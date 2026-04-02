@@ -236,7 +236,7 @@ fn dts_update_concurrent_cycles_change_succeeds() {
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
             - call_charge
-            - (test.canister_execution_cost(a_id) - initial_execution_cost)
+            - (test.canister_execution_cost(a_id) - initial_execution_cost).real()
             - cycles_debit,
     );
 }
@@ -320,7 +320,7 @@ fn dts_replicated_query_concurrent_cycles_change_succeeds() {
         test.canister_state(canister_id).system_state.balance(),
         initial_cycles
             - cycles_to_burn
-            - (test.canister_execution_cost(canister_id) - initial_execution_cost)
+            - (test.canister_execution_cost(canister_id) - initial_execution_cost).real()
             - cycles_debit,
     );
 }
@@ -442,7 +442,7 @@ fn dts_update_concurrent_cycles_change_fails() {
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         initial_cycles
-            - (test.canister_execution_cost(canister_id) - initial_execution_cost)
+            - (test.canister_execution_cost(canister_id) - initial_execution_cost).real()
             - cycles_debit,
     );
 }
@@ -533,7 +533,7 @@ fn dts_replicated_query_concurrent_cycles_change_fails() {
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         initial_cycles
-            - (test.canister_execution_cost(canister_id) - initial_execution_cost)
+            - (test.canister_execution_cost(canister_id) - initial_execution_cost).real()
             - cycles_debit,
     );
 }
@@ -998,14 +998,15 @@ fn dts_abort_of_replicated_execution_works() {
             test.canister_state(a_id).system_state.balance(),
             Cycles::new(initial_cycles)
                 - transferred_cycles
-                - test.canister_execution_cost(a_id)
+                - test.canister_execution_cost(a_id).real()
                 - test.call_fee(method, &b).real()
                 - test.reply_fee(&[42]).real()
         );
 
         assert_eq!(
             test.canister_state(b_id).system_state.balance(),
-            Cycles::new(initial_cycles) + transferred_cycles - test.canister_execution_cost(b_id)
+            Cycles::new(initial_cycles) + transferred_cycles
+                - test.canister_execution_cost(b_id).real()
         );
     });
 }
@@ -1074,7 +1075,7 @@ fn dts_ingress_induction_cycles_debit_is_applied_on_replicated_execution_aborts(
         assert_eq!(
             test.canister_state(a_id).system_state.balance(),
             Cycles::new(initial_canister_cycles)
-                - test.canister_execution_cost(a_id)
+                - test.canister_execution_cost(a_id).real()
                 - cycles_debit
         );
     });

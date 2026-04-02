@@ -30,7 +30,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
 };
-use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, MAX_PAIRED_PRE_SIGNATURES};
+use ic_limits::MAX_PAIRED_PRE_SIGNATURES;
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
@@ -84,8 +84,8 @@ use ic_types::{
 };
 use ic_types::{messages::MessageId, methods::WasmMethod};
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, ECDSAOutcalls,
-    NominalCycles, NonConsumed, SchnorrOutcalls, VetKd,
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, ECDSAOutcalls, Instructions,
+    NominalCycles, SchnorrOutcalls, VetKd,
 };
 use ic_utils_thread::deallocator_thread::{DeallocationSender, DeallocatorThread};
 use ic_wasm_types::WasmHash;
@@ -326,7 +326,10 @@ pub trait PausedExecution: std::fmt::Debug + Send {
 
     /// Aborts the paused execution.
     /// Returns the original message and the cycles prepaid for execution.
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterMessageOrTask, Cycles);
+    fn abort(
+        self: Box<Self>,
+        log: &ReplicaLogger,
+    ) -> (CanisterMessageOrTask, CompoundCycles<Instructions>);
 
     /// Returns a reference to the message or task being executed.
     fn input(&self) -> CanisterMessageOrTask;
@@ -1056,7 +1059,10 @@ impl ExecutionEnvironment {
                     response: Err(err),
                     refund: msg.take_cycles(),
                 },
-                Ok(args) => self.deposit_cycles(args.get_canister_id(), &mut msg, &mut state),
+                Ok(args) => {
+                    let canister_id = args.get_canister_id();
+                    self.deposit_cycles(canister_id, &mut msg, &mut state)
+                }
             },
 
             Ok(Ic00Method::FlexibleHttpRequest) => match &msg {
@@ -2074,7 +2080,7 @@ impl ExecutionEnvironment {
         instruction_limits: InstructionLimits,
         max_instructions_per_query_message: NumInstructions,
         input: CanisterMessageOrTask,
-        prepaid_execution_cycles: Option<Cycles>,
+        prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
         time: Time,
         network_topology: Arc<NetworkTopology>,
         round_limits: &mut RoundLimits,
@@ -2242,7 +2248,7 @@ impl ExecutionEnvironment {
         &self,
         canister: CanisterState,
         task: CanisterTask,
-        prepaid_execution_cycles: Option<Cycles>,
+        prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
         instruction_limits: InstructionLimits,
         round: RoundContext,
         round_limits: &mut RoundLimits,
@@ -2392,32 +2398,27 @@ impl ExecutionEnvironment {
     ) -> ExecuteSubnetMessageResult {
         let cost_schedule = state.get_own_cost_schedule();
         match state.canister_state_make_mut(&canister_id) {
-            None => ExecuteSubnetMessageResult::Finished {
-                response: Err(UserError::new(
+            None => {
+                let err = UserError::new(
                     ErrorCode::CanisterNotFound,
                     format!("Canister {} not found.", &canister_id),
-                )),
-                refund: msg.take_cycles(),
-            },
+                );
+                ExecuteSubnetMessageResult::Finished {
+                    response: Err(err),
+                    refund: msg.take_cycles(),
+                }
+            }
 
             Some(canister_state) => {
                 let cycles = msg.take_cycles();
-                canister_state
-                    .system_state
-                    .add_cycles(CompoundCycles::<NonConsumed>::new(cycles, cost_schedule));
-                if cycles.get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
-                    info!(
-                        self.log,
-                        "Canister {} deposited {} cycles to canister {}.",
-                        msg.sender(),
-                        cycles,
-                        canister_id.get(),
-                    );
-                }
-                ExecuteSubnetMessageResult::Finished {
-                    response: Ok((EmptyBlob.encode(), Some(canister_id))),
-                    refund: Cycles::zero(),
-                }
+                let sender = *msg.sender();
+                let response = self.canister_manager.deposit_cycles(
+                    canister_state,
+                    cycles,
+                    sender,
+                    cost_schedule,
+                );
+                self.process_canister_manager_response(response, state, msg)
             }
         }
     }
@@ -3778,7 +3779,7 @@ impl ExecutionEnvironment {
         &self,
         mut msg: CanisterCall,
         call_id: Option<InstallCodeCallId>,
-        prepaid_execution_cycles: Option<Cycles>,
+        prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
         dts_status: DtsInstallCodeStatus,
         mut state: ReplicatedState,
         instruction_limits: InstructionLimits,
@@ -4639,7 +4640,7 @@ pub struct ExecuteCanisterResult {
 /// This is a helper for `execute_canister()`.
 fn execute_canister_input(
     input: CanisterMessageOrTask,
-    prepaid_execution_cycles: Option<Cycles>,
+    prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
     exec_env: &ExecutionEnvironment,
     mut canister: CanisterState,
     instruction_limits: InstructionLimits,

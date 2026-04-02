@@ -2,8 +2,8 @@ use crate::{
     neuron::Neuron,
     pb::v1::{
         Followees, Governance as GovernanceProto, MonthlyNodeProviderRewards, NetworkEconomics,
-        NeuronStakeTransfer, NodeProvider, ProposalData, RestoreAgingSummary, RewardEvent, Topic,
-        XdrConversionRate as XdrConversionRatePb,
+        NeuronDissolveStateSnapshot, NeuronStakeTransfer, NodeProvider, ProposalData,
+        RestoreAgingSummary, RewardEvent, Topic, XdrConversionRate as XdrConversionRatePb,
         governance::{GovernanceCachedMetrics, NeuronInFlightCommand},
     },
 };
@@ -37,6 +37,7 @@ pub struct HeapGovernanceData {
     pub restore_aging_summary: Option<RestoreAgingSummary>,
     pub topic_of_garbage_collected_proposals: HashMap<u64, Topic>,
     pub eight_year_gang_bonus_migration_done: bool,
+    pub neuron_id_to_pre_clamp_dissolve_state: HashMap<u64, NeuronDissolveStateSnapshot>,
 }
 
 /// Internal representation for `XdrConversionRatePb`.
@@ -207,6 +208,7 @@ pub fn initialize_governance(
         restore_aging_summary,
         topic_of_garbage_collected_proposals: HashMap::new(),
         eight_year_gang_bonus_migration_done: false,
+        neuron_id_to_pre_clamp_dissolve_state: HashMap::new(),
     };
 
     // Finally, return the result.
@@ -247,6 +249,7 @@ pub fn split_governance_proto(
         restore_aging_summary,
         topic_of_garbage_collected_proposals,
         eight_year_gang_bonus_migration_done,
+        neuron_id_to_pre_clamp_dissolve_state,
         rng_seed,
     } = governance_proto;
 
@@ -291,6 +294,7 @@ pub fn split_governance_proto(
                 .map(|(k, v)| (k, Topic::try_from(v).unwrap_or(Topic::Unspecified)))
                 .collect(),
             eight_year_gang_bonus_migration_done,
+            neuron_id_to_pre_clamp_dissolve_state,
         },
         rng_seed,
     )
@@ -329,6 +333,7 @@ pub fn reassemble_governance_proto(
         restore_aging_summary,
         topic_of_garbage_collected_proposals,
         eight_year_gang_bonus_migration_done,
+        neuron_id_to_pre_clamp_dissolve_state,
     } = heap_governance_proto;
 
     let neuron_management_voting_period_seconds = Some(neuron_management_voting_period_seconds);
@@ -360,6 +365,7 @@ pub fn reassemble_governance_proto(
             .map(|(k, v)| (k, v as i32))
             .collect(),
         eight_year_gang_bonus_migration_done,
+        neuron_id_to_pre_clamp_dissolve_state,
         rng_seed: rng_seed.map(|seed| seed.to_vec()),
     }
 }
@@ -368,6 +374,7 @@ pub fn reassemble_governance_proto(
 mod tests {
     use super::*;
 
+    use crate::governance::MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70;
     use crate::pb::v1::ProposalData;
 
     use maplit::{btreemap, hashmap};
@@ -400,6 +407,15 @@ mod tests {
             restore_aging_summary: None,
             topic_of_garbage_collected_proposals: hashmap! { 1 => Topic::Unspecified as i32 },
             eight_year_gang_bonus_migration_done: true,
+            neuron_id_to_pre_clamp_dissolve_state: hashmap! {
+                1 => NeuronDissolveStateSnapshot {
+                    dissolve_state: Some(
+                        crate::pb::v1::neuron_dissolve_state_snapshot::DissolveState::DissolveDelaySeconds(
+                            MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70,
+                        ),
+                    ),
+                },
+            },
             rng_seed: Some(vec![1_u8; 32]),
         }
     }

@@ -29,7 +29,7 @@ use ic_types::messages::{
 };
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{CanisterTimer, NumBytes, NumInstructions, Time};
-use ic_types_cycles::{CompoundCycles, Cycles};
+use ic_types_cycles::{CompoundCycles, Cycles, Instructions};
 use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
@@ -42,7 +42,7 @@ pub fn execute_call_or_task(
     clean_canister: CanisterState,
     call_or_task: CanisterCallOrTask,
     method: WasmMethod,
-    prepaid_execution_cycles: Option<Cycles>,
+    prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
     execution_parameters: ExecutionParameters,
     time: Time,
     round: RoundContext,
@@ -111,7 +111,7 @@ pub fn execute_call_or_task(
                         );
                     }
                 };
-                (canister, prepaid_execution_cycles.real(), false)
+                (canister, prepaid_execution_cycles, false)
             }
         };
 
@@ -278,7 +278,7 @@ fn finish_err(
         &mut canister.system_state,
         instructions_left,
         instruction_limit,
-        CompoundCycles::new(original.prepaid_execution_cycles, round.cost_schedule),
+        original.prepaid_execution_cycles,
         round.counters.execution_refund_error,
         original.subnet_size,
         round.cost_schedule,
@@ -303,7 +303,7 @@ fn finish_err(
 struct OriginalContext {
     call_origin: CallOrigin,
     call_or_task: CanisterCallOrTask,
-    prepaid_execution_cycles: Cycles,
+    prepaid_execution_cycles: CompoundCycles<Instructions>,
     method: WasmMethod,
     execution_parameters: ExecutionParameters,
     subnet_size: usize,
@@ -646,7 +646,7 @@ impl CallOrTaskHelper {
             &mut self.canister.system_state,
             output.num_instructions_left,
             original.execution_parameters.instruction_limits.message(),
-            CompoundCycles::new(original.prepaid_execution_cycles, round.cost_schedule),
+            original.prepaid_execution_cycles,
             round.counters.execution_refund_error,
             original.subnet_size,
             round.cost_schedule,
@@ -789,7 +789,10 @@ impl PausedExecution for PausedCallOrTaskExecution {
         }
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterMessageOrTask, Cycles) {
+    fn abort(
+        self: Box<Self>,
+        log: &ReplicaLogger,
+    ) -> (CanisterMessageOrTask, CompoundCycles<Instructions>) {
         info!(
             log,
             "[DTS] Aborting {:?} execution of canister {}",
