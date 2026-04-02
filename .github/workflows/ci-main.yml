@@ -282,7 +282,7 @@ jobs:
               eval "bazel test $bazel_args --target_pattern_file=$test_targets"
             fi
 
-  # Build & upload the arm64-{linux,darwin} variant of the PocketIC server,
+  # Build & upload arm64-{linux,darwin} binaries,
   # build the entire codebase on arm64-darwin,
   # and run tests tagged to run on all platforms.
   # NOTE: uses 'namespace.so' runners.
@@ -297,6 +297,7 @@ jobs:
     name: Bazel Test arm64-${{ matrix.os }}
     runs-on: ${{ matrix.profile }}
     timeout-minutes: 120
+    needs: config
     if: github.repository == 'dfinity/ic' # only run on public repo, not private since Namespace runners are not configured there, so these CI jobs get stuck otherwise.
     steps:
       - name: Set up Bazel cache
@@ -314,12 +315,20 @@ jobs:
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
             build \
-            //publish/binaries:pocket-ic.gz
+            //publish/binaries:pocket-ic.gz \
+            //publish/binaries:ic-admin.gz \
+            //publish/binaries:sns.gz
 
           mkdir -p build
           cp \
             ./bazel-bin/publish/binaries/pocket-ic.gz \
             ./build/pocket-ic-server-arm64-${{ matrix.os }}.gz
+          cp \
+            ./bazel-bin/publish/binaries/ic-admin.gz \
+            ./build/ic-admin-arm64-${{ matrix.os }}.gz
+          cp \
+            ./bazel-bin/publish/binaries/sns.gz \
+            ./build/sns-arm64-${{ matrix.os }}.gz
 
       - name: Build pocket-ic-server x86_64-darwin
         if: ${{ matrix.os == 'darwin' }}
@@ -368,17 +377,21 @@ jobs:
             "${bazel_test_targets[@]}"
 
       - name: Upload pocket-ic-server x86_64-darwin
-        if: ${{ matrix.os == 'darwin' }}
+        if: ${{ matrix.os == 'darwin' && needs.config.outputs.release-build == 'true' }}
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: pocket-ic-server-x86_64-darwin.gz
           path: ./build/pocket-ic-server-x86_64-darwin.gz
 
-      - name: Upload pocket-ic-server
+      - name: Upload arm64-${{ matrix.os }} artifacts
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        if: ${{ needs.config.outputs.release-build == 'true' }}
         with:
-          name: pocket-ic-server-arm64-${{ matrix.os }}.gz
-          path: ./build/pocket-ic-server-arm64-${{ matrix.os }}.gz
+          name: arm64-binaries-${{ matrix.os }}.gz
+          path: |
+            ./build/pocket-ic-server-arm64-${{ matrix.os }}.gz
+            ./build/ic-admin-arm64-${{ matrix.os }}.gz
+            ./build/sns-arm64-${{ matrix.os }}.gz
 
   # Upload external artifacts, retrieved from non-DFINITY runner builds.
   upload-external-artifacts:
@@ -393,19 +406,19 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Download pocket-ic-server (arm64-linux)
+      - name: Download arm64-linux artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: pocket-ic-server-arm64-linux.gz
+          name: arm64-binaries-linux.gz
           # avoid downloading to workspace to avoid version being marked as dirty
-          path: ~/.cache/pocket-ic-server-arm64-linux
+          path: ~/.cache/arm64-binaries-linux
 
-      - name: Download pocket-ic-server (arm64-darwin)
+      - name: Download arm64-darwin artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: pocket-ic-server-arm64-darwin.gz
+          name: arm64-binaries-darwin.gz
           # avoid downloading to workspace to avoid version being marked as dirty
-          path: ~/.cache/pocket-ic-server-arm64-darwin
+          path: ~/.cache/arm64-binaries-darwin
 
       - name: Download pocket-ic-server (x86_64-darwin)
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -421,10 +434,14 @@ jobs:
 
           # Create a "bundle" that the uploader can digest
           mkdir -p "$bundledir/binaries/arm64-linux/"
-          cp ~/.cache/pocket-ic-server-arm64-linux/pocket-ic-server-arm64-linux.gz "$bundledir/binaries/arm64-linux/pocket-ic.gz"
+          cp ~/.cache/arm64-binaries-linux/pocket-ic-server-arm64-linux.gz "$bundledir/binaries/arm64-linux/pocket-ic.gz"
+          cp ~/.cache/arm64-binaries-linux/ic-admin-arm64-linux.gz "$bundledir/binaries/arm64-linux/ic-admin.gz"
+          cp ~/.cache/arm64-binaries-linux/sns-arm64-linux.gz "$bundledir/binaries/arm64-linux/sns.gz"
 
           mkdir -p "$bundledir/binaries/arm64-darwin/"
-          cp ~/.cache/pocket-ic-server-arm64-darwin/pocket-ic-server-arm64-darwin.gz "$bundledir/binaries/arm64-darwin/pocket-ic.gz"
+          cp ~/.cache/arm64-binaries-darwin/pocket-ic-server-arm64-darwin.gz "$bundledir/binaries/arm64-darwin/pocket-ic.gz"
+          cp ~/.cache/arm64-binaries-darwin/ic-admin-arm64-darwin.gz "$bundledir/binaries/arm64-darwin/ic-admin.gz"
+          cp ~/.cache/arm64-binaries-darwin/sns-arm64-darwin.gz "$bundledir/binaries/arm64-darwin/sns.gz"
 
           mkdir -p "$bundledir/binaries/x86_64-darwin/"
           cp ~/.cache/pocket-ic-server-x86_64-darwin/pocket-ic-server-x86_64-darwin.gz "$bundledir/binaries/x86_64-darwin/pocket-ic.gz"
