@@ -631,7 +631,8 @@ pub async fn assert_no_new_utxo(
     .expect("assert_no_new_utxo failed");
 }
 
-/// Assert that calling update_balance returns a transient error.
+/// Assert that calling update_balance returns either a `TemporarilyUnavailable`
+/// error or an `Ok` result where all UTXOs have `Checked` status.
 /// Retries on transient transport errors.
 pub async fn assert_temporarily_unavailable(
     agent: &CkBtcMinterAgent,
