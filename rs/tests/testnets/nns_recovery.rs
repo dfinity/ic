@@ -55,7 +55,7 @@ fn setup(env: TestEnv) {
 
     let dkg_interval = std::env::var("DKG_INTERVAL")
         .ok()
-        .and_then(|s| s.parse::<u64>().ok())
+        .map(|s| s.parse::<u64>().expect("DKG_INTERVAL must be a valid u64"))
         .unwrap_or(DKG_INTERVAL_HEIGHT);
 
     ic_nested_nns_recovery_common::setup(
