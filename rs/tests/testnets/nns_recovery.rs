@@ -144,7 +144,7 @@ fn log_instructions(env: TestEnv) {
     };
 
     loop {
-        let (_, highest_cert_share) = node_with_highest_cert_share_and_cup_heights(
+        let (_, highest_cert_share, _, _) = node_with_highest_cert_share_and_cup_heights(
             &env.topology_snapshot().root_subnet(),
             &logger,
         );
