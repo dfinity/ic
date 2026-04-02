@@ -1208,7 +1208,7 @@ mod tests {
                 );
 
                 // This is the first attempt to run DKG for this remote target.
-                assert_eq!(initial_dkg_attempts.get(&target_id), Some(&1u32));
+                assert_eq!(initial_dkg_attempts.get(&target_id), Some(&1_u32));
 
                 // STEP 2:
                 // Call compute_remote_dkg_data again, but this time with an indicator that we

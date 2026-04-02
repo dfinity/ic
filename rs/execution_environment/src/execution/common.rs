@@ -745,7 +745,7 @@ mod test {
         );
 
         if let ExecutionResponse::Request(response) = response {
-            assert_eq!(response.refund, Cycles::from(1000u128));
+            assert_eq!(response.refund, Cycles::from(1000_u128));
         } else {
             panic!("Unexpected response.");
         }

@@ -394,8 +394,8 @@ fn sanity_check_ledger() {
     #[cfg(feature = "get_blocks_disabled")]
     {
         let req = Encode!(&GetBlocksRequest {
-            start: Nat::from(0u64),
-            length: Nat::from(0u64)
+            start: Nat::from(0_u64),
+            length: Nat::from(0_u64)
         })
         .unwrap();
         match env
@@ -412,8 +412,8 @@ fn sanity_check_ledger() {
     #[cfg(feature = "icrc3_disabled")]
     {
         let req = Encode!(&vec![GetBlocksRequest {
-            start: Nat::from(0u64),
-            length: Nat::from(0u64)
+            start: Nat::from(0_u64),
+            length: Nat::from(0_u64)
         }])
         .unwrap();
         match env
@@ -1179,7 +1179,7 @@ fn test_oldest_tx_id() {
     // account(1, 0) oldest_tx_id is 0, i.e. the mint at ledger init.
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(1, 0), None, u64::MAX).oldest_tx_id;
-    assert_eq!(Some(0u8.into()), oldest_tx_id);
+    assert_eq!(Some(0_u8.into()), oldest_tx_id);
 
     ////
     // Add one block for account(1, 0) and account(2, 0).
@@ -1189,12 +1189,12 @@ fn test_oldest_tx_id() {
     // account(1, 0) oldest_tx_id is still 0.
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(1, 0), None, u64::MAX).oldest_tx_id;
-    assert_eq!(Some(0u8.into()), oldest_tx_id);
+    assert_eq!(Some(0_u8.into()), oldest_tx_id);
 
     // account(2, 0) oldest_tx_id is 1, i.e. the new transfer.
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(2, 0), None, u64::MAX).oldest_tx_id;
-    assert_eq!(Some(1u8.into()), oldest_tx_id);
+    assert_eq!(Some(1_u8.into()), oldest_tx_id);
 
     // account(3, 0) oldest_tx_id is still `None`.
     let oldest_tx_id =
@@ -1211,17 +1211,17 @@ fn test_oldest_tx_id() {
     // account(1, 0) oldest_tx_id is still 0.
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(1, 0), None, u64::MAX).oldest_tx_id;
-    assert_eq!(Some(0u8.into()), oldest_tx_id);
+    assert_eq!(Some(0_u8.into()), oldest_tx_id);
 
     // account(2, 0) oldest_tx_id is still 1.
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(2, 0), None, u64::MAX).oldest_tx_id;
-    assert_eq!(Some(1u8.into()), oldest_tx_id);
+    assert_eq!(Some(1_u8.into()), oldest_tx_id);
 
     // account(3, 0) oldest_tx_id is 3, i.e. the last block index.
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(3, 0), None, u64::MAX).oldest_tx_id;
-    assert_eq!(Some(3u8.into()), oldest_tx_id);
+    assert_eq!(Some(3_u8.into()), oldest_tx_id);
 
     // There should be no fee collector.
     assert_eq!(get_fee_collectors_ranges(env, index_id).ranges, vec![]);
@@ -1267,7 +1267,7 @@ fn test_fee_collector() {
 
     assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
-        vec![(fee_collector, vec![(0u8.into(), 4u8.into())])],
+        vec![(fee_collector, vec![(0_u8.into(), 4_u8.into())])],
     );
 
     // Remove the fee collector to burn some transactions fees.
@@ -1285,7 +1285,7 @@ fn test_fee_collector() {
 
     assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
-        vec![(fee_collector, vec![(0u8.into(), 4u8.into())])],
+        vec![(fee_collector, vec![(0_u8.into(), 4_u8.into())])],
     );
 
     // Add a new fee collector different from the first one.
@@ -1306,8 +1306,8 @@ fn test_fee_collector() {
     assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
         vec![
-            (new_fee_collector, vec![(6u8.into(), 7u8.into())]),
-            (fee_collector, vec![(0u8.into(), 4u8.into())]),
+            (new_fee_collector, vec![(6_u8.into(), 7_u8.into())]),
+            (fee_collector, vec![(0_u8.into(), 4_u8.into())]),
         ],
     );
 
@@ -1329,10 +1329,10 @@ fn test_fee_collector() {
     assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
         vec![
-            (new_fee_collector, vec![(6u8.into(), 7u8.into())]),
+            (new_fee_collector, vec![(6_u8.into(), 7_u8.into())]),
             (
                 fee_collector,
-                vec![(0u8.into(), 4u8.into()), (7u8.into(), 9u8.into())],
+                vec![(0_u8.into(), 4_u8.into()), (7_u8.into(), 9_u8.into())],
             ),
         ],
     );
@@ -1491,7 +1491,7 @@ fn test_fee_collector_107_irregular_mthd() {
     let tx_fields = vec![
         ("mthd", ICRC3Value::Text(UNRECOGNIZED_MTHD_NAME.to_string())),
         ("fee_collector", account_to_icrc3_value(&feecol_107)),
-        ("ts", ICRC3Value::Nat(Nat::from(0u64))),
+        ("ts", ICRC3Value::Nat(Nat::from(0_u64))),
     ];
 
     add_custom_block(env, ledger_id, 0, Some(BTYPE_107), tx_fields);
@@ -1508,7 +1508,7 @@ fn test_fee_collector_107_op_instead_of_mthd() {
     let tx_fields = vec![
         ("op", ICRC3Value::Text(SET_FEE_COL_107.to_string())),
         ("fee_collector", account_to_icrc3_value(&feecol_107)),
-        ("ts", ICRC3Value::Nat(Nat::from(0u64))),
+        ("ts", ICRC3Value::Nat(Nat::from(0_u64))),
     ];
 
     add_custom_block(env, ledger_id, 0, Some(BTYPE_107), tx_fields);
@@ -1533,7 +1533,7 @@ fn test_block_with_no_btype_but_with_mthd() {
 
     let tx_fields = vec![
         ("mthd", ICRC3Value::Text("107set_fee_collector".to_string())),
-        ("ts", ICRC3Value::Nat(Nat::from(0u64))),
+        ("ts", ICRC3Value::Nat(Nat::from(0_u64))),
     ];
 
     add_custom_block(env, ledger_id, 0, None, tx_fields);
@@ -1557,7 +1557,7 @@ fn test_block_with_no_btype_and_no_mthd() {
     let ledger_id = install_icrc3_test_ledger(env);
     let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
-    let tx_fields = vec![("ts", ICRC3Value::Nat(Nat::from(0u64)))];
+    let tx_fields = vec![("ts", ICRC3Value::Nat(Nat::from(0_u64)))];
 
     add_custom_block(env, ledger_id, 0, None, tx_fields);
     let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
@@ -1691,7 +1691,7 @@ fn test_large_transfers_and_approvals() {
         memo: None,
     };
     let mint_index = icrc1_transfer(env, ledger_id, minter.into(), req);
-    assert_eq!(mint_index, Nat::from(0u64));
+    assert_eq!(mint_index, Nat::from(0_u64));
 
     // Test initial mint block.
     wait_until_sync_is_completed(env, index_id, ledger_id);
@@ -1717,7 +1717,7 @@ fn test_large_transfers_and_approvals() {
         created_at_time: None,
     };
     let approve_index = icrc2_approve(env, ledger_id, PrincipalId(account1.owner), req);
-    assert_eq!(approve_index, Nat::from(1u64));
+    assert_eq!(approve_index, Nat::from(1_u64));
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
     assert_ledger_index_parity(env, ledger_id, index_id);
@@ -1828,7 +1828,7 @@ mod fees_in_burn_and_mint_blocks {
         let expected_balance = MINT_AMOUNT - MINT_FEE;
 
         assert_eq!(
-            Nat::from(0u64),
+            Nat::from(0_u64),
             add_block(&env, ledger_id, &mint)
                 .expect("error adding mint block to ICRC-3 test ledger")
         );
@@ -1898,13 +1898,13 @@ mod fees_in_burn_and_mint_blocks {
         expected_balance -= BURN_AMOUNT + BURN_FEE;
 
         assert_eq!(
-            Nat::from(0u64),
+            Nat::from(0_u64),
             add_block(&env, ledger_id, &mint)
                 .expect("error adding mint block to ICRC-3 test ledger")
         );
 
         assert_eq!(
-            Nat::from(1u64),
+            Nat::from(1_u64),
             add_block(&env, ledger_id, &burn)
                 .expect("error adding mint block to ICRC-3 test ledger")
         );

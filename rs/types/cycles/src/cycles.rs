@@ -11,9 +11,12 @@ use std::{
 };
 use thousands::Separable;
 
-/// Struct to handle cycles on the IC. They are maintained as a
+/// Struct to be used for updates to the canister's balance. They are maintained as a
 /// simple u128. We implement our own arithmetic functions on them so that we
 /// can ensure that they never overflow or underflow.
+///
+/// NOTE: This is distinct from `NominalCycles` which should be used to update metrics
+/// related to cycles accounting.
 #[derive(
     Copy,
     Clone,
@@ -308,11 +311,14 @@ mod test {
             Cycles::zero()
         );
         assert_eq!(
-            Cycles::from(u128::MAX) - Cycles::from(10u128),
+            Cycles::from(u128::MAX) - Cycles::from(10_u128),
             Cycles::from(u128::MAX - 10)
         );
-        assert_eq!(Cycles::zero() - Cycles::from(10u128), Cycles::zero());
-        assert_eq!(Cycles::from(10u128) - Cycles::from(20u128), Cycles::zero());
+        assert_eq!(Cycles::zero() - Cycles::from(10_u128), Cycles::zero());
+        assert_eq!(
+            Cycles::from(10_u128) - Cycles::from(20_u128),
+            Cycles::zero()
+        );
     }
 
     #[test]

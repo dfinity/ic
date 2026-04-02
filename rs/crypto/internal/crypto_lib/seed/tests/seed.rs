@@ -6,7 +6,7 @@ fn seed_fixed_output() {
     fn test_seed_output(seed: Seed, expected: &str) {
         let rng = &mut seed.into_rng();
 
-        let mut rng_output = vec![0u8; expected.len() / 2];
+        let mut rng_output = vec![0_u8; expected.len() / 2];
         rng.fill_bytes(&mut rng_output);
         assert_eq!(hex::encode(rng_output), expected);
     }

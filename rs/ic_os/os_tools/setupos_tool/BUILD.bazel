@@ -6,6 +6,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/ic_os/config/tool:config_lib",
     "//rs/ic_os/config/types:config_types",
+    "//rs/ic_os/logging",
     "//rs/ic_os/networking/deterministic_ips",
     "//rs/ic_os/networking/network",
     "//rs/ic_os/utils",
@@ -17,7 +18,6 @@ DEPENDENCIES = [
     "@crate_index//:prost",
     "@crate_index//:tokio",
     "@crate_index//:tracing",
-    "@crate_index//:tracing-subscriber",
     "@crate_index//:url",
 ]
 

@@ -1,5 +1,5 @@
 {
-  "checksum": "039c010125fb5a7e9b285985debfc06af3f0beb6e7c0c1ffb027d1431794028a",
+  "checksum": "1d88faead9fe3d4ca18cc2287397ac1457604de13e94aded554c8104ad506e69",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -3154,13 +3154,7 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/askama_derive/0.15.1/download",
-          "sha256": "8ba5e7259a1580c61571e3116ebaaa01e3c001b2132b17c4cc5c70780ca3e994",
-          "patch_args": [
-            "-p2"
-          ],
-          "patches": [
-            "@@//bazel:askama.patch"
-          ]
+          "sha256": "8ba5e7259a1580c61571e3116ebaaa01e3c001b2132b17c4cc5c70780ca3e994"
         }
       },
       "targets": [
@@ -21693,6 +21687,10 @@
               "target": "hex_literal"
             },
             {
+              "id": "hickory-resolver 0.25.2",
+              "target": "hickory_resolver"
+            },
+            {
               "id": "hkdf 0.12.4",
               "target": "hkdf"
             },
@@ -22071,10 +22069,6 @@
             {
               "id": "num-bigint-dig 0.9.1",
               "target": "num_bigint_dig"
-            },
-            {
-              "id": "num-rational 0.2.4",
-              "target": "num_rational"
             },
             {
               "id": "num-traits 0.2.19",
@@ -22655,6 +22649,10 @@
               "target": "tracing_flame"
             },
             {
+              "id": "tracing-journald 0.3.2",
+              "target": "tracing_journald"
+            },
+            {
               "id": "tracing-opentelemetry 0.28.0",
               "target": "tracing_opentelemetry"
             },
@@ -22741,6 +22739,10 @@
             {
               "id": "wat 1.244.0",
               "target": "wat"
+            },
+            {
+              "id": "webpki-roots 1.0.6",
+              "target": "webpki_roots"
             },
             {
               "id": "which 4.4.0",
@@ -34027,7 +34029,7 @@
               "target": "tower_service"
             },
             {
-              "id": "webpki-roots 1.0.2",
+              "id": "webpki-roots 1.0.6",
               "target": "webpki_roots"
             }
           ],
@@ -51783,108 +51785,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "num-rational 0.2.4": {
-      "name": "num-rational",
-      "version": "0.2.4",
-      "package_url": "https://github.com/rust-num/num-rational",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/num-rational/0.2.4/download",
-          "sha256": "5c000134b5dbf44adc5cb772486d335293351644b801551abe8f75c84cfa4aef"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "num_rational",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "num_rational",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "bigint",
-            "bigint-std",
-            "default",
-            "num-bigint",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "num-bigint 0.2.6",
-              "target": "num_bigint"
-            },
-            {
-              "id": "num-integer 0.1.46",
-              "target": "num_integer"
-            },
-            {
-              "id": "num-rational 0.2.4",
-              "target": "build_script_build"
-            },
-            {
-              "id": "num-traits 0.2.19",
-              "target": "num_traits"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.2.4"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "autocfg 1.5.0",
-              "target": "autocfg"
-            }
-          ],
-          "selects": {}
-        }
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "num-rational 0.4.2": {
       "name": "num-rational",
       "version": "0.4.2",
@@ -66435,7 +66335,7 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 1.0.2",
+                "id": "webpki-roots 1.0.6",
                 "target": "webpki_roots"
               }
             ],
@@ -66485,7 +66385,7 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 1.0.2",
+                "id": "webpki-roots 1.0.6",
                 "target": "webpki_roots"
               }
             ],
@@ -66605,7 +66505,7 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 1.0.2",
+                "id": "webpki-roots 1.0.6",
                 "target": "webpki_roots"
               }
             ],
@@ -66655,7 +66555,7 @@
                 "target": "tokio_util"
               },
               {
-                "id": "webpki-roots 1.0.2",
+                "id": "webpki-roots 1.0.6",
                 "target": "webpki_roots"
               }
             ]
@@ -69608,7 +69508,7 @@
               "target": "thiserror"
             },
             {
-              "id": "webpki-roots 1.0.2",
+              "id": "webpki-roots 1.0.6",
               "target": "webpki_roots"
             },
             {
@@ -84933,6 +84833,61 @@
       ],
       "license_file": "LICENSE"
     },
+    "tracing-journald 0.3.2": {
+      "name": "tracing-journald",
+      "version": "0.3.2",
+      "package_url": "https://github.com/tokio-rs/tracing",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tracing-journald/0.3.2/download",
+          "sha256": "2d3a81ed245bfb62592b1e2bc153e77656d94ee6a0497683a65a12ccaf2438d0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tracing_journald",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tracing_journald",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "libc 0.2.177",
+              "target": "libc"
+            },
+            {
+              "id": "tracing-core 0.1.33",
+              "target": "tracing_core"
+            },
+            {
+              "id": "tracing-subscriber 0.3.20",
+              "target": "tracing_subscriber"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.3.2"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "tracing-log 0.2.0": {
       "name": "tracing-log",
       "version": "0.2.0",
@@ -91843,14 +91798,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "webpki-roots 1.0.2": {
+    "webpki-roots 1.0.6": {
       "name": "webpki-roots",
-      "version": "1.0.2",
+      "version": "1.0.6",
       "package_url": "https://github.com/rustls/webpki-roots",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/webpki-roots/1.0.2/download",
-          "sha256": "7e8983c3ab33d6fb807cfcdad2491c4ea8cbc8ed839181c7dfd9c67c83e261b2"
+          "url": "https://static.crates.io/crates/webpki-roots/1.0.6/download",
+          "sha256": "22cfaf3c063993ff62e73cb4311efde4db1efb31ab78a3e5c457939ad5cc0bed"
         }
       },
       "targets": [
@@ -91883,7 +91838,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.0.2"
+        "version": "1.0.6"
       },
       "license": "CDLA-Permissive-2.0",
       "license_ids": [
@@ -98695,6 +98650,7 @@
     "hashlink 0.8.3",
     "hex 0.4.3",
     "hex-literal 0.4.1",
+    "hickory-resolver 0.25.2",
     "hkdf 0.12.4",
     "hmac 0.12.1",
     "hpke 0.12.0",
@@ -98791,7 +98747,6 @@
     "nix 0.24.3",
     "num-bigint 0.4.6",
     "num-bigint-dig 0.9.1",
-    "num-rational 0.2.4",
     "num-traits 0.2.19",
     "num_cpus 1.16.0",
     "object 0.37.3",
@@ -98943,6 +98898,7 @@
     "tracing 0.1.41",
     "tracing-appender 0.2.3",
     "tracing-flame 0.2.0",
+    "tracing-journald 0.3.2",
     "tracing-opentelemetry 0.28.0",
     "tracing-serde 0.1.3",
     "tracing-slog 0.2.0",
@@ -98965,6 +98921,7 @@
     "wasmtime 42.0.1",
     "wast 244.0.0",
     "wat 1.244.0",
+    "webpki-roots 1.0.6",
     "which 4.4.0",
     "wirm 2.1.0",
     "wsl 0.1.0",

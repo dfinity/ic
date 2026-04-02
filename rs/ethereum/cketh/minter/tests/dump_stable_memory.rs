@@ -442,7 +442,7 @@ fn convert_events_and_dump_stable_memory(input_file: &str, output_file: &str) {
 
     // Read raw bytes from the VectorMemory
     let size_bytes = memory_ref.size() as usize * 65536;
-    let mut bytes = vec![0u8; size_bytes];
+    let mut bytes = vec![0_u8; size_bytes];
     memory_ref.read(0, &mut bytes);
 
     // Compress and write

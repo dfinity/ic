@@ -9,12 +9,13 @@ on the process that this file is part of, see
 
 ## Added
 
-## Changed
+- Support for `snapshot_visibility` in `UpdateCanisterSettings` proposals.
+- Proposal type `DeleteSubnet`, currently limited to CloudEngine subnets. 
+- Tag neurons that have the maximum dissolve delay of 8 years with their bonus base
+  (`eight_year_gang_bonus_base_e8s`), in preparation for the dissolve delay bonus
+  grandfathering when the maximum dissolve delay is reduced to 2 years.
 
-- `CreateServiceNervousSystem` proposals no longer reject SNS configurations
-  where the sum of developer-allocated tokens exceeds
-  `swap_distribution.total_e8s`. With the Neurons' Fund discontinued, this
-  validation is no longer needed.
+## Changed
 
 ## Deprecated
 

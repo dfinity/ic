@@ -2050,7 +2050,7 @@ mod idkg_open_dealing {
 
             let dealing = match self.additional_operation {
                 Some(IDkgOpenDealingTestAdditionalOperation::UseDealingWithInvalidEncoding) => {
-                    let invalid_internal_dealing_raw = vec![0xFFu8; 100];
+                    let invalid_internal_dealing_raw = vec![0xFF_u8; 100];
                     dummy_batch_signed_dealing_with(invalid_internal_dealing_raw, node_id(456))
                 }
                 None => signed_dealings

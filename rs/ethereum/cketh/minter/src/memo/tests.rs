@@ -233,7 +233,7 @@ fn should_return_error_for_invalid_mint_memo() {
     // bogus memo
     let args = DecodeLedgerMemoArgs {
         memo_type: MemoType::Mint,
-        encoded_memo: vec![10u8],
+        encoded_memo: vec![10_u8],
     };
     let result = decode_ledger_memo(args);
     assert_matches!(
@@ -346,7 +346,7 @@ fn should_return_error_for_invalid_burn_memo() {
     // bogus memo
     let args = DecodeLedgerMemoArgs {
         memo_type: MemoType::Burn,
-        encoded_memo: vec![10u8],
+        encoded_memo: vec![10_u8],
     };
     let result = decode_ledger_memo(args);
     assert_matches!(
@@ -358,7 +358,7 @@ fn should_return_error_for_invalid_burn_memo() {
 
 #[test]
 fn should_decode_memo_only_if_size_below_limit() {
-    let memo_max_bytes = vec![0u8; CKETH_LEDGER_MEMO_SIZE as usize];
+    let memo_max_bytes = vec![0_u8; CKETH_LEDGER_MEMO_SIZE as usize];
     let args = DecodeLedgerMemoArgs {
         memo_type: MemoType::Mint,
         encoded_memo: memo_max_bytes,
@@ -369,7 +369,7 @@ fn should_decode_memo_only_if_size_below_limit() {
         Err(Some(DecodeLedgerMemoError::InvalidMemo(msg)))
         if msg.contains("Error decoding MintMemo")
     );
-    let memo_more_than_max_bytes = vec![0u8; CKETH_LEDGER_MEMO_SIZE as usize + 1];
+    let memo_more_than_max_bytes = vec![0_u8; CKETH_LEDGER_MEMO_SIZE as usize + 1];
     let args = DecodeLedgerMemoArgs {
         memo_type: MemoType::Mint,
         encoded_memo: memo_more_than_max_bytes,

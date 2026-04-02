@@ -1,6 +1,5 @@
-use crate::driver::ic::VmResources;
+use crate::driver::ic::VmResourceOverrides;
 use crate::driver::test_env::TestEnvAttribute;
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -11,7 +10,7 @@ pub struct GroupSetup {
     /// For now, the group timeout strictly translates to the corresponding group
     /// TTL.
     pub group_timeout: Option<Duration>,
-    pub default_vm_resources: Option<VmResources>,
+    pub vm_resource_overrides: VmResourceOverrides,
 }
 
 impl GroupSetup {
@@ -21,8 +20,11 @@ impl GroupSetup {
             group_base_name: group_base_name.clone(),
             ..Default::default()
         };
-        let time = Utc::now().format("%Y-%m-%dT%H-%M-%S-%6f");
-        res.infra_group_name = format!("{group_base_name}--{time}").replace('_', "-");
+        let time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("bad things")
+            .as_micros();
+        res.infra_group_name = format!("{group_base_name}--{time:?}").replace('_', "-");
         res.group_timeout = timeout;
         res
     }

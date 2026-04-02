@@ -38,6 +38,7 @@ rust_binary(
     compile_data = [
         "templates/upgrade.md",
         "templates/install.md",
+        "templates/reinstall.md",
         "templates/submit_with_ic_admin.shx",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES,

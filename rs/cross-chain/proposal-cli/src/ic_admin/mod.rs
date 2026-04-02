@@ -53,6 +53,7 @@ impl IcAdminArgs {
         let mode = match proposal {
             ProposalTemplate::Upgrade(_) => "upgrade",
             ProposalTemplate::Install(_) => "install",
+            ProposalTemplate::Reinstall(_) => "reinstall",
         }
         .to_string();
         IcAdminTemplate {
@@ -96,7 +97,7 @@ pub struct IcAdminTemplate {
     /// The mode to use when updating the canister.
     // We could use CanisterInstallMode instead, but it lives in the `ic-management-canister-types-private` crate
     // which has a somewhat large number of dependencies for what we need here, which is
-    // just a simple enum with 2 variants.
+    // just a simple enum with 3 variants.
     mode: String,
 
     /// The ID of the canister to modify.

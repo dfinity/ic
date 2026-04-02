@@ -3150,25 +3150,35 @@ fn ic0_call_cycles_add_deducts_cycles() {
     let mgr = test.cycles_account_manager();
     let messaging_fee = mgr
         .xnet_call_performed_fee(test.subnet_size(), CanisterCyclesCostSchedule::Normal)
-        + mgr.xnet_call_bytes_transmitted_fee(
-            test.xnet_messages()[0].payload_size_bytes(),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
-        )
-        + mgr.xnet_call_bytes_transmitted_fee(
-            MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
-        )
-        + mgr.execution_cost(
-            MAX_NUM_INSTRUCTIONS,
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
-            test.canister_wasm_execution_mode(canister_id),
-        );
+        .real()
+        + mgr
+            .xnet_call_bytes_transmitted_fee(
+                test.xnet_messages()[0].payload_size_bytes(),
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+            )
+            .real()
+        + mgr
+            .xnet_call_bytes_transmitted_fee(
+                MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+            )
+            .real()
+        + mgr
+            .execution_cost(
+                MAX_NUM_INSTRUCTIONS,
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+                test.canister_wasm_execution_mode(canister_id),
+            )
+            .real();
     let transferred_cycles = Cycles::new(10_000_000_000);
     assert_eq!(
-        initial_cycles - messaging_fee - transferred_cycles - test.execution_cost(),
+        initial_cycles
+            - messaging_fee
+            - transferred_cycles
+            - test.canister_execution_cost(canister_id).real(),
         test.canister_state(canister_id).system_state.balance(),
     );
 }
@@ -3212,7 +3222,7 @@ fn ic0_call_cycles_add_has_no_effect_without_ic0_call_perform() {
     assert_eq!(0, test.xnet_messages().len());
     // Cycles deducted by `ic0.call_cycles_add` are refunded.
     assert_eq!(
-        initial_cycles - test.execution_cost(),
+        initial_cycles - test.canister_execution_cost(canister_id).real(),
         test.canister_state(canister_id).system_state.balance(),
     );
 }
@@ -5401,24 +5411,24 @@ fn cycles_cannot_be_accepted_after_response() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b)
-            - test.reply_fee(&b)
+            - test.canister_execution_cost(a_id).real()
+            - test.call_fee("update", &b).real()
+            - test.reply_fee(&b).real()
     );
 
     // Canister B doesn't get the transferred cycles.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(b_id)
-            - test.call_fee("update", &c)
-            - test.reply_fee(&c)
+            - test.canister_execution_cost(b_id).real()
+            - test.call_fee("update", &c).real()
+            - test.reply_fee(&c).real()
     );
 
     // Canister C pays only for execution.
     assert_eq!(
         test.canister_state(c_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(c_id)
+        initial_cycles - test.canister_execution_cost(c_id).real()
     );
 }
 
@@ -5481,9 +5491,9 @@ fn cycles_are_refunded_if_not_accepted() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b)
-            - test.reply_fee(&b)
+            - test.canister_execution_cost(a_id).real()
+            - test.call_fee("update", &b).real()
+            - test.reply_fee(&b).real()
             - a_to_b_accepted,
     );
 
@@ -5492,9 +5502,9 @@ fn cycles_are_refunded_if_not_accepted() {
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(b_id)
-            - test.call_fee("update", &c)
-            - test.reply_fee(&c)
+            - test.canister_execution_cost(b_id).real()
+            - test.call_fee("update", &c).real()
+            - test.reply_fee(&c).real()
             + a_to_b_accepted
             - b_to_c_accepted
     );
@@ -5502,7 +5512,7 @@ fn cycles_are_refunded_if_not_accepted() {
     // Canister C get all cycles it accepted.
     assert_eq!(
         test.canister_state(c_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(c_id) + b_to_c_accepted
+        initial_cycles - test.canister_execution_cost(c_id).real() + b_to_c_accepted
     );
 }
 
@@ -5554,15 +5564,15 @@ fn cycles_are_refunded_if_callee_traps() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b)
-            - test.reject_fee(reject_message)
+            - test.canister_execution_cost(a_id).real()
+            - test.call_fee("update", &b).real()
+            - test.reject_fee(reject_message).real()
     );
 
     // Canister B doesn't get any transferred cycles.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(b_id)
+        initial_cycles - test.canister_execution_cost(b_id).real()
     );
 }
 
@@ -5604,16 +5614,16 @@ fn cycles_are_refunded_even_if_response_callback_traps() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b)
-            - test.reply_fee(&b)
+            - test.canister_execution_cost(a_id).real()
+            - test.call_fee("update", &b).real()
+            - test.reply_fee(&b).real()
             - a_to_b_accepted,
     );
 
     // Canister B gets cycles it accepted.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(b_id) + a_to_b_accepted
+        initial_cycles - test.canister_execution_cost(b_id).real() + a_to_b_accepted
     );
 }
 
@@ -5653,15 +5663,15 @@ fn cycles_are_refunded_if_callee_is_a_query() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
-            - test.call_fee("query", &b)
-            - test.reply_fee(&b)
+            - test.canister_execution_cost(a_id).real()
+            - test.call_fee("query", &b).real()
+            - test.reply_fee(&b).real()
     );
 
     // Canister B doesn't get any transferred cycles.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(b_id)
+        initial_cycles - test.canister_execution_cost(b_id).real()
     );
 }
 
@@ -5706,15 +5716,15 @@ fn cycles_are_refunded_if_callee_is_uninstalled_before_execution() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b)
-            - test.reject_fee(reject_message)
+            - test.canister_execution_cost(a_id).real()
+            - test.call_fee("update", &b).real()
+            - test.reject_fee(reject_message).real()
     );
 
     // Canister B doesn't get any cycles.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(b_id)
+        initial_cycles - test.canister_execution_cost(b_id).real()
     );
 }
 
@@ -5798,9 +5808,9 @@ fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b)
-            - test.reject_fee(reject_message)
+            - test.canister_execution_cost(a_id).real()
+            - test.call_fee("update", &b).real()
+            - test.reject_fee(reject_message).real()
             - a_to_b_accepted,
     );
 
@@ -5809,9 +5819,9 @@ fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(b_id)
-            - test.call_fee("update", &c)
-            - test.reply_fee(&c)
+            - test.canister_execution_cost(b_id).real()
+            - test.call_fee("update", &c).real()
+            - test.reply_fee(&c).real()
             + a_to_b_accepted
             - b_to_c_accepted
     );
@@ -5819,7 +5829,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
     // Canister C gets all cycles it accepted.
     assert_eq!(
         test.canister_state(c_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(c_id) + b_to_c_accepted
+        initial_cycles - test.canister_execution_cost(c_id).real() + b_to_c_accepted
     );
 }
 
@@ -5905,9 +5915,9 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b)
-            - test.reject_fee(reject_message)
+            - test.canister_execution_cost(a_id).real()
+            - test.call_fee("update", &b).real()
+            - test.reject_fee(reject_message).real()
             - a_to_b_accepted,
     );
 
@@ -5916,9 +5926,9 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(b_id)
-            - test.call_fee("update", &c)
-            - test.reply_fee(&c)
+            - test.canister_execution_cost(b_id).real()
+            - test.call_fee("update", &c).real()
+            - test.reply_fee(&c).real()
             + a_to_b_accepted
             - b_to_c_accepted
     );
@@ -5926,7 +5936,7 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
     // Canister C gets all cycles it accepted.
     assert_eq!(
         test.canister_state(c_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(c_id) + b_to_c_accepted
+        initial_cycles - test.canister_execution_cost(c_id).real() + b_to_c_accepted
     );
 }
 
@@ -6051,9 +6061,9 @@ where
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b_0)
-            - test.reject_fee(reject_message.clone())
+            - test.canister_execution_cost(a_id).real()
+            - test.call_fee("update", &b_0).real()
+            - test.reject_fee(reject_message.clone()).real()
             - a_to_b_accepted
     );
 
@@ -6071,11 +6081,11 @@ where
         test.canister_state(b_id).system_state.balance(),
         initial_cycles
             - extra_cost
-            - test.canister_execution_cost(b_id)
-            - test.call_fee("update", &b_1)
-            - test.call_fee("update", &b_2)
-            - test.reject_fee(reject_message)
-            - test.reject_fee(reject_message_b_2_to_1)
+            - test.canister_execution_cost(b_id).real()
+            - test.call_fee("update", &b_1).real()
+            - test.call_fee("update", &b_2).real()
+            - test.reject_fee(reject_message).real()
+            - test.reject_fee(reject_message_b_2_to_1).real()
             + a_to_b_accepted
     );
 }
@@ -6414,12 +6424,15 @@ fn dts_abort_works_in_update_call() {
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         original_system_state.balance()
-            - test.cycles_account_manager().execution_cost(
-                NumInstructions::from(100_000_000),
-                test.subnet_size(),
-                CanisterCyclesCostSchedule::Normal,
-                test.canister_wasm_execution_mode(canister_id)
-            ),
+            - test
+                .cycles_account_manager()
+                .execution_cost(
+                    NumInstructions::from(100_000_000),
+                    test.subnet_size(),
+                    CanisterCyclesCostSchedule::Normal,
+                    test.canister_wasm_execution_mode(canister_id)
+                )
+                .real(),
     );
     assert_eq!(
         test.canister_state(canister_id)
@@ -6448,12 +6461,15 @@ fn dts_abort_works_in_update_call() {
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         original_system_state.balance()
-            - test.cycles_account_manager().execution_cost(
-                NumInstructions::from(100_000_000),
-                test.subnet_size(),
-                CanisterCyclesCostSchedule::Normal,
-                test.canister_wasm_execution_mode(canister_id)
-            ),
+            - test
+                .cycles_account_manager()
+                .execution_cost(
+                    NumInstructions::from(100_000_000),
+                    test.subnet_size(),
+                    CanisterCyclesCostSchedule::Normal,
+                    test.canister_wasm_execution_mode(canister_id)
+                )
+                .real(),
     );
     assert_eq!(
         test.canister_state(canister_id)
@@ -6471,7 +6487,7 @@ fn dts_abort_works_in_update_call() {
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         original_system_state.balance()
-            - (test.canister_execution_cost(canister_id) - original_execution_cost)
+            - (test.canister_execution_cost(canister_id) - original_execution_cost).real()
     );
     let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
@@ -6727,7 +6743,7 @@ fn cycles_correct_if_update_fails() {
     assert_gt!(execution_cost_after, execution_cost_before);
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(b_id)
+        initial_cycles - test.canister_execution_cost(b_id).real()
     );
 }
 
@@ -8043,12 +8059,14 @@ fn set_reserved_cycles_limit_below_existing_fails() {
     assert_gt!(reserved_cycles, Cycles::zero());
     assert_eq!(
         reserved_cycles,
-        test.cycles_account_manager().storage_reservation_cycles(
-            memory_usage_after - memory_usage_before,
-            &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
-        )
+        test.cycles_account_manager()
+            .storage_reservation_cycles(
+                memory_usage_after - memory_usage_before,
+                &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+            )
+            .real()
     );
 
     assert_gt!(balance_before - balance_after, reserved_cycles);
@@ -8921,7 +8939,7 @@ fn invoke_cost_create_canister() {
         panic!("Expected reply, got {res:?}");
     };
     let actual_cost = Cycles::from(&bytes);
-    assert_eq!(actual_cost, expected_cost,);
+    assert_eq!(actual_cost, expected_cost.real());
 }
 
 #[test]
@@ -8947,7 +8965,7 @@ fn invoke_cost_http_request() {
         panic!("Expected reply, got {res:?}");
     };
     let actual_cost = Cycles::from(&bytes);
-    assert_eq!(actual_cost, expected_cost,);
+    assert_eq!(actual_cost, expected_cost.real());
 }
 
 #[test]
@@ -8994,7 +9012,7 @@ fn invoke_cost_http_request_v2() {
     );
     let bytes = get_reply(res);
     let actual_cost = Cycles::from(&bytes);
-    assert_eq!(actual_cost, expected_cost,);
+    assert_eq!(actual_cost, expected_cost.real());
 }
 
 #[test]
@@ -9063,7 +9081,7 @@ fn invoke_cost_sign_with_ecdsa() {
         panic!("Expected reply, got {res:?}");
     };
     let actual_cost = Cycles::from(&bytes);
-    assert_eq!(actual_cost, expected_cost,);
+    assert_eq!(actual_cost, expected_cost.real());
 }
 
 #[test]
@@ -9143,7 +9161,7 @@ fn invoke_cost_sign_with_schnorr() {
         panic!("Expected reply, got {res:?}");
     };
     let actual_cost = Cycles::from(&bytes);
-    assert_eq!(actual_cost, expected_cost,);
+    assert_eq!(actual_cost, expected_cost.real());
 }
 
 #[test]
@@ -9223,7 +9241,7 @@ fn invoke_cost_vetkd_derive_key() {
         panic!("Expected reply, got {res:?}");
     };
     let actual_cost = Cycles::from(&bytes);
-    assert_eq!(actual_cost, expected_cost,);
+    assert_eq!(actual_cost, expected_cost.real());
 }
 
 #[test]

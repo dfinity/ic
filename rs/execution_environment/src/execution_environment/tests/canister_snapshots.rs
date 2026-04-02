@@ -1514,7 +1514,7 @@ fn load_canister_snapshot_succeeds() {
         .unwrap()
         .system_state
         .canister_version();
-    assert_eq!(canister_version_before, 1u64);
+    assert_eq!(canister_version_before, 1_u64);
 
     let canister_history = test
         .state()
@@ -1581,7 +1581,7 @@ fn load_canister_snapshot_succeeds() {
         .canister_version();
     // Canister version should be bumped after loading a snapshot.
     assert_gt!(canister_version_after, canister_version_before);
-    assert_eq!(canister_version_after, 2u64);
+    assert_eq!(canister_version_after, 2_u64);
 
     // Entry in canister history should contain the information of
     // the snapshot that was loaded back into the canister.
@@ -1801,11 +1801,14 @@ fn take_canister_snapshot_charges_canister_cycles() {
         + NumInstructions::new(canister_snapshot_size.get());
 
     // Take a snapshot of the canister will decrease the balance.
-    let expected_charge = test.cycles_account_manager().management_canister_cost(
-        instructions,
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
-    );
+    let expected_charge = test
+        .cycles_account_manager()
+        .management_canister_cost(
+            instructions,
+            test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
+        )
+        .real();
 
     // Take a snapshot for the canister.
     let args: TakeCanisterSnapshotArgs =
@@ -1878,11 +1881,14 @@ fn load_canister_snapshot_charges_canister_cycles() {
         + NumInstructions::new(canister_snapshot_size.get());
 
     // Load a snapshot of the canister will decrease the balance.
-    let expected_charge = test.cycles_account_manager().management_canister_cost(
-        instructions,
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
-    );
+    let expected_charge = test
+        .cycles_account_manager()
+        .management_canister_cost(
+            instructions,
+            test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
+        )
+        .real();
 
     // Load an existing snapshot will decrease the balance.
     let args: LoadCanisterSnapshotArgs =

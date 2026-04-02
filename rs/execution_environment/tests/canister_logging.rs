@@ -5,7 +5,7 @@ use ic_config::execution_environment::{
 };
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
-use ic_execution_environment::units::KIB;
+use ic_execution_environment::units::{KIB, MIB};
 use ic_management_canister_types_private::{
     self as ic00, BoundedAllowedViewers, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord,
     CanisterSettingsArgs, CanisterSettingsArgsBuilder, DataSize, EmptyBlob,
@@ -39,7 +39,7 @@ const MAX_INSTRUCTIONS_PER_ROUND: NumInstructions = NumInstructions::new(5 * B);
 const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions::new(25 * B);
 const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(5 * B);
 
-const CANISTER_INIT_CYCLES: Cycles = Cycles::new(301_000_000_000_u128);
+const CANISTER_INIT_CYCLES: Cycles = Cycles::new(310_000_000_000_u128);
 
 fn system_time_to_nanos(t: SystemTime) -> u64 {
     t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64
@@ -1992,6 +1992,41 @@ fn test_canister_uninstall_and_install_clears_log_memory() {
     let logs_after = fetch_log_records(&env, controller, canister_id);
     // Expect zero, because log memory store is deallocated.
     assert_eq!(logs_after.len(), 0);
+}
+
+#[test]
+fn test_large_delta_log_in_single_execution() {
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    // Test that a single message execution can generate a large delta log
+    // (e.g., ~1.5 MiB) that exceeds the default 4 KiB capacity but is still
+    // within the configured canister log memory limit.
+    let log_memory_limit = 2 * MIB;
+    let message_count = 1_500;
+    let message = [b'a'; 1_000];
+
+    let env = setup_env();
+    let controller = PrincipalId::new_anonymous();
+    let canister_id = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![controller])
+            .with_log_memory_limit(log_memory_limit)
+            .build(),
+        wat_canister()
+            .update(
+                "generate_logs",
+                wat_fn().repeat(message_count, wat_fn().debug_print(&message)),
+            )
+            .build_wasm(),
+    );
+
+    // Execute a single message that generates a large amount of logs.
+    let _ = env.execute_ingress(canister_id, "generate_logs", vec![]);
+
+    let logs = fetch_log_records(&env, controller, canister_id);
+    assert_eq!(logs.len(), message_count as usize);
 }
 
 #[test]

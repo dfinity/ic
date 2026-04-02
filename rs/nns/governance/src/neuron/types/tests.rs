@@ -3,7 +3,7 @@ use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{
         self as pb, VotingPowerEconomics,
-        manage_neuron::{SetDissolveTimestamp, StartDissolving},
+        manage_neuron::{Configure, SetDissolveTimestamp, StartDissolving, configure::Operation},
     },
 };
 use ic_cdk::println;
@@ -230,7 +230,7 @@ fn create_neuron_with_stake_dissolve_state_and_age(
 ) -> Neuron {
     NeuronBuilder::new(
         NeuronId { id: 1 },
-        Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+        Subaccount::try_from(vec![0_u8; 32].as_slice()).unwrap(),
         PrincipalId::new_user_test_id(1),
         dissolve_state_and_age,
         123_456_789,
@@ -368,7 +368,7 @@ fn create_neuron_with_dissolve_state_and_age(
 ) -> Neuron {
     NeuronBuilder::new(
         NeuronId { id: 1 },
-        Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+        Subaccount::try_from(vec![0_u8; 32].as_slice()).unwrap(),
         PrincipalId::new_user_test_id(1),
         dissolve_state_and_age,
         123_456_789,
@@ -445,9 +445,7 @@ fn increase_dissolve_delay_does_not_set_age_for_non_dissolving_neurons() {
 
     // Test cases
     for current_aging_since_timestamp_seconds in [0, NOW - 1, NOW, NOW + 1, NOW + 2000] {
-        for current_dissolve_delay_seconds in
-            [1, 10, 100, NOW, NOW + 1000, (ONE_DAY_SECONDS * 365 * 8)]
-        {
+        for current_dissolve_delay_seconds in [1, 10, 100, 1000, max_dissolve_delay_seconds() - 1] {
             test_increase_dissolve_delay_by_1_for_non_dissolving_neuron(
                 current_aging_since_timestamp_seconds,
                 current_dissolve_delay_seconds,
@@ -522,7 +520,10 @@ fn test_neuron_configure_dissolve_delay() {
         )
         .unwrap();
     assert_eq!(neuron.state(now), NeuronState::NotDissolving);
-    assert_eq!(neuron.dissolve_delay_seconds(now), 8 * ONE_YEAR_SECONDS);
+    assert_eq!(
+        neuron.dissolve_delay_seconds(now),
+        max_dissolve_delay_seconds()
+    );
 
     // Step 5: start dissolving the neuron.
     neuron
@@ -537,7 +538,7 @@ fn test_neuron_configure_dissolve_delay() {
     assert_eq!(neuron.state(now), NeuronState::Dissolving);
 
     // Step 7: advance the time by 8 years - 1 second and see that the neuron is still dissolving.
-    let now = now + 8 * ONE_YEAR_SECONDS - 1;
+    let now = now + max_dissolve_delay_seconds() - 1;
     assert_eq!(neuron.state(now), NeuronState::Dissolving);
 
     // Step 8: advance the time by 1 second and see that the neuron is now dissolved.
@@ -553,7 +554,7 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
 
     let builder = NeuronBuilder::new(
         NeuronId { id: 42 },
-        Subaccount::try_from(vec![42u8; 32].as_slice()).unwrap(),
+        Subaccount::try_from(vec![42_u8; 32].as_slice()).unwrap(),
         principal_id,
         DissolveStateAndAge::NotDissolving {
             dissolve_delay_seconds: 1_000_000,
@@ -619,7 +620,7 @@ fn test_adjust_voting_power() {
 
     let neuron = NeuronBuilder::new(
         NeuronId { id: 42 },
-        Subaccount::try_from(vec![42u8; 32].as_slice()).unwrap(),
+        Subaccount::try_from(vec![42_u8; 32].as_slice()).unwrap(),
         principal_id,
         DissolveStateAndAge::NotDissolving {
             dissolve_delay_seconds: 12 * ONE_MONTH_SECONDS,
@@ -711,7 +712,7 @@ fn test_ready_to_unstake_maturity() {
         |dissolve_state_and_age, staked_maturity| -> Neuron {
             NeuronBuilder::new(
                 NeuronId { id: 1 },
-                Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+                Subaccount::try_from(vec![0_u8; 32].as_slice()).unwrap(),
                 PrincipalId::new_user_test_id(1),
                 dissolve_state_and_age,
                 123_456_789,
@@ -773,7 +774,7 @@ fn test_ready_to_spawn() {
     // Ready to spawn since it has a spawn timestamp in the past.
     let neuron_ready_to_spawn = NeuronBuilder::new(
         NeuronId { id: 1 },
-        Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+        Subaccount::try_from(vec![0_u8; 32].as_slice()).unwrap(),
         PrincipalId::new_user_test_id(1),
         DissolveStateAndAge::DissolvingOrDissolved {
             when_dissolved_timestamp_seconds: now - 1,
@@ -787,7 +788,7 @@ fn test_ready_to_spawn() {
     // Not ready to spawn since it has a spawn timestamp in the future.
     let neuron_not_ready_to_spawn = NeuronBuilder::new(
         NeuronId { id: 1 },
-        Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+        Subaccount::try_from(vec![0_u8; 32].as_slice()).unwrap(),
         PrincipalId::new_user_test_id(1),
         DissolveStateAndAge::DissolvingOrDissolved {
             when_dissolved_timestamp_seconds: now + 1,
@@ -801,7 +802,7 @@ fn test_ready_to_spawn() {
     // Not ready to spawn since it has no spawn timestamp.
     let neuron_no_spawn_timestamp = NeuronBuilder::new(
         NeuronId { id: 1 },
-        Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+        Subaccount::try_from(vec![0_u8; 32].as_slice()).unwrap(),
         PrincipalId::new_user_test_id(1),
         DissolveStateAndAge::DissolvingOrDissolved {
             when_dissolved_timestamp_seconds: now - 1,
@@ -810,4 +811,43 @@ fn test_ready_to_spawn() {
     )
     .build();
     assert!(!neuron_no_spawn_timestamp.ready_to_spawn(now));
+}
+
+#[test]
+fn test_eight_year_gang_bonus_base_e8s_is_lost_after_dissolving() {
+    let now = 123_456_789;
+    let dissolve_delay_seconds = 8 * ONE_YEAR_SECONDS;
+    let mut neuron = NeuronBuilder::new(
+        NeuronId { id: 1 },
+        Subaccount::try_from(vec![0_u8; 32].as_slice()).unwrap(),
+        PrincipalId::new_user_test_id(1),
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds,
+            aging_since_timestamp_seconds: now - 1000,
+        },
+        now - 2000,
+    )
+    .with_cached_neuron_stake_e8s(100 * E8)
+    .with_eight_year_gang_bonus_base_e8s(100 * E8)
+    .build();
+    let controller = neuron.controller();
+
+    // Verify the neuron is not dissolving and has a non-zero eight year gang bonus.
+    assert_eq!(neuron.state(now), NeuronState::NotDissolving);
+    assert_eq!(neuron.eight_year_gang_bonus_base_e8s, 100 * E8);
+
+    // Start dissolving.
+    neuron
+        .configure(
+            &controller,
+            now,
+            &Configure {
+                operation: Some(Operation::StartDissolving(StartDissolving {})),
+            },
+        )
+        .unwrap();
+
+    // Verify the neuron is dissolving and the eight year gang bonus has been set to 0.
+    assert_eq!(neuron.state(now), NeuronState::Dissolving);
+    assert_eq!(neuron.eight_year_gang_bonus_base_e8s, 0);
 }

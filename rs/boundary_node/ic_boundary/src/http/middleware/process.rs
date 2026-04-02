@@ -4,15 +4,14 @@ use axum::{Extension, body::Body, extract::Request, middleware::Next, response::
 use bytes::Bytes;
 use candid::{Decode, Principal};
 use http::header::{CONTENT_TYPE, HeaderValue, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
-use ic_bn_lib::http::{body::buffer_body, cache::CacheStatus, headers::*};
-use ic_bn_lib_common::types::http::Error as HttpError;
+use ic_bn_lib::http::{cache::CacheStatus, headers::*};
 use ic_types::messages::Blob;
 use serde::de::Error as SerdeDeError;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::{
     core::{MAX_REQUEST_BODY_SIZE, decoder_config},
-    errors::{ApiError, ErrorCause},
+    errors::{ApiError, ErrorCause, buffer_body_to_bytes},
     http::{RequestType, middleware::retry::RetryResult},
     metrics::MAX_LOGGING_METHOD_NAME_LENGTH,
     routes::{HttpRequest, RequestContext},
@@ -34,6 +33,7 @@ struct ICRequestContent {
     nonce: Option<Blob>,
     ingress_expiry: Option<u64>,
     arg: Option<Blob>,
+    paths: Option<Vec<Vec<Blob>>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -68,14 +68,7 @@ pub async fn preprocess_request(
 ) -> Result<impl IntoResponse, ApiError> {
     // Consume body
     let (parts, body) = request.into_parts();
-    let body = buffer_body(body, MAX_REQUEST_BODY_SIZE, Duration::from_secs(60))
-        .await
-        .map_err(|e| match e {
-            HttpError::BodyReadingFailed(v) => ErrorCause::UnableToReadBody(v),
-            HttpError::BodyTooBig => ErrorCause::PayloadTooLarge(MAX_REQUEST_BODY_SIZE),
-            HttpError::BodyTimedOut => ErrorCause::BodyTimedOut,
-            _ => ErrorCause::Other(e.to_string()),
-        })?;
+    let body = buffer_body_to_bytes(body, MAX_REQUEST_BODY_SIZE, Duration::from_secs(60)).await?;
 
     // Parse the request body
     let envelope: ICRequestEnvelope = serde_cbor::from_slice(&body)
@@ -118,6 +111,11 @@ pub async fn preprocess_request(
         arg: arg.map(|x| x.0),
         nonce: content.nonce.map(|x| x.0),
         http_request,
+        read_state_paths: content.paths.map(|p| {
+            p.into_iter()
+                .map(|v| v.into_iter().map(|b| b.0).collect())
+                .collect()
+        }),
     };
 
     let ctx = Arc::new(ctx);
@@ -258,6 +256,7 @@ mod tests {
             nonce: None,
             ingress_expiry: None,
             arg: None,
+            paths: None,
         };
         let envelope = ICRequestEnvelope { content };
 
@@ -278,6 +277,7 @@ mod tests {
             nonce: None,
             ingress_expiry: None,
             arg: None,
+            paths: None,
         };
         let envelope = ICRequestEnvelope { content };
 
@@ -300,6 +300,7 @@ mod tests {
             nonce: None,
             ingress_expiry: None,
             arg: None,
+            paths: None,
         };
         let envelope = ICRequestEnvelope { content };
 
@@ -318,6 +319,7 @@ mod tests {
             nonce: None,
             ingress_expiry: None,
             arg: None,
+            paths: None,
         };
         let envelope = ICRequestEnvelope { content };
 

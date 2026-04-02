@@ -27,11 +27,16 @@ use ic_types::{
     messages::{CallContextId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, RejectContext, Request},
     methods::{SystemMethod, WasmClosure},
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, Instructions,
+    RequestAndResponseTransmission,
+};
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use ic_wasm_types::doc_ref;
 use request_in_prep::{RequestInPrep, into_request};
-use sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications};
+use sandbox_safe_system_state::{
+    ConsumedCyclesDuringExecution, SandboxSafeSystemState, SystemStateModifications,
+};
 use serde::{Deserialize, Serialize};
 use stable_memory::StableMemory;
 use std::time::Duration;
@@ -1672,7 +1677,7 @@ impl SystemApiImpl {
                     callback_updates: vec![],
                     cycles_balance_change: CyclesBalanceChange::zero(),
                     reserved_cycles: Cycles::zero(),
-                    consumed_cycles_by_use_case: BTreeMap::new(),
+                    consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
                     call_context_balance_taken: None,
                     request_slots_used: BTreeMap::new(),
                     requests: vec![],
@@ -1695,7 +1700,7 @@ impl SystemApiImpl {
                     callback_updates: vec![],
                     cycles_balance_change: CyclesBalanceChange::zero(),
                     reserved_cycles: Cycles::zero(),
-                    consumed_cycles_by_use_case: BTreeMap::new(),
+                    consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
                     call_context_balance_taken: None,
                     request_slots_used: BTreeMap::new(),
                     requests: vec![],
@@ -1709,7 +1714,7 @@ impl SystemApiImpl {
                     callback_updates: system_state_modifications.callback_updates,
                     cycles_balance_change: CyclesBalanceChange::zero(),
                     reserved_cycles: Cycles::zero(),
-                    consumed_cycles_by_use_case: BTreeMap::new(),
+                    consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
                     call_context_balance_taken: None,
                     request_slots_used: system_state_modifications.request_slots_used,
                     requests: system_state_modifications.requests,
@@ -1730,7 +1735,7 @@ impl SystemApiImpl {
                         callback_updates: vec![],
                         cycles_balance_change: CyclesBalanceChange::zero(),
                         reserved_cycles: Cycles::zero(),
-                        consumed_cycles_by_use_case: BTreeMap::new(),
+                        consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
                         call_context_balance_taken: None,
                         request_slots_used: BTreeMap::new(),
                         requests: vec![],
@@ -1772,7 +1777,7 @@ impl SystemApiImpl {
                         callback_updates: vec![],
                         cycles_balance_change: CyclesBalanceChange::zero(),
                         reserved_cycles: Cycles::zero(),
-                        consumed_cycles_by_use_case: BTreeMap::new(),
+                        consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
                         call_context_balance_taken: None,
                         request_slots_used: BTreeMap::new(),
                         requests: vec![],
@@ -1803,7 +1808,7 @@ impl SystemApiImpl {
                         callback_updates: vec![],
                         cycles_balance_change: CyclesBalanceChange::zero(),
                         reserved_cycles: Cycles::zero(),
-                        consumed_cycles_by_use_case: BTreeMap::new(),
+                        consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
                         call_context_balance_taken: None,
                         request_slots_used: BTreeMap::new(),
                         requests: vec![],
@@ -1829,8 +1834,8 @@ impl SystemApiImpl {
     pub fn push_output_request(
         &mut self,
         req: Request,
-        prepayment_for_response_execution: Cycles,
-        prepayment_for_response_transmission: Cycles,
+        prepayment_for_response_execution: CompoundCycles<Instructions>,
+        prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
     ) -> HypervisorResult<i32> {
         let abort = |request: Request, sandbox_safe_system_state: &mut SandboxSafeSystemState| {
             sandbox_safe_system_state.refund_cycles(request.payment);
@@ -4194,7 +4199,7 @@ impl SystemApi for SystemApiImpl {
             .sandbox_safe_system_state
             .get_cycles_account_manager()
             .canister_creation_fee(subnet_size, self.get_cost_schedule());
-        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_create_canister")?;
+        copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_create_canister")?;
         trace_syscall!(self, CostCreateCanister, cost);
         Ok(())
     }
@@ -4216,7 +4221,7 @@ impl SystemApi for SystemApiImpl {
                 subnet_size,
                 self.get_cost_schedule(),
             );
-        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_http_request")?;
+        copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_http_request")?;
         trace_syscall!(self, CostHttpRequest, cost);
         Ok(())
     }
@@ -4269,7 +4274,7 @@ impl SystemApi for SystemApiImpl {
                 subnet_size,
                 self.get_cost_schedule(),
             );
-        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_http_request_v2")?;
+        copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_http_request_v2")?;
         trace_syscall!(self, CostHttpRequestV2, cost);
         Ok(())
     }
@@ -4309,7 +4314,7 @@ impl SystemApi for SystemApiImpl {
             .sandbox_safe_system_state
             .get_cycles_account_manager()
             .ecdsa_signature_fee(subnet_size, cost_schedule);
-        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_ecdsa")?;
+        copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_sign_with_ecdsa")?;
         trace_syscall!(self, CostSignWithEcdsa, cost);
         Ok(CostReturnCode::Success as u32)
     }
@@ -4349,7 +4354,7 @@ impl SystemApi for SystemApiImpl {
             .sandbox_safe_system_state
             .get_cycles_account_manager()
             .schnorr_signature_fee(subnet_size, cost_schedule);
-        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_schnorr")?;
+        copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_sign_with_schnorr")?;
         trace_syscall!(self, CostSignWithSchnorr, cost);
         Ok(CostReturnCode::Success as u32)
     }
@@ -4389,7 +4394,7 @@ impl SystemApi for SystemApiImpl {
             .sandbox_safe_system_state
             .get_cycles_account_manager()
             .vetkd_fee(subnet_size, cost_schedule);
-        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_vetkd_derive_key")?;
+        copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_vetkd_derive_key")?;
         trace_syscall!(self, CostVetkdDeriveEncryptedKey, cost);
         Ok(CostReturnCode::Success as u32)
     }
