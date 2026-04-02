@@ -2761,6 +2761,7 @@ impl From<pb::update_canister_settings::CanisterSettings>
             log_visibility: item.log_visibility,
             wasm_memory_limit: item.wasm_memory_limit,
             wasm_memory_threshold: item.wasm_memory_threshold,
+            snapshot_visibility: item.snapshot_visibility,
         }
     }
 }
@@ -2777,6 +2778,7 @@ impl From<api::update_canister_settings::CanisterSettings>
             log_visibility: item.log_visibility,
             wasm_memory_limit: item.wasm_memory_limit,
             wasm_memory_threshold: item.wasm_memory_threshold,
+            snapshot_visibility: item.snapshot_visibility,
         }
     }
 }
@@ -3735,6 +3737,7 @@ impl From<pb::NnsFunction> for api::NnsFunction {
                 api::NnsFunction::SetSubnetOperationalLevel
             }
             pb::NnsFunction::SplitSubnet => api::NnsFunction::SplitSubnet,
+            pb::NnsFunction::DeleteSubnet => api::NnsFunction::DeleteSubnet,
         }
     }
 }
@@ -3831,6 +3834,7 @@ impl From<api::NnsFunction> for pb::NnsFunction {
                 pb::NnsFunction::SetSubnetOperationalLevel
             }
             api::NnsFunction::SplitSubnet => pb::NnsFunction::SplitSubnet,
+            api::NnsFunction::DeleteSubnet => pb::NnsFunction::DeleteSubnet,
         }
     }
 }

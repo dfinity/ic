@@ -154,6 +154,8 @@ pub struct AbridgedNeuron {
     pub voting_power_refreshed_timestamp_seconds: ::core::option::Option<u64>,
     #[prost(uint32, optional, tag = "25")]
     pub recent_ballots_next_entry_index: ::core::option::Option<u32>,
+    #[prost(uint64, tag = "26")]
+    pub eight_year_gang_bonus_base_e8s: u64,
     #[prost(oneof = "abridged_neuron::DissolveState", tags = "9, 10")]
     pub dissolve_state: ::core::option::Option<abridged_neuron::DissolveState>,
 }
@@ -2802,6 +2804,8 @@ pub mod update_canister_settings {
         pub wasm_memory_limit: ::core::option::Option<u64>,
         #[prost(uint64, optional, tag = "7")]
         pub wasm_memory_threshold: ::core::option::Option<u64>,
+        #[prost(enumeration = "SnapshotVisibility", optional, tag = "8")]
+        pub snapshot_visibility: ::core::option::Option<i32>,
     }
     /// Log visibility of a canister.
     #[derive(
@@ -2845,6 +2849,52 @@ pub mod update_canister_settings {
                 "LOG_VISIBILITY_UNSPECIFIED" => Some(Self::Unspecified),
                 "LOG_VISIBILITY_CONTROLLERS" => Some(Self::Controllers),
                 "LOG_VISIBILITY_PUBLIC" => Some(Self::Public),
+                _ => None,
+            }
+        }
+    }
+    /// Snapshot visibility of a canister.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration,
+    )]
+    #[repr(i32)]
+    pub enum SnapshotVisibility {
+        Unspecified = 0,
+        /// Snapshots are visible to the controllers of the dapp canister.
+        Controllers = 1,
+        /// Snapshots are visible to the public.
+        Public = 2,
+    }
+    impl SnapshotVisibility {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                Self::Unspecified => "SNAPSHOT_VISIBILITY_UNSPECIFIED",
+                Self::Controllers => "SNAPSHOT_VISIBILITY_CONTROLLERS",
+                Self::Public => "SNAPSHOT_VISIBILITY_PUBLIC",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "SNAPSHOT_VISIBILITY_UNSPECIFIED" => Some(Self::Unspecified),
+                "SNAPSHOT_VISIBILITY_CONTROLLERS" => Some(Self::Controllers),
+                "SNAPSHOT_VISIBILITY_PUBLIC" => Some(Self::Public),
                 _ => None,
             }
         }
@@ -2904,6 +2954,42 @@ pub struct LoadCanisterSnapshot {
     /// The ID of the snapshot to load.
     #[prost(bytes = "vec", tag = "2")]
     pub snapshot_id: ::prost::alloc::vec::Vec<u8>,
+}
+/// Snapshot of a neuron's dissolve state, recorded before clamping to the
+/// Mission 70 maximum. Used to restore the original dissolve state if the
+/// maximum dissolve delay is ever increased again.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct NeuronDissolveStateSnapshot {
+    #[prost(oneof = "neuron_dissolve_state_snapshot::DissolveState", tags = "1, 2")]
+    pub dissolve_state: ::core::option::Option<neuron_dissolve_state_snapshot::DissolveState>,
+}
+/// Nested message and enum types in `NeuronDissolveStateSnapshot`.
+pub mod neuron_dissolve_state_snapshot {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum DissolveState {
+        #[prost(uint64, tag = "1")]
+        DissolveDelaySeconds(u64),
+        #[prost(uint64, tag = "2")]
+        WhenDissolvedTimestampSeconds(u64),
+    }
 }
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
@@ -3024,6 +3110,15 @@ pub struct Governance {
     /// Map of proposal IDs to their topics for those garbage collected.
     #[prost(map = "uint64, enumeration(Topic)", tag = "29")]
     pub topic_of_garbage_collected_proposals: ::std::collections::HashMap<u64, i32>,
+    /// Whether the eight year gang bonus base migration has run for all neurons.
+    /// This prevents the migration from running more than once.
+    #[prost(bool, tag = "31")]
+    pub eight_year_gang_bonus_migration_done: bool,
+    /// Snapshot of each neuron's dissolve state taken while clamping to the Mission 70 maximum
+    /// dissolve delay. Enables restoring original dissolve states if the maximum is reversed.
+    #[prost(map = "uint64, message", tag = "32")]
+    pub neuron_id_to_pre_clamp_dissolve_state:
+        ::std::collections::HashMap<u64, NeuronDissolveStateSnapshot>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -4960,6 +5055,11 @@ pub enum NnsFunction {
     SetSubnetOperationalLevel = 55,
     /// The proposal requests to split a subnet.
     SplitSubnet = 56,
+    /// Delete a subnet. The subnet record, catch-up package, threshold signing key
+    /// and routing table entries are removed from the registry, and the subnet's
+    /// nodes become unassigned.
+    /// Currently limited to CloudEngine subnets.
+    DeleteSubnet = 57,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -5034,6 +5134,7 @@ impl NnsFunction {
             Self::UnpauseCanisterMigrations => "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS",
             Self::SetSubnetOperationalLevel => "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL",
             Self::SplitSubnet => "NNS_FUNCTION_SPLIT_SUBNET",
+            Self::DeleteSubnet => "NNS_FUNCTION_DELETE_SUBNET",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -5115,6 +5216,7 @@ impl NnsFunction {
             "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS" => Some(Self::UnpauseCanisterMigrations),
             "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL" => Some(Self::SetSubnetOperationalLevel),
             "NNS_FUNCTION_SPLIT_SUBNET" => Some(Self::SplitSubnet),
+            "NNS_FUNCTION_DELETE_SUBNET" => Some(Self::DeleteSubnet),
             _ => None,
         }
     }

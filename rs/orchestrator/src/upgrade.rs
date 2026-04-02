@@ -616,9 +616,9 @@ impl Upgrade {
         Ok(())
     }
 
-    // Stop the replica if the given CUP is unsigned and higher than the given height.
-    // Without restart, consensus would reject the unsigned artifact.
-    // If stopping the replica fails, restart the current process instead.
+    /// Stop the replica if the given CUP is unsigned and higher than the given height.
+    /// Without restart, consensus would reject the unsigned artifact.
+    /// If stopping the replica fails, restart the current process instead.
     fn stop_replica_if_new_recovery_cup(
         &self,
         cup: &CatchUpPackage,
@@ -639,7 +639,7 @@ impl Upgrade {
         }
     }
 
-    // Start the replica process if not running already
+    /// Start the replica process if not running already
     fn ensure_replica_is_running(
         &self,
         replica_version: &ReplicaVersion,
@@ -742,7 +742,7 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
     }
 }
 
-// Returns the subnet id for the given CUP.
+/// Returns the subnet id for the given CUP.
 fn get_subnet_id(registry: &dyn RegistryClient, cup: &CatchUpPackage) -> Result<SubnetId, String> {
     let dkg_summary = &cup
         .content
@@ -807,10 +807,10 @@ enum UnassignmentDecision {
     StayInSubnet,
 }
 
-// Checks if the node still belongs to the subnet it was assigned the last time.
-// We decide this by checking the subnet membership starting from the oldest
-// relevant version of the local CUP and ending with the latest registry
-// version.
+/// Checks if the node still belongs to the subnet it was assigned the last time.
+/// We decide this by checking the subnet membership starting from the oldest
+/// relevant version of the local CUP and ending with the latest registry
+/// version.
 fn should_node_become_unassigned(
     registry: &dyn RegistryClient,
     latest_registry_version: RegistryVersion,
@@ -827,6 +827,12 @@ fn should_node_become_unassigned(
         return UnassignmentDecision::StayInSubnet;
     }
 
+    if let Ok(true) =
+        registry.is_subnet_deleted(subnet_id, RegistryVersion::from(latest_registry_version))
+    {
+        return UnassignmentDecision::Now;
+    }
+
     // If the node is at the latest registry version in a subnet it shouldn't be unassigned.
     if node_is_in_subnet_at_version(registry, node_id, subnet_id, latest_registry_version) {
         return UnassignmentDecision::StayInSubnet;
@@ -841,17 +847,22 @@ fn should_node_become_unassigned(
     UnassignmentDecision::Now
 }
 
-// Checks if the given node belongs to the given subnet at the given registry version, by looking
-// at the corresponding subnet record's membership in the registry.
-// If the record is missing, or there is any error (like a corrupted local store), then this
-// function returns true, to avoid removing the subnet state by mistake, as a conservative
-// approach. This function thus assumes that the caller has verified that the subnet ID exists.
+/// Checks if the given node belongs to the given subnet at the given registry version, by looking
+/// at the corresponding subnet record's membership in the registry.
+/// If the record is missing, or there is any error (like a corrupted local store), then this
+/// function returns true, to avoid removing the subnet state by mistake, as a conservative
+/// approach. This function thus assumes that the caller has verified that the subnet ID exists.
+///
+/// Shortcuts to `false` if the subnet was explicitly deleted.
 fn node_is_in_subnet_at_version(
     registry: &dyn RegistryClient,
     node_id: NodeId,
     subnet_id: SubnetId,
     version: u64,
 ) -> bool {
+    if let Ok(true) = registry.is_subnet_deleted(subnet_id, RegistryVersion::from(version)) {
+        return false;
+    }
     registry
         .get_node_ids_on_subnet(subnet_id, RegistryVersion::from(version))
         .map(|maybe_members| {
@@ -862,7 +873,7 @@ fn node_is_in_subnet_at_version(
         .unwrap_or(true)
 }
 
-// Call `sync` and `fstrim` on the data partition
+/// Call `sync` and `fstrim` on the data partition
 async fn sync_and_trim_fs(logger: &ReplicaLogger) -> Result<(), String> {
     let mut fstrim_script = tokio::process::Command::new("/opt/ic/bin/sync_fstrim.sh");
     info!(logger, "Running command '{:?}'...", fstrim_script);
@@ -882,8 +893,8 @@ async fn sync_and_trim_fs(logger: &ReplicaLogger) -> Result<(), String> {
     }
 }
 
-// Deletes the subnet state consisting of the consensus pool, execution state,
-// the local CUP and the persisted error metric of threshold key changes.
+/// Deletes the subnet state consisting of the consensus pool, execution state,
+/// the local CUP and the persisted error metric of threshold key changes.
 fn remove_node_state(
     replica_config_file: PathBuf,
     cup_path: PathBuf,
@@ -988,7 +999,7 @@ fn remove_node_state(
     Ok(())
 }
 
-// Re-execute the current process, exactly as it was originally called.
+/// Re-execute the current process, exactly as it was originally called.
 fn reexec_current_process(logger: &ReplicaLogger) -> OrchestratorError {
     let args: Vec<String> = std::env::args().collect();
     info!(
@@ -3321,7 +3332,66 @@ mod tests {
     }
 
     #[test]
+    fn test_unassignment_now_when_subnet_deleted() {
+        let key_id = make_vetkd_key_id();
+        let node_id = NodeId::new(PrincipalId::new_node_test_id(1));
+        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let latest_registry_version = RegistryVersion::from(10);
+        let oldest_relevant_version = 5;
+
+        let mut registry_client = MockFakeRegistryClient::new();
+
+        let mut setup = Setup::new_with_nidkg_registry_version(Some(oldest_relevant_version));
+        let key_transcript = setup.generate_key_transcript(&key_id);
+        let cup = make_cup_with_key_transcript(Height::from(15), Some(key_transcript));
+
+        // Return a deleted-subnet record: value is None and version > 0.
+        registry_client
+            .expect_get_versioned_value()
+            .once()
+            .return_const(Ok(RegistryVersionedRecord {
+                key: make_subnet_record_key(subnet_id),
+                version: RegistryVersion::new(1),
+                value: None,
+            }));
+
+        let response = should_node_become_unassigned(
+            &registry_client,
+            latest_registry_version,
+            node_id,
+            subnet_id,
+            &cup,
+        );
+
+        assert_eq!(response, UnassignmentDecision::Now);
+    }
+
+    #[test]
     fn test_stay_in_subnet_on_subnet_missing() {
+        let node_id = NodeId::new(PrincipalId::new_node_test_id(1));
+        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let version = 10;
+
+        let mut registry_client = MockFakeRegistryClient::new();
+        registry_client
+            .expect_get_versioned_value()
+            .times(2)
+            .return_const(Ok(RegistryVersionedRecord {
+                key: make_subnet_record_key(subnet_id),
+                version: RegistryVersion::new(0),
+                value: None,
+            }));
+
+        assert!(node_is_in_subnet_at_version(
+            &registry_client,
+            node_id,
+            subnet_id,
+            version
+        ))
+    }
+
+    #[test]
+    fn test_do_not_stay_in_subnet_on_subnet_deleted() {
         let node_id = NodeId::new(PrincipalId::new_node_test_id(1));
         let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
         let version = 10;
@@ -3332,11 +3402,11 @@ mod tests {
             .once()
             .return_const(Ok(RegistryVersionedRecord {
                 key: make_subnet_record_key(subnet_id),
-                version: RegistryVersion::new(0),
+                version: RegistryVersion::new(1),
                 value: None,
             }));
 
-        assert!(node_is_in_subnet_at_version(
+        assert!(!node_is_in_subnet_at_version(
             &registry_client,
             node_id,
             subnet_id,
@@ -3353,7 +3423,7 @@ mod tests {
         let mut registry_client = MockFakeRegistryClient::new();
         registry_client
             .expect_get_versioned_value()
-            .once()
+            .times(2)
             .return_const(Err(RegistryClientError::VersionNotAvailable {
                 version: RegistryVersion::new(version),
             }));

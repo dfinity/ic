@@ -36,9 +36,9 @@ const VALID_TOPIC: i32 = Topic::ParticipantManagement as i32;
 const INVALID_TOPIC: i32 = 69420;
 const PROTOCOAL_CANISTER_MANAGEMENT_TOPIC: i32 = Topic::ProtocolCanisterManagement as i32;
 const NEURON_MANAGEMENT_TOPIC: i32 = Topic::NeuronManagement as i32;
-const VOTING_POWER_NEURON_1: u64 = 1_404_004_106;
-const VOTING_POWER_NEURON_2: u64 = 140_400_410;
-const VOTING_POWER_NEURON_3: u64 = 14_040_040;
+const VOTING_POWER_NEURON_1: u64 = 1_866_016_426;
+const VOTING_POWER_NEURON_2: u64 = 186_601_642;
+const VOTING_POWER_NEURON_3: u64 = 18_660_163;
 
 fn setup_state_machine_with_nns_canisters() -> StateMachine {
     let state_machine = state_machine_builder_for_nns_tests().build();
@@ -255,7 +255,7 @@ fn vote_propagation_with_following() {
         Vote::Yes,
     );
     let votes = get_yes_votes(&state_machine, &proposal_id);
-    assert_eq!(votes, 1_544_404_516);
+    assert_eq!(votes, 2_052_618_068);
     let ballot_n1 = check_ballots(&state_machine, &proposal_id, &n1);
     assert_eq!(ballot_n1, (VOTING_POWER_NEURON_1, Vote::Yes));
 
@@ -384,12 +384,12 @@ fn vote_propagation_with_following() {
     let votes = get_yes_votes(&state_machine, &proposal_id);
     assert_eq!(
         votes,
-        702_002_052 + 701_988_012 + VOTING_POWER_NEURON_2 + VOTING_POWER_NEURON_3
+        933_008_212 + 932_989_552 + VOTING_POWER_NEURON_2 + VOTING_POWER_NEURON_3
     );
     let ballot_n1 = check_ballots(&state_machine, &proposal_id, &n1);
-    assert_eq!(ballot_n1, (702_002_052, Vote::Yes));
+    assert_eq!(ballot_n1, (933_008_212, Vote::Yes));
     let ballot_n1a = check_ballots(&state_machine, &proposal_id, &n1a);
-    assert_eq!(ballot_n1a, (701_988_012, Vote::Yes));
+    assert_eq!(ballot_n1a, (932_989_552, Vote::Yes));
     let ballot_n2 = check_ballots(&state_machine, &proposal_id, &n2);
     assert_eq!(ballot_n2, (VOTING_POWER_NEURON_2, Vote::Yes));
     let ballot_n3 = check_ballots(&state_machine, &proposal_id, &n3);

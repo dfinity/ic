@@ -111,7 +111,9 @@ mod crypto_hash_stability {
         ThresholdSigShare, ThresholdSigShareOf,
     };
     use crate::crypto::{CryptoHash, CryptoHashOf};
-    use crate::messages::{Blob, CallbackId, HttpCanisterUpdate, MessageId, SignedRequestBytes};
+    use crate::messages::{
+        Blob, CallbackId, HttpCanisterUpdate, MessageId, RawSignedSenderInfo, SignedRequestBytes,
+    };
     use crate::signature::{
         BasicSignature, MultiSignature, MultiSignatureShare, ThresholdSignature,
         ThresholdSignatureShare,
@@ -1032,11 +1034,16 @@ mod crypto_hash_stability {
             sender: Blob(vec![0x42; 29]),
             ingress_expiry: 1234567890,
             nonce: Some(Blob(vec![0x42; 8])),
+            sender_info: Some(RawSignedSenderInfo {
+                info: Blob(vec![1, 2, 3]),
+                signer: Blob(vec![0xAB; 10]),
+                sig: Blob(vec![4, 5, 6]),
+            }),
         };
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "1fc89a61eb9215d4c379b3ac99c23ff73140ff1ba89a8fbd531c7fc62fc0c762",
+            "b410d43e850c9f8ae12dc397bbcdbd3e8f4a6b7988924cdc4917dd9ab2a860da",
             "Hash of HttpCanisterUpdate changed"
         );
     }
@@ -1065,13 +1072,14 @@ mod crypto_hash_stability {
             id: CallbackId::from(42),
             timeout: UNIX_EPOCH,
             content_hash: test_crypto_hash_of(0x42),
+            content_size: 0,
             registry_version: RegistryVersion::from(1),
             replica_version: ReplicaVersion::default(),
         };
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "5b1f5808c5e36cb70254914aeb76682e158889b6071c2c1c7b2a6667b2d5a699",
+            "be14ad8b8f7fe064b74586e784c669ddc0878c700076ba8bd186cfbd42701bfd",
             "Hash of CanisterHttpResponseMetadata changed"
         );
     }
@@ -1083,6 +1091,7 @@ mod crypto_hash_stability {
             id: CallbackId::from(42),
             timeout: UNIX_EPOCH,
             content_hash: test_crypto_hash_of(0x42),
+            content_size: 0,
             registry_version: RegistryVersion::from(1),
             replica_version: ReplicaVersion::default(),
         };
@@ -1096,7 +1105,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "e1f245d7fafe2fc4db847ac67141ebe869dcc1901c6779fe46c876341c797b68",
+            "bfc544c49bfab42d9d2d153a9e840c68fd8b49a3ce70f361b1646e89d360184d",
             "Hash of CanisterHttpResponseShare changed"
         );
     }

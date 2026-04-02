@@ -37,6 +37,11 @@ pub enum InvalidCanisterHttpPayloadReason {
         metadata_hash: CryptoHashOf<CanisterHttpResponse>,
         calculated_hash: CryptoHashOf<CanisterHttpResponse>,
     },
+    /// The content size of the signed metadata does not match the actual size of the content
+    ContentSizeMismatch {
+        metadata_size: u32,
+        calculated_size: u32,
+    },
     /// The response has already timed out
     Timeout {
         timed_out_at: Time,
@@ -91,6 +96,10 @@ pub enum InvalidCanisterHttpPayloadReason {
     FlexibleSignerNotInCommittee {
         callback_id: CallbackId,
         signer: NodeId,
+    },
+    /// A flexible ok-response group contains a Reject response.
+    FlexibleRejectNotAllowedInOkResponses {
+        callback_id: CallbackId,
     },
     /// The payload is not in its designated section.
     /// For example, a non-flexible response is not in the responses section

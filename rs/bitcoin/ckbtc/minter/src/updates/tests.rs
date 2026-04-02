@@ -4,10 +4,13 @@ mod update_balance {
     use crate::metrics::{Histogram, NumUtxoPages};
     use crate::metrics::{LatencyHistogram, MetricsResult};
     use crate::state::eventlog::{CkBtcEventLogger, CkBtcMinterEvent};
-    use crate::state::{SuspendedReason, audit, eventlog::EventType, mutate_state, read_state};
+    use crate::state::{
+        RetrieveBtcRequest, SubmittedBtcTransaction, SubmittedWithdrawalRequests, SuspendedReason,
+        audit, eventlog::EventType, mutate_state, read_state,
+    };
     use crate::test_fixtures::{
-        BTC_CHECKER_CANISTER_ID, DAY, MINTER_CANISTER_ID, NOW, ecdsa_public_key, get_uxos_response,
-        ignored_utxo, init_args, init_state, ledger_account,
+        BTC_CHECKER_CANISTER_ID, DAY, MINTER_CANISTER_ID, NOW, bitcoin_address, ecdsa_public_key,
+        get_uxos_response, ignored_utxo, init_args, init_state, ledger_account,
         mock::{MockCanisterRuntime, mock_increasing_time},
         quarantined_utxo, utxo,
     };
@@ -16,10 +19,12 @@ mod update_balance {
     use crate::updates::update_balance::{
         SuspendedUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
     };
-    use crate::{CanisterRuntime, GetUtxosResponse, Timestamp};
+    use crate::{CanisterRuntime, GetUtxosResponse, Timestamp, state};
+    use assert_matches::assert_matches;
     use ic_btc_checker::{CheckTransactionResponse, CheckTransactionStatus};
     use ic_btc_interface::Utxo;
     use icrc_ledger_types::icrc1::account::Account;
+    use maplit::btreeset;
     use std::iter;
     use std::time::Duration;
 
@@ -128,6 +133,150 @@ mod update_balance {
             suspended_utxo(&ignored_utxo),
             Some(SuspendedReason::Quarantined)
         );
+    }
+
+    #[tokio::test]
+    async fn should_not_mint_cached_utxo() {
+        init_state_with_ecdsa_public_key();
+        let account = ledger_account();
+        let mut runtime = MockCanisterRuntime::new();
+        use_ckbtc_event_logger(&mut runtime);
+        mock_increasing_time(&mut runtime, NOW, Duration::from_secs(1));
+        let utxo = utxo();
+        let minted_amount = utxo.value - read_state(|s| s.check_fee);
+
+        // Step 1: First update_balance call succeeds and mints.
+        mock_derive_user_address(&mut runtime, account);
+        mock_get_utxos_for_account(&mut runtime, account, vec![utxo.clone()]);
+        expect_check_transaction_returning(
+            &mut runtime,
+            utxo.clone(),
+            CheckTransactionResponse::Passed,
+        );
+        runtime
+            .expect_mint_ckbtc()
+            .times(1)
+            .withf(move |amount_, account_, _memo| {
+                amount_ == &minted_amount && account_ == &account
+            })
+            .return_const(Ok(1));
+        mock_schedule_now_process_logic(&mut runtime);
+
+        let result = update_balance(
+            UpdateBalanceArgs {
+                owner: Some(account.owner),
+                subaccount: account.subaccount,
+            },
+            &runtime,
+        )
+        .await;
+
+        assert_eq!(
+            result,
+            Ok(vec![UtxoStatus::Minted {
+                block_index: 1,
+                minted_amount,
+                utxo: utxo.clone(),
+            }])
+        );
+
+        // Step 2: sends a transaction that uses this UTXO
+        let pending_withdrawal = RetrieveBtcRequest {
+            amount: 1,
+            address: bitcoin_address(),
+            block_index: 0,
+            received_at: 0,
+            kyt_provider: None,
+            reimbursement_account: Some(account),
+        };
+        mutate_state(|s| {
+            audit::accept_retrieve_btc_request(s, pending_withdrawal.clone(), &runtime)
+        });
+        let batch = mutate_state(|s| s.build_batch(1));
+        assert_eq!(batch.len(), 1);
+        let submitted_btc_tx = SubmittedBtcTransaction {
+            requests: SubmittedWithdrawalRequests::from(vec![pending_withdrawal]),
+            txid: "c61fde25eeffe494f93876d7cfd17ad6b2a84a3e5f68c3b40fd8f7e6e586665f"
+                .parse()
+                .unwrap(),
+            used_utxos: vec![utxo.clone()],
+            submitted_at: 0,
+            change_output: None,
+            effective_fee_per_vbyte: None,
+            withdrawal_fee: None,
+            signed_tx: None,
+        };
+        mutate_state(|s| {
+            for block_index in submitted_btc_tx.requests.iter_block_index() {
+                s.push_in_flight_request(block_index, state::InFlightStatus::Signing);
+            }
+        });
+        mutate_state(|s| {
+            audit::sent_transaction(s, submitted_btc_tx.clone(), &runtime);
+        });
+
+        // Step 3: Just before the transaction is confirmed, call update_balance again to fill the cache.
+        runtime.checkpoint();
+        use_ckbtc_event_logger(&mut runtime);
+        mock_increasing_time(
+            &mut runtime,
+            NOW.checked_add(Duration::from_hours(1)).unwrap(),
+            Duration::from_secs(1),
+        );
+        mock_derive_user_address(&mut runtime, account);
+        //not yet 4 confirmations, utxo still returned by bitcoin canister
+        mock_get_utxos_for_account(&mut runtime, account, vec![utxo.clone()]);
+        // UTXO still known by minter, no double mint
+        read_state(|s| {
+            assert_eq!(
+                s.utxos_state_addresses.get(&account),
+                Some(&btreeset! {utxo.clone()})
+            )
+        });
+        let result = update_balance(
+            UpdateBalanceArgs {
+                owner: Some(account.owner),
+                subaccount: account.subaccount,
+            },
+            &runtime,
+        )
+        .await;
+        assert_matches!(result, Err(UpdateBalanceError::NoNewUtxos{pending_utxos, ..}) if pending_utxos == Some(vec![]));
+        let time = runtime.time();
+
+        // Step 4: Transaction is confirmed and UTXO is forgotten.
+        runtime.checkpoint();
+        use_ckbtc_event_logger(&mut runtime);
+        mock_increasing_time(&mut runtime, time.into(), Duration::from_secs(1));
+        mutate_state(|s| audit::confirm_transaction(s, &submitted_btc_tx.txid, &runtime));
+        read_state(|s| assert_eq!(s.utxos_state_addresses.get(&account), None));
+        let time = runtime.time();
+
+        // Step 5: Soon after, call update_balance again to use the cached value,
+        // which contains the already-used UTXO that the minter just forgot about.
+        runtime.checkpoint();
+        use_ckbtc_event_logger(&mut runtime);
+        mock_increasing_time(&mut runtime, time.into(), Duration::from_secs(1));
+        mock_derive_user_address(&mut runtime, account);
+        runtime.expect_caller().return_const(account.owner);
+        runtime.expect_id().return_const(MINTER_CANISTER_ID);
+
+        let result = update_balance(
+            UpdateBalanceArgs {
+                owner: Some(account.owner),
+                subaccount: account.subaccount,
+            },
+            &runtime,
+        )
+        .await;
+        assert_matches!(result, Err(UpdateBalanceError::NoNewUtxos{pending_utxos, ..}) if pending_utxos == Some(vec![]));
+        read_state(|s| {
+            assert!(
+                s.duplicated_outpoints.contains(&utxo.outpoint),
+                "Expected duplicated_outpoints to contain {:?}",
+                utxo.outpoint
+            );
+        });
     }
 
     #[tokio::test]
@@ -483,7 +632,12 @@ mod update_balance {
 
     #[tokio::test]
     async fn should_observe_get_utxos_latency_metrics() {
-        init_state_with_ecdsa_public_key();
+        init_state(crate::lifecycle::init::InitArgs {
+            // disable cache for this test
+            get_utxos_cache_expiration_seconds: None,
+            ..init_args()
+        });
+        mutate_state(|s| s.ecdsa_public_key = Some(ecdsa_public_key()));
 
         fn mock_get_utxos_for_account_with_num_pages(
             runtime: &mut MockCanisterRuntime,

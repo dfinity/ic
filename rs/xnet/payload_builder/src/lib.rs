@@ -20,6 +20,7 @@ use hyper_util::client::legacy::Client;
 use hyper_util::rt::{TokioExecutor, TokioTimer};
 use ic_config::message_routing::MAX_STREAM_MESSAGES;
 use ic_crypto_tls_interfaces::TlsConfig;
+use ic_interfaces::crypto::ErrorReproducibility;
 use ic_interfaces::messaging::{
     InvalidXNetPayload, XNetPayloadBuilder, XNetPayloadValidationError,
     XNetPayloadValidationFailure,
@@ -34,6 +35,7 @@ use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetListRegistry};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{ReplicatedState, replicated_state::ReplicatedStateMessageRouting};
@@ -473,18 +475,30 @@ impl XNetPayloadBuilderImpl {
             .unwrap_or_default()
     }
 
-    /// Computes the expected message and signal indices for every known subnet.
+    /// Computes the expected message and signal indices for every known subnet
+    /// except cloud engines.
     fn expected_stream_indices(
         &self,
         validation_context: &ValidationContext,
         state: &ReplicatedState,
         past_payloads: &[&XNetPayload],
     ) -> Result<BTreeMap<SubnetId, ExpectedIndices>, Error> {
-        let subnet_ids = self
+        let all_subnet_ids = self
             .registry
             .get_subnet_ids(validation_context.registry_version)
             .map_err(Error::RegistryGetSubnetsFailed)?
             .unwrap_or_default();
+
+        let subnet_ids: Vec<_> = all_subnet_ids
+            .into_iter()
+            .filter(|subnet_id| {
+                self.registry
+                    .get_subnet_type(*subnet_id, validation_context.registry_version)
+                    .is_ok_and(|maybe_t| {
+                        maybe_t.is_some_and(|t| t != SubnetType::CloudEngine.into())
+                    })
+            })
+            .collect();
 
         let expected_indices = subnet_ids
             .into_iter()
@@ -625,6 +639,38 @@ impl XNetPayloadBuilderImpl {
             return SliceValidationResult::Invalid(
                 "Loopback stream is inducted separately".to_string(),
             );
+        }
+
+        // Do not accept slices from CloudEngine subnets or subnets whose type
+        // cannot be determined.
+        match self
+            .registry
+            .get_subnet_type(subnet_id, validation_context.registry_version)
+        {
+            Ok(Some(subnet_type)) if subnet_type == SubnetType::CloudEngine.into() => {
+                return SliceValidationResult::Invalid(format!(
+                    "Slice from CloudEngine subnet {}",
+                    subnet_id
+                ));
+            }
+            Ok(Some(_)) => {}
+            Ok(None) => {
+                return SliceValidationResult::Invalid(format!(
+                    "No subnet type for subnet {}",
+                    subnet_id
+                ));
+            }
+            Err(err) => {
+                let msg = format!(
+                    "Unable to determine subnet type of subnet {}: Err({})",
+                    subnet_id, err
+                );
+                if err.is_reproducible() {
+                    return SliceValidationResult::Invalid(msg);
+                } else {
+                    return SliceValidationResult::Transient(msg);
+                }
+            }
         }
 
         let slice = match self.certified_stream_store.decode_certified_stream_slice(
@@ -824,6 +870,11 @@ impl XNetPayloadBuilderImpl {
             })?
             .take();
 
+        // CloudEngine subnets do not participate in XNet.
+        if state.metadata.own_subnet_type == SubnetType::CloudEngine {
+            return Ok((XNetPayload::default(), 0.into()));
+        }
+
         // Build the payload based on indices computed from state + past payloads.
         let stream_positions =
             self.expected_stream_indices(validation_context, &state, past_payloads)?;
@@ -892,7 +943,7 @@ impl XNetPayloadBuilderImpl {
                         return Some((slice, message_count, slice_bytes));
                     }
 
-                    SliceValidationResult::Invalid(_) => {
+                    SliceValidationResult::Invalid(_) | SliceValidationResult::Transient(_) => {
                         info!(
                             self.log,
                             "Invalid slice from {}: {:?}. Referenced certified height {}. Gap to chain tip {}.",
@@ -1171,6 +1222,7 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
         past_payloads: &[&XNetPayload],
     ) -> Result<NumBytes, XNetPayloadValidationError> {
         let since = Instant::now();
+
         let state = match self
             .state_manager
             .get_state_at(validation_context.certified_height)
@@ -1182,6 +1234,16 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                 return Err(from_state_manager_error(err));
             }
         };
+
+        if state.metadata.own_subnet_type == SubnetType::CloudEngine
+            && !payload.stream_slices.is_empty()
+        {
+            return Err(ValidationError::InvalidArtifact(
+                InvalidXNetPayload::InvalidSlice(
+                    "CloudEngine subnets do not accept XNet payloads".to_string(),
+                ),
+            ));
+        }
 
         // For every slice in `payload`, check certification and gaps/duplicates.
         let mut new_stream_positions = Vec::new();
@@ -1201,6 +1263,13 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                         .observe_validate_duration(VALIDATION_STATUS_INVALID, since);
                     return Err(ValidationError::InvalidArtifact(
                         InvalidXNetPayload::InvalidSlice(reason),
+                    ));
+                }
+                SliceValidationResult::Transient(reason) => {
+                    self.metrics
+                        .observe_validate_duration(VALIDATION_STATUS_ERROR, since);
+                    return Err(ValidationError::ValidationFailed(
+                        XNetPayloadValidationFailure::Transient(reason),
                     ));
                 }
                 SliceValidationResult::Empty => {
@@ -1591,6 +1660,8 @@ enum SliceValidationResult {
     },
     /// Slice is invalid for the given reason.
     Invalid(String),
+    /// Validation could not be completed due to a transient error.
+    Transient(String),
     /// Slice is empty.
     Empty,
 }
@@ -1603,6 +1674,7 @@ impl SliceValidationResult {
         match self {
             SliceValidationResult::Valid { .. } => "Valid",
             SliceValidationResult::Invalid(_) => "Invalid",
+            SliceValidationResult::Transient(_) => "Transient",
             SliceValidationResult::Empty => "Empty",
         }
     }

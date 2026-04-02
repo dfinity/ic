@@ -23,7 +23,7 @@ use ic_types::messages::{
 };
 use ic_types::xnet::{RejectReason, RejectSignal, StreamIndex, StreamIndexedQueue, StreamSlice};
 use ic_types::{CanisterId, SubnetId};
-use ic_types_cycles::NominalCycles;
+use ic_types_cycles::CompoundCycles;
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
@@ -741,6 +741,7 @@ impl StreamHandlerImpl {
         stream: &mut Stream,
         available_guaranteed_response_memory: &mut i64,
     ) {
+        let own_cost_schedule = state.get_own_cost_schedule();
         let (msg, msg_type) = match msg {
             StreamMessage::Request(req) => {
                 (RequestOrResponse::Request(req), LABEL_VALUE_TYPE_REQUEST)
@@ -820,8 +821,9 @@ impl StreamHandlerImpl {
                 self.metrics.critical_error_sender_subnet_mismatch.inc();
                 stream.push_accept_signal();
                 // Cycles are lost.
-                state.observe_lost_cycles_due_to_dropped_messages(NominalCycles::from(
-                    rep.refund.get(),
+                state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                    rep.refund,
+                    own_cost_schedule,
                 ));
             }
         }
@@ -849,6 +851,7 @@ impl StreamHandlerImpl {
         let receiver_host_subnet = state.metadata.network_topology.route(msg.receiver().get());
 
         let payload_size = msg.payload_size_bytes().get();
+        let own_cost_schedule = state.get_own_cost_schedule();
         match receiver_host_subnet {
             // Matching receiver subnet, try inducting message.
             Some(host_subnet) if host_subnet == self.subnet_id => {
@@ -908,7 +911,7 @@ impl StreamHandlerImpl {
                                 self.metrics.critical_error_induct_response_failed.inc();
                                 // Cycles are lost.
                                 state.observe_lost_cycles_due_to_dropped_messages(
-                                    NominalCycles::from(response.refund.get()),
+                                    CompoundCycles::new(response.refund, own_cost_schedule),
                                 );
                                 Accept
                             }
@@ -997,8 +1000,9 @@ impl StreamHandlerImpl {
         match receiver_host_subnet {
             // Matching receiver subnet, try crediting the cycles.
             Some(host_subnet) if host_subnet == self.subnet_id => {
+                let cost_schedule = state.get_own_cost_schedule();
                 stream.push_accept_signal();
-                if state.credit_refund(refund) {
+                if state.credit_refund(refund, cost_schedule) {
                     self.observe_inducted_message_status(
                         LABEL_VALUE_TYPE_REFUND,
                         LABEL_VALUE_SUCCESS,
@@ -1009,8 +1013,9 @@ impl StreamHandlerImpl {
                         LABEL_VALUE_TYPE_REFUND,
                         LABEL_VALUE_DROPPED,
                     );
-                    state.observe_lost_cycles_due_to_dropped_messages(NominalCycles::from(
-                        refund.amount().get(),
+                    state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                        refund.amount(),
+                        cost_schedule,
                     ));
                 }
             }
