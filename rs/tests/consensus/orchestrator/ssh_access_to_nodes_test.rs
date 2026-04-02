@@ -460,7 +460,7 @@ fn updating_readonly_does_not_remove_backup_keys(env: TestEnv) {
     assert_authentication_works(&node_ip, "backup", &backup_mean);
 }
 
-fn updating_recovery_does_not_remove_recovery_and_backup_keys(env: TestEnv) {
+fn updating_recovery_does_not_remove_readonly_and_backup_keys(env: TestEnv) {
     let logger = env.logger();
     let (nns_node, app_node, _, app_subnet) = topology_entities(env.topology_snapshot());
 
@@ -885,7 +885,7 @@ fn main() -> Result<()> {
         ))
         .add_test(systest!(updating_readonly_does_not_remove_backup_keys))
         .add_test(systest!(
-            updating_recovery_does_not_remove_recovery_and_backup_keys
+            updating_recovery_does_not_remove_readonly_and_backup_keys
         ))
         .add_test(systest!(can_add_max_number_of_keys))
         .add_test(systest!(cannot_add_more_than_max_number_of_keys))
