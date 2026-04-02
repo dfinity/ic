@@ -15,7 +15,6 @@ Runbook:
 9.  Retry step 6 and assert it succeeds.
 10. Verify that the agent can no longer send requests to the counter canister after API boundary node enforces the new rule.
 11. Add a rate-limit rule, which explicitly unblocks requests to the counter canister.
-    Setting this rule should still be possible despite the rate-limit canister being blocked itself (as there is an explicit allow-rule in the ic-boundary).
 12. Verify that the agent can send requests to the counter canister again, ensuring that updated rate-limit rules are enforced correctly by API boundary nodes.
 
 end::catalog[] */
