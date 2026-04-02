@@ -367,7 +367,6 @@ system_test_nns(
         "//rs/limits",
         "//rs/tests/consensus/subnet_recovery:lib",
         "//rs/tests/driver:ic-system-test-driver",
-        "//rs/tests/nested",
         "//rs/tests/nested/nns_recovery:common",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
