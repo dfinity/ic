@@ -125,7 +125,7 @@ async fn replace_nns_with_nested_vms(env: &TestEnv, use_mainnet_state: bool) {
         "Not all nested VMs have registered as IC nodes"
     );
     assert!(
-        new_node_ids.len() > 0,
+        !new_node_ids.len().is_empty(),
         "No nested VMs found to add to the NNS subnet"
     );
 
