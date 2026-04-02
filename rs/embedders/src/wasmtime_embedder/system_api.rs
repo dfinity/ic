@@ -31,7 +31,9 @@ use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use ic_wasm_types::doc_ref;
 use request_in_prep::{RequestInPrep, into_request};
-use sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications};
+use sandbox_safe_system_state::{
+    ConsumedCyclesDuringExecution, SandboxSafeSystemState, SystemStateModifications,
+};
 use serde::{Deserialize, Serialize};
 use stable_memory::StableMemory;
 use std::time::Duration;
@@ -1672,7 +1674,7 @@ impl SystemApiImpl {
                     callback_updates: vec![],
                     cycles_balance_change: CyclesBalanceChange::zero(),
                     reserved_cycles: Cycles::zero(),
-                    consumed_cycles_by_use_case: BTreeMap::new(),
+                    consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
                     call_context_balance_taken: None,
                     request_slots_used: BTreeMap::new(),
                     requests: vec![],
@@ -1695,7 +1697,7 @@ impl SystemApiImpl {
                     callback_updates: vec![],
                     cycles_balance_change: CyclesBalanceChange::zero(),
                     reserved_cycles: Cycles::zero(),
-                    consumed_cycles_by_use_case: BTreeMap::new(),
+                    consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
                     call_context_balance_taken: None,
                     request_slots_used: BTreeMap::new(),
                     requests: vec![],
@@ -1709,7 +1711,7 @@ impl SystemApiImpl {
                     callback_updates: system_state_modifications.callback_updates,
                     cycles_balance_change: CyclesBalanceChange::zero(),
                     reserved_cycles: Cycles::zero(),
-                    consumed_cycles_by_use_case: BTreeMap::new(),
+                    consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
                     call_context_balance_taken: None,
                     request_slots_used: system_state_modifications.request_slots_used,
                     requests: system_state_modifications.requests,
@@ -1730,7 +1732,7 @@ impl SystemApiImpl {
                         callback_updates: vec![],
                         cycles_balance_change: CyclesBalanceChange::zero(),
                         reserved_cycles: Cycles::zero(),
-                        consumed_cycles_by_use_case: BTreeMap::new(),
+                        consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
                         call_context_balance_taken: None,
                         request_slots_used: BTreeMap::new(),
                         requests: vec![],
@@ -1772,7 +1774,7 @@ impl SystemApiImpl {
                         callback_updates: vec![],
                         cycles_balance_change: CyclesBalanceChange::zero(),
                         reserved_cycles: Cycles::zero(),
-                        consumed_cycles_by_use_case: BTreeMap::new(),
+                        consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
                         call_context_balance_taken: None,
                         request_slots_used: BTreeMap::new(),
                         requests: vec![],
@@ -1803,7 +1805,7 @@ impl SystemApiImpl {
                         callback_updates: vec![],
                         cycles_balance_change: CyclesBalanceChange::zero(),
                         reserved_cycles: Cycles::zero(),
-                        consumed_cycles_by_use_case: BTreeMap::new(),
+                        consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
                         call_context_balance_taken: None,
                         request_slots_used: BTreeMap::new(),
                         requests: vec![],

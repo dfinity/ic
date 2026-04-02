@@ -398,8 +398,8 @@ fn cycles_correct_if_response_fails() {
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
             - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b)
-            - test.reply_fee(&b)
+            - test.call_fee("update", &b).real()
+            - test.reply_fee(&b).real()
     );
     let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap_err();
@@ -448,8 +448,8 @@ fn cycles_correct_if_cleanup_fails() {
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
             - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b)
-            - test.reply_fee(&b)
+            - test.call_fee("update", &b).real()
+            - test.reply_fee(&b).real()
     );
     let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap_err();
@@ -1349,15 +1349,16 @@ fn dts_response_concurrent_cycles_change_succeeds() {
         )
         .real();
 
-    let call_charge = test.call_fee("update", &b)
+    let call_charge = test.call_fee("update", &b).real()
         + max_execution_cost
-        + test.max_response_fee()
+        + test.max_response_fee().real()
         + transferred_cycles;
 
     let refund = test.max_response_fee() - test.reply_fee(&b);
 
     // Reset the cycles balance of canister A to simplify cycles bookkeeping.
-    let initial_cycles = freezing_threshold + additional_freezing_threshold + call_charge - refund;
+    let initial_cycles =
+        freezing_threshold + additional_freezing_threshold + call_charge - refund.real();
     let initial_execution_cost = test.canister_execution_cost(a_id);
     test.canister_state_mut(a_id)
         .system_state
@@ -1392,7 +1393,7 @@ fn dts_response_concurrent_cycles_change_succeeds() {
 
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
-        initial_cycles + refund - call_charge - cycles_debit
+        initial_cycles + refund.real() - call_charge - cycles_debit
             + (max_execution_cost - (test.canister_execution_cost(a_id) - initial_execution_cost))
     );
 }
@@ -1472,15 +1473,16 @@ fn dts_response_concurrent_cycles_change_fails() {
         )
         .real();
 
-    let call_charge = test.call_fee("update", &b)
+    let call_charge = test.call_fee("update", &b).real()
         + max_execution_cost
-        + test.max_response_fee()
+        + test.max_response_fee().real()
         + transferred_cycles;
 
     let refund = test.max_response_fee() - test.reply_fee(&b);
 
     // Reset the cycles balance of canister A to simplify cycles bookkeeping.
-    let initial_cycles = freezing_threshold + additional_freezing_threshold + call_charge - refund;
+    let initial_cycles =
+        freezing_threshold + additional_freezing_threshold + call_charge - refund.real();
     let initial_execution_cost = test.canister_execution_cost(a_id);
     test.canister_state_mut(a_id)
         .system_state
@@ -1520,13 +1522,13 @@ fn dts_response_concurrent_cycles_change_fails() {
         format!(
             "Error from Canister {a_id}: Canister {a_id} is out of cycles: \
              please top up the canister with at least {} additional cycles",
-            call_charge - (initial_cycles + refund - cycles_debit)
+            call_charge - (initial_cycles + refund.real() - cycles_debit)
         )
     );
 
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
-        initial_cycles + refund - cycles_debit
+        initial_cycles + refund.real() - cycles_debit
             + (max_execution_cost - (test.canister_execution_cost(a_id) - initial_execution_cost))
     );
 }
@@ -1618,15 +1620,16 @@ fn dts_response_with_cleanup_concurrent_cycles_change_succeeds() {
         )
         .real();
 
-    let call_charge = test.call_fee("update", &b)
+    let call_charge = test.call_fee("update", &b).real()
         + max_execution_cost
-        + test.max_response_fee()
+        + test.max_response_fee().real()
         + transferred_cycles;
 
     let refund = test.max_response_fee() - test.reply_fee(&b);
 
     // Reset the cycles balance of canister A to simplify cycles bookkeeping.
-    let initial_cycles = freezing_threshold + additional_freezing_threshold + call_charge - refund;
+    let initial_cycles =
+        freezing_threshold + additional_freezing_threshold + call_charge - refund.real();
     let initial_execution_cost = test.canister_execution_cost(a_id);
     test.canister_state_mut(a_id)
         .system_state
@@ -1668,7 +1671,7 @@ fn dts_response_with_cleanup_concurrent_cycles_change_succeeds() {
 
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
-        initial_cycles + refund - cycles_debit
+        initial_cycles + refund.real() - cycles_debit
             + (max_execution_cost - (test.canister_execution_cost(a_id) - initial_execution_cost))
     );
 

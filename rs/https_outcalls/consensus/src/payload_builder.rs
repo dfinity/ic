@@ -5,7 +5,8 @@ use crate::{
     payload_builder::{
         parse::bytes_to_payload,
         utils::{
-            find_flexible_responses, find_fully_replicated_response, find_non_replicated_response,
+            estimate_response_with_consensus_size, find_flexible_responses,
+            find_fully_replicated_response, find_non_replicated_response,
             group_shares_by_callback_id, grouped_shares_meet_divergence_criteria,
         },
     },
@@ -43,8 +44,7 @@ use ic_types::{
     canister_http::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
         CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
-        CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseWithConsensus,
-        Replication,
+        CanisterHttpResponseMetadata, CanisterHttpResponseWithConsensus, Replication,
     },
     consensus::Committee,
     crypto::{Signed, crypto_hash},
@@ -54,7 +54,6 @@ use ic_types::{
 };
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
-    mem::size_of,
     sync::{Arc, RwLock},
 };
 
@@ -75,6 +74,7 @@ pub struct CanisterHttpBatchStats {
     pub divergence_responses: usize,
     pub single_signature_responses: usize,
     pub flexible_ok_responses: usize,
+    pub flexible_ok_responses_candid_failures: usize,
     pub payload_bytes: usize,
 }
 
@@ -288,7 +288,7 @@ impl CanisterHttpPayloadBuilderImpl {
                             find_fully_replicated_response(grouped_shares, threshold, &*pool_access)
                         {
                             let candidate_size =
-                                size_of::<CanisterHttpResponseProof>() + content.count_bytes();
+                                estimate_response_with_consensus_size(&metadata, &shares, &content);
                             let size = NumBytes::new((accumulated_size + candidate_size) as u64);
                             if size < max_payload_size {
                                 candidates.push((metadata, shares, content));
@@ -322,7 +322,7 @@ impl CanisterHttpPayloadBuilderImpl {
                             &*pool_access,
                         ) {
                             let candidate_size =
-                                size_of::<CanisterHttpResponseProof>() + content.count_bytes();
+                                estimate_response_with_consensus_size(&metadata, &shares, &content);
                             let size = NumBytes::new((accumulated_size + candidate_size) as u64);
                             if size < max_payload_size {
                                 candidates.push((metadata, shares, content));
@@ -365,6 +365,7 @@ impl CanisterHttpPayloadBuilderImpl {
             timeouts,
             divergence_responses,
             flexible_responses,
+            flexible_errors: vec![],
         }
     }
 
@@ -708,6 +709,17 @@ impl CanisterHttpPayloadBuilderImpl {
                     );
                 }
 
+                // Content size must match
+                let calculated_size = entry.response.content.count_bytes() as u32;
+                if calculated_size != entry.proof.content.content_size {
+                    return invalid_artifact(
+                        InvalidCanisterHttpPayloadReason::ContentSizeMismatch {
+                            metadata_size: entry.proof.content.content_size,
+                            calculated_size,
+                        },
+                    );
+                }
+
                 // Metadata consistency (timeout)
                 if entry.proof.content.timeout != entry.response.timeout {
                     return invalid_artifact(InvalidCanisterHttpPayloadReason::InvalidMetadata {
@@ -870,15 +882,19 @@ impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
 
         let divergence_responses = messages
             .divergence_responses
-            .iter()
+            .into_iter()
             .filter_map(divergence_response_into_reject)
             .inspect(|_| stats.divergence_responses += 1);
 
         let flexible_ok_responses = messages
             .flexible_responses
             .into_iter()
-            .filter_map(flexible_ok_responses_into_consensus_response)
-            .inspect(|_| stats.flexible_ok_responses += 1);
+            .map(flexible_ok_responses_into_consensus_response)
+            .inspect(|result| match result {
+                Some(_) => stats.flexible_ok_responses += 1,
+                None => stats.flexible_ok_responses_candid_failures += 1,
+            })
+            .flatten();
 
         let responses = responses
             .chain(timeouts)
@@ -933,7 +949,7 @@ fn flexible_ok_responses_into_consensus_response(
 ///
 /// The function includes request id and timeout, which are also part of the hashed value.
 fn divergence_response_into_reject(
-    response: &CanisterHttpResponseDivergence,
+    response: CanisterHttpResponseDivergence,
 ) -> Option<ConsensusResponse> {
     // Get the id and timeout, which need to be reported in the error message as well
     let Some((id, timeout)) = response
@@ -952,11 +968,11 @@ fn divergence_response_into_reject(
     let mut hash_counts = BTreeMap::new();
     response
         .shares
-        .iter()
-        .map(|share| share.content.content_hash.clone().get().0)
-        .for_each(|share| {
+        .into_iter()
+        .map(|share| share.content.content_hash.get().0)
+        .for_each(|hash| {
             hash_counts
-                .entry(share)
+                .entry(hash)
                 .and_modify(|count| *count += 1)
                 .or_insert(1);
         });

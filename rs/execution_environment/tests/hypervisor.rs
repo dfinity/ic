@@ -5409,8 +5409,8 @@ fn cycles_cannot_be_accepted_after_response() {
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
             - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b)
-            - test.reply_fee(&b)
+            - test.call_fee("update", &b).real()
+            - test.reply_fee(&b).real()
     );
 
     // Canister B doesn't get the transferred cycles.
@@ -5418,8 +5418,8 @@ fn cycles_cannot_be_accepted_after_response() {
         test.canister_state(b_id).system_state.balance(),
         initial_cycles
             - test.canister_execution_cost(b_id)
-            - test.call_fee("update", &c)
-            - test.reply_fee(&c)
+            - test.call_fee("update", &c).real()
+            - test.reply_fee(&c).real()
     );
 
     // Canister C pays only for execution.
@@ -5489,8 +5489,8 @@ fn cycles_are_refunded_if_not_accepted() {
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
             - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b)
-            - test.reply_fee(&b)
+            - test.call_fee("update", &b).real()
+            - test.reply_fee(&b).real()
             - a_to_b_accepted,
     );
 
@@ -5500,8 +5500,8 @@ fn cycles_are_refunded_if_not_accepted() {
         test.canister_state(b_id).system_state.balance(),
         initial_cycles
             - test.canister_execution_cost(b_id)
-            - test.call_fee("update", &c)
-            - test.reply_fee(&c)
+            - test.call_fee("update", &c).real()
+            - test.reply_fee(&c).real()
             + a_to_b_accepted
             - b_to_c_accepted
     );
@@ -5562,8 +5562,8 @@ fn cycles_are_refunded_if_callee_traps() {
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
             - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b)
-            - test.reject_fee(reject_message)
+            - test.call_fee("update", &b).real()
+            - test.reject_fee(reject_message).real()
     );
 
     // Canister B doesn't get any transferred cycles.
@@ -5612,8 +5612,8 @@ fn cycles_are_refunded_even_if_response_callback_traps() {
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
             - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b)
-            - test.reply_fee(&b)
+            - test.call_fee("update", &b).real()
+            - test.reply_fee(&b).real()
             - a_to_b_accepted,
     );
 
@@ -5661,8 +5661,8 @@ fn cycles_are_refunded_if_callee_is_a_query() {
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
             - test.canister_execution_cost(a_id)
-            - test.call_fee("query", &b)
-            - test.reply_fee(&b)
+            - test.call_fee("query", &b).real()
+            - test.reply_fee(&b).real()
     );
 
     // Canister B doesn't get any transferred cycles.
@@ -5714,8 +5714,8 @@ fn cycles_are_refunded_if_callee_is_uninstalled_before_execution() {
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
             - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b)
-            - test.reject_fee(reject_message)
+            - test.call_fee("update", &b).real()
+            - test.reject_fee(reject_message).real()
     );
 
     // Canister B doesn't get any cycles.
@@ -5806,8 +5806,8 @@ fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
             - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b)
-            - test.reject_fee(reject_message)
+            - test.call_fee("update", &b).real()
+            - test.reject_fee(reject_message).real()
             - a_to_b_accepted,
     );
 
@@ -5817,8 +5817,8 @@ fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
         test.canister_state(b_id).system_state.balance(),
         initial_cycles
             - test.canister_execution_cost(b_id)
-            - test.call_fee("update", &c)
-            - test.reply_fee(&c)
+            - test.call_fee("update", &c).real()
+            - test.reply_fee(&c).real()
             + a_to_b_accepted
             - b_to_c_accepted
     );
@@ -5913,8 +5913,8 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
             - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b)
-            - test.reject_fee(reject_message)
+            - test.call_fee("update", &b).real()
+            - test.reject_fee(reject_message).real()
             - a_to_b_accepted,
     );
 
@@ -5924,8 +5924,8 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
         test.canister_state(b_id).system_state.balance(),
         initial_cycles
             - test.canister_execution_cost(b_id)
-            - test.call_fee("update", &c)
-            - test.reply_fee(&c)
+            - test.call_fee("update", &c).real()
+            - test.reply_fee(&c).real()
             + a_to_b_accepted
             - b_to_c_accepted
     );
@@ -6059,8 +6059,8 @@ where
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
             - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b_0)
-            - test.reject_fee(reject_message.clone())
+            - test.call_fee("update", &b_0).real()
+            - test.reject_fee(reject_message.clone()).real()
             - a_to_b_accepted
     );
 
@@ -6079,10 +6079,10 @@ where
         initial_cycles
             - extra_cost
             - test.canister_execution_cost(b_id)
-            - test.call_fee("update", &b_1)
-            - test.call_fee("update", &b_2)
-            - test.reject_fee(reject_message)
-            - test.reject_fee(reject_message_b_2_to_1)
+            - test.call_fee("update", &b_1).real()
+            - test.call_fee("update", &b_2).real()
+            - test.reject_fee(reject_message).real()
+            - test.reject_fee(reject_message_b_2_to_1).real()
             + a_to_b_accepted
     );
 }

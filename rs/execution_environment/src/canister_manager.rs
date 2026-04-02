@@ -64,7 +64,7 @@ use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{
         CanisterCall, Payload, RejectContext, Response as CanisterResponse, SignedIngressContent,
-        StopCanisterContext,
+        StopCanisterCallId,
     },
 };
 use ic_types_cycles::{
@@ -744,10 +744,11 @@ impl CanisterManager {
 
         Ok(CanisterManagerResponse {
             canister_id: canister.canister_id(),
-            reply: EmptyBlob.encode(),
+            reply: Some(EmptyBlob.encode()),
             heap_delta_increase: NumBytes::new(0),
             unflushed_checkpoint_op: None,
             deleted_call_context_responses: vec![],
+            stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
         })
     }
@@ -1031,10 +1032,11 @@ impl CanisterManager {
 
         Ok(CanisterManagerResponse {
             canister_id,
-            reply: EmptyBlob.encode(),
+            reply: Some(EmptyBlob.encode()),
             heap_delta_increase: NumBytes::new(0),
             unflushed_checkpoint_op: None,
             deleted_call_context_responses: rejects,
+            stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
         })
     }
@@ -1056,38 +1058,41 @@ impl CanisterManager {
     pub(crate) fn stop_canister(
         &self,
         canister_id: CanisterId,
-        mut stop_context: StopCanisterContext,
+        msg: &mut CanisterCall,
+        call_id: StopCanisterCallId,
         state: &mut ReplicatedState,
         subnet_admins: Option<BTreeSet<PrincipalId>>,
-    ) -> StopCanisterResult {
+    ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         let canister = match state.canister_state(&canister_id) {
             None => {
-                return StopCanisterResult::Failure {
-                    error: CanisterManagerError::CanisterNotFound(canister_id),
-                    cycles_to_return: stop_context.take_cycles(),
-                };
+                return Err(CanisterManagerError::CanisterNotFound(canister_id));
             }
             Some(canister) => canister,
         };
 
-        if let Err(err) =
-            validate_controller_or_subnet_admin(canister, subnet_admins, stop_context.sender())
-        {
-            return StopCanisterResult::Failure {
-                error: err,
-                cycles_to_return: stop_context.take_cycles(),
-            };
-        }
+        validate_controller_or_subnet_admin(canister, subnet_admins, msg.sender())?;
 
         let canister = state.canister_state_make_mut(&canister_id).unwrap();
-        let result = match canister.system_state.begin_stopping(stop_context) {
-            Some(mut stop_context) => StopCanisterResult::AlreadyStopped {
-                cycles_to_return: stop_context.take_cycles(),
-            },
-            None => StopCanisterResult::RequestAccepted,
+
+        // If the canister did not begin stopping, i.e., if the canister is already stopped,
+        // then we produce a reply immediately and return the `call_id` to be closed.
+        let (reply, stop_call_id_to_remove) = if !canister.system_state.begin_stopping(msg, call_id)
+        {
+            (Some(EmptyBlob.encode()), Some(call_id))
+        } else {
+            (None, None)
         };
         canister.system_state.bump_canister_version();
-        result
+
+        Ok(CanisterManagerResponse {
+            canister_id,
+            reply,
+            heap_delta_increase: NumBytes::new(0),
+            unflushed_checkpoint_op: None,
+            deleted_call_context_responses: vec![],
+            stop_call_id_to_remove,
+            stop_contexts_to_reject: vec![],
+        })
     }
 
     /// Signals a canister to start.
@@ -1114,10 +1119,11 @@ impl CanisterManager {
 
         Ok(CanisterManagerResponse {
             canister_id: canister.canister_id(),
-            reply: EmptyBlob.encode(),
+            reply: Some(EmptyBlob.encode()),
             heap_delta_increase: NumBytes::new(0),
             unflushed_checkpoint_op: None,
             deleted_call_context_responses: vec![],
+            stop_call_id_to_remove: None,
             stop_contexts_to_reject,
         })
     }
@@ -1597,10 +1603,11 @@ impl CanisterManager {
 
         Ok(CanisterManagerResponse {
             canister_id: canister.canister_id(),
-            reply: EmptyBlob.encode(),
+            reply: Some(EmptyBlob.encode()),
             heap_delta_increase: NumBytes::new(0),
             unflushed_checkpoint_op: None,
             deleted_call_context_responses: vec![],
+            stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
         })
     }
@@ -1702,10 +1709,11 @@ impl CanisterManager {
                 };
                 return Ok(CanisterManagerResponse {
                     canister_id: canister.canister_id(),
-                    reply: reply.encode(),
+                    reply: Some(reply.encode()),
                     heap_delta_increase: NumBytes::new(0),
                     unflushed_checkpoint_op: None,
                     deleted_call_context_responses: vec![],
+                    stop_call_id_to_remove: None,
                     stop_contexts_to_reject: vec![],
                 });
             }
@@ -1761,10 +1769,11 @@ impl CanisterManager {
         let reply = UploadChunkReply { hash };
         Ok(CanisterManagerResponse {
             canister_id: canister.canister_id(),
-            reply: reply.encode(),
+            reply: Some(reply.encode()),
             heap_delta_increase: chunk_bytes,
             unflushed_checkpoint_op: None,
             deleted_call_context_responses: vec![],
+            stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
         })
     }
@@ -1811,10 +1820,11 @@ impl CanisterManager {
 
         Ok(CanisterManagerResponse {
             canister_id: canister.canister_id(),
-            reply: EmptyBlob.encode(),
+            reply: Some(EmptyBlob.encode()),
             heap_delta_increase: NumBytes::new(0),
             unflushed_checkpoint_op: None,
             deleted_call_context_responses: vec![],
+            stop_call_id_to_remove: None,
             stop_contexts_to_reject: vec![],
         })
     }
