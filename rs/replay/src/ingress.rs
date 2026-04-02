@@ -479,7 +479,7 @@ fn show_mutation_type(mutation_type: i32) -> &'static str {
 }
 
 /// Applies 'mutations' to the registry.
-pub fn atomic_mutate(
+fn atomic_mutate(
     agent: &Agent,
     canister_id: CanisterId,
     mutations: Vec<RegistryMutation>,
@@ -521,7 +521,7 @@ pub(crate) fn bless_replica_version(
 }
 
 /// Add a new replica version by mutating the registry canister.
-pub fn add_replica_version(
+fn add_replica_version(
     agent: &Agent,
     replica_version_id: String,
     record: ReplicaVersionRecord,
@@ -546,7 +546,7 @@ pub fn add_replica_version(
 }
 
 /// Update subnet record.
-pub fn update_subnet_record(
+fn update_subnet_record(
     agent: &Agent,
     subnet_id: SubnetId,
     record: SubnetRecord,
@@ -571,7 +571,7 @@ pub fn update_subnet_record(
 }
 
 /// Update subnet list record.
-pub fn update_subnet_list_record(
+fn update_subnet_list_record(
     agent: &Agent,
     record: SubnetListRecord,
     context_time: Time,
