@@ -163,6 +163,104 @@ The governance canister MUST support a defined set of native proposal actions wi
   - Motion (1), ManageNervousSystemParameters (2), UpgradeSnsControlledCanister (3)
   - AddGenericNervousSystemFunction (4), RemoveGenericNervousSystemFunction (5)
   - ExecuteGenericNervousSystemFunction (6), UpgradeSnsToNextVersion (7)
+  - ManageSnsMetadata (8), TransferSnsTreasuryFunds (9), RegisterDappCanisters (10)
+  - DeregisterDappCanisters (11), MintSnsTokens (12), ManageLedgerParameters (13)
+  - ManageDappCanisterSettings (14), AdvanceSnsTargetVersion (15)
+  - SetTopicsForCustomProposals (16), RegisterExtension (17), ExecuteExtensionOperation (18), UpgradeExtension (19)
+
+---
+
+## REQ-SNS-008: Proposal Topics
+
+Proposals MUST be categorized into topics that affect voting behavior and criticality.
+
+### SCENARIO-SNS-020: Topic categorization
+**Given** topics are queried
+**When** the full list is returned
+**Then** seven topics exist:
+  - DaoCommunitySettings (critical) — tokenomics, branding, parameters
+  - SnsFrameworkManagement — upgrade and manage SNS framework
+  - DappCanisterManagement — upgrade registered dapp canisters
+  - ApplicationBusinessLogic — custom dapp proposals
+  - Governance — community polls (motion proposals)
+  - TreasuryAssetManagement (critical) — move and manage DAO-owned assets
+  - CriticalDappOperations (critical) — deregister dapps, manage functions, extensions
+
+---
+
+## REQ-SNS-009: Treasury Management
+
+The governance canister MUST manage treasury operations including transfer and minting proposals.
+
+### SCENARIO-SNS-021: Treasury transfers retained 7 days for rolling limits
+**Given** a `TransferSnsTreasuryFunds` proposal is successfully executed
+**When** retention is applied
+**Then** the proposal is retained for 7 days (`EXECUTED_TRANSFER_SNS_TREASURY_FUNDS_PROPOSAL_RETENTION_DURATION_SECONDS`)
+**And** this is used to enforce 7-day rolling limits on treasury transfers
+
+### SCENARIO-SNS-022: Mint proposals retained 7 days
+**Given** a `MintSnsTokens` proposal is successfully executed
+**When** retention is applied
+**Then** it is retained for 7 days
+
+---
+
+## REQ-SNS-010: Voting Rewards
+
+Voting rewards MUST be distributed to neurons that participate in governance.
+
+### SCENARIO-SNS-023: Reward rate schedule
+**Given** the reward rate is calculated at a given time
+**When** the rate is computed
+**Then** it transitions linearly from `initial_reward_rate_basis_points` to `final_reward_rate_basis_points`
+**And** the transition takes `reward_rate_transition_duration_seconds`
+**And** the initial rate ceiling is 10,000 basis points (100%)
+
+### SCENARIO-SNS-024: Maturity modulation
+**Given** maturity modulation is applied to reward disbursement
+**When** the modulation is obtained
+**Then** it comes from the Cycles Minting Canister
+**And** if `maturity_modulation_disabled` is set, a modulation of 0 is used
+
+---
+
+## REQ-SNS-011: Nervous System Parameters Validation
+
+Parameters MUST be validated within defined bounds.
+
+### SCENARIO-SNS-025: Parameter bounds
+**Given** nervous system parameters are validated
+**When** bounds are checked
+**Then** `max_number_of_neurons` ≤ 200,000
+**And** `max_followees_per_function` ≤ 15
+**And** `max_dissolve_delay_bonus_percentage` ≤ 900%
+**And** `max_age_bonus_percentage` ≤ 400%
+**And** `max_number_of_principals_per_neuron` is between 5 and 15
+
+### SCENARIO-SNS-026: Default parameter values
+**Given** parameters are created with defaults
+**When** the defaults are checked
+**Then** `reject_cost_e8s` = 1 governance token
+**And** `initial_voting_period_seconds` = 4 days
+**And** `wait_for_quiet_deadline_increase_seconds` = 1 day
+**And** `max_number_of_neurons` = 200,000
+
+---
+
+## REQ-SNS-012: Extensions
+
+SNS Governance MUST support extension canisters.
+
+### SCENARIO-SNS-027: Extension registration via allowlist
+**Given** a `RegisterExtension` proposal is submitted
+**When** validation runs
+**Then** the extension's WASM hash must match an entry in the allowed extensions list
+**And** the extension is installed and controlled by both Root and Governance
+
+### SCENARIO-SNS-028: Extension operations
+**Given** an `ExecuteExtensionOperation` proposal is adopted
+**When** execution runs
+**Then** the governance canister calls the extension canister with the specified arguments
 
 ---
 

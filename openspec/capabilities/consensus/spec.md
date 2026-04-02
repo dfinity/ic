@@ -317,6 +317,201 @@ Consensus MUST determine subnet membership from the registry.
 | REQ-CONS-010 | Batch delivery | linked | rs/consensus/tests/integration.rs |
 | REQ-CONS-011 | Random tape | narrative | rs/consensus/tests/ |
 | REQ-CONS-012 | Share aggregation | narrative | rs/consensus/tests/ |
+## REQ-CONS-016: Block Signing
+
+Block proposals MUST be cryptographically signed by the proposing node.
+
+### SCENARIO-CONS-036: Block proposal signing
+**Given** a block is constructed
+**When** signing runs
+**Then** `BlockMetadata` is derived from the block and subnet ID
+**And** the metadata is signed using the node's key at the current registry version
+**And** if signing fails, no proposal is emitted
+
+---
+
+## REQ-CONS-017: Notarization Delay
+
+Notarization MUST be delayed based on block rank and system conditions.
+
+### SCENARIO-CONS-037: Base notary delay
+**Given** computing notarization delay for rank `r`
+**When** the delay is calculated
+**Then** delay = `initial_notary_delay + unit_delay * r * 1.5^(finality_gap)`
+**And** `finality_gap` = notarized height - finalized height
+
+### SCENARIO-CONS-038: Certified height backlog delay
+**Given** finalized height exceeds certified height by more than `ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP` (1)
+**And** the subnet is not halting/upgrading
+**When** additional delay is computed
+**Then** `BACKLOG_DELAY_MILLIS * certified_gap` (2000ms per round of gap) is added
+
+### SCENARIO-CONS-039: No backlog delay during upgrades
+**Given** the subnet is halting for an upgrade
+**When** backlog delay is checked
+**Then** no backlog delay is added (execution halts at CUP height by design)
+
+---
+
+## REQ-CONS-018: Hard Notarization Limits
+
+Notarization MUST stop entirely when gap thresholds are exceeded.
+
+### SCENARIO-CONS-040: Notarization-certification gap exceeded
+**Given** `notarized_height - certified_height >= ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP` (70)
+**When** the notary runs
+**Then** it returns `None` (cannot notarize)
+**And** a warning is logged every 5 seconds
+
+### SCENARIO-CONS-041: Notarization-CUP gap exceeded
+**Given** `notarized_height - next_cup_height >= ACCEPTABLE_NOTARIZATION_CUP_GAP` (130)
+**When** the notary runs
+**Then** it returns `None` (cannot notarize)
+
+---
+
+## REQ-CONS-019: Finalization Share Conditions
+
+Finalization shares MUST only be produced under strict safety conditions.
+
+### SCENARIO-CONS-042: Single notarized block, no conflicts
+**Given** exactly one fully notarized block exists at height `h`
+**And** this replica has NOT created notarization shares for any other block at `h`
+**And** this replica has NOT yet created a finalization share at `h`
+**When** the finalizer runs
+**Then** a finalization share is produced for the notarized block
+
+### SCENARIO-CONS-043: Multiple notarized blocks prevents finalization
+**Given** more than one fully notarized block exists at height `h`
+**When** the finalizer runs
+**Then** no finalization share is produced
+
+---
+
+## REQ-CONS-020: CUP Creation Conditions
+
+CUP shares MUST only be created when a summary block is finalized and state is available.
+
+### SCENARIO-CONS-044: CUP share creation
+**Given** a finalized summary block exists above the current CUP height
+**And** the state hash is available from the state manager
+**And** a random beacon exists at this height
+**When** the CUP maker runs
+**Then** a `CatchUpPackageShare` is created
+
+### SCENARIO-CONS-045: State hash mismatch triggers divergence
+**Given** the local state hash at CUP height differs from the CUP's state hash
+**And** the CUP height > 0 (not genesis)
+**When** divergence is detected
+**Then** `state_manager.report_diverged_checkpoint` is called (deletes diverged states and panics)
+
+---
+
+## REQ-CONS-021: Payload Building Sections
+
+The batch payload MUST be built from multiple section builders with rotation and size limits.
+
+### SCENARIO-CONS-046: Section builders called in rotation
+**Given** a batch payload is constructed for height `h`
+**When** building runs
+**Then** section builders (Ingress, SelfValidating, XNet, CanisterHttp, QueryStats, VetKd) are called in rotation `h % num_sections`
+**And** each section is allocated space from the remaining block size budget
+
+### SCENARIO-CONS-047: Section exceeds size limit replaced with empty
+**Given** a payload section builder returns a payload larger than `max_size`
+**When** the size check runs
+**Then** the section is replaced with an empty default
+**And** a critical error metric is incremented
+
+### SCENARIO-CONS-048: Built payload fails self-validation
+**Given** a section's built payload does not pass its own validation
+**When** the validation check runs
+**Then** the section is replaced with an empty default
+**And** a critical error metric is incremented
+
+---
+
+## REQ-CONS-022: Consensus Status and Halting
+
+The consensus status system MUST control block production and batch delivery during upgrades.
+
+### SCENARIO-CONS-049: Running status
+**Given** no upgrade is pending and no halt-at-CUP instruction
+**When** status is evaluated
+**Then** status is `Running`
+
+### SCENARIO-CONS-050: Halting status
+**Given** an upgrade is pending OR registry instructs halt at CUP height
+**And** the certified height has not yet reached the halting condition
+**When** status is evaluated
+**Then** status is `Halting` — empty blocks are produced but no batches are delivered
+
+### SCENARIO-CONS-051: Halted status
+**Given** an upgrade is pending or registry instructs halt
+**And** the certified height HAS reached the halting condition
+**When** status is evaluated
+**Then** status is `Halted` — no blocks produced and no batches delivered
+
+---
+
+## REQ-CONS-023: Artifact Priority (Bouncer)
+
+The bouncer MUST determine fetch priority for incoming consensus artifacts based on height.
+
+### SCENARIO-CONS-052: Artifact below minimum height is unwanted
+**Given** an artifact's height is below both CUP height and expected batch height
+**When** the bouncer evaluates it
+**Then** the artifact is `Unwanted`
+
+### SCENARIO-CONS-053: CUP always wanted
+**Given** a CUP artifact arrives at any height
+**When** the bouncer evaluates it
+**Then** it is always `Wants` (always fetched)
+
+### SCENARIO-CONS-054: Non-CUP beyond gap is deferred
+**Given** a non-CUP artifact's height exceeds `next_cup_height + ACCEPTABLE_NOTARIZATION_CUP_GAP`
+**When** the bouncer evaluates it
+**Then** the artifact is `MaybeWantsLater` (stashed, not fetched)
+
+---
+
+## REQ-CONS-024: Equivocation Proof Validation
+
+The system MUST validate and use equivocation proofs to detect misbehaving block makers.
+
+### SCENARIO-CONS-055: Valid equivocation proof
+**Given** a proof contains two distinct signed block metadata from the same signer at the same height
+**And** both basic signatures are valid
+**When** validation runs
+**Then** the equivocation proof is moved to the validated pool
+
+---
+
+## Traceability
+
+| ID | Description | Status | Tests |
+|----|-------------|--------|-------|
+| REQ-CONS-001 | Subcomponent order | linked | rs/consensus/tests/integration.rs |
+| REQ-CONS-002 | Block maker election | linked | rs/consensus/tests/integration.rs |
+| REQ-CONS-003 | Block proposal timing | linked | rs/consensus/tests/integration.rs |
+| REQ-CONS-004 | Notarization | linked | rs/consensus/tests/integration.rs |
+| REQ-CONS-005 | Finalization | linked | rs/consensus/tests/integration.rs |
+| REQ-CONS-006 | Random beacon | narrative | rs/consensus/tests/ |
+| REQ-CONS-007 | Catch-up packages | narrative | rs/consensus/tests/ |
+| REQ-CONS-008 | Block payload | narrative | rs/consensus/tests/ |
+| REQ-CONS-009 | Pool purging | narrative | rs/consensus/tests/ |
+| REQ-CONS-010 | Batch delivery | linked | rs/consensus/tests/integration.rs |
+| REQ-CONS-011 | Random tape | narrative | rs/consensus/tests/ |
+| REQ-CONS-012 | Share aggregation | narrative | rs/consensus/tests/ |
 | REQ-CONS-013 | Artifact validation | narrative | rs/consensus/tests/ |
 | REQ-CONS-014 | Pool bounds | narrative | rs/consensus/tests/ |
 | REQ-CONS-015 | Membership | narrative | rs/consensus/tests/ |
+| REQ-CONS-016 | Block signing | narrative | rs/consensus/tests/ |
+| REQ-CONS-017 | Notarization delay | narrative | rs/consensus/tests/ |
+| REQ-CONS-018 | Hard notarization limits | narrative | rs/consensus/tests/ |
+| REQ-CONS-019 | Finalization conditions | narrative | rs/consensus/tests/ |
+| REQ-CONS-020 | CUP creation conditions | narrative | rs/consensus/tests/ |
+| REQ-CONS-021 | Payload building sections | narrative | rs/consensus/tests/ |
+| REQ-CONS-022 | Consensus status/halting | narrative | rs/consensus/tests/ |
+| REQ-CONS-023 | Artifact priority (bouncer) | narrative | rs/consensus/tests/ |
+| REQ-CONS-024 | Equivocation proof | narrative | rs/consensus/tests/ |
