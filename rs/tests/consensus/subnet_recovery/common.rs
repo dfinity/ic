@@ -1079,11 +1079,11 @@ struct RecoveryParameters {
 
 /// If we can deploy read-only access to the subnet, then:
 ///   - We can download the consensus pool from the node with highest certification and
-///   CUP share height.
+///     CUP share height.
 ///   - The node where we download the state from must have a last manifest height at
-///   least as high as the highest CUP height to be able to replay correctly.
+///     least as high as the highest CUP height to be able to replay correctly.
 ///   - The upload node is either an unassigned node (in case of failover nodes recovery)
-///   or the same as the download state node (in case of same nodes recovery).
+///     or the same as the download state node (in case of same nodes recovery).
 ///   - The admin nodes are only the upload node.
 fn get_recovery_parameters_when_ssh_key_can_be_deployed(
     env: &TestEnv,
@@ -1091,7 +1091,7 @@ fn get_recovery_parameters_when_ssh_key_can_be_deployed(
     logger: &Logger,
 ) -> RecoveryParameters {
     let (download_pool_node, highest_cert_share, highest_cup, _) =
-        node_with_highest_cert_share_and_cup_heights(&app_subnet, &logger);
+        node_with_highest_cert_share_and_cup_heights(app_subnet, logger);
 
     let download_state_node = app_subnet
         .nodes()

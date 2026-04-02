@@ -403,7 +403,7 @@ impl Recovery {
         let maybe_latest_checkpoint_name = match (ssh_helper, download_height) {
             (Some(ssh_helper), Some(height)) => {
                 let name = format!("{:016x}", height);
-                if !path_exists_remotely(&ic_checkpoints_path.join(&name), &ssh_helper)? {
+                if !path_exists_remotely(&ic_checkpoints_path.join(&name), ssh_helper)? {
                     return Err(RecoveryError::invalid_output_error(format!(
                         "Checkpoint {} at height {} does not exist at {}",
                         name,
@@ -1308,6 +1308,7 @@ mod tests {
 
     // TODO: add tests
 
+    #[test]
     fn get_latest_checkpoint_name_and_height_test() {
         let checkpoints_dir = tmpdir("checkpoints");
         create_fake_checkpoint_dirs(
