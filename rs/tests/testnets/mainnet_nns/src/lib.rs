@@ -500,8 +500,10 @@ fn recover_nns_subnet(
         .arg(aux_ip.to_string())
         .arg("--aux-user")
         .arg(SSH_USERNAME)
+        // --validate-nns-url will not actually be used because the backup pod tarball also
+        // contains the local store, which initializes ic-recovery
         .arg("--validate-nns-url")
-        .arg(nns_url.to_string())
+        .arg("https://icp0.io")
         .arg("--upload-method")
         .arg(upload_ip.to_string())
         .arg("--parent-nns-host-ip")
@@ -580,7 +582,7 @@ fn patch_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcN
     )
     .expect("Could not patch config NNS URLs of API BN");
 
-    // Path config NNS public key to the recovered NNS public key
+    // Patch config NNS public key to the recovered NNS public key
     patch_config_nns_public_key(
         &logger,
         api_bn,
