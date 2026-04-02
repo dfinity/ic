@@ -30,7 +30,7 @@ use ic_replicated_state::{
 };
 use ic_types::messages::{CanisterCall, RequestMetadata};
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CompoundCycles, Instructions};
 
 use super::install_code::MemoryHandling;
 
@@ -650,7 +650,14 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
         }
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, InstallCodeCallId, Cycles) {
+    fn abort(
+        self: Box<Self>,
+        log: &ReplicaLogger,
+    ) -> (
+        CanisterCall,
+        InstallCodeCallId,
+        CompoundCycles<Instructions>,
+    ) {
         info!(
             log,
             "[DTS] Aborting (canister_pre_upgrade) execution of canister {}.",
@@ -755,7 +762,14 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
         }
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, InstallCodeCallId, Cycles) {
+    fn abort(
+        self: Box<Self>,
+        log: &ReplicaLogger,
+    ) -> (
+        CanisterCall,
+        InstallCodeCallId,
+        CompoundCycles<Instructions>,
+    ) {
         info!(
             log,
             "[DTS] Aborting (start) execution of canister {}.", self.original.canister_id
@@ -856,7 +870,14 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
         }
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, InstallCodeCallId, Cycles) {
+    fn abort(
+        self: Box<Self>,
+        log: &ReplicaLogger,
+    ) -> (
+        CanisterCall,
+        InstallCodeCallId,
+        CompoundCycles<Instructions>,
+    ) {
         info!(
             log,
             "[DTS] Aborting (canister_post_upgrade) execution of canister {}.",

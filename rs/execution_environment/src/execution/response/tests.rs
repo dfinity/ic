@@ -397,7 +397,7 @@ fn cycles_correct_if_response_fails() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
+            - test.canister_execution_cost(a_id).real()
             - test.call_fee("update", &b).real()
             - test.reply_fee(&b).real()
     );
@@ -447,7 +447,7 @@ fn cycles_correct_if_cleanup_fails() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
+            - test.canister_execution_cost(a_id).real()
             - test.call_fee("update", &b).real()
             - test.reply_fee(&b).real()
     );
@@ -1394,7 +1394,8 @@ fn dts_response_concurrent_cycles_change_succeeds() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles + refund.real() - call_charge - cycles_debit
-            + (max_execution_cost - (test.canister_execution_cost(a_id) - initial_execution_cost))
+            + (max_execution_cost
+                - (test.canister_execution_cost(a_id) - initial_execution_cost).real())
     );
 }
 
@@ -1529,7 +1530,8 @@ fn dts_response_concurrent_cycles_change_fails() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles + refund.real() - cycles_debit
-            + (max_execution_cost - (test.canister_execution_cost(a_id) - initial_execution_cost))
+            + (max_execution_cost
+                - (test.canister_execution_cost(a_id) - initial_execution_cost).real())
     );
 }
 
@@ -1672,7 +1674,8 @@ fn dts_response_with_cleanup_concurrent_cycles_change_succeeds() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles + refund.real() - cycles_debit
-            + (max_execution_cost - (test.canister_execution_cost(a_id) - initial_execution_cost))
+            + (max_execution_cost
+                - (test.canister_execution_cost(a_id) - initial_execution_cost).real())
     );
 
     // Check that the cleanup callback did run.

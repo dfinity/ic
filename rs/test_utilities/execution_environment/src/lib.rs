@@ -83,7 +83,7 @@ use ic_types::{
 use ic_types::{ExecutionRound, RegistryVersion, ReplicaVersion};
 use ic_types_cycles::{
     CanisterCreation, CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase,
-    HTTPOutcalls, NominalCycles, RequestAndResponseTransmission,
+    HTTPOutcalls, Instructions, NominalCycles, RequestAndResponseTransmission,
 };
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_SERIALIZED_MODULE, UNIVERSAL_CANISTER_WASM};
@@ -288,7 +288,7 @@ pub struct ExecutionTest {
     // The number of instructions executed so far per canister.
     executed_instructions: HashMap<CanisterId, NumInstructions>,
     // The total cost of execution so far per canister.
-    execution_cost: HashMap<CanisterId, Cycles>,
+    execution_cost: HashMap<CanisterId, CompoundCycles<Instructions>>,
     // Tracks paused subnet message executions per canister.
     // The value is reset when the execution finishes.
     paused_subnet_messages: HashMap<CanisterId, PausedSubnetMessage>,
@@ -437,10 +437,6 @@ impl ExecutionTest {
             .unwrap_or(&NumInstructions::new(0))
     }
 
-    pub fn execution_cost(&self) -> Cycles {
-        Cycles::new(self.execution_cost.values().map(|x| x.get()).sum())
-    }
-
     pub fn canister_snapshot_cost(&self, canister_id: CanisterId) -> Cycles {
         let canister = self.canister_state(canister_id);
         let new_snapshot_size = canister.snapshot_size_bytes();
@@ -452,11 +448,11 @@ impl ExecutionTest {
             .real()
     }
 
-    pub fn canister_execution_cost(&self, canister_id: CanisterId) -> Cycles {
+    pub fn canister_execution_cost(&self, canister_id: CanisterId) -> CompoundCycles<Instructions> {
         *self
             .execution_cost
             .get(&canister_id)
-            .unwrap_or(&Cycles::new(0))
+            .unwrap_or(&CompoundCycles::new(Cycles::new(0), self.cost_schedule()))
     }
 
     pub fn idle_cycles_burned_per_day(&self, canister_id: CanisterId) -> Cycles {
@@ -2011,7 +2007,7 @@ impl ExecutionTest {
         *self
             .execution_cost
             .entry(canister_id)
-            .or_insert(Cycles::new(0)) += instruction_cost.real();
+            .or_insert(CompoundCycles::new(Cycles::new(0), cost_schedule)) += instruction_cost;
     }
 
     /// Inducts messages between canisters and pushes all cross-net messages to

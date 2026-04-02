@@ -74,6 +74,10 @@ message Callback {
   state.queues.v1.Cycles prepayment_for_response_transmission = 9;
   // If non-zero, this is a best-effort call.
   uint32 deadline_seconds = 10;
+  // To replace `prepayment_for_response_execution`.
+  state.queues.v1.CompoundCycles prepayment_for_response_execution_compound = 11;
+  // To replace `prepayment_for_response_transmission`.
+  state.queues.v1.CompoundCycles prepayment_for_response_transmission_compound = 12;
 }
 
 message CallbackEntry {
@@ -221,6 +225,10 @@ message ExecutionTask {
     // The execution cost that has already been charged from the canister.
     // Retried execution does not have to pay for it again.
     state.queues.v1.Cycles prepaid_execution_cycles = 4;
+    // The execution cost that has already been charged from the canister.
+    // Retried execution does not have to pay for it again.
+    // This field will replace the existing `prepaid_execution_cycles`.
+    state.queues.v1.CompoundCycles prepaid_execution_compound_cycles = 7;
   }
 
   message AbortedInstallCode {
@@ -233,6 +241,10 @@ message ExecutionTask {
     state.queues.v1.Cycles prepaid_execution_cycles = 3;
     reserved "request_id";
     optional uint64 call_id = 4;
+    // The execution cost that has already been charged from the canister.
+    // Retried execution does not have to pay for it again.
+    // Will replace the existing `prepaid_execution_cycles`.
+    state.queues.v1.CompoundCycles prepaid_execution_compound_cycles = 5;
   }
 
   oneof task {

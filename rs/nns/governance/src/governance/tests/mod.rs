@@ -3,7 +3,7 @@ use crate::pb::v1::ExecuteNnsFunction;
 use crate::storage::with_voting_history_store;
 use crate::test_utils::MockRandomness;
 use crate::{
-    governance::MAX_DISSOLVE_DELAY_SECONDS,
+    governance::MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70,
     neuron::{DissolveStateAndAge, NeuronBuilder},
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
@@ -1735,7 +1735,7 @@ fn test_maybe_set_eight_year_gang_bonus_base() {
     let neuron = NeuronBuilder::new_for_test(
         1,
         DissolveStateAndAge::NotDissolving {
-            dissolve_delay_seconds: MAX_DISSOLVE_DELAY_SECONDS,
+            dissolve_delay_seconds: MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70,
             aging_since_timestamp_seconds: 0,
         },
     )
