@@ -449,7 +449,12 @@ fn some_checkpoint_dir(backup_dir: &Path, subnet_id: &SubnetId) -> Option<PathBu
 }
 
 fn cold_storage_exists(log: &Logger, cold_storage_dir: PathBuf) -> bool {
-    for _ in 0..12 {
+    // The cold storage thread in ic-backup needs to acquire the artifacts_guard
+    // mutex to check need_cold_storage_move(). However, rsync_spool holds this
+    // same mutex for its entire duration, including 60-second sleeps between
+    // retries on failure (up to 5 retries per node). With 2 nodes, this can
+    // block the cold storage thread for up to ~10 minutes.
+    for _ in 0..90 {
         if dir_exists_and_have_file(log, &cold_storage_dir.join("states"))
             && dir_exists_and_have_file(log, &cold_storage_dir.join("artifacts"))
         {
