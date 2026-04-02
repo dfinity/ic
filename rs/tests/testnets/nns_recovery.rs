@@ -87,17 +87,6 @@ fn log_instructions(env: TestEnv) {
         );
     }
 
-    let upgrade_version = get_guestos_update_img_version();
-    let upgrade_image_url = get_guestos_update_img_url();
-    let upgrade_image_hash = get_guestos_update_img_sha256();
-    info!(
-        logger,
-        r#"Working GuestOS version:
-    --upgrade-version {upgrade_version}
-    --upgrade-image-url {upgrade_image_url}
-    --upgrade-image-hash {upgrade_image_hash}"#
-    );
-
     info!(logger, "Host <-> IPs mapping:");
     for vm in env.get_all_nested_vms().unwrap() {
         let vm_name = vm.vm_name();
