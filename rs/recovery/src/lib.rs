@@ -600,17 +600,30 @@ impl Recovery {
         Ok(res)
     }
 
-    /// Get the name of the latest checkpoint currently on the remote node, if any.
+    /// Get the name of the latest verified checkpoint currently on the remote
+    /// node, if any.
+    ///
+    /// A checkpoint is considered verified when it does not contain an
+    /// `unverified_checkpoint_marker` file. Only verified checkpoints are loaded
+    /// by the state manager, so downloading an unverified checkpoint would cause
+    /// ic-replay to hang (see CON-1604).
     pub fn get_maybe_latest_checkpoint_name_remotely(
         ssh_helper: &SshHelper,
         checkpoints_path: &Path,
     ) -> RecoveryResult<Option<String>> {
         let maybe_output = ssh_helper.ssh(format!(
-            "ls -1 {} | sort | tail -n 1",
-            checkpoints_path.display()
+            r#"for cp in $(ls -1 {path} | sort -r); do
+    if [ ! -f "{path}/$cp/unverified_checkpoint_marker" ]; then
+        echo "$cp"
+        break
+    fi
+done"#,
+            path = checkpoints_path.display()
         ))?;
 
-        Ok(maybe_output.map(|output| output.trim().to_string()))
+        Ok(maybe_output
+            .map(|output| output.trim().to_string())
+            .filter(|s| !s.is_empty()))
     }
 
     /// Get the name and the height of the latest checkpoint currently on disk, if any.
