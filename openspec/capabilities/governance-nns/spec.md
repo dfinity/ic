@@ -223,6 +223,187 @@ The governance canister MUST run periodic timer tasks for background operations.
 
 ---
 
+## REQ-NNS-013: Vote Casting
+
+Neurons MUST be able to cast votes directly, with eligibility rules and cascade processing.
+
+### SCENARIO-NNS-023: Direct vote
+**Given** a neuron's controller or hot key submits a vote (Yes or No) on a proposal
+**When** the vote is cast
+**Then** the vote is recorded in the proposal's ballots
+**And** cascade follow processing is triggered
+**And** the proposal tally is recomputed
+
+### SCENARIO-NNS-024: Vote eligibility
+**Given** a neuron attempts to vote on a proposal
+**When** eligibility is checked
+**Then** the neuron must have been created before the proposal was submitted
+**And** the neuron must have a ballot in the proposal's ballots map
+
+### SCENARIO-NNS-025: Votes eligible for rewards
+**Given** a vote is cast
+**When** reward eligibility is checked
+**Then** Yes or No votes are eligible for voting rewards
+**And** Unspecified votes are NOT eligible for rewards
+
+---
+
+## REQ-NNS-014: Voting State Machine
+
+The voting system MUST use a state machine that processes votes across message boundaries to avoid instruction limits.
+
+### SCENARIO-NNS-026: Vote processing with instruction limits
+**Given** a vote is cast
+**When** cascade follow processing runs
+**Then** processing continues until either voting is finished or the soft instruction limit (1 billion instructions) is reached
+**And** if the soft limit is reached, processing continues in the next message via self-call
+**And** if the hard limit (750 billion instructions) is reached, remaining processing moves to timer jobs
+
+### SCENARIO-NNS-027: Background vote processing
+**Given** timer tasks run
+**When** unfinished voting state machines exist
+**Then** they are processed, tallies are recomputed, and decided proposals are handled
+
+---
+
+## REQ-NNS-015: Tally Recomputation
+
+After votes are cast, the proposal tally MUST be recomputed to determine the outcome.
+
+### SCENARIO-NNS-028: Tally counts
+**Given** a proposal tally is recomputed
+**When** the computation runs
+**Then** `yes` = sum of voting power of all Yes ballots
+**And** `no` = sum of voting power of all No ballots
+**And** `total` = sum of voting power of ALL ballots (yes + no + undecided)
+
+### SCENARIO-NNS-029: Proposal decided by majority
+**Given** a proposal tally is evaluated
+**When** `yes > total / 2`
+**Then** the proposal is accepted (adopted)
+
+**When** `no >= ceil(total / 2)`
+**Then** the proposal is rejected (adoption becomes impossible)
+
+---
+
+## REQ-NNS-016: Reward Rate Calculation
+
+The reward rate MUST decrease from 10% to 5% per year over 8 years following a quadratic curve.
+
+### SCENARIO-NNS-030: Reward rate at genesis
+**Given** rewards are calculated at IC genesis
+**When** the rate is computed
+**Then** the rate is `INITIAL_VOTING_REWARD_RELATIVE_RATE` (10% per year / 365.25 days)
+
+### SCENARIO-NNS-031: Reward rate after 8 years
+**Given** rewards are calculated at or after `REWARD_FLATTENING_DATE` (8 years * 365.25 days)
+**When** the rate is computed
+**Then** the rate is `FINAL_VOTING_REWARD_RELATIVE_RATE` (5% per year / 365.25 days)
+
+### SCENARIO-NNS-032: Reward rate quadratic curve
+**Given** rewards are calculated between genesis and 8 years
+**When** the rate is computed
+**Then** `R(t) = Rf + (R0 - Rf) * [(t - T) / (G - T)]^2`
+**And** the curve is differentiable at the flattening date (smooth transition)
+**And** the rate decreases monotonically
+
+---
+
+## REQ-NNS-017: Reward Distribution
+
+Rewards MUST be distributed daily as maturity, with rollover for periods with no settled proposals.
+
+### SCENARIO-NNS-033: Daily reward pool
+**Given** the daily reward pool is calculated for a given day since genesis
+**When** the calculation runs
+**Then** pool = supply fraction rate * total ICP supply
+**And** undistributed rewards are rolled over
+
+### SCENARIO-NNS-034: Rewards rolled over when no proposals settle
+**Given** a reward event has no settled proposals
+**When** the event is processed
+**Then** `total_available_e8s_equivalent` and `rounds_since_last_distribution` are rolled over to the next event
+
+### SCENARIO-NNS-035: Rewards distributed as maturity
+**Given** rewards are distributed to a neuron with `auto_stake_maturity = false`
+**When** distribution runs
+**Then** the reward is added to `maturity_e8s_equivalent`
+
+### SCENARIO-NNS-036: Rewards auto-staked
+**Given** rewards are distributed to a neuron with `auto_stake_maturity = true`
+**When** distribution runs
+**Then** the reward is added to `staked_maturity_e8s_equivalent`
+
+### SCENARIO-NNS-037: Reward distribution uses state machine
+**Given** a reward distribution is scheduled
+**When** processing runs
+**Then** it is processed across multiple messages respecting instruction limits (1 billion per message)
+**And** each neuron's reward is applied atomically
+
+---
+
+## REQ-NNS-018: Maturity Disbursement
+
+Neuron maturity MUST be disbursable with a 7-day delay and subject to maturity modulation.
+
+### SCENARIO-NNS-038: Initiate maturity disbursement
+**Given** a neuron controller initiates a maturity disbursement
+**And** the percentage is between 1 and 100
+**And** the neuron is not spawning
+**And** in-progress disbursements < `MAX_NUM_DISBURSEMENTS` (10)
+**And** the disbursement amount ≥ `MINIMUM_DISBURSEMENT_E8S` (1 ICP)
+**When** the request is processed
+**Then** a `MaturityDisbursement` record is created
+**And** `disbursement_maturity_e8s` is deducted from the neuron's maturity
+**And** the disbursement will be finalized after `DISBURSEMENT_DELAY_SECONDS` (7 days)
+
+### SCENARIO-NNS-039: Disbursement finalization with modulation
+**Given** the 7-day delay has passed
+**When** finalization runs
+**Then** maturity modulation is applied to determine the actual ICP amount
+**And** the ICP is minted to the specified destination account
+
+### SCENARIO-NNS-040: Disbursement destination rules
+**Given** no destination is specified
+**When** disbursement runs
+**Then** ICP is sent to the caller's default account
+
+**Given** both Account and AccountIdentifier are specified
+**When** disbursement runs
+**Then** the disbursement fails with an error
+
+### SCENARIO-NNS-041: Too many disbursements
+**Given** a neuron already has `MAX_NUM_DISBURSEMENTS` (10) in progress
+**When** a new disbursement is requested
+**Then** the request is rejected
+
+---
+
+## REQ-NNS-019: Maturity Modulation
+
+Maturity modulation MUST adjust the conversion rate between maturity and ICP within a bounded range.
+
+### SCENARIO-NNS-042: Maturity modulation range
+**Given** maturity modulation is applied
+**When** the modulation value is checked
+**Then** it is within `VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE` (-500 to +500 basis points)
+**And** the actual ICP minted can vary by +/- 5% from the maturity amount
+
+---
+
+## REQ-NNS-020: Voting Power Snapshots
+
+Periodic snapshots of neuron voting power MUST be taken for reward computation.
+
+### SCENARIO-NNS-043: Voting power snapshots taken
+**Given** the `snapshot_voting_power` timer task runs
+**When** the snapshot is taken
+**Then** a snapshot of all neuron voting powers is stored in `VOTING_POWER_SNAPSHOTS` stable storage
+**And** these snapshots are used for reward calculations
+
+---
+
 ## Traceability
 
 | ID | Description | Status | Tests |
@@ -239,3 +420,11 @@ The governance canister MUST run periodic timer tasks for background operations.
 | REQ-NNS-010 | Proposal topics | narrative | rs/nns/governance/tests/ |
 | REQ-NNS-011 | Proposal content limits | narrative | rs/nns/governance/tests/ |
 | REQ-NNS-012 | Timer tasks | narrative | rs/nns/governance/tests/ |
+| REQ-NNS-013 | Vote casting | narrative | rs/nns/governance/src/voting.rs |
+| REQ-NNS-014 | Voting state machine | narrative | rs/nns/governance/src/voting.rs |
+| REQ-NNS-015 | Tally recomputation | narrative | rs/nns/governance/tests/ |
+| REQ-NNS-016 | Reward rate calculation | narrative | rs/nns/governance/src/reward/ |
+| REQ-NNS-017 | Reward distribution | narrative | rs/nns/governance/src/reward/ |
+| REQ-NNS-018 | Maturity disbursement | narrative | rs/nns/governance/tests/ |
+| REQ-NNS-019 | Maturity modulation | narrative | rs/nns/governance/tests/ |
+| REQ-NNS-020 | Voting power snapshots | narrative | rs/nns/governance/tests/ |
