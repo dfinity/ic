@@ -403,27 +403,33 @@ impl Recovery {
         let maybe_latest_checkpoint_name = match (ssh_helper, download_height) {
             (Some(ssh_helper), Some(height)) => {
                 let name = format!("{:016x}", height);
-                if !path_exists_remotely(&ic_checkpoints_path.join(&name), ssh_helper)? {
+                if height == 0 {
+                    None
+                } else if !path_exists_remotely(&ic_checkpoints_path.join(&name), ssh_helper)? {
                     return Err(RecoveryError::invalid_output_error(format!(
                         "Checkpoint {} at height {} does not exist at {}",
                         name,
                         height,
                         ic_checkpoints_path.display()
                     )));
+                } else {
+                    Some(name)
                 }
-                Some(name)
             }
             (None, Some(height)) => {
                 let name = format!("{:016x}", height);
-                if !path_exists(&ic_checkpoints_path.join(&name))? {
+                if height == 0 {
+                    None
+                } else if !path_exists(&ic_checkpoints_path.join(&name))? {
                     return Err(RecoveryError::invalid_output_error(format!(
                         "Checkpoint {} at height {} does not exist at {}",
                         name,
                         height,
                         ic_checkpoints_path.display()
                     )));
+                } else {
+                    Some(name)
                 }
-                Some(name)
             }
             (Some(ssh_helper), None) => {
                 Self::get_maybe_latest_checkpoint_name_remotely(ssh_helper, &ic_checkpoints_path)?
