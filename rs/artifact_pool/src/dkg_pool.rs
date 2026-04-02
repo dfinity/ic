@@ -36,7 +36,7 @@ impl DkgPoolImpl {
             ),
             validated: PoolSection::new(metrics_registry.clone(), POOL_DKG, POOL_TYPE_VALIDATED),
             unvalidated: PoolSection::new(metrics_registry, POOL_DKG, POOL_TYPE_UNVALIDATED),
-            current_start_height: Height::from(1),
+            current_start_height: Height::from(0),
             log,
         }
     }

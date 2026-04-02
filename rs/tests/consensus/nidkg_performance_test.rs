@@ -1,4 +1,5 @@
 use anyhow::Result;
+use ic_system_test_driver::driver::ic::VmResourceOverrides;
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
@@ -8,7 +9,7 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
-    ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+    ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet},
     simulate_network::{FixedNetworkSimulation, SimulateNetwork},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder, SshSession},
@@ -34,7 +35,7 @@ const BANDWIDTH_MBITS: u32 = 300;
 const LATENCY: Duration = Duration::from_millis(120);
 
 fn setup(env: TestEnv) {
-    let vm_resources = VmResources {
+    let vm_resources = VmResourceOverrides {
         vcpus: Some(NrOfVCPUs::new(64)),
         memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
         boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
@@ -50,7 +51,7 @@ fn setup(env: TestEnv) {
 
     let mut nns_subnet = Subnet::new(SubnetType::System)
         .with_required_host_features(vec![HostFeature::Performance])
-        .with_default_vm_resources(vm_resources)
+        .with_resource_overrides(vm_resources)
         .add_nodes(NNS_NODES_COUNT);
     nns_subnet.dkg_dealings_per_block = Some(DEFAULT_NNS_DKG_DEALINGS_PER_BLOCK);
 
