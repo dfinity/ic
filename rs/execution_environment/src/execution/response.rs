@@ -27,7 +27,8 @@ use ic_types::messages::{
 use ic_types::methods::{Callback, FuncRef, WasmClosure};
 use ic_types::{NumBytes, NumInstructions, Time};
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, NonConsumed, RequestAndResponseTransmission,
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, Instructions, NonConsumed,
+    RequestAndResponseTransmission,
 };
 use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
@@ -110,7 +111,7 @@ const RESERVED_CLEANUP_INSTRUCTIONS_IN_PERCENT: u64 = 5;
 #[derive(Debug)]
 struct PausedResponseHelper {
     refund_for_sent_cycles: Cycles,
-    refund_for_response_transmission: Cycles,
+    refund_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
     initial_cycles_balance: Cycles,
     response_sender: CanisterId,
 }
@@ -120,7 +121,7 @@ struct PausedResponseHelper {
 struct ResponseHelper {
     canister: CanisterState,
     refund_for_sent_cycles: Cycles,
-    refund_for_response_transmission: Cycles,
+    refund_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
     initial_cycles_balance: Cycles,
     response_sender: CanisterId,
     applied_subnet_memory_reservation: NumBytes,
@@ -173,14 +174,10 @@ impl ResponseHelper {
                 round.log,
                 round.counters.response_cycles_refund_error,
                 &response.response_payload,
-                CompoundCycles::new(
-                    original.callback.prepayment_for_response_transmission,
-                    round.cost_schedule,
-                ),
+                original.callback.prepayment_for_response_transmission,
                 original.subnet_size,
                 round.cost_schedule,
-            )
-            .real();
+            );
 
         let canister = clean_canister.clone();
         let initial_cycles_balance = canister.system_state.balance();
@@ -211,12 +208,9 @@ impl ResponseHelper {
                 cost_schedule,
             ));
 
-        self.canister.system_state.add_cycles(
-            CompoundCycles::<RequestAndResponseTransmission>::new(
-                self.refund_for_response_transmission,
-                cost_schedule,
-            ),
-        );
+        self.canister
+            .system_state
+            .add_cycles(self.refund_for_response_transmission);
     }
 
     /// Checks that the canister has not been uninstalled:
@@ -580,10 +574,7 @@ impl ResponseHelper {
             &mut self.canister.system_state,
             instructions_left,
             original.message_instruction_limit,
-            CompoundCycles::new(
-                original.callback.prepayment_for_response_execution,
-                round.cost_schedule,
-            ),
+            original.callback.prepayment_for_response_execution,
             round.counters.execution_refund_error,
             original.subnet_size,
             round.cost_schedule,
@@ -689,6 +680,7 @@ struct OriginalContext {
     canister_id: CanisterId,
     instructions_executed: NumInstructions,
     log_dirty_pages: FlagStatus,
+    cost_schedule: CanisterCyclesCostSchedule,
 }
 
 fn is_composite_query(origin: &CallOrigin) -> bool {
@@ -782,7 +774,10 @@ impl PausedExecution for PausedResponseExecution {
         )
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterMessageOrTask, Cycles) {
+    fn abort(
+        self: Box<Self>,
+        log: &ReplicaLogger,
+    ) -> (CanisterMessageOrTask, CompoundCycles<Instructions>) {
         info!(
             log,
             "[DTS] Aborting paused response callback {:?} of canister {}.",
@@ -795,7 +790,10 @@ impl PausedExecution for PausedResponseExecution {
             callback: self.original.callback,
         };
         // No cycles were prepaid for execution during this DTS execution.
-        (CanisterMessageOrTask::Message(message), Cycles::zero())
+        (
+            CanisterMessageOrTask::Message(message),
+            CompoundCycles::new(Cycles::zero(), self.original.cost_schedule),
+        )
     }
 
     fn input(&self) -> CanisterMessageOrTask {
@@ -888,7 +886,10 @@ impl PausedExecution for PausedCleanupExecution {
         )
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterMessageOrTask, Cycles) {
+    fn abort(
+        self: Box<Self>,
+        log: &ReplicaLogger,
+    ) -> (CanisterMessageOrTask, CompoundCycles<Instructions>) {
         info!(
             log,
             "[DTS] Aborting paused cleanup callback {:?} of canister {}.",
@@ -901,7 +902,10 @@ impl PausedExecution for PausedCleanupExecution {
             callback: self.original.callback,
         };
         // No cycles were prepaid for execution during this DTS execution.
-        (CanisterMessageOrTask::Message(message), Cycles::zero())
+        (
+            CanisterMessageOrTask::Message(message),
+            CompoundCycles::new(Cycles::zero(), self.original.cost_schedule),
+        )
     }
 
     fn input(&self) -> CanisterMessageOrTask {
@@ -965,6 +969,7 @@ pub fn execute_response(
         canister_id: clean_canister.canister_id(),
         instructions_executed: call_context.instructions_executed(),
         log_dirty_pages,
+        cost_schedule: round.cost_schedule,
     };
 
     let mut helper = ResponseHelper::new(

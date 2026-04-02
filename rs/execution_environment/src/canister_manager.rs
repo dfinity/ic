@@ -886,7 +886,7 @@ impl CanisterManager {
         context: InstallCodeContext,
         message: CanisterCall,
         call_id: InstallCodeCallId,
-        prepaid_execution_cycles: Option<Cycles>,
+        prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
         mut canister: CanisterState,
         time: Time,
         canister_layout_path: PathBuf,
@@ -929,7 +929,7 @@ impl CanisterManager {
                     reveal_top_up,
                     wasm_execution_mode,
                 ) {
-                    Ok(cycles) => cycles.real(),
+                    Ok(cycles) => cycles,
                     Err(err) => {
                         return DtsInstallCodeResult::Finished {
                             canister,

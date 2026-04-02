@@ -41,7 +41,7 @@ use ic_types::messages::{
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::xnet::StreamIndex;
 use ic_types::{CountBytes, MemoryAllocation, SnapshotId, Time};
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Cycles};
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::collections::{BTreeMap, VecDeque};
@@ -1350,7 +1350,10 @@ fn online_split() {
             .enqueue(ExecutionTask::AbortedInstallCode {
                 message: CanisterCall::Request(RequestBuilder::default().build().into()),
                 call_id: InstallCodeCallId::new(3_u64),
-                prepaid_execution_cycles: Cycles::new(3),
+                prepaid_execution_cycles: CompoundCycles::new(
+                    Cycles::new(3),
+                    CanisterCyclesCostSchedule::Normal,
+                ),
             });
     };
     add_aborted_install_code_task(CANISTER_1);

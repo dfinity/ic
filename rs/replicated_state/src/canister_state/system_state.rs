@@ -46,7 +46,7 @@ use ic_types::{
 };
 use ic_types_cycles::{
     CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, CyclesUseCaseKind,
-    IngressInduction, NominalCycles, NonConsumed, Uninstall,
+    IngressInduction, Instructions, NominalCycles, NonConsumed, Uninstall,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -530,7 +530,7 @@ pub enum ExecutionTask {
         input: CanisterMessageOrTask,
         /// The execution cost that has already been charged from the canister.
         /// Retried execution does not have to pay for it again.
-        prepaid_execution_cycles: Cycles,
+        prepaid_execution_cycles: CompoundCycles<Instructions>,
     },
 
     /// Any paused `install_code` that doesn't finish until the next checkpoint
@@ -544,7 +544,7 @@ pub enum ExecutionTask {
         call_id: InstallCodeCallId,
         /// The execution cost that has already been charged from the canister.
         /// Retried execution does not have to pay for it again.
-        prepaid_execution_cycles: Cycles,
+        prepaid_execution_cycles: CompoundCycles<Instructions>,
     },
 }
 
@@ -2238,8 +2238,8 @@ fn invalid_callback() -> Arc<Callback> {
         CallContextId::from(u64::MAX), // Non-existent CallContext
         CanisterId::from_u64(0),
         Cycles::zero(),
-        Cycles::zero(),
-        Cycles::zero(),
+        CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
         WasmClosure::new(0, 0),
         WasmClosure::new(0, 0),
         None,
@@ -2342,8 +2342,8 @@ pub mod testing {
                 call_context_id,
                 respondent,
                 Cycles::new(13),
-                Cycles::new(42),
-                Cycles::new(84),
+                CompoundCycles::new(Cycles::new(42), CanisterCyclesCostSchedule::Normal),
+                CompoundCycles::new(Cycles::new(84), CanisterCyclesCostSchedule::Normal),
                 WasmClosure::new(0, 2),
                 WasmClosure::new(0, 2),
                 None,
