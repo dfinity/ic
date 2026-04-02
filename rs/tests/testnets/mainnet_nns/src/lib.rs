@@ -793,6 +793,6 @@ fn remove_large_files(env: &TestEnv) {
     let mut rm = Command::new("rm");
     rm.arg("-rf")
         .arg(env.get_path(PATH_STATE_TARBALL))
-        .arg(env.get_path("recovery"));
+        .arg(env.get_path(PATH_RECOVERY_WORKING_DIR));
     rm.output().expect("Failed to remove large files");
 }
