@@ -9,11 +9,7 @@ on the process that this file is part of, see
 
 ## Added
 
-- Support for `snapshot_visibility` in `UpdateCanisterSettings` proposals.
-- Proposal type `DeleteSubnet`, currently limited to CloudEngine subnets. 
-- Tag neurons that have the maximum dissolve delay of 8 years with their bonus base
-  (`eight_year_gang_bonus_base_e8s`), in preparation for the dissolve delay bonus
-  grandfathering when the maximum dissolve delay is reduced to 2 years.
+- Proposal type `DeleteSubnet`, currently limited to CloudEngine subnets.
 
 ## Changed
 

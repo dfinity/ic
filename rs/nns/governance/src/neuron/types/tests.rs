@@ -445,9 +445,7 @@ fn increase_dissolve_delay_does_not_set_age_for_non_dissolving_neurons() {
 
     // Test cases
     for current_aging_since_timestamp_seconds in [0, NOW - 1, NOW, NOW + 1, NOW + 2000] {
-        for current_dissolve_delay_seconds in
-            [1, 10, 100, NOW, NOW + 1000, (ONE_DAY_SECONDS * 365 * 8)]
-        {
+        for current_dissolve_delay_seconds in [1, 10, 100, 1000, max_dissolve_delay_seconds() - 1] {
             test_increase_dissolve_delay_by_1_for_non_dissolving_neuron(
                 current_aging_since_timestamp_seconds,
                 current_dissolve_delay_seconds,
@@ -522,7 +520,10 @@ fn test_neuron_configure_dissolve_delay() {
         )
         .unwrap();
     assert_eq!(neuron.state(now), NeuronState::NotDissolving);
-    assert_eq!(neuron.dissolve_delay_seconds(now), 8 * ONE_YEAR_SECONDS);
+    assert_eq!(
+        neuron.dissolve_delay_seconds(now),
+        max_dissolve_delay_seconds()
+    );
 
     // Step 5: start dissolving the neuron.
     neuron
@@ -537,7 +538,7 @@ fn test_neuron_configure_dissolve_delay() {
     assert_eq!(neuron.state(now), NeuronState::Dissolving);
 
     // Step 7: advance the time by 8 years - 1 second and see that the neuron is still dissolving.
-    let now = now + 8 * ONE_YEAR_SECONDS - 1;
+    let now = now + max_dissolve_delay_seconds() - 1;
     assert_eq!(neuron.state(now), NeuronState::Dissolving);
 
     // Step 8: advance the time by 1 second and see that the neuron is now dissolved.

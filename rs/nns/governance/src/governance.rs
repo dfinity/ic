@@ -14,7 +14,7 @@ use crate::{
         split_governance_proto,
     },
     is_comprehensive_neuron_list_enabled, is_mission_70_voting_rewards_enabled,
-    is_neuron_follow_restrictions_enabled, is_self_describing_proposal_actions_enabled,
+    is_neuron_follow_restrictions_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
@@ -200,9 +200,6 @@ pub const PROPOSAL_MOTION_TEXT_BYTES_MAX: usize = 10000;
 // The minimum neuron dissolve delay (set when a neuron is first claimed)
 pub const INITIAL_NEURON_DISSOLVE_DELAY: u64 = 7 * ONE_DAY_SECONDS;
 
-// The maximum dissolve delay allowed for a neuron.
-pub const MAX_DISSOLVE_DELAY_SECONDS: u64 = 8 * ONE_YEAR_SECONDS;
-
 // The age of a neuron that saturates the age bonus for the voting power
 // computation.
 pub const MAX_NEURON_AGE_FOR_AGE_BONUS: u64 = 4 * ONE_YEAR_SECONDS;
@@ -286,6 +283,21 @@ pub const MAX_NEURONS_FUND_PARTICIPANTS: u64 = 5_000;
 /// A key for the neuron rate limiter, to make sure all add_neuron operations are limited
 /// in the same limit.
 const NEURON_RATE_LIMITER_KEY: &str = "ADD_NEURON";
+
+// The maximum dissolve delay allowed for a neuron.
+pub const MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70: u64 = 8 * ONE_YEAR_SECONDS;
+pub const MAX_DISSOLVE_DELAY_SECONDS_POST_MISSION_70: u64 = 2 * ONE_YEAR_SECONDS;
+
+/// Returns the maximum dissolve delay allowed for a neuron. After the flag is enabled, we can
+/// replace `max_dissolve_delay_seconds()` with `MAX_DISSOLVE_DELAY_SECONDS` and set
+/// `MAX_DISSOLVE_DELAY_SECONDS` to `MAX_DISSOLVE_DELAY_SECONDS_POST_MISSION_70`.
+pub fn max_dissolve_delay_seconds() -> u64 {
+    if is_mission_70_voting_rewards_enabled() {
+        MAX_DISSOLVE_DELAY_SECONDS_POST_MISSION_70
+    } else {
+        MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70
+    }
+}
 
 impl GovernanceError {
     pub fn new(error_type: ErrorType) -> Self {
@@ -1334,6 +1346,21 @@ impl Governance {
 
         // A one-time data migration.
         governance.maybe_set_eight_year_gang_bonus_base();
+
+        // Clamp all neuron dissolve delays to the Mission 70 maximum exactly once.
+        // The snapshot serves as the idempotency guard: if it's already populated,
+        // clamping has already run and we must not overwrite the pre-clamp record.
+        if is_mission_70_voting_rewards_enabled()
+            && governance
+                .heap_data
+                .neuron_id_to_pre_clamp_dissolve_state
+                .is_empty()
+        {
+            let now = governance.env.now();
+            governance.heap_data.neuron_id_to_pre_clamp_dissolve_state = governance
+                .neuron_store
+                .clamp_dissolve_delay_for_all_neurons_or_panic(now);
+        }
 
         governance
     }
@@ -2972,7 +2999,7 @@ impl Governance {
 
         let dissolve_delay_seconds = std::cmp::min(
             disburse_to_neuron.dissolve_delay_seconds,
-            MAX_DISSOLVE_DELAY_SECONDS,
+            max_dissolve_delay_seconds(),
         );
 
         let dissolve_state_and_age = if dissolve_delay_seconds > 0 {
@@ -3420,10 +3447,9 @@ impl Governance {
     ) -> Vec<ProposalInfo> {
         let now = self.env.now();
         let caller_neurons = self.get_neuron_ids_by_principal(caller);
-        let return_self_describing_action = is_self_describing_proposal_actions_enabled()
-            && req
-                .and_then(|r| r.return_self_describing_action)
-                .unwrap_or(false);
+        let return_self_describing_action = req
+            .and_then(|r| r.return_self_describing_action)
+            .unwrap_or(false);
         self.heap_data
             .proposals
             .values()
@@ -3541,8 +3567,7 @@ impl Governance {
             req.include_reward_status.iter().cloned().collect();
         let include_status: HashSet<i32> = req.include_status.iter().cloned().collect();
         let caller_neurons = self.get_neuron_ids_by_principal(caller);
-        let return_self_describing_action = is_self_describing_proposal_actions_enabled()
-            && req.return_self_describing_action.unwrap_or(false);
+        let return_self_describing_action = req.return_self_describing_action.unwrap_or(false);
         let now = self.env.now();
         let proposal_matches_request = |data: &ProposalData| -> bool {
             let topic = data.topic();
@@ -3814,7 +3839,7 @@ impl Governance {
                 let nid = self.neuron_store.new_neuron_id(&mut *self.randomness)?;
                 let dissolve_delay_seconds = std::cmp::min(
                     reward_to_neuron.dissolve_delay_seconds,
-                    MAX_DISSOLVE_DELAY_SECONDS,
+                    max_dissolve_delay_seconds(),
                 );
 
                 let dissolve_state_and_age = if dissolve_delay_seconds > 0 {
@@ -5141,16 +5166,21 @@ impl Governance {
             ));
         }
 
-        let self_describing_action = if is_self_describing_proposal_actions_enabled()
-            && cfg!(target_arch = "wasm32")
-            && !cfg!(feature = "canbench-rs")
-        {
-            // TODO(NNS1-4271): handle the error case when the self-describing action is fully
-            // implemented.
-            action.to_self_describing(self.env.clone()).await.ok()
-        } else {
-            None
-        };
+        let self_describing_action =
+            if cfg!(target_arch = "wasm32") && !cfg!(feature = "canbench-rs") {
+                match action.to_self_describing(self.env.clone()).await {
+                    Ok(self_describing_action) => Some(self_describing_action),
+                    Err(e) => {
+                        println!(
+                            "{}Failed to get self_describing_action for proposal: {:?}",
+                            LOG_PREFIX, e
+                        );
+                        None
+                    }
+                }
+            } else {
+                None
+            };
 
         // Before actually modifying anything, we first make sure that
         // the neuron is allowed to make this proposal and create the

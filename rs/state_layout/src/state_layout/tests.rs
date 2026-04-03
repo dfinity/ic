@@ -19,6 +19,7 @@ use ic_types::messages::{
 };
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
+use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles};
 use itertools::Itertools;
 use proptest::prelude::*;
 use std::fs::File;
@@ -316,8 +317,14 @@ fn test_encode_decode_task_queue() {
         call_context_id: 1.into(),
         respondent: canister_test_id(43),
         cycles_sent: Cycles::new(6),
-        prepayment_for_response_execution: Cycles::new(169),
-        prepayment_for_response_transmission: Cycles::new(2197),
+        prepayment_for_response_execution: CompoundCycles::new(
+            Cycles::new(169),
+            CanisterCyclesCostSchedule::Normal,
+        ),
+        prepayment_for_response_transmission: CompoundCycles::new(
+            Cycles::new(2197),
+            CanisterCyclesCostSchedule::Normal,
+        ),
         on_reply: WasmClosure::new(13, 14),
         on_reject: WasmClosure::new(15, 16),
         on_cleanup: Some(WasmClosure::new(17, 18)),
@@ -326,16 +333,25 @@ fn test_encode_decode_task_queue() {
     for task in [
         ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Ingress(Arc::clone(&ingress)),
-            prepaid_execution_cycles: Cycles::new(1),
+            prepaid_execution_cycles: CompoundCycles::new(
+                Cycles::new(1),
+                CanisterCyclesCostSchedule::Normal,
+            ),
             call_id: InstallCodeCallId::new(0),
         },
         ExecutionTask::AbortedExecution {
             input: CanisterMessageOrTask::Message(CanisterMessage::Request(Arc::clone(&request))),
-            prepaid_execution_cycles: Cycles::new(2),
+            prepaid_execution_cycles: CompoundCycles::new(
+                Cycles::new(2),
+                CanisterCyclesCostSchedule::Normal,
+            ),
         },
         ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Request(Arc::clone(&request)),
-            prepaid_execution_cycles: Cycles::new(3),
+            prepaid_execution_cycles: CompoundCycles::new(
+                Cycles::new(3),
+                CanisterCyclesCostSchedule::Normal,
+            ),
             call_id: InstallCodeCallId::new(3_u64),
         },
         ExecutionTask::AbortedExecution {
@@ -343,11 +359,17 @@ fn test_encode_decode_task_queue() {
                 response: Arc::clone(&response),
                 callback: Arc::clone(&callback),
             }),
-            prepaid_execution_cycles: Cycles::new(4),
+            prepaid_execution_cycles: CompoundCycles::new(
+                Cycles::new(4),
+                CanisterCyclesCostSchedule::Normal,
+            ),
         },
         ExecutionTask::AbortedExecution {
             input: CanisterMessageOrTask::Message(CanisterMessage::Ingress(Arc::clone(&ingress))),
-            prepaid_execution_cycles: Cycles::new(5),
+            prepaid_execution_cycles: CompoundCycles::new(
+                Cycles::new(5),
+                CanisterCyclesCostSchedule::Normal,
+            ),
         },
     ] {
         let mut task_queue = TaskQueue::default();
@@ -1175,7 +1197,10 @@ fn test_encode_decode_non_empty_task_queue() {
 
     task_queue.enqueue(ExecutionTask::AbortedExecution {
         input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
-        prepaid_execution_cycles: Cycles::zero(),
+        prepaid_execution_cycles: CompoundCycles::new(
+            Cycles::zero(),
+            CanisterCyclesCostSchedule::Normal,
+        ),
     });
 
     // A canister state with non empty TaskQueue.
@@ -1225,8 +1250,14 @@ mod mainnet_compatibility_tests {
                 call_context_id: CallContextId::new(1),
                 respondent,
                 cycles_sent: Cycles::new(100),
-                prepayment_for_response_execution: Cycles::zero(),
-                prepayment_for_response_transmission: Cycles::zero(),
+                prepayment_for_response_execution: CompoundCycles::new(
+                    Cycles::zero(),
+                    CanisterCyclesCostSchedule::Normal,
+                ),
+                prepayment_for_response_transmission: CompoundCycles::new(
+                    Cycles::zero(),
+                    CanisterCyclesCostSchedule::Normal,
+                ),
                 on_reply: WasmClosure::new(1, 2),
                 on_reject: WasmClosure::new(3, 4),
                 on_cleanup: None,
@@ -1265,7 +1296,10 @@ mod mainnet_compatibility_tests {
                     response: response1,
                     callback: Arc::new(callback1),
                 }),
-                prepaid_execution_cycles: Cycles::new(10),
+                prepaid_execution_cycles: CompoundCycles::new(
+                    Cycles::new(10),
+                    CanisterCyclesCostSchedule::Normal,
+                ),
             });
 
             CanisterStateBits {
