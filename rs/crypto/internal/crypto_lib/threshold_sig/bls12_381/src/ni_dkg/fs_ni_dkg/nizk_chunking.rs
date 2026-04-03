@@ -412,8 +412,6 @@ pub fn verify_chunking(
                     //   lhs = ∏_{k=1}^{l} (∏_{i=1}^{n} ∏_{j=1}^{m} c_{ij}^{e_{ijk}})^{x^k} · ∏_{k=1}^{l} cc_k^{x^k} · Y
                     //   rhs = ∏_{i=1}^{n} y_i^{z_{r_i}} · y_0^{z_β} · g_1^{Σ_{k=1}^{l} z_{s_k} · x^k}
 
-
-
                     let cij_to_eijks: Vec<G1Projective> = (0..NUM_ZK_REPETITIONS)
                         .into_par_iter()
                         .map(|k| {
