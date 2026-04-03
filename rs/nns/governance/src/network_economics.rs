@@ -274,7 +274,7 @@ impl VotingPowerEconomics {
     /// When a proposal is created, neurons with dissolve delay (in seconds) less than
     /// `VotingPowerEconomics.min_dissolve_delay_seconds` receive no ballot (to be filled out)
     /// for that proposal. Thus, such neurons cannot vote on the proposal.
-    pub const DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS: u64 = 14 * ONE_DAY_SECONDS;
+    pub const DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
 
     /// A proposal to set `VotingPowerEconomics.min_dissolve_delay_seconds` must specify a value
     /// for this field that falls within this range. Changing the lower bound of this parameter

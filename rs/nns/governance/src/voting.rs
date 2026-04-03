@@ -869,9 +869,9 @@ mod test {
         );
         let expected_tally = Tally {
             timestamp_seconds: 234,
-            yes: 500,
+            yes: 530,
             no: 0,
-            total: 600,
+            total: 636,
         };
         assert_eq!(
             governance

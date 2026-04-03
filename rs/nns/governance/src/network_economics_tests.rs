@@ -93,7 +93,7 @@ fn test_neuron_minimum_dissolve_delay_to_vote_seconds_bounds() {
     // Define constants for better readability and maintainability
     const LOWER_BOUND_SECONDS: u64 = 14 * ONE_DAY_SECONDS;
     const UPPER_BOUND_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
-    const DEFAULT_SECONDS: u64 = LOWER_BOUND_SECONDS;
+    const DEFAULT_SECONDS: u64 = UPPER_BOUND_SECONDS;
 
     // Test cases: (delay in seconds, expected result)
     let test_cases = [

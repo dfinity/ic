@@ -13,8 +13,8 @@ use crate::{
         HeapGovernanceData, XdrConversionRate, initialize_governance, reassemble_governance_proto,
         split_governance_proto,
     },
-    is_comprehensive_neuron_list_enabled, is_neuron_follow_restrictions_enabled,
-    is_self_describing_proposal_actions_enabled,
+    is_comprehensive_neuron_list_enabled, is_mission_70_voting_rewards_enabled,
+    is_neuron_follow_restrictions_enabled, is_self_describing_proposal_actions_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
@@ -4761,9 +4761,14 @@ impl Governance {
     }
 
     pub fn neuron_minimum_dissolve_delay_to_vote_seconds(&self) -> u64 {
+        let default = if is_mission_70_voting_rewards_enabled() {
+            14 * ONE_DAY_SECONDS
+        } else {
+            VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS
+        };
         self.voting_power_economics()
             .neuron_minimum_dissolve_delay_to_vote_seconds
-            .unwrap_or(VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS)
+            .unwrap_or(default)
     }
 
     /// Reduces `neuron_minimum_dissolve_delay_to_vote_seconds` to 2 weeks if it is currently
@@ -4772,6 +4777,10 @@ impl Governance {
     fn maybe_reduce_neuron_minimum_dissolve_delay_to_vote_seconds(
         heap_data: &mut HeapGovernanceData,
     ) {
+        if !is_mission_70_voting_rewards_enabled() {
+            return;
+        }
+
         let two_weeks_seconds = 14 * ONE_DAY_SECONDS;
 
         let Some(voting_power_economics) = heap_data

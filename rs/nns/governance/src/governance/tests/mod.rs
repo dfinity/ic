@@ -1804,6 +1804,7 @@ fn test_maybe_set_eight_year_gang_bonus_base() {
 
 #[test]
 fn test_post_upgrade_migrates_neuron_minimum_dissolve_delay_to_vote_seconds() {
+    let _mission70 = crate::temporarily_enable_mission_70_voting_rewards();
     let two_weeks_seconds = 14 * ONE_DAY_SECONDS;
 
     // Simulate the old production state: 6 months.
@@ -1834,6 +1835,7 @@ fn test_post_upgrade_migrates_neuron_minimum_dissolve_delay_to_vote_seconds() {
 #[test]
 #[should_panic(expected = "unexpectedly below 2 weeks")]
 fn test_post_upgrade_panics_if_neuron_minimum_dissolve_delay_to_vote_seconds_below_two_weeks() {
+    let _mission70 = crate::temporarily_enable_mission_70_voting_rewards();
     let one_week_seconds = 7 * ONE_DAY_SECONDS;
 
     let mut heap_data = HeapGovernanceData {
