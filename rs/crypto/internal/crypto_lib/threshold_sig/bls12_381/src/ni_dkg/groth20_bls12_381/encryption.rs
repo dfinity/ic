@@ -144,34 +144,27 @@ pub fn encrypt_and_prove(
         rng,
     );
 
+    // Generating the chunking and sharing proofs could happen in parallel but this
+    // changes the stability tests and may not be worth it
+
+    let chunking_proof = prove_chunking(
+        &public_keys,
+        &ciphertext,
+        &plaintext_chunks,
+        &encryption_witness,
+        rng,
+    );
+
     let public_coefficients = G2Affine::batch_deserialize(&public_coefficients.coefficients)
         .map_err(|_| EncryptAndZKProveError::MalformedPublicCoefficients)?;
 
-    let chunking_seed = Seed::from_rng(rng);
-    let sharing_seed = Seed::from_rng(rng);
-
-    let (chunking_proof, sharing_proof) = rayon::join(
-        || {
-            let rng = &mut chunking_seed.into_rng();
-            prove_chunking(
-                &public_keys,
-                &ciphertext,
-                &plaintext_chunks,
-                &encryption_witness,
-                rng,
-            )
-        },
-        || {
-            let rng = &mut sharing_seed.into_rng();
-            prove_sharing(
-                &public_keys,
-                &public_coefficients,
-                &ciphertext,
-                &plaintext_chunks,
-                &encryption_witness,
-                rng,
-            )
-        },
+    let sharing_proof = prove_sharing(
+        &public_keys,
+        &public_coefficients,
+        &ciphertext,
+        &plaintext_chunks,
+        &encryption_witness,
+        rng,
     );
 
     #[cfg(test)]
