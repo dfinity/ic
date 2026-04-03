@@ -8,6 +8,7 @@ use crate::{
             validate_merge_neurons_before_commit,
         },
         split_neuron::{SplitNeuronEffect, calculate_split_neuron_effect},
+        voting_power_snapshots::VotingPowerSnapshots,
     },
     heap_governance_data::{
         HeapGovernanceData, XdrConversionRate, initialize_governance, reassemble_governance_proto,
@@ -1356,6 +1357,9 @@ impl Governance {
                 .clamp_dissolve_delay_for_all_neurons_or_panic(now);
         }
 
+        if is_mission_70_voting_rewards_enabled() {
+            VOTING_POWER_SNAPSHOTS.with_borrow_mut(VotingPowerSnapshots::clear);
+        }
         governance
     }
 
