@@ -364,9 +364,8 @@ pub fn verify_chunking(
 
     let (r1, (r2, r3)) = rayon::join(
         || -> Result<(), ZkProofChunkingError> {
-            // Verify lhs == rhs where
-            // lhs = product [R_j ^ sum [e_ijk * x^k | k <- [1..l]] | j <- [1..m]] * dd_i
-            // rhs = g1 ^ z_r_i | i <- [1..n]]
+            // First verification equation (for each i ∈ [1..n]):
+            //   ∏_{j=1}^{m} R_j^{Σ_{k=1}^{l} e_{ijk} · x^k} · dd_i == g_1^{z_{r_i}}
             let rhs = g1.batch_mul_vartime(&nizk.z_r);
 
             let lhs = {
@@ -398,7 +397,8 @@ pub fn verify_chunking(
         || {
             rayon::join(
                 || -> Result<(), ZkProofChunkingError> {
-                    // Verify: product [bb_k ^ x^k | k <- [1..l]] * dd_0 == g1 ^ z_beta
+                    // Second verification equation:
+                    //   ∏_{k=1}^{l} bb_k^{x^k} · dd_0 == g_1^{z_β}
                     let lhs = G1Projective::muln_affine_vartime(&nizk.bb, &xpowers) + &nizk.dd[0];
 
                     let rhs = g1.mul_vartime(&nizk.z_beta);
@@ -408,9 +408,11 @@ pub fn verify_chunking(
                     Ok(())
                 },
                 || -> Result<(), ZkProofChunkingError> {
-                    // Verify: product [product [chunk_ij ^ e_ijk | i <- [1..n], j <- [1..m]] ^ x^k
-                    // | k <- [1..l]] * product [cc_k ^ x^k | k <- [1..l]] * Y   = product
-                    // [y_i^z_ri | i <- [1..n]] * y0^z_beta * g_1 ^ sum [z_sk * x^k | k <- [1..l]]
+                    // Third verification equation:
+                    //   lhs = ∏_{k=1}^{l} (∏_{i=1}^{n} ∏_{j=1}^{m} c_{ij}^{e_{ijk}})^{x^k} · ∏_{k=1}^{l} cc_k^{x^k} · Y
+                    //   rhs = ∏_{i=1}^{n} y_i^{z_{r_i}} · y_0^{z_β} · g_1^{Σ_{k=1}^{l} z_{s_k} · x^k}
+
+
 
                     let cij_to_eijks: Vec<G1Projective> = (0..NUM_ZK_REPETITIONS)
                         .into_par_iter()
