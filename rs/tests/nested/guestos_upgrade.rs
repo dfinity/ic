@@ -15,8 +15,8 @@ use nested::{
     HOST_VM_NAME, registration,
     util::{
         NODE_UPGRADE_BACKOFF, NODE_UPGRADE_TIMEOUT, elect_guestos_version,
-        get_elected_guestos_versions, get_unassigned_nodes_config,
-        try_logging_guestos_diagnostics, update_unassigned_nodes, wait_for_expected_guest_version,
+        get_elected_guestos_versions, get_unassigned_nodes_config, try_logging_guestos_diagnostics,
+        update_unassigned_nodes, wait_for_expected_guest_version,
     },
 };
 
