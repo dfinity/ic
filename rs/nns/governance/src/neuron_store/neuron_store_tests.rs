@@ -1,7 +1,11 @@
 use super::*;
 use crate::{
+    governance::max_dissolve_delay_seconds,
     neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::{BallotInfo, Followees, KnownNeuronData, MaturityDisbursement},
+    pb::v1::{
+        BallotInfo, Followees, KnownNeuronData, MaturityDisbursement, NeuronDissolveStateSnapshot,
+        neuron_dissolve_state_snapshot::DissolveState as SnapshotDissolveState,
+    },
     storage::{with_stable_neuron_indexes, with_voting_history_store},
 };
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
@@ -1052,4 +1056,141 @@ fn test_record_neuron_vote() {
         voting_history.list_neuron_votes(neuron_id, None, Some(10))
     });
     assert_eq!(voting_history, vec![(ProposalId { id: 1 }, Vote::Yes)]);
+}
+
+#[test]
+fn test_clamp_dissolve_delay_for_all_neurons_multiple_neurons() {
+    // Step 1. Create the neurons with various dissolve states.
+    let now_seconds = 1_000_000_u64;
+    // Neuron 1: NotDissolving above max - should be clamped
+    let neuron_1 = simple_neuron_builder(1)
+        .with_dissolve_state_and_age(DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: max_dissolve_delay_seconds() + 100_000,
+            aging_since_timestamp_seconds: now_seconds - 1000,
+        })
+        .build();
+    // Neuron 2: NotDissolving below max - should remain unchanged
+    let neuron_2 = simple_neuron_builder(2)
+        .with_dissolve_state_and_age(DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 50_000,
+            aging_since_timestamp_seconds: now_seconds - 2000,
+        })
+        .build();
+    // Neuron 3: Dissolving above max - should be clamped
+    let neuron_3 = simple_neuron_builder(3)
+        .with_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: now_seconds + max_dissolve_delay_seconds() + 100_000,
+        })
+        .build();
+    // Neuron 4: Dissolving below max - should remain unchanged
+    let neuron_4 = simple_neuron_builder(4)
+        .with_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: now_seconds + 50_000,
+        })
+        .build();
+    // Neuron 5: Already dissolved - should remain unchanged
+    let neuron_5 = simple_neuron_builder(5)
+        .with_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: now_seconds - 10_000,
+        })
+        .build();
+    let mut neuron_store = NeuronStore::new(btreemap! {
+        1 => neuron_1,
+        2 => neuron_2,
+        3 => neuron_3,
+        4 => neuron_4,
+        5 => neuron_5,
+    });
+
+    // Step 2. Clamp the dissolve delay for all neurons.
+    let snapshot = neuron_store.clamp_dissolve_delay_for_all_neurons_or_panic(now_seconds);
+
+    // Step 3. Verify the snapshot contains the pre-clamp dissolve states.
+    assert_eq!(
+        snapshot,
+        hashmap! {
+            1 => NeuronDissolveStateSnapshot {
+                dissolve_state: Some(SnapshotDissolveState::DissolveDelaySeconds(
+                    max_dissolve_delay_seconds() + 100_000,
+                )),
+            },
+            2 => NeuronDissolveStateSnapshot {
+                dissolve_state: Some(SnapshotDissolveState::DissolveDelaySeconds(50_000)),
+            },
+            3 => NeuronDissolveStateSnapshot {
+                dissolve_state: Some(SnapshotDissolveState::WhenDissolvedTimestampSeconds(
+                    now_seconds + max_dissolve_delay_seconds() + 100_000,
+                )),
+            },
+            4 => NeuronDissolveStateSnapshot {
+                dissolve_state: Some(SnapshotDissolveState::WhenDissolvedTimestampSeconds(
+                    now_seconds + 50_000,
+                )),
+            },
+            5 => NeuronDissolveStateSnapshot {
+                dissolve_state: Some(SnapshotDissolveState::WhenDissolvedTimestampSeconds(
+                    now_seconds - 10_000,
+                )),
+            },
+        }
+    );
+
+    // Step 4. Verify the post-clamp neuron states.
+    // Neuron 1: NotDissolving clamped to max
+    neuron_store
+        .with_neuron(&NeuronId { id: 1 }, |neuron| {
+            assert_eq!(
+                neuron.dissolve_state_and_age(),
+                DissolveStateAndAge::NotDissolving {
+                    dissolve_delay_seconds: max_dissolve_delay_seconds(),
+                    aging_since_timestamp_seconds: now_seconds - 1000,
+                }
+            );
+        })
+        .unwrap();
+    // Neuron 2: NotDissolving unchanged
+    neuron_store
+        .with_neuron(&NeuronId { id: 2 }, |neuron| {
+            assert_eq!(
+                neuron.dissolve_state_and_age(),
+                DissolveStateAndAge::NotDissolving {
+                    dissolve_delay_seconds: 50_000,
+                    aging_since_timestamp_seconds: now_seconds - 2000,
+                }
+            );
+        })
+        .unwrap();
+    // Neuron 3: Dissolving clamped to now + max
+    neuron_store
+        .with_neuron(&NeuronId { id: 3 }, |neuron| {
+            assert_eq!(
+                neuron.dissolve_state_and_age(),
+                DissolveStateAndAge::DissolvingOrDissolved {
+                    when_dissolved_timestamp_seconds: now_seconds + max_dissolve_delay_seconds(),
+                }
+            );
+        })
+        .unwrap();
+    // Neuron 4: Dissolving unchanged
+    neuron_store
+        .with_neuron(&NeuronId { id: 4 }, |neuron| {
+            assert_eq!(
+                neuron.dissolve_state_and_age(),
+                DissolveStateAndAge::DissolvingOrDissolved {
+                    when_dissolved_timestamp_seconds: now_seconds + 50_000,
+                }
+            );
+        })
+        .unwrap();
+    // Neuron 5: Already dissolved unchanged
+    neuron_store
+        .with_neuron(&NeuronId { id: 5 }, |neuron| {
+            assert_eq!(
+                neuron.dissolve_state_and_age(),
+                DissolveStateAndAge::DissolvingOrDissolved {
+                    when_dissolved_timestamp_seconds: now_seconds - 10_000,
+                }
+            );
+        })
+        .unwrap();
 }

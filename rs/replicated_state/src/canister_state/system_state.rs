@@ -36,7 +36,7 @@ use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask,
     Ingress, NO_DEADLINE, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse,
-    Response, StopCanisterContext,
+    Response, StopCanisterCallId, StopCanisterContext,
 };
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
@@ -46,7 +46,7 @@ use ic_types::{
 };
 use ic_types_cycles::{
     CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, CyclesUseCaseKind,
-    IngressInduction, NominalCycles, NonConsumed, Uninstall,
+    IngressInduction, Instructions, NominalCycles, NonConsumed, Uninstall,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -530,7 +530,7 @@ pub enum ExecutionTask {
         input: CanisterMessageOrTask,
         /// The execution cost that has already been charged from the canister.
         /// Retried execution does not have to pay for it again.
-        prepaid_execution_cycles: Cycles,
+        prepaid_execution_cycles: CompoundCycles<Instructions>,
     },
 
     /// Any paused `install_code` that doesn't finish until the next checkpoint
@@ -544,7 +544,7 @@ pub enum ExecutionTask {
         call_id: InstallCodeCallId,
         /// The execution cost that has already been charged from the canister.
         /// Retried execution does not have to pay for it again.
-        prepaid_execution_cycles: Cycles,
+        prepaid_execution_cycles: CompoundCycles<Instructions>,
     },
 }
 
@@ -1340,33 +1340,41 @@ impl SystemState {
 
     /// Transitions the canister into `Stopping` state.
     ///
-    /// If the canister was `Running` or `Stopping`, remembers the stop context, so
+    /// If the canister was `Running` or `Stopping`, creates and remembers the stop context, so
     /// that it can be responded to once the canister has fully stopped. If the
-    /// canister was already `Stopped`, returns the stop context.
-    pub fn begin_stopping(
-        &mut self,
-        stop_context: StopCanisterContext,
-    ) -> Option<StopCanisterContext> {
+    /// canister was already `Stopped`, this function is a no-op.
+    ///
+    /// The function returns `true` if and only if a stop context with the given `call_id`
+    /// was inserted into the canister state.
+    pub fn begin_stopping(&mut self, msg: &mut CanisterCall, call_id: StopCanisterCallId) -> bool {
         match &mut self.status {
-            // Return the stop context, nothing to do here.
-            CanisterStatus::Stopped => Some(stop_context),
+            // Nothing to do here.
+            CanisterStatus::Stopped => false,
 
             CanisterStatus::Stopping { stop_contexts, .. } => {
+                // Constructing a stop context moves the cycles from the message
+                // to the stop context and thus we must only do so if we store the call context
+                // in `SystemState` to not lose those cycles.
+                let stop_context = StopCanisterContext::from((msg, call_id));
                 // Add the message so we can respond to it once the canister has fully stopped.
                 stop_contexts.push(stop_context);
-                None
+                true
             }
 
             CanisterStatus::Running {
                 call_context_manager,
             } => {
+                // Constructing a stop context moves the cycles from the message
+                // to the stop context and thus we must only do so if we store the call context
+                // in `SystemState` to not lose those cycles.
+                let stop_context = StopCanisterContext::from((msg, call_id));
                 // Transition the canister into the stopping state.
                 self.status = CanisterStatus::Stopping {
                     call_context_manager: std::mem::take(call_context_manager),
                     // Track the stop message to respond to it once the canister is fully stopped.
                     stop_contexts: vec![stop_context],
                 };
-                None
+                true
             }
         }
     }
@@ -2230,8 +2238,8 @@ fn invalid_callback() -> Arc<Callback> {
         CallContextId::from(u64::MAX), // Non-existent CallContext
         CanisterId::from_u64(0),
         Cycles::zero(),
-        Cycles::zero(),
-        Cycles::zero(),
+        CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
         WasmClosure::new(0, 0),
         WasmClosure::new(0, 0),
         None,
@@ -2334,8 +2342,8 @@ pub mod testing {
                 call_context_id,
                 respondent,
                 Cycles::new(13),
-                Cycles::new(42),
-                Cycles::new(84),
+                CompoundCycles::new(Cycles::new(42), CanisterCyclesCostSchedule::Normal),
+                CompoundCycles::new(Cycles::new(84), CanisterCyclesCostSchedule::Normal),
                 WasmClosure::new(0, 2),
                 WasmClosure::new(0, 2),
                 None,

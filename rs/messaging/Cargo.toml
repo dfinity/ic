@@ -49,6 +49,7 @@ ic-registry-local-registry = { path = "../registry/local_registry" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-registry-transport = { path = "../registry/transport" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
+ic-universal-canister = { path = "../universal_canister/lib" }
 ic-state-manager = { path = "../state_manager" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-execution-environment = { path = "../test_utilities/execution_environment" }

@@ -245,16 +245,16 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
             },
             from: match &t.operation {
                 Transfer { from, .. } | Burn { from, .. } | Approve { from, .. } => Some(*from),
-                _ => None,
+                Mint { .. } | FeeCollector { .. } => None,
             },
             to: match &t.operation {
                 Mint { to, .. } | Transfer { to, .. } => Some(*to),
-                _ => None,
+                Burn { .. } | Approve { .. } | FeeCollector { .. } => None,
             },
             spender: match &t.operation {
                 Transfer { spender, .. } | Burn { spender, .. } => spender.to_owned(),
                 Approve { spender, .. } => Some(*spender),
-                _ => None,
+                Mint { .. } | FeeCollector { .. } => None,
             },
             amount: match &t.operation {
                 Burn { amount, .. }
@@ -274,23 +274,23 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 Approve {
                     expected_allowance, ..
                 } => expected_allowance.to_owned(),
-                _ => None,
+                Mint { .. } | Transfer { .. } | Burn { .. } | FeeCollector { .. } => None,
             },
             expires_at: match &t.operation {
                 Approve { expires_at, .. } => expires_at.to_owned(),
-                _ => None,
+                Mint { .. } | Transfer { .. } | Burn { .. } | FeeCollector { .. } => None,
             },
             fee_collector: match &t.operation {
                 FeeCollector { fee_collector, .. } => fee_collector.to_owned(),
-                _ => None,
+                Mint { .. } | Transfer { .. } | Burn { .. } | Approve { .. } => None,
             },
             caller: match &t.operation {
                 FeeCollector { caller, .. } => caller.to_owned(),
-                _ => None,
+                Mint { .. } | Transfer { .. } | Burn { .. } | Approve { .. } => None,
             },
             mthd: match &t.operation {
                 FeeCollector { mthd, .. } => mthd.to_owned(),
-                _ => None,
+                Mint { .. } | Transfer { .. } | Burn { .. } | Approve { .. } => None,
             },
         }
     }
@@ -675,7 +675,7 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
             Operation::FeeCollector { .. } => {
                 panic!("FeeCollector107 not implemented")
             }
-            _ => None,
+            Operation::Mint { .. } | Operation::Burn { .. } => None,
         };
         let (fee_collector, fee_collector_block_index) = match fee_collector {
             Some(FeeCollector {

@@ -33,7 +33,7 @@ use ic_types::{
     methods::{Callback, WasmClosure},
     time::UNIX_EPOCH,
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Cycles};
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
 use std::{collections::BTreeSet, sync::Arc};
@@ -135,8 +135,8 @@ where
         call_context_id,
         canister_test_id(REMOTE_CANISTER_ID),
         Cycles::new(0),
-        Cycles::new(0),
-        Cycles::new(0),
+        CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
         WasmClosure::new(0, 1),
         WasmClosure::new(0, 1),
         None,

@@ -21,6 +21,7 @@ DEPENDENCIES = [
     "//rs/registry/local_store",
     "//rs/registry/proto_data_provider",
     "//rs/registry/provisional_whitelist",
+    "//rs/registry/resource_limits",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_features",
     "//rs/registry/subnet_type",

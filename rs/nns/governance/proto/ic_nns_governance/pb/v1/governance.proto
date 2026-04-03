@@ -1979,6 +1979,16 @@ message LoadCanisterSnapshot {
   bytes snapshot_id = 2;
 }
 
+// Snapshot of a neuron's dissolve state, recorded before clamping to the
+// Mission 70 maximum. Used to restore the original dissolve state if the
+// maximum dissolve delay is ever increased again.
+message NeuronDissolveStateSnapshot {
+  oneof dissolve_state {
+    uint64 dissolve_delay_seconds = 1;
+    uint64 when_dissolved_timestamp_seconds = 2;
+  }
+}
+
 // This represents the whole NNS governance system. It contains all
 // information about the NNS governance system that must be kept
 // across upgrades of the NNS governance system.
@@ -2218,6 +2228,10 @@ message Governance {
   // Whether the eight year gang bonus base migration has run for all neurons.
   // This prevents the migration from running more than once.
   bool eight_year_gang_bonus_migration_done = 31;
+
+  // Snapshot of each neuron's dissolve state taken while clamping to the Mission 70 maximum
+  // dissolve delay. Enables restoring original dissolve states if the maximum is reversed.
+  map<uint64, NeuronDissolveStateSnapshot> neuron_id_to_pre_clamp_dissolve_state = 32;
 
   reserved 30;
   reserved "first_proposal_id_to_record_voting_history";
