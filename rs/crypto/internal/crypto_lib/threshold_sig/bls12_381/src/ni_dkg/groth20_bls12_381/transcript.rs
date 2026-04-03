@@ -259,7 +259,6 @@ pub fn compute_threshold_signing_key(
 ) -> Result<threshold_types::SecretKeyBytes, ni_dkg_errors::CspDkgLoadPrivateKeyError> {
     // Get my shares
 
-    // TODO(CRP-2550) this loop can run in parallel
     let shares_from_each_dealer: Result<BTreeMap<NodeIndex, threshold_types::SecretKey>, _> =
         transcript
             .receiver_data

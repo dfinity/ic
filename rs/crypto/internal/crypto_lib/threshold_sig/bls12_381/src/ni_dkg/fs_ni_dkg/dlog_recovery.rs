@@ -30,67 +30,28 @@ impl HonestDealerDlogLookupTable {
     pub fn solve_several(&self, targets: &[Gt]) -> Vec<Option<Scalar>> {
         use subtle::{ConditionallySelectable, ConstantTimeEq};
 
-        let target_hashes = targets
-            .iter()
-            .map(|t| t.short_hash_for_linear_search())
-            .collect::<Vec<_>>();
+        // Solve each target in parallel. For each target, perform a constant-time
+        // scan of the full table, then confirm the candidate (since hash collisions
+        // may have occurred if the dealer was dishonest).
+        targets
+            .par_iter()
+            .map(|target| {
+                let target_hash = target.short_hash_for_linear_search();
 
-        // This code assumes that CHUNK_MAX fits in a u16
-        let mut scan_results = vec![0_u16; targets.len()];
+                let mut candidate = 0_u16;
+                for x in CHUNK_MIN..=CHUNK_MAX {
+                    let x_hash = self.table[x as usize];
+                    let hashes_eq = x_hash.ct_eq(&target_hash);
+                    candidate.conditional_assign(&(x as u16), hashes_eq);
+                }
 
-        for x in CHUNK_MIN..=CHUNK_MAX {
-            let x_hash = self.table[x as usize];
-
-            for i in 0..targets.len() {
-                /*
-                Should this function need to be further optimized a good start would be to
-                replace the statements below with something like
-
-                // Variable diff equals 0 iff x_hash == target_hashes[i];
-                let diff = x_hash ^ target_hashes[i];
-                // Variable mask equals u32::max if diff == 0, or 0 otherwise
-                let mask = 0u32.wrapping_sub((!diff & diff.wrapping_sub(1)) >> 31);
-                // Selectively OR in x as the solution, iff x_hash == target_hashes[i]
-                scan_results[i] |= (mask as u16) & (x as u16);
-
-                This is more or less what ct_eq / conditional_assign end up being compiled
-                to, with the difference that it skips the volatile loads which subtle uses
-                to (try to) prevent LLVM from optimizing code into using a conditional jump.
-
-                Also regarding performance note that it would be quite straighforward to
-                express the above statements in a 4-wide or 8-wide SIMD expression suitable
-                for SSE2 or AVX2 execution. This would not only be faster but also highly
-                likely immune to compiler optimizations that would introduce jumps, since
-                this would require moving the data out of SIMD registers which would be
-                expensive, and so the compiler would avoid such a transformation.
-                */
-                let hashes_eq = x_hash.ct_eq(&target_hashes[i]);
-                scan_results[i].conditional_assign(&(x as u16), hashes_eq);
-            }
-        }
-
-        // Now confirm the results (since collisions may have occurred
-        // if the dealer was dishonest) and convert to Scalar
-
-        let mut results = Vec::with_capacity(targets.len());
-
-        for i in 0..targets.len() {
-            /*
-            After finding a candidate we must perform a multiplication in order
-            to tell if we found the dlog correctly, or if there was a collision
-            due to a dishonest dealer.
-
-            If no match was found then scan_results[i] will just be zero, we
-            perform the multiplication anyway and then reject the candidate dlog.
-             */
-            if Gt::g_mul_u16(scan_results[i]) == targets[i] {
-                results.push(Some(Scalar::from_u64(scan_results[i] as u64)));
-            } else {
-                results.push(None);
-            }
-        }
-
-        results
+                if Gt::g_mul_u16(candidate) == *target {
+                    Some(Scalar::from_u64(candidate as u64))
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }
 
@@ -268,7 +229,6 @@ impl BabyStepGiantStepTable {
         }
 
         table.sort_unstable();
-        println!("Table generation complete");
 
         // Giant step is -(base * table_size)
         let giant_step = base.mul_vartime(&Scalar::from_usize(table_size)).neg();

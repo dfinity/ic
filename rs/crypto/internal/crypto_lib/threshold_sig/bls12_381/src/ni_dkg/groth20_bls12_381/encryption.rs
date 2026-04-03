@@ -101,14 +101,12 @@ pub fn encrypt_and_prove(
     public_coefficients: &PublicCoefficientsBytes,
     associated_data: &[u8],
 ) -> Result<(FsEncryptionCiphertextBytes, ZKProofDec, ZKProofShare), EncryptAndZKProveError> {
-    let receivers = key_message_pairs.len();
-
-    // TODO(CRP-2550) the deserialization step can run in parallel
-    let public_keys = {
-        let mut public_keys = Vec::with_capacity(receivers);
-        for receiver_index in 0..receivers {
-            let public_key_bytes = key_message_pairs[receiver_index].0.as_bytes();
-            let pk = G1Affine::deserialize(public_key_bytes).map_err(|_| {
+    let public_keys: Result<Vec<G1Affine>, EncryptAndZKProveError> = key_message_pairs
+        .par_iter()
+        .enumerate()
+        .map(|(receiver_index, (pk_bytes, _))| {
+            let public_key_bytes = pk_bytes.as_bytes();
+            G1Affine::deserialize(public_key_bytes).map_err(|_| {
                 EncryptAndZKProveError::MalformedFsPublicKeyError {
                     receiver_index: receiver_index as u32,
                     error: MalformedPublicKeyError {
@@ -117,12 +115,10 @@ pub fn encrypt_and_prove(
                         internal_error: "Could not parse public key.".to_string(),
                     },
                 }
-            })?;
-
-            public_keys.push(pk);
-        }
-        public_keys
-    };
+            })
+        })
+        .collect();
+    let public_keys = public_keys?;
 
     let plaintext_chunks = key_message_pairs
         .iter()
@@ -148,26 +144,34 @@ pub fn encrypt_and_prove(
         rng,
     );
 
-    // TODO(CRP-2550) generating the chunking and sharing proofs can happen in parallel
-
-    let chunking_proof = prove_chunking(
-        &public_keys,
-        &ciphertext,
-        &plaintext_chunks,
-        &encryption_witness,
-        rng,
-    );
-
     let public_coefficients = G2Affine::batch_deserialize(&public_coefficients.coefficients)
         .map_err(|_| EncryptAndZKProveError::MalformedPublicCoefficients)?;
 
-    let sharing_proof = prove_sharing(
-        &public_keys,
-        &public_coefficients,
-        &ciphertext,
-        &plaintext_chunks,
-        &encryption_witness,
-        rng,
+    let chunking_seed = Seed::from_rng(rng);
+    let sharing_seed = Seed::from_rng(rng);
+
+    let (chunking_proof, sharing_proof) = rayon::join(
+        || {
+            let rng = &mut chunking_seed.into_rng();
+            prove_chunking(
+                &public_keys,
+                &ciphertext,
+                &plaintext_chunks,
+                &encryption_witness,
+                rng,
+            )
+        },
+        || {
+            let rng = &mut sharing_seed.into_rng();
+            prove_sharing(
+                &public_keys,
+                &public_coefficients,
+                &ciphertext,
+                &plaintext_chunks,
+                &encryption_witness,
+                rng,
+            )
+        },
     );
 
     #[cfg(test)]
