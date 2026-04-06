@@ -4436,6 +4436,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, api::
             voting_power_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
             deciding_voting_power: Some(expected_voting_power),
             potential_voting_power: Some(expected_voting_power),
+            eight_year_gang_bonus_base_e8s: Some(0),
             maturity_disbursements_in_progress: Some(vec![]),
             ..Default::default()
         }
@@ -9639,6 +9640,7 @@ fn test_include_public_neurons_in_full_neurons() {
             voting_power_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
             deciding_voting_power: Some(20 * E8),
             potential_voting_power: Some(20 * E8),
+            eight_year_gang_bonus_base_e8s: Some(0),
             maturity_disbursements_in_progress: Some(vec![]),
 
             ..Default::default()
