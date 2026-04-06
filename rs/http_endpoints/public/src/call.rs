@@ -6,7 +6,7 @@ mod ingress_watcher;
 pub use ingress_watcher::{IngressWatcher, IngressWatcherHandle};
 
 use crate::{
-    HttpError, IngressFilterService,
+    HttpError, IngressFilterService, RootOfTrustFactory,
     common::{build_validator, certified_state_unavailable_error, validation_error_to_http_error},
 };
 use hyper::StatusCode;
@@ -49,6 +49,7 @@ pub struct IngressValidatorBuilder {
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
     ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
+    root_of_trust_factory: RootOfTrustFactory,
 }
 
 impl IngressValidatorBuilder {
@@ -62,6 +63,13 @@ impl IngressValidatorBuilder {
         ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
         ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
     ) -> Self {
+        let root_of_trust_registry_client = registry_client.clone();
+        let root_of_trust_factory = Arc::new(move |registry_version| {
+            RegistryRootOfTrustProvider::new(
+                root_of_trust_registry_client.clone(),
+                registry_version,
+            )
+        });
         Self {
             log,
             node_id,
@@ -73,6 +81,7 @@ impl IngressValidatorBuilder {
             ingress_filter,
             ingress_throttler,
             ingress_tx,
+            root_of_trust_factory,
         }
     }
 
@@ -83,6 +92,11 @@ impl IngressValidatorBuilder {
 
     pub fn with_time_source(mut self, time_source: Arc<dyn TimeSource>) -> Self {
         self.time_source = Some(time_source);
+        self
+    }
+
+    pub fn with_root_of_trust_factory(mut self, root_of_trust_factory: RootOfTrustFactory) -> Self {
+        self.root_of_trust_factory = root_of_trust_factory;
         self
     }
 
@@ -98,6 +112,7 @@ impl IngressValidatorBuilder {
             ingress_filter: self.ingress_filter,
             ingress_throttler: self.ingress_throttler,
             ingress_tx: self.ingress_tx,
+            root_of_trust_factory: self.root_of_trust_factory,
         }
     }
 }
@@ -183,6 +198,7 @@ pub struct IngressValidator {
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
     ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
+    root_of_trust_factory: RootOfTrustFactory,
 }
 
 impl IngressValidator {
@@ -205,6 +221,7 @@ impl IngressValidator {
             ingress_filter,
             ingress_throttler,
             ingress_tx,
+            root_of_trust_factory,
         } = self;
 
         // Load shed the request if the ingress pool is full.
@@ -261,8 +278,7 @@ impl IngressValidator {
             })?;
         }
 
-        let root_of_trust_provider =
-            RegistryRootOfTrustProvider::new(Arc::clone(&registry_client), registry_version);
+        let root_of_trust_provider = root_of_trust_factory(registry_version);
         // Since spawn blocking requires 'static we can't use any references
         let request_c = msg.as_ref().clone();
 
