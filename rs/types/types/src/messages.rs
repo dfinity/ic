@@ -148,8 +148,8 @@ impl StopCanisterContext {
     }
 }
 
-impl From<(CanisterCall, StopCanisterCallId)> for StopCanisterContext {
-    fn from(input: (CanisterCall, StopCanisterCallId)) -> Self {
+impl From<(&mut CanisterCall, StopCanisterCallId)> for StopCanisterContext {
+    fn from(input: (&mut CanisterCall, StopCanisterCallId)) -> Self {
         let (msg, call_id) = input;
         assert_eq!(
             msg.method_name(),
@@ -157,11 +157,11 @@ impl From<(CanisterCall, StopCanisterCallId)> for StopCanisterContext {
             "Converting a CanisterCall into StopCanisterContext should only happen with stop_canister calls."
         );
         match msg {
-            CanisterCall::Request(mut req) => StopCanisterContext::Canister {
+            CanisterCall::Request(req) => StopCanisterContext::Canister {
                 sender: req.sender,
                 reply_callback: req.sender_reply_callback,
                 call_id: Some(call_id),
-                cycles: Arc::make_mut(&mut req).payment.take(),
+                cycles: Arc::make_mut(req).payment.take(),
                 deadline: req.deadline,
             },
             CanisterCall::Ingress(ingress) => StopCanisterContext::Ingress {

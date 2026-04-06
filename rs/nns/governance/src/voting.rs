@@ -595,6 +595,7 @@ mod test {
     use crate::test_utils::MockRandomness;
     use crate::{
         governance::{Governance, REWARD_DISTRIBUTION_PERIOD_SECONDS},
+        is_mission_70_voting_rewards_enabled,
         neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
         neuron_store::NeuronStore,
         pb::v1::{
@@ -602,6 +603,8 @@ mod test {
             VotingPowerEconomics, WaitForQuietState, proposal::Action,
         },
         storage::with_voting_state_machines_mut,
+        temporarily_disable_mission_70_voting_rewards,
+        temporarily_enable_mission_70_voting_rewards,
         test_utils::{
             ExpectedCallCanisterMethodCallArguments, MockEnvironment, StubCMC, StubIcpLedger,
         },
@@ -867,11 +870,20 @@ mod test {
                 6 => make_ballot(deciding_voting_power(NeuronId { id: 6 }), Vote::Unspecified),
             }
         );
+        // Each neuron has 100 stake and 6 months dissolve delay.
+        // With 2-year max (mission 70): 6 months / 2 years = 25% bonus → 1.25x → 100 * 1.25 = 125
+        // With 8-year max (pre mission 70): 6 months / 8 years = 6.25% bonus → 1.0625x → 100 * 1.0625 = 106
+        // 5 neurons voting yes, 6 neurons total.
+        let (expected_yes, expected_total) = if is_mission_70_voting_rewards_enabled() {
+            (625, 750) // 5 * 125, 6 * 125
+        } else {
+            (530, 636) // 5 * 106, 6 * 106
+        };
         let expected_tally = Tally {
             timestamp_seconds: 234,
-            yes: 530,
+            yes: expected_yes,
             no: 0,
-            total: 636,
+            total: expected_total,
         };
         assert_eq!(
             governance
@@ -1394,7 +1406,22 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine() {
+    async fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine_pre_mission_70()
+     {
+        let _restore_on_drop = temporarily_disable_mission_70_voting_rewards();
+        test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine(5474).await;
+    }
+
+    #[tokio::test]
+    async fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine_with_mission_70()
+     {
+        let _restore_on_drop = temporarily_enable_mission_70_voting_rewards();
+        test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine(3476).await;
+    }
+
+    async fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine(
+        expected_neuron_1_maturity: u64,
+    ) {
         let now = 1733433219;
         let topic = Topic::Governance;
         let environment = MockEnvironment::new(
@@ -1530,7 +1557,7 @@ mod test {
                 .neuron_store
                 .with_neuron(&NeuronId { id: 1 }, |n| n.maturity_e8s_equivalent)
                 .unwrap(),
-            5474
+            expected_neuron_1_maturity,
         );
     }
 
