@@ -3547,7 +3547,6 @@ impl Operation for ProcessCanisterHttpInternal {
             let mut client = client.lock().unwrap();
             for (id, context) in new_requests {
                 if let Ok(()) = client.send(AdapterCanisterHttpRequest {
-                    timeout: context.time + Duration::from_secs(5 * 60),
                     id,
                     context,
                     socks_proxy_addrs: vec![],
@@ -3566,7 +3565,6 @@ impl Operation for ProcessCanisterHttpInternal {
                         {
                             sm.mock_canister_http_response(
                                 response.id.get(),
-                                response.timeout,
                                 context.request.sender,
                                 vec![response.content; sm.nodes.len()],
                             );
@@ -3678,7 +3676,6 @@ fn process_mock_canister_https_response(
             canister_http_request_id,
         )));
     };
-    let timeout = context.time + Duration::from_secs(5 * 60);
     let canister_id = context.request.sender;
 
     let response_to_content = |response: &CanisterHttpResponse| match response {
@@ -3724,7 +3721,6 @@ fn process_mock_canister_https_response(
             );
             client
                 .send(AdapterCanisterHttpRequest {
-                    timeout,
                     id: canister_http_request_id,
                     context: context.clone(),
                     socks_proxy_addrs: vec![],
@@ -3766,7 +3762,6 @@ fn process_mock_canister_https_response(
     }
     subnet.mock_canister_http_response(
         mock_canister_http_response.request_id,
-        timeout,
         canister_id,
         contents,
     );
