@@ -39,8 +39,6 @@ use ic_registry_keys::make_nns_canister_records_key;
 use ic_registry_transport::pb::v1::{Precondition, RegistryMutation, registry_mutation::Type};
 use prost::Message;
 
-const STANDARD_CREATE_CANISTER_CYCLES: u128 = 2_000_000_000_000;
-
 pub async fn do_add_nns_canister(request: AddCanisterRequest) {
     let key = make_nns_canister_records_key().into_bytes();
     let name = request.name.clone();
@@ -292,12 +290,6 @@ pub async fn create_canister_and_install_code(
         };
         let create_canister_result = Call::bounded_wait(callee, "create_canister")
             .with_arg(create_canister_args)
-            // Cycles are taken from Root's own balance. There is no mechanism that
-            // forces anyone to top up Root before the CreateCanisterAndInstallCode
-            // proposal gets executed. This is probably not ideal, but it is the
-            // same pattern that SNS-WASM uses when creating a Service Nervous Systems
-            // (see `this_canister_has_enough_cycles` in rs/nns/sns-wasm/src/sns_wasm.rs).
-            .with_cycles(STANDARD_CREATE_CANISTER_CYCLES)
             .await;
 
         // Step 1.2: Handle the create_canister result. This consists of decoding
