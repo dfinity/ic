@@ -43,7 +43,9 @@ use ic_replicated_state::canister_state::system_state::ReservationError;
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::{
     self, CHUNK_SIZE, ChunkValidationResult, WasmChunkHash, WasmChunkStore,
 };
-use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
+use ic_replicated_state::metadata_state::{
+    UnflushedCheckpointOp, subnet_call_context_manager::InstallCodeCallId,
+};
 use ic_replicated_state::page_map::{Buffer, PageAllocatorFileDescriptor};
 use ic_replicated_state::{
     CallOrigin, CanisterState, NetworkTopology, ReplicatedState, SchedulerState, SystemState,
@@ -2066,11 +2068,10 @@ impl CanisterManager {
         canister: &mut CanisterState,
         replace_snapshot: Option<SnapshotId>,
         uninstall_code: bool,
-        state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
         resource_saturation: &ResourceSaturation,
         time: Time,
-    ) -> Result<(CanisterSnapshotResponse, Vec<Response>), CanisterManagerError> {
+    ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         let sender = origin.origin();
 
         // Check sender is a controller.
@@ -2155,28 +2156,21 @@ impl CanisterManager {
         );
         round_limits.instructions -= as_round_instructions(instructions);
 
+        let heap_delta = new_snapshot.heap_delta();
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
             canister.scheduler_state.heap_delta_debit = canister
                 .scheduler_state
                 .heap_delta_debit
-                .saturating_add(&new_snapshot.heap_delta());
+                .saturating_add(&heap_delta);
         }
-        state.metadata.heap_delta_estimate = state
-            .metadata
-            .heap_delta_estimate
-            .saturating_add(&new_snapshot.heap_delta());
 
-        let snapshot_id =
-            SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
+        let canister_id = canister.canister_id();
+        let snapshot_id = SnapshotId::from((canister_id, canister.new_local_snapshot_id()));
         canister
             .canister_snapshots
             .push(snapshot_id, Arc::new(new_snapshot));
-        state
-            .metadata
-            .unflushed_checkpoint_ops
-            .take_snapshot(canister.canister_id(), snapshot_id);
 
-        let rejects = if uninstall_code {
+        let deleted_call_context_responses = if uninstall_code {
             let rejects = uninstall_canister(
                 &self.log,
                 canister,
@@ -2197,14 +2191,23 @@ impl CanisterManager {
             vec![]
         };
 
-        Ok((
-            CanisterSnapshotResponse::new(
-                &snapshot_id,
-                time.as_nanos_since_unix_epoch(),
-                new_snapshot_size,
-            ),
-            rejects,
-        ))
+        let reply = CanisterSnapshotResponse::new(
+            &snapshot_id,
+            time.as_nanos_since_unix_epoch(),
+            new_snapshot_size,
+        );
+        Ok(CanisterManagerResponse {
+            canister_id,
+            reply: Some(reply.encode()),
+            heap_delta_increase: heap_delta,
+            unflushed_checkpoint_op: Some(UnflushedCheckpointOp::TakeSnapshot(
+                canister_id,
+                snapshot_id,
+            )),
+            deleted_call_context_responses,
+            stop_call_id_to_remove: None,
+            stop_contexts_to_reject: vec![],
+        })
     }
 
     /// Returns an Arc to the snapshot, if it exists.
@@ -2261,7 +2264,7 @@ impl CanisterManager {
         resource_saturation: &ResourceSaturation,
         time: Time,
         metrics: &ExecutionEnvironmentMetrics,
-    ) -> Result<CanisterState, CanisterManagerError> {
+    ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         let canister_id = canister.canister_id();
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
@@ -2536,23 +2539,28 @@ impl CanisterManager {
         round_limits
             .subnet_available_memory
             .update_execution_memory_unchecked(available_execution_memory_change);
-        state
-            .metadata
-            .unflushed_checkpoint_ops
-            .load_snapshot(canister_id, snapshot_id);
 
+        let heap_delta = new_canister.heap_delta();
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
             new_canister.scheduler_state.heap_delta_debit = new_canister
                 .scheduler_state
                 .heap_delta_debit
-                .saturating_add(&new_canister.heap_delta());
+                .saturating_add(&heap_delta);
         }
-        state.metadata.heap_delta_estimate = state
-            .metadata
-            .heap_delta_estimate
-            .saturating_add(&new_canister.heap_delta());
 
-        Ok(new_canister)
+        *canister = new_canister;
+        Ok(CanisterManagerResponse {
+            canister_id,
+            reply: Some(EmptyBlob.encode()),
+            heap_delta_increase: heap_delta,
+            unflushed_checkpoint_op: Some(UnflushedCheckpointOp::LoadSnapshot(
+                canister_id,
+                snapshot_id,
+            )),
+            deleted_call_context_responses: vec![],
+            stop_call_id_to_remove: None,
+            stop_contexts_to_reject: vec![],
+        })
     }
 
     /// Returns the canister snapshots list, or
@@ -2593,7 +2601,7 @@ impl CanisterManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
         resource_saturation: &ResourceSaturation,
-    ) -> Result<(), CanisterManagerError> {
+    ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
 
@@ -2627,7 +2635,15 @@ impl CanisterManager {
             validated_cycles_and_memory_usage,
         );
 
-        Ok(())
+        Ok(CanisterManagerResponse {
+            canister_id: canister.canister_id(),
+            reply: Some(EmptyBlob.encode()),
+            heap_delta_increase: NumBytes::new(0),
+            unflushed_checkpoint_op: None,
+            deleted_call_context_responses: vec![],
+            stop_call_id_to_remove: None,
+            stop_contexts_to_reject: vec![],
+        })
     }
 
     pub(crate) fn read_snapshot_metadata(
