@@ -246,7 +246,7 @@ impl BackupHelper {
             match self.rsync_remote_cmd(
                 remote_dir.clone(),
                 &self.spool_dir().into_os_string(),
-                &["-qam", "--ignore-existing", "--exclude=\'*.tmp\'"],
+                &["-qam", "--ignore-existing", "--exclude='*.tmp'"],
             ) {
                 Ok(_) => return true,
                 Err(e) => warn!(
