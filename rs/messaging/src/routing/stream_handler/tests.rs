@@ -1966,10 +1966,10 @@ fn duplicate_best_effort_response_is_dropped() {
             });
             expected_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
             // Cycles of the duplicate response are refunded.
-            expected_state.credit_refund(
-                &ic_types::messages::Refund::anonymous(*LOCAL_CANISTER, response.cycles()),
-                CanisterCyclesCostSchedule::Normal,
-            );
+            expected_state.credit_refund(&ic_types::messages::Refund::anonymous(
+                *LOCAL_CANISTER,
+                response.cycles(),
+            ));
 
             // Push the clone of the best effort response onto the loopback stream.
             state.modify_streams(|streams| streams.get_mut(&LOCAL_SUBNET).unwrap().push(response));
@@ -2049,10 +2049,10 @@ fn inducting_best_effort_response_into_stopped_canister_does_not_raise_a_critica
         },
         |expected_state, refund| {
             // Cycles attached to the late response are refunded.
-            expected_state.credit_refund(
-                &ic_types::messages::Refund::anonymous(*LOCAL_CANISTER, refund),
-                CanisterCyclesCostSchedule::Normal,
-            );
+            expected_state.credit_refund(&ic_types::messages::Refund::anonymous(
+                *LOCAL_CANISTER,
+                refund,
+            ));
         },
     );
 }
@@ -2744,7 +2744,7 @@ fn induct_stream_slices_with_refunds() {
 
             // Refund to `LOCAL_CANISTER` (@43) was applied.
             let refund43 = refund_in_slice(slices.get(&REMOTE_SUBNET), 43);
-            expected_state.credit_refund(refund43, CanisterCyclesCostSchedule::Normal);
+            expected_state.credit_refund(refund43);
 
             // Cycles in refund @44 are lost
             let refund44 = refund_in_slice(slices.get(&REMOTE_SUBNET), 44);
@@ -3650,7 +3650,7 @@ fn push_input(state: &mut ReplicatedState, msg: StreamMessage) {
                 .unwrap();
         }
         StreamMessage::Refund(refund) => {
-            assert!(state.credit_refund(&refund, CanisterCyclesCostSchedule::Normal));
+            assert!(state.credit_refund(&refund));
         }
     }
 }
