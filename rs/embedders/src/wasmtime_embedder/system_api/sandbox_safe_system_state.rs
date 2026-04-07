@@ -1662,7 +1662,7 @@ mod tests {
                 NumInstructions::from(1_000_000_000),
                 SubnetType::Application,
                 subnet_test_id(0),
-                CyclesAccountManagerConfig::application_subnet(),
+                CyclesAccountManagerConfig::application_subnet(false),
             ),
             Some(0),
             0,

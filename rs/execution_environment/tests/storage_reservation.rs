@@ -20,7 +20,7 @@ fn reserved_cycles_memory_grow_to_full_capacity<F>(
 {
     // Create application subnet `StateMachine`.
     let subnet_type = SubnetType::Application;
-    let mut subnet_config = SubnetConfig::new(subnet_type);
+    let mut subnet_config = SubnetConfig::new(subnet_type, false);
     // 2 cores, so we don't have to retry every allocation 4 times (due to the
     // memory being split 4 ways).
     subnet_config.scheduler_config.scheduler_cores = 2;

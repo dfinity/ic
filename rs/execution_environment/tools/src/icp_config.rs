@@ -50,7 +50,7 @@ fn icp_config_as_json(version: &str) -> serde_json::Value {
     let execution = execution_environment::Config::default();
 
     let application = json_config(
-        &CyclesAccountManagerConfig::application_subnet(),
+        &CyclesAccountManagerConfig::application_subnet(false),
         &SchedulerConfig::application_subnet(),
         &embedder,
         &execution,

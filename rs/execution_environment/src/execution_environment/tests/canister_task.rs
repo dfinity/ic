@@ -1036,7 +1036,7 @@ where
     F: FnOnce(&StateMachine, CanisterId),
     G: FnOnce(&StateMachine, CanisterId),
 {
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, false);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config.clone(),
         HypervisorConfig::default(),

@@ -220,7 +220,7 @@ pub fn update_settings_of_frozen_canister(env: TestEnv) {
                 SchedulerConfig::application_subnet().max_instructions_per_message,
                 SubnetType::Application,
                 app_node.subnet_id().unwrap(),
-                CyclesAccountManagerConfig::application_subnet(),
+                CyclesAccountManagerConfig::application_subnet(false),
             );
 
             assert!(

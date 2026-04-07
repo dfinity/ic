@@ -359,7 +359,7 @@ fn apply_filter(
 /// Create a `SubnetConfig` with a redacted `CyclesAccountManagerConfig` to have only the fees
 /// for specific operation.
 fn filtered_subnet_config(subnet_type: SubnetType, filter: KeepFeesFilter) -> SubnetConfig {
-    let mut subnet_config = SubnetConfig::new(subnet_type);
+    let mut subnet_config = SubnetConfig::new(subnet_type, false);
     subnet_config.cycles_account_manager_config =
         apply_filter(subnet_config.cycles_account_manager_config, filter);
 
@@ -819,8 +819,10 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
                 http_request_per_byte_fee: Cycles::new(400),
                 http_response_per_byte_fee: Cycles::new(800),
                 max_storage_reservation_period: Duration::from_secs(0),
-                default_reserved_balance_limit: CyclesAccountManagerConfig::application_subnet()
-                    .default_reserved_balance_limit,
+                default_reserved_balance_limit: CyclesAccountManagerConfig::application_subnet(
+                    false,
+                )
+                .default_reserved_balance_limit,
                 fetch_canister_logs_base_fee: Cycles::new(5_000_000),
                 fetch_canister_logs_per_byte_fee: Cycles::new(80),
             }

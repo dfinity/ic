@@ -812,7 +812,7 @@ const COUNTER_GROW_CANISTER_WAT: &str = r#"
 fn take_frozen_canister_snapshot_fails() {
     // Create application subnet `StateMachine`.
     let subnet_type = SubnetType::Application;
-    let subnet_config = SubnetConfig::new(subnet_type);
+    let subnet_config = SubnetConfig::new(subnet_type, false);
     let execution_config = ExecutionConfig::default();
     let config = StateMachineConfig::new(subnet_config, execution_config);
     let env = StateMachineBuilder::new()
@@ -887,7 +887,7 @@ fn take_frozen_canister_snapshot_fails() {
 #[test]
 fn load_canister_snapshot_works_on_another_canister() {
     let subnet_type = SubnetType::Application;
-    let subnet_config = SubnetConfig::new(subnet_type);
+    let subnet_config = SubnetConfig::new(subnet_type, false);
     let execution_config = ExecutionConfig::default();
     let config = StateMachineConfig::new(subnet_config, execution_config);
     let env = StateMachineBuilder::new()

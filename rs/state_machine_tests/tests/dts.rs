@@ -63,7 +63,7 @@ fn very_slow_wasm(n: u64) -> Vec<u8> {
 #[test]
 fn test_dts() {
     let config = StateMachineConfig::new(
-        SubnetConfig::new(SubnetType::Application),
+        SubnetConfig::new(SubnetType::Application, false),
         HypervisorConfig::default(),
     );
     let sm = StateMachineBuilder::new()

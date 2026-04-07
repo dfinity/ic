@@ -2375,7 +2375,7 @@ pub struct ExecutionTestBuilder {
 impl Default for ExecutionTestBuilder {
     fn default() -> Self {
         let subnet_type = SubnetType::Application;
-        let mut subnet_config = SubnetConfig::new(subnet_type);
+        let mut subnet_config = SubnetConfig::new(subnet_type, false);
         subnet_config.scheduler_config.scheduler_cores = 2;
         Self {
             execution_config: Config {
@@ -2468,7 +2468,7 @@ impl ExecutionTestBuilder {
         self.subnet_type = subnet_type;
         // If `subnet_type` is updated, then we need to update the subnet config
         // to match it.
-        self.subnet_config = SubnetConfig::new(subnet_type);
+        self.subnet_config = SubnetConfig::new(subnet_type, false);
         self
     }
 

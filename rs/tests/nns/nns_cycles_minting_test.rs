@@ -310,7 +310,7 @@ pub fn test(env: TestEnv) {
                 .await
                 .unwrap();
         assert_eq!(new_canister_status.controller(), controller_pid);
-        let config = CyclesAccountManagerConfig::application_subnet();
+        let config = CyclesAccountManagerConfig::application_subnet(false);
         let max_fees = scale_cycles(
             config.canister_creation_fee
                 + config.ingress_message_reception_fee

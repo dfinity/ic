@@ -4391,7 +4391,7 @@ pub fn test_cycles_for_archive_creation_default_spawns_archive<T>(
     let account = Account::from(PrincipalId::new_user_test_id(1).0);
     let initial_balances = vec![(account, 100_000_000_u64)];
 
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, false);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config.clone(),
         HypervisorConfig::default(),

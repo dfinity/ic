@@ -286,7 +286,7 @@ impl Player {
         };
 
         let metrics_registry = MetricsRegistry::new();
-        let subnet_config = SubnetConfig::new(subnet_type);
+        let subnet_config = SubnetConfig::new(subnet_type, false);
 
         let crypto = ic_crypto_for_verification_only::new(registry.clone());
         let crypto = Arc::new(crypto);

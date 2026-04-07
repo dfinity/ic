@@ -35,7 +35,7 @@ fn only_charge_for_allocation_after_specified_duration() {
     // Just enough memory to cost us one cycle per second.
     let bytes_per_cycle = (1_u128 << 30)
         .checked_div(
-            CyclesAccountManagerConfig::application_subnet()
+            CyclesAccountManagerConfig::application_subnet(false)
                 .gib_storage_per_second_fee
                 .get(),
         )
@@ -397,7 +397,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     // Taking a snapshot of the canister will decrease the balance.
     // Increase the canister balance to be able to take a new snapshot.
     let subnet_type = SubnetType::Application;
-    let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
+    let scheduler_config = SubnetConfig::new(subnet_type, false).scheduler_config;
     let canister_snapshot_size = test.canister_state(canister_id).snapshot_size_bytes();
     let instructions = scheduler_config.canister_snapshot_baseline_instructions
         + NumInstructions::new(canister_snapshot_size.get());
@@ -515,7 +515,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     // Taking a snapshot of the canister will decrease the balance.
     // Increase the canister balance to be able to take a new snapshot.
     let subnet_type = SubnetType::Application;
-    let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
+    let scheduler_config = SubnetConfig::new(subnet_type, false).scheduler_config;
     let canister_snapshot_size = test.canister_state(canister_id).snapshot_size_bytes();
     let instructions = scheduler_config.canister_snapshot_baseline_instructions
         + NumInstructions::new(canister_snapshot_size.get());

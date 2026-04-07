@@ -1340,7 +1340,7 @@ fn test_storage_reservation_cycles() {
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
     const GB: u64 = 1024 * 1024 * 1024;
 
-    let cfg = CyclesAccountManagerConfig::application_subnet();
+    let cfg = CyclesAccountManagerConfig::application_subnet(false);
     let cam = CyclesAccountManagerBuilder::new().build();
 
     // Allocation of 100GB below the threshold.

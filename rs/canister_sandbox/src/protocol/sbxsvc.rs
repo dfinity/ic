@@ -489,7 +489,7 @@ mod tests {
                         NumInstructions::new(10),
                         SubnetType::Application,
                         SubnetId::new(canister_test_id(1).get()),
-                        CyclesAccountManagerConfig::application_subnet(),
+                        CyclesAccountManagerConfig::application_subnet(false),
                     ),
                     &NetworkTopology::default(),
                     NumInstructions::new(42),

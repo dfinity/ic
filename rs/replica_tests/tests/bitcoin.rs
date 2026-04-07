@@ -547,7 +547,7 @@ fn testnet_requests_are_routed_to_testnet_canister() {
         CanisterId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
 
     let env = StateMachine::new_with_config(StateMachineConfig::new(
-        SubnetConfig::new(SubnetType::System),
+        SubnetConfig::new(SubnetType::System, false),
         HypervisorConfig {
             bitcoin: BitcoinConfig {
                 testnet_canister_id: Some(bitcoin_canister_id),
@@ -575,7 +575,7 @@ fn regtest_requests_are_routed_to_testnet_canister() {
         CanisterId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
 
     let env = StateMachine::new_with_config(StateMachineConfig::new(
-        SubnetConfig::new(SubnetType::System),
+        SubnetConfig::new(SubnetType::System, false),
         HypervisorConfig {
             bitcoin: BitcoinConfig {
                 testnet_canister_id: Some(bitcoin_canister_id),
@@ -603,7 +603,7 @@ fn mainnet_requests_are_routed_to_mainnet_canister() {
         CanisterId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
 
     let env = StateMachine::new_with_config(StateMachineConfig::new(
-        SubnetConfig::new(SubnetType::System),
+        SubnetConfig::new(SubnetType::System, false),
         HypervisorConfig {
             bitcoin: BitcoinConfig {
                 mainnet_canister_id: Some(bitcoin_canister_id),
@@ -628,7 +628,7 @@ fn mainnet_requests_are_routed_to_mainnet_canister() {
 #[test]
 fn requests_are_rejected_if_no_bitcoin_canisters_are_set() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
-        SubnetConfig::new(SubnetType::System),
+        SubnetConfig::new(SubnetType::System, false),
         HypervisorConfig {
             // No bitcoin canisters set.
             bitcoin: BitcoinConfig::default(),

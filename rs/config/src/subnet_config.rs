@@ -135,6 +135,9 @@ pub const VETKD_FEE: Cycles = Cycles::new(10 * B as u128);
 /// IMPORTANT: never set this value to zero.
 pub const DEFAULT_REFERENCE_SUBNET_SIZE: usize = 13;
 
+/// Reference subnet size for SEV-enabled application subnets.
+pub const SEV_REFERENCE_SUBNET_SIZE: usize = 7;
+
 /// Costs for each newly created dirty page in stable memory.
 const DEFAULT_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(1_000);
 
@@ -457,10 +460,14 @@ pub struct CyclesAccountManagerConfig {
 }
 
 impl CyclesAccountManagerConfig {
-    pub fn application_subnet() -> Self {
+    pub fn application_subnet(is_sev_enabled: bool) -> Self {
         let ten_update_instructions_execution_fee_in_cycles = 10;
         Self {
-            reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
+            reference_subnet_size: if is_sev_enabled {
+                SEV_REFERENCE_SUBNET_SIZE
+            } else {
+                DEFAULT_REFERENCE_SUBNET_SIZE
+            },
             canister_creation_fee: CANISTER_CREATION_FEE,
             compute_percent_allocated_per_second_fee: Cycles::new(10_000_000),
 
@@ -495,8 +502,8 @@ impl CyclesAccountManagerConfig {
         }
     }
 
-    pub fn verified_application_subnet() -> Self {
-        Self::application_subnet()
+    pub fn verified_application_subnet(is_sev_enabled: bool) -> Self {
+        Self::application_subnet(is_sev_enabled)
     }
 
     /// All processing is free on system subnets
@@ -566,7 +573,7 @@ impl CyclesAccountManagerConfig {
     }
 
     pub fn cloud_engine() -> Self {
-        Self::application_subnet()
+        Self::application_subnet(false)
     }
 }
 
@@ -579,20 +586,24 @@ pub struct SubnetConfig {
 }
 
 impl SubnetConfig {
-    pub fn new(own_subnet_type: SubnetType) -> Self {
+    pub fn new(own_subnet_type: SubnetType, is_sev_enabled: bool) -> Self {
         match own_subnet_type {
-            SubnetType::Application => Self::default_application_subnet(),
+            SubnetType::Application => Self::default_application_subnet(is_sev_enabled),
             SubnetType::System => Self::default_system_subnet(),
-            SubnetType::VerifiedApplication => Self::default_verified_application_subnet(),
+            SubnetType::VerifiedApplication => {
+                Self::default_verified_application_subnet(is_sev_enabled)
+            }
             SubnetType::CloudEngine => Self::default_cloud_engine(),
         }
     }
 
     /// Returns the subnet configuration for the application subnet type.
-    fn default_application_subnet() -> Self {
+    fn default_application_subnet(is_sev_enabled: bool) -> Self {
         Self {
             scheduler_config: SchedulerConfig::application_subnet(),
-            cycles_account_manager_config: CyclesAccountManagerConfig::application_subnet(),
+            cycles_account_manager_config: CyclesAccountManagerConfig::application_subnet(
+                is_sev_enabled,
+            ),
         }
     }
 
@@ -606,10 +617,11 @@ impl SubnetConfig {
 
     /// Returns the subnet configuration for the verified application subnet
     /// type.
-    fn default_verified_application_subnet() -> Self {
+    fn default_verified_application_subnet(is_sev_enabled: bool) -> Self {
         Self {
             scheduler_config: SchedulerConfig::verified_application_subnet(),
             cycles_account_manager_config: CyclesAccountManagerConfig::verified_application_subnet(
+                is_sev_enabled,
             ),
         }
     }
@@ -626,9 +638,11 @@ impl SubnetConfig {
 #[cfg(test)]
 mod tests {
     use super::{
-        B, MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE, MAX_INSTRUCTIONS_PER_ROUND,
-        MAX_INSTRUCTIONS_PER_SLICE,
+        B, DEFAULT_REFERENCE_SUBNET_SIZE, MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE,
+        MAX_INSTRUCTIONS_PER_ROUND, MAX_INSTRUCTIONS_PER_SLICE, SEV_REFERENCE_SUBNET_SIZE,
     };
+    use crate::subnet_config::{CyclesAccountManagerConfig, SubnetConfig};
+    use ic_registry_subnet_type::SubnetType;
     use ic_types::NumInstructions;
 
     #[test]
@@ -637,6 +651,59 @@ mod tests {
             MAX_INSTRUCTIONS_PER_ROUND,
             MAX_INSTRUCTIONS_PER_SLICE.max(MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE)
                 + NumInstructions::from(2 * B)
+        );
+    }
+
+    #[test]
+    fn application_subnet_sev_disabled_uses_default_reference_subnet_size() {
+        let config = CyclesAccountManagerConfig::application_subnet(false);
+        assert_eq!(config.reference_subnet_size, DEFAULT_REFERENCE_SUBNET_SIZE);
+    }
+
+    #[test]
+    fn application_subnet_sev_enabled_uses_sev_reference_subnet_size() {
+        let config = CyclesAccountManagerConfig::application_subnet(true);
+        assert_eq!(config.reference_subnet_size, SEV_REFERENCE_SUBNET_SIZE);
+    }
+
+    #[test]
+    fn subnet_config_application_sev_disabled_uses_default_reference_subnet_size() {
+        let config = SubnetConfig::new(SubnetType::Application, false);
+        assert_eq!(
+            config.cycles_account_manager_config.reference_subnet_size,
+            DEFAULT_REFERENCE_SUBNET_SIZE
+        );
+    }
+
+    #[test]
+    fn subnet_config_application_sev_enabled_uses_sev_reference_subnet_size() {
+        let config = SubnetConfig::new(SubnetType::Application, true);
+        assert_eq!(
+            config.cycles_account_manager_config.reference_subnet_size,
+            SEV_REFERENCE_SUBNET_SIZE
+        );
+    }
+
+    #[test]
+    fn subnet_config_verified_application_sev_enabled_uses_sev_reference_subnet_size() {
+        let config = SubnetConfig::new(SubnetType::VerifiedApplication, true);
+        assert_eq!(
+            config.cycles_account_manager_config.reference_subnet_size,
+            SEV_REFERENCE_SUBNET_SIZE
+        );
+    }
+
+    #[test]
+    fn subnet_config_system_ignores_sev_flag() {
+        let config_sev = SubnetConfig::new(SubnetType::System, true);
+        let config_no_sev = SubnetConfig::new(SubnetType::System, false);
+        assert_eq!(
+            config_sev
+                .cycles_account_manager_config
+                .reference_subnet_size,
+            config_no_sev
+                .cycles_account_manager_config
+                .reference_subnet_size
         );
     }
 }

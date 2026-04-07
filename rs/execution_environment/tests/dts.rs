@@ -98,7 +98,7 @@ fn dts_subnet_config(
     message_instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
 ) -> SubnetConfig {
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, false);
     SubnetConfig {
         scheduler_config: SchedulerConfig {
             max_instructions_per_install_code: message_instruction_limit,
@@ -147,7 +147,7 @@ fn dts_install_code_env(
     message_instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
 ) -> (StateMachine, SubnetConfig) {
-    let default_app_subnet_config = SubnetConfig::new(SubnetType::Application);
+    let default_app_subnet_config = SubnetConfig::new(SubnetType::Application, false);
     let subnet_config = SubnetConfig {
         scheduler_config: SchedulerConfig {
             max_instructions_per_install_code: message_instruction_limit,

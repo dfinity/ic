@@ -40,7 +40,7 @@ fn env_with_backtrace_canister_and_visibility(
 
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
-            SubnetConfig::new(subnet_type),
+            SubnetConfig::new(subnet_type, false),
             hypervisor_config,
         )))
         .with_subnet_type(subnet_type)

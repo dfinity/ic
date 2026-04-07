@@ -20,13 +20,13 @@ impl CyclesAccountManagerBuilder {
             subnet_id: subnet_test_id(0),
             subnet_type: SubnetType::Application,
             cycles_limit_per_canister: Some(Cycles::new(100_000_000_000_000)),
-            config: CyclesAccountManagerConfig::application_subnet(),
+            config: CyclesAccountManagerConfig::application_subnet(false),
         }
     }
 
     pub fn with_subnet_type(mut self, subnet_type: SubnetType) -> Self {
         self.subnet_type = subnet_type;
-        self.config = SubnetConfig::new(subnet_type).cycles_account_manager_config;
+        self.config = SubnetConfig::new(subnet_type, false).cycles_account_manager_config;
         self
     }
 

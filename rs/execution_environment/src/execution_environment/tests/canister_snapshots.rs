@@ -1778,7 +1778,7 @@ fn take_canister_snapshot_charges_canister_cycles() {
     let caller_canister = canister_test_id(1);
 
     let subnet_type = SubnetType::Application;
-    let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
+    let scheduler_config = SubnetConfig::new(subnet_type, false).scheduler_config;
 
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
@@ -1843,7 +1843,7 @@ fn load_canister_snapshot_charges_canister_cycles() {
     let caller_canister = canister_test_id(1);
 
     let subnet_type = SubnetType::Application;
-    let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
+    let scheduler_config = SubnetConfig::new(subnet_type, false).scheduler_config;
 
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)

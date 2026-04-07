@@ -16,7 +16,7 @@ struct BreakMessageParams {
 
 fn state_machine_for_test(instructions_limit: u64) -> StateMachine {
     let mut hypervisor_config = ic_config::execution_environment::Config::default();
-    let mut subnet_config = SubnetConfig::new(SubnetType::System);
+    let mut subnet_config = SubnetConfig::new(SubnetType::System, false);
 
     let instruction_limit = NumInstructions::new(instructions_limit);
     if instruction_limit > subnet_config.scheduler_config.max_instructions_per_round {

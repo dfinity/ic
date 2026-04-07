@@ -648,7 +648,7 @@ impl PocketIcSubnets {
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
-        let mut subnet_config = SubnetConfig::new(subnet_type);
+        let mut subnet_config = SubnetConfig::new(subnet_type, false);
         // using `let IcpConfig { }` with explicit field names
         // to force an update after adding a new field to `IcpConfig`
         let IcpConfig {

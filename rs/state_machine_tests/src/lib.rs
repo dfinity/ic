@@ -1994,7 +1994,10 @@ impl StateMachine {
 
         let (mut subnet_config, hypervisor_config) = match config {
             Some(config) => (config.subnet_config, config.hypervisor_config),
-            None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
+            None => (
+                SubnetConfig::new(subnet_type, false),
+                HypervisorConfig::default(),
+            ),
         };
         if let Some(ecdsa_signature_fee) = ecdsa_signature_fee {
             subnet_config
@@ -5596,7 +5599,7 @@ pub fn two_subnets_with_config(
 /// Sets up two `StateMachine` that can communicate with each other.
 pub fn two_subnets_simple() -> (Arc<StateMachine>, Arc<StateMachine>) {
     let config = StateMachineConfig::new(
-        SubnetConfig::new(SubnetType::Application),
+        SubnetConfig::new(SubnetType::Application, false),
         HypervisorConfig::default(),
     );
     two_subnets_with_config(config.clone(), config)

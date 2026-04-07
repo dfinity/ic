@@ -126,12 +126,14 @@ pub fn construct_ic_stack(
         .get_root_subnet_id(catch_up_package.content.registry_version())
         .expect("cannot read from registry")
         .expect("cannot find root subnet id");
-    let subnet_type = get_subnet_type(
-        log,
-        subnet_id,
-        registry.get_latest_version(),
-        registry.as_ref(),
-    );
+    let registry_version = registry.get_latest_version();
+    let subnet_type = get_subnet_type(log, subnet_id, registry_version, registry.as_ref());
+    let is_sev_enabled = registry
+        .get_features(subnet_id, registry_version)
+        .ok()
+        .flatten()
+        .map(|f| f.sev_enabled)
+        .unwrap_or(false);
 
     // ---------- THE PERSISTED CONSENSUS ARTIFACT POOL DEPS FOLLOW ----------
     // This is the first object that is required for the creation of the IC stack. Initializing the
@@ -190,7 +192,7 @@ pub fn construct_ic_stack(
     let max_canister_http_requests_in_flight =
         config.hypervisor.max_canister_http_requests_in_flight;
 
-    let subnet_config = SubnetConfig::new(subnet_type);
+    let subnet_config = SubnetConfig::new(subnet_type, is_sev_enabled);
 
     let execution_services = ExecutionServices::setup_execution(
         log.clone(),

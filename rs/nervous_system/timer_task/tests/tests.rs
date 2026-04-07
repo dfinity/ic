@@ -8,7 +8,7 @@ use ic_types::{CanisterId, ingress::WasmResult};
 fn state_machine_for_test() -> StateMachine {
     // Setting up the state machine with a lower instruction limit to make the tests run faster.
     let mut hypervisor_config = ic_config::execution_environment::Config::default();
-    let mut subnet_config = SubnetConfig::new(SubnetType::System);
+    let mut subnet_config = SubnetConfig::new(SubnetType::System, false);
     let instruction_divisor = 10;
     subnet_config.scheduler_config.max_instructions_per_round /= instruction_divisor;
     subnet_config.scheduler_config.max_instructions_per_message /= instruction_divisor;

@@ -93,7 +93,7 @@ fn readable_logs_without_backtraces(
 
 fn setup_env_with(replicated_inter_canister_log_fetch: FlagStatus) -> StateMachine {
     let subnet_type = SubnetType::Application;
-    let mut subnet_config = SubnetConfig::new(subnet_type);
+    let mut subnet_config = SubnetConfig::new(subnet_type, false);
     subnet_config.scheduler_config.max_instructions_per_round = MAX_INSTRUCTIONS_PER_ROUND;
     subnet_config.scheduler_config.max_instructions_per_message = MAX_INSTRUCTIONS_PER_MESSAGE;
     subnet_config.scheduler_config.max_instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE;
@@ -148,7 +148,7 @@ fn setup_with_controller(controller: PrincipalId, wasm: Vec<u8>) -> (StateMachin
 
 fn restart_node(env: StateMachine) -> StateMachine {
     env.restart_node_with_config(StateMachineConfig::new(
-        SubnetConfig::new(SubnetType::Application),
+        SubnetConfig::new(SubnetType::Application, false),
         ExecutionConfig::default(),
     ))
 }

@@ -502,7 +502,7 @@ fn can_create_canister_with_cycles_from_another_canister() {
             test.canister_state(&canister_id).system_state.balance();
 
         // Create another canister with some cycles.
-        let config = CyclesAccountManagerConfig::application_subnet();
+        let config = CyclesAccountManagerConfig::application_subnet(false);
         let cycles_for_new_canister = config.canister_creation_fee + Cycles::new(100_000_000);
         let new_canister_id_payload = test
             .ingress(

@@ -29,7 +29,7 @@ pub fn env() -> StateMachine {
     };
     StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
-            SubnetConfig::new(SubnetType::Application),
+            SubnetConfig::new(SubnetType::Application, false),
             hypervisor_config,
         )))
         .with_checkpoints_enabled(false)

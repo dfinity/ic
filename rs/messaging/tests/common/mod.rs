@@ -239,7 +239,9 @@ impl TestSubnetConfig {
                     max_instructions_per_install_code_slice: self.max_instructions_per_round.into(),
                     ..SchedulerConfig::application_subnet()
                 },
-                cycles_account_manager_config: CyclesAccountManagerConfig::application_subnet(),
+                cycles_account_manager_config: CyclesAccountManagerConfig::application_subnet(
+                    false,
+                ),
             },
             HypervisorConfig {
                 guaranteed_response_message_memory_capacity: self

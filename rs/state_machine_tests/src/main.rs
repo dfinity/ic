@@ -67,7 +67,10 @@ fn main() {
         default_provisional_cycles_balance: Cycles::new(0),
         ..Default::default()
     };
-    let config = StateMachineConfig::new(SubnetConfig::new(SubnetType::System), hypervisor_config);
+    let config = StateMachineConfig::new(
+        SubnetConfig::new(SubnetType::System, false),
+        hypervisor_config,
+    );
     let env = StateMachineBuilder::new().with_config(Some(config)).build();
     loop {
         debug_print!(&opts, "enter request loop");

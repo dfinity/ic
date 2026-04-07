@@ -74,7 +74,7 @@ fn execute_ingress_with_dts(
 fn test(wat: &str, mode: CanisterInstallMode, dts_install: bool, dts_upgrade: bool) {
     let test_canister = wat::parse_str(wat).expect("invalid WAT");
 
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, false);
     let subnet_config = SubnetConfig {
         scheduler_config: SchedulerConfig {
             max_instructions_per_install_code_slice: 100_000.into(),

@@ -279,7 +279,7 @@ where
     let log = no_op_logger();
     let own_subnet_id = subnet_test_id(1);
     let own_subnet_type = SubnetType::Application;
-    let subnet_configs = SubnetConfig::new(own_subnet_type);
+    let subnet_configs = SubnetConfig::new(own_subnet_type, false);
 
     let embedders_config = EmbeddersConfig {
         // Set up larger heap, of 8GB for the Wasm64 feature.

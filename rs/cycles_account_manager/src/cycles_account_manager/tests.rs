@@ -6,7 +6,7 @@ use ic_test_utilities_types::ids::subnet_test_id;
 const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
 
 fn create_cycles_account_manager(reference_subnet_size: usize) -> CyclesAccountManager {
-    let mut config = CyclesAccountManagerConfig::application_subnet();
+    let mut config = CyclesAccountManagerConfig::application_subnet(false);
     config.reference_subnet_size = reference_subnet_size;
 
     CyclesAccountManager {
@@ -91,7 +91,7 @@ fn test_reference_subnet_size_is_not_zero() {
     // `reference_subnet_size` is used to scale cost according to a subnet size.
     // It should never be equal to zero.
     assert_ne!(
-        CyclesAccountManagerConfig::application_subnet().reference_subnet_size,
+        CyclesAccountManagerConfig::application_subnet(false).reference_subnet_size,
         0
     );
     assert_ne!(
