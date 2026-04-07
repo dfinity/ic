@@ -1770,11 +1770,7 @@ impl ProposeToBlessAlternativeGuestOsVersionCmd {
             assert!(
                 extra.is_empty(),
                 "Chip IDs [{}] do not belong to any node in subnet {}",
-                extra
-                    .iter()
-                    .map(|id| hex::encode(id))
-                    .collect::<Vec<_>>()
-                    .join(", "),
+                extra.iter().map(hex::encode).collect::<Vec<_>>().join(", "),
                 shortened_subnet_string(subnet_descriptor),
             );
 
