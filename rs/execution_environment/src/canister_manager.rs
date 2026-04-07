@@ -26,6 +26,7 @@ use ic_embedders::{
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{MessageMemoryUsage, SubnetAvailableMemory};
+use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use ic_logger::{ReplicaLogger, error, fatal, info};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterMetadataResponse,
@@ -1580,6 +1581,37 @@ impl CanisterManager {
         canister.system_state.add_cycles(cycles_amount);
 
         Ok(())
+    }
+
+    pub(crate) fn deposit_cycles(
+        &self,
+        canister: &mut CanisterState,
+        cycles: Cycles,
+        sender: PrincipalId,
+    ) -> CanisterManagerResponse {
+        let canister_id = canister.canister_id();
+
+        canister.system_state.add_cycles(cycles);
+
+        if cycles.get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
+            info!(
+                self.log,
+                "Canister {} deposited {} cycles to canister {}.",
+                sender,
+                cycles,
+                canister_id.get(),
+            );
+        }
+
+        CanisterManagerResponse {
+            canister_id,
+            reply: Some(EmptyBlob.encode()),
+            heap_delta_increase: NumBytes::new(0),
+            unflushed_checkpoint_op: None,
+            deleted_call_context_responses: vec![],
+            stop_call_id_to_remove: None,
+            stop_contexts_to_reject: vec![],
+        }
     }
 
     fn validate_canister_is_stopped(

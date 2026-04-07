@@ -48,7 +48,7 @@ fn main() -> Result<()> {
             local_recovery: false,
             break_dfinity_owned_node: true,
             num_broken_nodes: SUBNET_SIZE,
-            add_and_bless_upgrade_version: true,
+            add_upgrade_version: true,
             fix_dfinity_owned_node_like_np: false,
             sequential_np_actions: true,
         }))

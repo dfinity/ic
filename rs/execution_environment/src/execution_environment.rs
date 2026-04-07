@@ -30,7 +30,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
 };
-use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, MAX_PAIRED_PRE_SIGNATURES};
+use ic_limits::MAX_PAIRED_PRE_SIGNATURES;
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
@@ -1059,7 +1059,10 @@ impl ExecutionEnvironment {
                     response: Err(err),
                     refund: msg.take_cycles(),
                 },
-                Ok(args) => self.deposit_cycles(args.get_canister_id(), &mut msg, &mut state),
+                Ok(args) => {
+                    let canister_id = args.get_canister_id();
+                    self.deposit_cycles(canister_id, &mut msg, &mut state)
+                }
             },
 
             Ok(Ic00Method::FlexibleHttpRequest) => match &msg {
@@ -2394,30 +2397,24 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
     ) -> ExecuteSubnetMessageResult {
         match state.canister_state_make_mut(&canister_id) {
-            None => ExecuteSubnetMessageResult::Finished {
-                response: Err(UserError::new(
+            None => {
+                let err = UserError::new(
                     ErrorCode::CanisterNotFound,
                     format!("Canister {} not found.", &canister_id),
-                )),
-                refund: msg.take_cycles(),
-            },
+                );
+                ExecuteSubnetMessageResult::Finished {
+                    response: Err(err),
+                    refund: msg.take_cycles(),
+                }
+            }
 
             Some(canister_state) => {
                 let cycles = msg.take_cycles();
-                canister_state.system_state.add_cycles(cycles);
-                if cycles.get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
-                    info!(
-                        self.log,
-                        "Canister {} deposited {} cycles to canister {}.",
-                        msg.sender(),
-                        cycles,
-                        canister_id.get(),
-                    );
-                }
-                ExecuteSubnetMessageResult::Finished {
-                    response: Ok((EmptyBlob.encode(), Some(canister_id))),
-                    refund: Cycles::zero(),
-                }
+                let sender = *msg.sender();
+                let response = self
+                    .canister_manager
+                    .deposit_cycles(canister_state, cycles, sender);
+                self.process_canister_manager_response(response, state, msg)
             }
         }
     }
