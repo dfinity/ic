@@ -625,7 +625,7 @@ pub(crate) fn create_data_payload_helper_2(
     idkg_payload: &mut IDkgPayload,
     height: Height,
     chain_key_config: &ChainKeyConfig,
-    context_registry_version: RegistryVersion,
+    validation_context_registry_version: RegistryVersion,
     next_interval_registry_version: RegistryVersion,
     receivers: &[NodeId],
     idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingContext<'_>>,
@@ -697,7 +697,10 @@ pub(crate) fn create_data_payload_helper_2(
     );
     resharing::initiate_reshare_requests(
         idkg_payload,
-        resharing::get_reshare_requests(idkg_dealings_contexts, context_registry_version),
+        resharing::get_reshare_requests(
+            idkg_dealings_contexts,
+            validation_context_registry_version,
+        ),
     );
     Ok(())
 }
@@ -2073,7 +2076,7 @@ mod tests {
             }],
             ..ChainKeyConfig::default()
         };
-        let context_registry_version = RegistryVersion::from(10);
+        let validation_context_registry_version = RegistryVersion::from(10);
         let reached_request = create_reshare_request(key_id.clone(), 1, 10);
         let future_request = create_reshare_request(key_id.clone(), 2, 11);
         let contexts = BTreeMap::from([
@@ -2092,8 +2095,8 @@ mod tests {
             &mut idkg_payload,
             Height::from(5),
             &chain_key_config,
-            context_registry_version,
-            context_registry_version,
+            validation_context_registry_version,
+            validation_context_registry_version,
             &[node_test_id(0)],
             &contexts,
             BTreeMap::default(),

@@ -156,12 +156,12 @@ pub(crate) fn update_completed_reshare_requests(
 /// Translates the reshare requests in the replicated state to the internal format
 pub(super) fn get_reshare_requests(
     idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingContext<'_>>,
-    context_registry_version: RegistryVersion,
+    validation_context_registry_version: RegistryVersion,
 ) -> BTreeSet<idkg::IDkgReshareRequest> {
     idkg_dealings_contexts
         .values()
         // Skip the context if we haven't reached the registry version yet.
-        .filter(|context| context.registry_version <= context_registry_version)
+        .filter(|context| context.registry_version <= validation_context_registry_version)
         .map(reshare_request_from_dealings_context)
         .collect()
 }
