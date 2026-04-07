@@ -108,7 +108,7 @@ pub fn test(env: TestEnv) {
             nodes,
             version.clone(),
             Some(CanisterCyclesCostSchedule::Free),
-            None,
+            Some(0),
         )
         .await;
         info!(log, "Voting on proposal {proposal_id}");
