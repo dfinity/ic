@@ -5148,6 +5148,7 @@ impl StateMachine {
         }
         self.state_manager
             .commit_and_certify(replicated_state, CertificationScope::Metadata, None);
+        self.state_manager.flush_hash_channel();
     }
 }
 
