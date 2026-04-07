@@ -425,7 +425,7 @@ fn test_neuron_disburse_maturity() {
     let original_neuron_2_maturity_e8s_equivalent = neuron_2.maturity_e8s_equivalent;
     assert_eq!(neuron_2.maturity_disbursements_in_progress, Some(vec![]));
 
-    // Step 2.1: Disburse 30% of maturity for neuron 1
+    // Step 2.1: Disburse 40% of maturity for neuron 1
     let disburse_destination_1_principal =
         PrincipalId::new_self_authenticating(b"disburse_destination_1");
     let disburse_destination_1 = AccountIdentifier::from(disburse_destination_1_principal);
@@ -434,7 +434,7 @@ fn test_neuron_disburse_maturity() {
         neuron_1_controller,
         neuron_id_1,
         DisburseMaturity {
-            percentage_to_disburse: 30,
+            percentage_to_disburse: 40,
             to_account: Some(GovernanceAccount {
                 owner: Some(disburse_destination_1_principal),
                 subaccount: None,
@@ -720,7 +720,7 @@ fn test_neuron_disburse_maturity_through_neuron_management_proposal() {
         .with_ledger_accounts(vec![
             (
                 AccountIdentifier::new(managed_neuron_controller, None),
-                Tokens::new(1000, 10000).unwrap(),
+                Tokens::new(2_000, 10_000).unwrap(),
             ),
             (
                 AccountIdentifier::new(neuron_manager_controller, None),
@@ -734,7 +734,7 @@ fn test_neuron_disburse_maturity_through_neuron_management_proposal() {
     let managed_neuron_id = create_neuron_with_maturity(
         &state_machine,
         managed_neuron_controller,
-        Tokens::from_tokens(1000).unwrap(),
+        Tokens::from_tokens(2_000).unwrap(),
         false,
     );
 

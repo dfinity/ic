@@ -103,6 +103,13 @@ pub struct NeuronInfo {
     pub deciding_voting_power: Option<u64>,
     /// See analogous field in Neuron.
     pub potential_voting_power: Option<u64>,
+
+    /// Base value (in e8s) used for the "8-year gang" dissolve delay bonus.
+    /// For neurons that had the maximum dissolve delay of 8 years before the
+    /// maximum dissolve delay was reduced, this is set to the total staked value
+    /// net of fees (including staked maturity) captured at the time of migration.
+    /// For all other neurons, this is 0.
+    pub eight_year_gang_bonus_base_e8s: Option<u64>,
 }
 
 impl NeuronInfo {
@@ -327,6 +334,13 @@ pub struct Neuron {
     ///
     /// Per NNS policy, this is opt. Nevertheless, it will never be null.
     pub potential_voting_power: Option<u64>,
+
+    /// Base value (in e8s) used for the "8-year gang" dissolve delay bonus.
+    /// For neurons that had the maximum dissolve delay of 8 years before the
+    /// maximum dissolve delay was reduced, this is set to the total staked value
+    /// net of fees (including staked maturity) captured at the time of migration.
+    /// For all other neurons, this is 0.
+    pub eight_year_gang_bonus_base_e8s: Option<u64>,
 
     /// The maturity disbursements in progress for this neuron.
     pub maturity_disbursements_in_progress: Option<Vec<MaturityDisbursement>>,
@@ -4154,6 +4168,11 @@ pub enum NnsFunction {
     SetSubnetOperationalLevel = 55,
     /// The proposal requests to split a subnet.
     SplitSubnet = 56,
+    /// Delete a subnet. The subnet record, catch-up package, threshold signing key
+    /// and routing table entries are removed from the registry, and the subnet's
+    /// nodes become unassigned.
+    /// Currently limited to CloudEngine subnets.
+    DeleteSubnet = 57,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4238,6 +4257,7 @@ impl NnsFunction {
             NnsFunction::UnpauseCanisterMigrations => "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS",
             NnsFunction::SetSubnetOperationalLevel => "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL",
             NnsFunction::SplitSubnet => "NNS_FUNCTION_SPLIT_SUBNET",
+            NnsFunction::DeleteSubnet => "NNS_FUNCTION_DELETE_SUBNET",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4319,6 +4339,7 @@ impl NnsFunction {
             "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS" => Some(Self::UnpauseCanisterMigrations),
             "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL" => Some(Self::SetSubnetOperationalLevel),
             "NNS_FUNCTION_SPLIT_SUBNET" => Some(Self::SplitSubnet),
+            "NNS_FUNCTION_DELETE_SUBNET" => Some(Self::DeleteSubnet),
             _ => None,
         }
     }

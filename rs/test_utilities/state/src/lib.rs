@@ -42,7 +42,8 @@ use ic_types::{
     },
 };
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting,
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, NominalCycles,
+    NominalCyclesTesting,
 };
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
@@ -872,8 +873,8 @@ pub fn register_callback(
             call_context_id,
             respondent,
             Cycles::zero(),
-            Cycles::new(42),
-            Cycles::new(84),
+            CompoundCycles::new(Cycles::new(42), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::new(84), CanisterCyclesCostSchedule::Normal),
             WasmClosure::new(0, 2),
             WasmClosure::new(0, 2),
             None,

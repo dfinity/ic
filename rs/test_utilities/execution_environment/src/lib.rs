@@ -82,7 +82,8 @@ use ic_types::{
 };
 use ic_types::{ExecutionRound, RegistryVersion, ReplicaVersion};
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, NominalCycles,
+    CanisterCreation, CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase,
+    HTTPOutcalls, Instructions, NominalCycles, RequestAndResponseTransmission,
 };
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_SERIALIZED_MODULE, UNIVERSAL_CANISTER_WASM};
@@ -287,7 +288,7 @@ pub struct ExecutionTest {
     // The number of instructions executed so far per canister.
     executed_instructions: HashMap<CanisterId, NumInstructions>,
     // The total cost of execution so far per canister.
-    execution_cost: HashMap<CanisterId, Cycles>,
+    execution_cost: HashMap<CanisterId, CompoundCycles<Instructions>>,
     // Tracks paused subnet message executions per canister.
     // The value is reset when the execution finishes.
     paused_subnet_messages: HashMap<CanisterId, PausedSubnetMessage>,
@@ -436,10 +437,6 @@ impl ExecutionTest {
             .unwrap_or(&NumInstructions::new(0))
     }
 
-    pub fn execution_cost(&self) -> Cycles {
-        Cycles::new(self.execution_cost.values().map(|x| x.get()).sum())
-    }
-
     pub fn canister_snapshot_cost(&self, canister_id: CanisterId) -> Cycles {
         let canister = self.canister_state(canister_id);
         let new_snapshot_size = canister.snapshot_size_bytes();
@@ -451,11 +448,11 @@ impl ExecutionTest {
             .real()
     }
 
-    pub fn canister_execution_cost(&self, canister_id: CanisterId) -> Cycles {
+    pub fn canister_execution_cost(&self, canister_id: CanisterId) -> CompoundCycles<Instructions> {
         *self
             .execution_cost
             .get(&canister_id)
-            .unwrap_or(&Cycles::new(0))
+            .unwrap_or(&CompoundCycles::new(Cycles::new(0), self.cost_schedule()))
     }
 
     pub fn idle_cycles_burned_per_day(&self, canister_id: CanisterId) -> Cycles {
@@ -503,68 +500,64 @@ impl ExecutionTest {
         )
     }
 
-    pub fn call_fee<S: ToString>(&self, method_name: S, payload: &[u8]) -> Cycles {
-        let fee = self
-            .cycles_account_manager
+    pub fn call_fee<S: ToString>(
+        &self,
+        method_name: S,
+        payload: &[u8],
+    ) -> CompoundCycles<RequestAndResponseTransmission> {
+        self.cycles_account_manager
             .xnet_call_performed_fee(self.subnet_size(), self.cost_schedule())
             + self.cycles_account_manager.xnet_call_bytes_transmitted_fee(
                 NumBytes::from((payload.len() + method_name.to_string().len()) as u64),
                 self.subnet_size(),
                 self.cost_schedule(),
-            );
-        fee.real()
-    }
-
-    pub fn max_response_fee(&self) -> Cycles {
-        self.cycles_account_manager
-            .xnet_call_bytes_transmitted_fee(
-                MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
-                self.subnet_size(),
-                self.cost_schedule(),
             )
-            .real()
     }
 
-    pub fn reply_fee(&self, payload: &[u8]) -> Cycles {
-        self.cycles_account_manager
-            .xnet_call_bytes_transmitted_fee(
-                NumBytes::from(payload.len() as u64),
-                self.subnet_size(),
-                self.cost_schedule(),
-            )
-            .real()
+    pub fn max_response_fee(&self) -> CompoundCycles<RequestAndResponseTransmission> {
+        self.cycles_account_manager.xnet_call_bytes_transmitted_fee(
+            MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+            self.subnet_size(),
+            self.cost_schedule(),
+        )
     }
 
-    pub fn reject_fee<S: ToString>(&self, reject_message: S) -> Cycles {
+    pub fn reply_fee(&self, payload: &[u8]) -> CompoundCycles<RequestAndResponseTransmission> {
+        self.cycles_account_manager.xnet_call_bytes_transmitted_fee(
+            NumBytes::from(payload.len() as u64),
+            self.subnet_size(),
+            self.cost_schedule(),
+        )
+    }
+
+    pub fn reject_fee<S: ToString>(
+        &self,
+        reject_message: S,
+    ) -> CompoundCycles<RequestAndResponseTransmission> {
         let bytes = reject_message.to_string().len() + std::mem::size_of::<RejectCode>();
-        self.cycles_account_manager
-            .xnet_call_bytes_transmitted_fee(
-                NumBytes::from(bytes as u64),
-                self.subnet_size(),
-                self.cost_schedule(),
-            )
-            .real()
+        self.cycles_account_manager.xnet_call_bytes_transmitted_fee(
+            NumBytes::from(bytes as u64),
+            self.subnet_size(),
+            self.cost_schedule(),
+        )
     }
 
-    pub fn canister_creation_fee(&self) -> Cycles {
+    pub fn canister_creation_fee(&self) -> CompoundCycles<CanisterCreation> {
         self.cycles_account_manager
             .canister_creation_fee(self.subnet_size(), self.cost_schedule())
-            .real()
     }
 
     pub fn http_request_fee(
         &self,
         request_size: NumBytes,
         response_size_limit: Option<NumBytes>,
-    ) -> Cycles {
-        self.cycles_account_manager
-            .http_request_fee(
-                request_size,
-                response_size_limit,
-                self.subnet_size(),
-                self.cost_schedule(),
-            )
-            .real()
+    ) -> CompoundCycles<HTTPOutcalls> {
+        self.cycles_account_manager.http_request_fee(
+            request_size,
+            response_size_limit,
+            self.subnet_size(),
+            self.cost_schedule(),
+        )
     }
 
     pub fn reduced_wasm_compilation_fee(&self, wasm: &[u8]) -> Cycles {
@@ -1354,6 +1347,7 @@ impl ExecutionTest {
                 user_id: self.user_id,
                 ingress_expiry: 0,
                 nonce: None,
+                sender_info: None,
             },
             receiver: canister_id,
             method_name: method_name.to_string(),
@@ -2013,7 +2007,7 @@ impl ExecutionTest {
         *self
             .execution_cost
             .entry(canister_id)
-            .or_insert(Cycles::new(0)) += instruction_cost.real();
+            .or_insert(CompoundCycles::new(Cycles::new(0), cost_schedule)) += instruction_cost;
     }
 
     /// Inducts messages between canisters and pushes all cross-net messages to

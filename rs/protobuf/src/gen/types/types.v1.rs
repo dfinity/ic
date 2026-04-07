@@ -578,6 +578,8 @@ pub struct CanisterHttpResponseMetadata {
     pub registry_version: u64,
     #[prost(string, tag = "5")]
     pub replica_version: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "6")]
+    pub content_size: u32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseContent {
@@ -620,6 +622,8 @@ pub struct CanisterHttpResponseWithConsensus {
     pub replica_version: ::prost::alloc::string::String,
     #[prost(message, repeated, tag = "7")]
     pub signatures: ::prost::alloc::vec::Vec<CanisterHttpResponseSignature>,
+    #[prost(uint32, tag = "9")]
+    pub content_size: u32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpShare {
@@ -647,11 +651,42 @@ pub struct FlexibleCanisterHttpResponses {
     #[prost(message, repeated, tag = "2")]
     pub responses: ::prost::alloc::vec::Vec<FlexibleCanisterHttpResponseWithProof>,
 }
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct FlexibleCanisterHttpTimeout {}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FlexibleCanisterHttpResponsesTooLarge {
+    #[prost(message, repeated, tag = "1")]
+    pub metadata_shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FlexibleCanisterHttpTooManyRequestErrors {
+    #[prost(message, repeated, tag = "1")]
+    pub reject_responses: ::prost::alloc::vec::Vec<FlexibleCanisterHttpResponseWithProof>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FlexibleCanisterHttpError {
+    #[prost(uint64, tag = "1")]
+    pub callback_id: u64,
+    #[prost(oneof = "flexible_canister_http_error::ErrorDetails", tags = "2, 3, 4")]
+    pub error_details: ::core::option::Option<flexible_canister_http_error::ErrorDetails>,
+}
+/// Nested message and enum types in `FlexibleCanisterHttpError`.
+pub mod flexible_canister_http_error {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum ErrorDetails {
+        #[prost(message, tag = "2")]
+        Timeout(super::FlexibleCanisterHttpTimeout),
+        #[prost(message, tag = "3")]
+        ResponsesTooLarge(super::FlexibleCanisterHttpResponsesTooLarge),
+        #[prost(message, tag = "4")]
+        TooManyRequestErrors(super::FlexibleCanisterHttpTooManyRequestErrors),
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseMessage {
     #[prost(
         oneof = "canister_http_response_message::MessageType",
-        tags = "1, 2, 3, 4"
+        tags = "1, 2, 3, 4, 5"
     )]
     pub message_type: ::core::option::Option<canister_http_response_message::MessageType>,
 }
@@ -667,6 +702,8 @@ pub mod canister_http_response_message {
         DivergenceResponse(super::CanisterHttpResponseDivergence),
         #[prost(message, tag = "4")]
         FlexibleResponses(super::FlexibleCanisterHttpResponses),
+        #[prost(message, tag = "5")]
+        FlexibleError(super::FlexibleCanisterHttpError),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]

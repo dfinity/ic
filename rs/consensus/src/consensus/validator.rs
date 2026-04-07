@@ -29,8 +29,9 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateHashError, StateManager};
-use ic_logger::{ReplicaLogger, info, trace, warn};
+use ic_logger::{ReplicaLogger, trace, warn};
 use ic_metrics::MetricsRegistry;
+use ic_registry_client_helpers::node::NodeRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     Height, NodeId, RegistryVersion, SubnetId,
@@ -332,19 +333,30 @@ impl SignatureVerify for CatchUpPackage {
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
         _pool: &PoolReader<'_>,
-        _cfg: &ReplicaConfig,
+        cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
+        let cup_registry_version = self.content.registry_version();
+
+        let registry_subnet_id = membership
+            .registry_client
+            .get_subnet_id_from_node_id(cfg.node_id, cup_registry_version)
+            .map_err(ValidationFailure::RegistryClientError)?;
+
+        if registry_subnet_id.is_some_and(|subnet_id| subnet_id != membership.subnet_id) {
+            return Err(ValidationError::ValidationFailed(
+                ValidationFailure::SubnetSplittingError(format!(
+                    "Wrong subnet id in the CUP: {registry_subnet_id:?} != {}",
+                    membership.subnet_id,
+                )),
+            ));
+        }
+
         crypto
             .verify_combined_threshold_sig_by_public_key(
                 &self.signature.signature,
                 &self.content,
                 membership.subnet_id,
-                // Using any registry version here is fine because we assume that the
-                // public key of the subnet will not change. The alternative of trying
-                // to use the registry version obtained from the pool is not an option
-                // here because we may not be able to get a proper value if we do not
-                // have the relevant portion of the chain.
-                membership.registry_client.get_latest_version(),
+                cup_registry_version,
             )
             .map_err(ValidatorError::from)
     }
@@ -1755,10 +1767,6 @@ impl Validator {
             CatchUpPackageType::PostSplit { new_subnet_id }
                 if dkg_summary.get_next_start_height() == share_height =>
             {
-                info!(
-                    self.log,
-                    "Validating post-split cup share at height {share_height}"
-                );
                 let post_split_block = catchup_package_maker::create_post_split_summary_block(
                     &dkg_summary_block,
                     new_subnet_id,

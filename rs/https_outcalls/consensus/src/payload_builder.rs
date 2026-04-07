@@ -5,7 +5,8 @@ use crate::{
     payload_builder::{
         parse::bytes_to_payload,
         utils::{
-            find_flexible_responses, find_fully_replicated_response, find_non_replicated_response,
+            estimate_response_with_consensus_size, find_flexible_responses,
+            find_fully_replicated_response, find_non_replicated_response,
             group_shares_by_callback_id, grouped_shares_meet_divergence_criteria,
         },
     },
@@ -43,8 +44,7 @@ use ic_types::{
     canister_http::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
         CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
-        CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseWithConsensus,
-        Replication,
+        CanisterHttpResponseMetadata, CanisterHttpResponseWithConsensus, Replication,
     },
     consensus::Committee,
     crypto::{Signed, crypto_hash},
@@ -54,7 +54,6 @@ use ic_types::{
 };
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
-    mem::size_of,
     sync::{Arc, RwLock},
 };
 
@@ -289,7 +288,7 @@ impl CanisterHttpPayloadBuilderImpl {
                             find_fully_replicated_response(grouped_shares, threshold, &*pool_access)
                         {
                             let candidate_size =
-                                size_of::<CanisterHttpResponseProof>() + content.count_bytes();
+                                estimate_response_with_consensus_size(&metadata, &shares, &content);
                             let size = NumBytes::new((accumulated_size + candidate_size) as u64);
                             if size < max_payload_size {
                                 candidates.push((metadata, shares, content));
@@ -323,7 +322,7 @@ impl CanisterHttpPayloadBuilderImpl {
                             &*pool_access,
                         ) {
                             let candidate_size =
-                                size_of::<CanisterHttpResponseProof>() + content.count_bytes();
+                                estimate_response_with_consensus_size(&metadata, &shares, &content);
                             let size = NumBytes::new((accumulated_size + candidate_size) as u64);
                             if size < max_payload_size {
                                 candidates.push((metadata, shares, content));
@@ -366,6 +365,7 @@ impl CanisterHttpPayloadBuilderImpl {
             timeouts,
             divergence_responses,
             flexible_responses,
+            flexible_errors: vec![],
         }
     }
 
@@ -705,6 +705,17 @@ impl CanisterHttpPayloadBuilderImpl {
                         InvalidCanisterHttpPayloadReason::ContentHashMismatch {
                             metadata_hash: entry.proof.content.content_hash.clone(),
                             calculated_hash,
+                        },
+                    );
+                }
+
+                // Content size must match
+                let calculated_size = entry.response.content.count_bytes() as u32;
+                if calculated_size != entry.proof.content.content_size {
+                    return invalid_artifact(
+                        InvalidCanisterHttpPayloadReason::ContentSizeMismatch {
+                            metadata_size: entry.proof.content.content_size,
+                            calculated_size,
                         },
                     );
                 }

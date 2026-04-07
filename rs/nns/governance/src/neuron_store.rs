@@ -3,7 +3,10 @@ use crate::{
     governance::{LOG_PREFIX, TimeWarp},
     neuron::types::Neuron,
     neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
-    pb::v1::{GovernanceError, Topic, VotingPowerEconomics, governance_error::ErrorType},
+    pb::v1::{
+        GovernanceError, NeuronDissolveStateSnapshot, Topic, VotingPowerEconomics,
+        governance_error::ErrorType,
+    },
     storage::{
         neuron_indexes::CorruptedNeuronIndexes, neurons::NeuronSections,
         with_stable_neuron_indexes, with_stable_neuron_indexes_mut, with_stable_neuron_store,
@@ -778,6 +781,15 @@ impl NeuronStore {
         with_stable_neuron_store_mut(|stable_neuron_store| {
             stable_neuron_store.set_eight_year_gang_bonus_base_e8s_for_all_neurons_or_panic();
         });
+    }
+
+    pub fn clamp_dissolve_delay_for_all_neurons_or_panic(
+        &mut self,
+        now_seconds: u64,
+    ) -> HashMap<u64, NeuronDissolveStateSnapshot> {
+        with_stable_neuron_store_mut(|stable_neuron_store| {
+            stable_neuron_store.clamp_dissolve_delay_for_all_neurons_or_panic(now_seconds)
+        })
     }
 
     // Below are indexes related methods. They don't have a unified interface yet, but NNS1-2507 will change that.

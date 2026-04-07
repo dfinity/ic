@@ -214,6 +214,20 @@ impl CatchUpPackageProvider {
         registry_version: RegistryVersion,
         current_cup: Option<&pb::CatchUpPackage>,
     ) -> Option<pb::CatchUpPackage> {
+        let subnet_id = self
+            .registry
+            .get_subnet_id_from_node_id(self.node_id, registry_version)
+            .unwrap_or_default()
+            .inspect(|new_subnet_id| {
+                if *new_subnet_id != subnet_id {
+                    info!(
+                        self.logger,
+                        "Subnet assignment changed from {subnet_id} to {new_subnet_id}"
+                    )
+                }
+            })
+            .unwrap_or(subnet_id);
+
         let peers = self.select_peers(subnet_id, registry_version, current_cup);
 
         if peers.is_empty() {

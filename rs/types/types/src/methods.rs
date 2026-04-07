@@ -9,7 +9,10 @@ use ic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::{canister_state_bits::v1 as pb, queues::v1::Cycles as PbCycles};
 use ic_protobuf::types::v1 as pb_types;
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, Instructions,
+    RequestAndResponseTransmission,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     convert::{From, TryFrom},
@@ -276,11 +279,11 @@ pub struct Callback {
     /// Cycles prepaid by the caller for response execution.
     ///
     /// `Cycles::zero()` if the `Callback` was created before February 2022.
-    pub prepayment_for_response_execution: Cycles,
+    pub prepayment_for_response_execution: CompoundCycles<Instructions>,
     /// Cycles prepaid by the caller for response transimission.
     ///
     /// `Cycles::zero()` if the `Callback` was created before February 2022.
-    pub prepayment_for_response_transmission: Cycles,
+    pub prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
     /// A closure to be executed if the call succeeded.
     pub on_reply: WasmClosure,
     /// A closure to be executed if the call was rejected.
@@ -297,8 +300,8 @@ impl Callback {
         call_context_id: CallContextId,
         respondent: CanisterId,
         cycles_sent: Cycles,
-        prepayment_for_response_execution: Cycles,
-        prepayment_for_response_transmission: Cycles,
+        prepayment_for_response_execution: CompoundCycles<Instructions>,
+        prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
         on_reply: WasmClosure,
         on_reject: WasmClosure,
         on_cleanup: Option<WasmClosure>,
@@ -324,8 +327,16 @@ impl From<&Callback> for pb::Callback {
             call_context_id: item.call_context_id.get(),
             respondent: Some(pb_types::CanisterId::from(item.respondent)),
             cycles_sent: Some(item.cycles_sent.into()),
-            prepayment_for_response_execution: Some(item.prepayment_for_response_execution.into()),
+            prepayment_for_response_execution: Some(
+                item.prepayment_for_response_execution.real().into(),
+            ),
             prepayment_for_response_transmission: Some(
+                item.prepayment_for_response_transmission.real().into(),
+            ),
+            prepayment_for_response_execution_compound: Some(
+                item.prepayment_for_response_execution.into(),
+            ),
+            prepayment_for_response_transmission_compound: Some(
                 item.prepayment_for_response_transmission.into(),
             ),
             on_reply: Some(pb::WasmClosure {
@@ -356,14 +367,36 @@ impl TryFrom<pb::Callback> for Callback {
         let cycles_sent: PbCycles =
             try_from_option_field(value.cycles_sent, "Callback::cycles_sent")?;
 
-        let prepayment_for_response_execution = try_from_option_field(
-            value.prepayment_for_response_execution,
-            "Callback::prepayment_for_response_execution",
-        )?;
-        let prepayment_for_response_transmission = try_from_option_field(
-            value.prepayment_for_response_transmission,
-            "Callback::prepayment_for_response_transmission",
-        )?;
+        // cost_schedule should ideally be read from the checkpoint, however there
+        // is no easy access to it here (will need to be propagated from `StateManager`).
+        // Given that the current state is that the values for `Cycles` and `NominalCycles`
+        // should still match and that they should be 0 on `Free` schedule, we can use `Normal`
+        // without any loss (to maintain values on subnets with `Normal` schedule).
+        // This code will be removed anyway when the new fields are set and the old fields
+        // containing just `Cycles` can be retired.
+        let cost_schedule = CanisterCyclesCostSchedule::Normal;
+        let prepayment_for_response_execution =
+            match value.prepayment_for_response_execution_compound {
+                Some(value) => CompoundCycles::try_from(value)?,
+                None => CompoundCycles::new(
+                    try_from_option_field(
+                        value.prepayment_for_response_execution,
+                        "Callback::prepayment_for_response_execution",
+                    )?,
+                    cost_schedule,
+                ),
+            };
+        let prepayment_for_response_transmission =
+            match value.prepayment_for_response_transmission_compound {
+                Some(value) => CompoundCycles::try_from(value)?,
+                None => CompoundCycles::new(
+                    try_from_option_field(
+                        value.prepayment_for_response_transmission,
+                        "Callback::prepayment_for_response_transmission",
+                    )?,
+                    cost_schedule,
+                ),
+            };
 
         Ok(Self {
             call_context_id: CallContextId::from(value.call_context_id),

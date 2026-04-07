@@ -350,8 +350,20 @@ impl Upgrade {
             self.node_id,
             subnet_id,
             &latest_cup,
-        ) {
+        )
+        .map_err(|err| {
+            OrchestratorError::UpgradeError(format!("Failed to determine unassignment: {err}"))
+        })? {
             UnassignmentDecision::StayInSubnet => OrchestratorControlFlow::Assigned(subnet_id),
+            UnassignmentDecision::ChangeSubnet { new_subnet_id } => {
+                info!(
+                    self.logger,
+                    "Changing subnet from {subnet_id} to {new_subnet_id}"
+                );
+                self.stop_replica()?;
+                self.ensure_replica_is_running(&self.replica_version, new_subnet_id)?;
+                return Ok(OrchestratorControlFlow::Assigned(new_subnet_id));
+            }
             UnassignmentDecision::Later => OrchestratorControlFlow::Leaving(subnet_id),
             UnassignmentDecision::Now => {
                 // We are no longer part of the subnet.
@@ -805,6 +817,9 @@ enum UnassignmentDecision {
     /// This means that the node is participating in consensus and
     /// there are no requests for this node to leave.
     StayInSubnet,
+    ChangeSubnet {
+        new_subnet_id: SubnetId,
+    },
 }
 
 /// Checks if the node still belongs to the subnet it was assigned the last time.
@@ -817,34 +832,40 @@ fn should_node_become_unassigned(
     node_id: NodeId,
     subnet_id: SubnetId,
     cup: &CatchUpPackage,
-) -> UnassignmentDecision {
+) -> Result<UnassignmentDecision, String> {
     let oldest_relevant_version = cup.get_oldest_registry_version_in_use().get();
     let latest_registry_version = latest_registry_version.get();
     // Make sure that if the latest registry version is for some reason violating
     // the assumption that it's higher/equal than any other version used in the
     // system, we still do not remove the subnet state by a mistake.
     if latest_registry_version < oldest_relevant_version {
-        return UnassignmentDecision::StayInSubnet;
+        return Ok(UnassignmentDecision::StayInSubnet);
     }
 
     if let Ok(true) =
         registry.is_subnet_deleted(subnet_id, RegistryVersion::from(latest_registry_version))
     {
-        return UnassignmentDecision::Now;
+        return Ok(UnassignmentDecision::Now);
     }
 
     // If the node is at the latest registry version in a subnet it shouldn't be unassigned.
     if node_is_in_subnet_at_version(registry, node_id, subnet_id, latest_registry_version) {
-        return UnassignmentDecision::StayInSubnet;
+        return Ok(UnassignmentDecision::StayInSubnet);
+    }
+
+    let new_subnet_id = get_subnet_id(registry, cup)
+        .map_err(|err| format!("Failed to get the subnet id from the cup: {err}"))?;
+    if new_subnet_id != subnet_id {
+        return Ok(UnassignmentDecision::ChangeSubnet { new_subnet_id });
     }
 
     for version in oldest_relevant_version..latest_registry_version {
         if node_is_in_subnet_at_version(registry, node_id, subnet_id, version) {
-            return UnassignmentDecision::Later;
+            return Ok(UnassignmentDecision::Later);
         }
     }
 
-    UnassignmentDecision::Now
+    Ok(UnassignmentDecision::Now)
 }
 
 /// Checks if the given node belongs to the given subnet at the given registry version, by looking
@@ -3292,7 +3313,9 @@ mod tests {
 
             let mut setup = Setup::new_with_nidkg_registry_version(Some(oldest_relevant_version));
             let key_transcript = setup.generate_key_transcript(&key_id);
-            let cup = make_cup_with_key_transcript(Height::from(15), Some(key_transcript));
+            let mut cup = make_cup_with_key_transcript(Height::from(15), Some(key_transcript));
+            cup.signature.signer.target_subnet = NiDkgTargetSubnet::Local;
+            cup.signature.signer.dealer_subnet = subnet_id;
 
             println!(
                 "Use-case: {oldest_relevant_version}, {node_in_subnet:?}, {expected_decision:?}"
@@ -3322,7 +3345,8 @@ mod tests {
                 node_id,
                 subnet_id,
                 &cup,
-            );
+            )
+            .expect("Shouldn succeed");
 
             assert!(
                 response == expected_decision,
@@ -3361,7 +3385,8 @@ mod tests {
             node_id,
             subnet_id,
             &cup,
-        );
+        )
+        .expect("Should succeed");
 
         assert_eq!(response, UnassignmentDecision::Now);
     }

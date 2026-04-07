@@ -2955,6 +2955,42 @@ pub struct LoadCanisterSnapshot {
     #[prost(bytes = "vec", tag = "2")]
     pub snapshot_id: ::prost::alloc::vec::Vec<u8>,
 }
+/// Snapshot of a neuron's dissolve state, recorded before clamping to the
+/// Mission 70 maximum. Used to restore the original dissolve state if the
+/// maximum dissolve delay is ever increased again.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct NeuronDissolveStateSnapshot {
+    #[prost(oneof = "neuron_dissolve_state_snapshot::DissolveState", tags = "1, 2")]
+    pub dissolve_state: ::core::option::Option<neuron_dissolve_state_snapshot::DissolveState>,
+}
+/// Nested message and enum types in `NeuronDissolveStateSnapshot`.
+pub mod neuron_dissolve_state_snapshot {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum DissolveState {
+        #[prost(uint64, tag = "1")]
+        DissolveDelaySeconds(u64),
+        #[prost(uint64, tag = "2")]
+        WhenDissolvedTimestampSeconds(u64),
+    }
+}
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
 /// across upgrades of the NNS governance system.
@@ -3078,6 +3114,11 @@ pub struct Governance {
     /// This prevents the migration from running more than once.
     #[prost(bool, tag = "31")]
     pub eight_year_gang_bonus_migration_done: bool,
+    /// Snapshot of each neuron's dissolve state taken while clamping to the Mission 70 maximum
+    /// dissolve delay. Enables restoring original dissolve states if the maximum is reversed.
+    #[prost(map = "uint64, message", tag = "32")]
+    pub neuron_id_to_pre_clamp_dissolve_state:
+        ::std::collections::HashMap<u64, NeuronDissolveStateSnapshot>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -5014,6 +5055,11 @@ pub enum NnsFunction {
     SetSubnetOperationalLevel = 55,
     /// The proposal requests to split a subnet.
     SplitSubnet = 56,
+    /// Delete a subnet. The subnet record, catch-up package, threshold signing key
+    /// and routing table entries are removed from the registry, and the subnet's
+    /// nodes become unassigned.
+    /// Currently limited to CloudEngine subnets.
+    DeleteSubnet = 57,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -5088,6 +5134,7 @@ impl NnsFunction {
             Self::UnpauseCanisterMigrations => "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS",
             Self::SetSubnetOperationalLevel => "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL",
             Self::SplitSubnet => "NNS_FUNCTION_SPLIT_SUBNET",
+            Self::DeleteSubnet => "NNS_FUNCTION_DELETE_SUBNET",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -5169,6 +5216,7 @@ impl NnsFunction {
             "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS" => Some(Self::UnpauseCanisterMigrations),
             "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL" => Some(Self::SetSubnetOperationalLevel),
             "NNS_FUNCTION_SPLIT_SUBNET" => Some(Self::SplitSubnet),
+            "NNS_FUNCTION_DELETE_SUBNET" => Some(Self::DeleteSubnet),
             _ => None,
         }
     }
