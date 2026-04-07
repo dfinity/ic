@@ -2567,6 +2567,7 @@ fn wasm64_reject_msg_copy() {
         call_context_test_id(13),
         false,
         NumInstructions::new(700),
+        None,
     );
 
     let config = ic_config::embedders::Config::default();
@@ -3088,6 +3089,7 @@ fn wasm64_msg_cycles_refunded128() {
         call_context_test_id(13),
         false,
         NumInstructions::new(700),
+        None,
     );
 
     let config = ic_config::embedders::Config::default();
