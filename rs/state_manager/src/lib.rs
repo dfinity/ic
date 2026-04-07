@@ -3406,7 +3406,7 @@ impl StateManager for StateManagerImpl {
             CertificationScope::Metadata => Arc::new(state),
         };
 
-        // Kick off hashing of the new state. This will also compare the result with the 
+        // Kick off hashing of the new state. This will also compare the result with the
         // delivered hash, if present, in order to detect divergence.
         let hash_req = HashRequest::HashState {
             state: Arc::clone(&state),
@@ -3593,13 +3593,12 @@ fn spawn_hash_thread(
                                             log,
                                             "Failed to mark state @{} diverged: {}", height, err
                                         );
-                                    }   
+                                    }
                                     panic!(
                                         "Committed state @{height} with hash {hash:?} which is different from {msg} hash {prev_hash:?}"
                                     );
                                 }
                             };
-                            
                             // If a reference hash from consensus is available, check if we agree.
                             if let Some(ref cert) = *reference_certification {
                                 let delivered_hash = cert.signed.content.hash.as_ref();
