@@ -115,6 +115,7 @@ fn replicated_query_api() -> ApiType {
         vec![],
         user_test_id(1).get(),
         call_context_test_id(1),
+        None,
     )
 }
 
@@ -159,6 +160,7 @@ fn cleanup_api() -> ApiType {
         time: UNIX_EPOCH,
         reject_code: 0,
         call_context_instructions_executed: 0.into(),
+        sender_info: None,
     }
 }
 
@@ -167,11 +169,18 @@ fn composite_cleanup_api() -> ApiType {
         caller: PrincipalId::new_anonymous(),
         time: UNIX_EPOCH,
         call_context_instructions_executed: 0.into(),
+        sender_info: None,
     }
 }
 
 fn inspect_message_api() -> ApiType {
-    ApiType::inspect_message(user_test_id(1).get(), "".to_string(), vec![], UNIX_EPOCH)
+    ApiType::inspect_message(
+        user_test_id(1).get(),
+        "".to_string(),
+        vec![],
+        UNIX_EPOCH,
+        None,
+    )
 }
 
 fn system_task_api() -> ApiType {
@@ -1250,6 +1259,7 @@ fn data_certificate_copy() {
             subnet_test_id(1),
             vec![],
             Some(vec![1, 2, 3, 4, 5, 6]),
+            None,
         ),
         &system_state,
         cycles_account_manager,

@@ -22,7 +22,7 @@ use ic_sys::PAGE_SIZE;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterMessage, CanisterMessageOrTask, Payload, RequestMetadata,
-    Response,
+    Response, SenderInfo,
 };
 use ic_types::methods::{Callback, FuncRef, WasmClosure};
 use ic_types::{NumBytes, NumInstructions, Time};
@@ -681,6 +681,9 @@ struct OriginalContext {
     instructions_executed: NumInstructions,
     log_dirty_pages: FlagStatus,
     cost_schedule: CanisterCyclesCostSchedule,
+    /// Sender info from the ingress message that created the call context.
+    /// `None` for call contexts created by inter-canister calls.
+    sender_info: Option<SenderInfo>,
 }
 
 fn is_composite_query(origin: &CallOrigin) -> bool {
@@ -970,6 +973,7 @@ pub fn execute_response(
         instructions_executed: call_context.instructions_executed(),
         log_dirty_pages,
         cost_schedule: round.cost_schedule,
+        sender_info: call_context.sender_info().cloned(),
     };
 
     let mut helper = ResponseHelper::new(
@@ -1019,6 +1023,7 @@ pub fn execute_response(
             call_context_id,
             call_context.has_responded(),
             call_context.instructions_executed(),
+            call_context.sender_info().cloned(),
         ),
     };
 
@@ -1103,6 +1108,7 @@ fn execute_response_cleanup(
             time: original.time,
             reject_code,
             call_context_instructions_executed: original.instructions_executed,
+            sender_info: original.sender_info.clone(),
         },
         helper.canister().execution_state.as_ref().unwrap(),
         &helper.canister().system_state,

@@ -165,6 +165,7 @@ pub fn execute_call_or_task(
             msg.method_payload().to_vec(),
             *msg.sender(),
             helper.call_context_id(),
+            msg.sender_info().cloned(),
         ),
         CanisterCallOrTask::Task(CanisterTask::Heartbeat) => ApiType::system_task(
             SystemMethod::CanisterHeartbeat,

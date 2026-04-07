@@ -111,6 +111,7 @@ impl ApiTypeBuilder {
             vec![],
             user_test_id(1).get(),
             CallContextId::new(1),
+            None,
         )
     }
 
@@ -121,6 +122,7 @@ impl ApiTypeBuilder {
             subnet_test_id(1),
             vec![],
             Some(vec![1]),
+            None,
         )
     }
 
@@ -132,6 +134,7 @@ impl ApiTypeBuilder {
             vec![],
             Some(vec![1]),
             CallContextId::from(1),
+            None,
         )
     }
 
@@ -157,6 +160,7 @@ impl ApiTypeBuilder {
             CallContextId::new(1),
             false,
             0.into(),
+            None,
         )
     }
 
@@ -169,6 +173,7 @@ impl ApiTypeBuilder {
             call_context_test_id(1),
             false,
             0.into(),
+            None,
         )
     }
 
@@ -181,6 +186,7 @@ impl ApiTypeBuilder {
             call_context_test_id(1),
             false,
             0.into(),
+            None,
         )
     }
 
@@ -190,6 +196,7 @@ impl ApiTypeBuilder {
             "test".to_string(),
             vec![],
             UNIX_EPOCH,
+            None,
         )
     }
 

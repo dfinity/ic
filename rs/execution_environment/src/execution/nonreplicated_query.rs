@@ -76,6 +76,7 @@ pub fn execute_non_replicated_query(
                 hypervisor.subnet_id(),
                 payload.to_vec(),
                 data_certificate,
+                None,
             ),
             None,
         ),
@@ -104,6 +105,7 @@ pub fn execute_non_replicated_query(
                     payload.to_vec(),
                     data_certificate,
                     call_context_id,
+                    None,
                 ),
                 Some(call_context_id),
             )

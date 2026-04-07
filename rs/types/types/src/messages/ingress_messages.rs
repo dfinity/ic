@@ -145,6 +145,16 @@ impl HttpRequestContent for SignedIngressContent {
     }
 }
 
+impl SignedIngressContent {
+    /// Returns the sender info as a validated `SenderInfo` (without the signature).
+    pub fn as_sender_info(&self) -> Option<SenderInfo> {
+        self.sender_info.as_ref().map(|si| SenderInfo {
+            info: si.info.clone(),
+            signer: si.signer,
+        })
+    }
+}
+
 impl TryFrom<HttpCanisterUpdate> for SignedIngressContent {
     type Error = HttpRequestError;
 
