@@ -2689,6 +2689,7 @@ impl ExecutionEnvironment {
             state.resource_limits(),
         );
         let time = state.time();
+        let expected_compiled_wasms = Arc::clone(&state.metadata.expected_compiled_wasms);
         let result = self.canister_manager.load_canister_snapshot(
             subnet_size,
             cost_schedule,
@@ -2696,7 +2697,7 @@ impl ExecutionEnvironment {
             Arc::make_mut(&mut canister),
             snapshot_canister,
             snapshot_id,
-            state,
+            expected_compiled_wasms,
             round_limits,
             instruction_limits,
             origin,

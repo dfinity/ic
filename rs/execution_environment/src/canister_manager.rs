@@ -2258,7 +2258,7 @@ impl CanisterManager {
         canister: &mut CanisterState,
         snapshot_canister: Arc<CanisterState>,
         snapshot_id: SnapshotId,
-        state: &mut ReplicatedState,
+        expected_compiled_wasms: Arc<BTreeSet<WasmHash>>,
         round_limits: &mut RoundLimits,
         instruction_limits: InstructionLimits,
         origin: CanisterChangeOrigin,
@@ -2349,11 +2349,7 @@ impl CanisterManager {
 
         let new_execution_state = {
             let new_wasm_hash = WasmHash::from(&execution_snapshot.wasm_binary);
-            let compilation_cost_handling = if state
-                .metadata
-                .expected_compiled_wasms
-                .contains(&new_wasm_hash)
-            {
+            let compilation_cost_handling = if expected_compiled_wasms.contains(&new_wasm_hash) {
                 CompilationCostHandling::CountReducedAmount
             } else {
                 CompilationCostHandling::CountFullAmount
