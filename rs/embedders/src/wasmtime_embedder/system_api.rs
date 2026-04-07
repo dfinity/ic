@@ -286,7 +286,6 @@ pub enum ApiType {
         response_status: ResponseStatus,
         max_reply_size: NumBytes,
         /// Sender info from the ingress message that invoked this method.
-        /// `None` for inter-canister query calls.
         sender_info: Option<SenderInfo>,
     },
 
@@ -306,7 +305,6 @@ pub enum ApiType {
         call_context_id: CallContextId,
         outgoing_request: Option<RequestInPrep>,
         /// Sender info from the ingress message that invoked this method.
-        /// `None` for inter-canister composite query calls.
         sender_info: Option<SenderInfo>,
     },
 
@@ -352,7 +350,6 @@ pub enum ApiType {
         /// The total number of instructions executed in the call context
         call_context_instructions_executed: NumInstructions,
         /// Sender info from the ingress message that created the call context.
-        /// `None` for call contexts created by inter-canister calls.
         sender_info: Option<SenderInfo>,
     },
 
@@ -396,7 +393,6 @@ pub enum ApiType {
         /// The total number of instructions executed in the call context
         call_context_instructions_executed: NumInstructions,
         /// Sender info from the ingress message that created the call context.
-        /// `None` for call contexts created by inter-canister calls.
         sender_info: Option<SenderInfo>,
     },
 
@@ -457,7 +453,6 @@ pub enum ApiType {
         /// The total number of instructions executed in the call context
         call_context_instructions_executed: NumInstructions,
         /// Sender info from the ingress message that created the call context.
-        /// `None` for call contexts created by inter-canister calls.
         sender_info: Option<SenderInfo>,
     },
 }

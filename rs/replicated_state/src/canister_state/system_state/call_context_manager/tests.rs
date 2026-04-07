@@ -357,6 +357,10 @@ fn test_call_context_instructions_executed_is_updated() {
 fn call_context_roundtrip_encoding() {
     use ic_protobuf::state::canister_state_bits::v1 as pb;
 
+    let sender_info = SenderInfo {
+        info: vec![42, 43, 44],
+        signer: CanisterId::try_from(&[42_u8; 29][..]).unwrap(),
+    };
     let minimal_call_context = CallContext::new(
         CallOrigin::Ingress(user_test_id(1), message_test_id(2), String::from("")),
         false,
@@ -364,7 +368,7 @@ fn call_context_roundtrip_encoding() {
         Cycles::zero(),
         UNIX_EPOCH,
         Default::default(),
-        None,
+        Some(sender_info.clone()),
     );
     let maximal_call_context = CallContext::new(
         CallOrigin::Ingress(user_test_id(1), message_test_id(2), String::from("")),
@@ -373,7 +377,7 @@ fn call_context_roundtrip_encoding() {
         Cycles::new(3),
         Time::from_nanos_since_unix_epoch(4),
         RequestMetadata::new(5, Time::from_nanos_since_unix_epoch(6)),
-        None,
+        Some(sender_info.clone()),
     );
 
     for call_context in [minimal_call_context, maximal_call_context] {
@@ -700,12 +704,16 @@ fn roundtrip_encode() {
     let deadline_2 = CoarseTime::from_secs_since_unix_epoch(2);
 
     // Create a new call context.
+    let sender_info = SenderInfo {
+        info: vec![42, 43, 44],
+        signer: CanisterId::try_from(&[42_u8; 29][..]).unwrap(),
+    };
     let call_context_id = ccm.new_call_context(
         CallOrigin::CanisterUpdate(other, CallbackId::new(13), NO_DEADLINE, String::from("")),
         Cycles::new(30),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
-        None,
+        Some(sender_info),
     );
 
     // Register two best-effort and one guaranteed response callbacks.
