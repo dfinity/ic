@@ -93,6 +93,7 @@ impl ApiTypeBuilder {
             Cycles::zero(),
             user_test_id(1).get(),
             CallContextId::from(1),
+            None,
         )
     }
 
@@ -143,6 +144,7 @@ impl ApiTypeBuilder {
             CallContextId::new(1),
             false,
             0.into(),
+            None,
         )
     }
 
@@ -260,6 +262,7 @@ pub fn get_system_state() -> SystemState {
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
     system_state

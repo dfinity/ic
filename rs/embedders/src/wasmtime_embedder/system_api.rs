@@ -24,7 +24,9 @@ use ic_types::{
     CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, MemoryAllocation, NumBytes,
     NumInstructions, NumOsPages, PrincipalId, SubnetId, Time,
     ingress::WasmResult,
-    messages::{CallContextId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, RejectContext, Request},
+    messages::{
+        CallContextId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, RejectContext, Request, SenderInfo,
+    },
     methods::{SystemMethod, WasmClosure},
 };
 use ic_types_cycles::{
@@ -249,6 +251,9 @@ pub enum ApiType {
         /// request is currently under construction.
         outgoing_request: Option<RequestInPrep>,
         max_reply_size: NumBytes,
+        /// Sender info from the ingress message that invoked this method.
+        /// `None` for inter-canister update calls.
+        sender_info: Option<SenderInfo>,
     },
 
     // For executing canister methods marked as `query` in replicated mode.
@@ -314,6 +319,9 @@ pub enum ApiType {
         max_reply_size: NumBytes,
         /// The total number of instructions executed in the call context
         call_context_instructions_executed: NumInstructions,
+        /// Sender info from the ingress message that created the call context.
+        /// `None` for call contexts created by inter-canister calls.
+        sender_info: Option<SenderInfo>,
     },
 
     // For executing closures when a `Reply` is received in a composite query context.
@@ -461,6 +469,7 @@ impl ApiType {
         incoming_cycles: Cycles,
         caller: PrincipalId,
         call_context_id: CallContextId,
+        sender_info: Option<SenderInfo>,
     ) -> Self {
         Self::Update {
             time,
@@ -472,6 +481,7 @@ impl ApiType {
             response_status: ResponseStatus::NotRepliedYet,
             outgoing_request: None,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+            sender_info,
         }
     }
 
@@ -541,6 +551,7 @@ impl ApiType {
         call_context_id: CallContextId,
         replied: bool,
         call_context_instructions_executed: NumInstructions,
+        sender_info: Option<SenderInfo>,
     ) -> Self {
         Self::ReplyCallback {
             time,
@@ -557,6 +568,7 @@ impl ApiType {
             outgoing_request: None,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
             call_context_instructions_executed,
+            sender_info,
         }
     }
 

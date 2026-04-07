@@ -158,6 +158,7 @@ pub fn execute_call_or_task(
             msg.cycles(),
             *msg.sender(),
             helper.call_context_id(),
+            msg.sender_info().cloned(),
         ),
         CanisterCallOrTask::Query(msg) => ApiType::replicated_query(
             time,
@@ -375,6 +376,12 @@ impl CallOrTaskHelper {
             }
         }
 
+        let sender_info = match &original.call_or_task {
+            CanisterCallOrTask::Update(msg) | CanisterCallOrTask::Query(msg) => {
+                msg.sender_info().cloned()
+            }
+            CanisterCallOrTask::Task(_) => None,
+        };
         let call_context_id = canister
             .system_state
             .new_call_context(
@@ -382,6 +389,7 @@ impl CallOrTaskHelper {
                 original.call_or_task.cycles(),
                 original.time,
                 original.request_metadata.clone(),
+                sender_info,
             )
             .unwrap();
 

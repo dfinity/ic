@@ -1082,6 +1082,7 @@ fn test_canister_balance() {
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
 
@@ -1115,6 +1116,7 @@ fn test_canister_cycle_balance() {
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
 
@@ -1155,6 +1157,7 @@ fn test_msg_cycles_available_traps() {
             available_cycles,
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
 
@@ -1325,6 +1328,7 @@ fn msg_cycles_accept_all_cycles_in_call_context() {
             Cycles::from(amount),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
     let mut api = get_system_api(
@@ -1353,6 +1357,7 @@ fn msg_cycles_accept_all_cycles_in_call_context_when_more_asked() {
             Cycles::new(40),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
     let mut api = get_system_api(
@@ -1395,6 +1400,7 @@ fn call_perform_not_enough_cycles_does_not_trap() {
             Cycles::new(40),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
     let mut api = get_system_api(

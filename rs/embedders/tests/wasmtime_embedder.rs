@@ -604,6 +604,7 @@ fn read_before_write_stats() {
             Cycles::zero(),
             PrincipalId::new_user_test_id(0),
             0.into(),
+            None,
         ))
         .build();
     instance
@@ -633,6 +634,7 @@ fn read_before_write_stats() {
             Cycles::zero(),
             PrincipalId::new_user_test_id(0),
             0.into(),
+            None,
         ))
         .build();
     instance
@@ -2262,6 +2264,7 @@ fn wasm64_msg_caller_copy() {
         Cycles::zero(),
         caller,
         call_context_test_id(13),
+        None,
     );
 
     let config = ic_config::embedders::Config::default();
@@ -2331,6 +2334,7 @@ fn wasm64_msg_arg_data_copy() {
         Cycles::zero(),
         caller,
         call_context_test_id(13),
+        None,
     );
 
     let config = ic_config::embedders::Config::default();
@@ -2461,6 +2465,7 @@ fn wasm64_msg_reply_data_append() {
         Cycles::zero(),
         caller,
         call_context_test_id(13),
+        None,
     );
     let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
@@ -2511,6 +2516,7 @@ fn wasm64_msg_reject() {
         Cycles::zero(),
         caller,
         call_context_test_id(13),
+        None,
     );
     let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
@@ -2627,6 +2633,7 @@ fn wasm64_root_key() {
         Cycles::zero(),
         user_test_id(24).get(),
         call_context_test_id(13),
+        None,
     );
 
     let config = ic_config::embedders::Config::default();
@@ -2699,6 +2706,7 @@ fn wasm64_canister_self_copy() {
         Cycles::zero(),
         caller,
         call_context_test_id(13),
+        None,
     );
 
     let config = ic_config::embedders::Config::default();
@@ -2769,6 +2777,7 @@ fn wasm64_subnet_self_size() {
         Cycles::zero(),
         caller,
         call_context_test_id(13),
+        None,
     );
 
     let config = ic_config::embedders::Config::default();
@@ -2822,6 +2831,7 @@ fn wasm64_subnet_self_copy() {
         Cycles::zero(),
         caller,
         call_context_test_id(13),
+        None,
     );
 
     let config = ic_config::embedders::Config::default();
@@ -2896,6 +2906,7 @@ fn wasm64_trap() {
         Cycles::zero(),
         user_test_id(24).get(),
         call_context_test_id(13),
+        None,
     );
     let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
@@ -2936,6 +2947,7 @@ fn wasm64_canister_cycle_balance128() {
         Cycles::zero(),
         user_test_id(24).get(),
         call_context_test_id(13),
+        None,
     );
 
     let config = ic_config::embedders::Config::default();
@@ -3001,6 +3013,7 @@ fn wasm64_canister_liquid_cycle_balance128() {
         Cycles::zero(),
         user_test_id(24).get(),
         call_context_test_id(13),
+        None,
     );
 
     let config = ic_config::embedders::Config::default();
@@ -3137,6 +3150,7 @@ fn wasm64_cycles_burn128() {
         Cycles::zero(),
         user_test_id(24).get(),
         call_context_test_id(13),
+        None,
     );
 
     let config = ic_config::embedders::Config::default();
@@ -3210,6 +3224,7 @@ fn large_wasm64_memory_allocation_test() {
             Cycles::zero(),
             user_test_id(24).get(),
             call_context_test_id(13),
+            None,
         ))
         .with_wat(&wat)
         .build();
@@ -3276,6 +3291,7 @@ fn large_wasm64_stable_read_write_test() {
             Cycles::zero(),
             user_test_id(24).get(),
             call_context_test_id(13),
+            None,
         ))
         .with_wat(wat)
         .build();
@@ -3340,6 +3356,7 @@ fn wasm64_saturate_fun_index() {
         Cycles::zero(),
         user_test_id(24).get(),
         call_context_test_id(13),
+        None,
     );
 
     let config = ic_config::embedders::Config::default();
@@ -3509,6 +3526,7 @@ fn test_environment_variable_system_api() {
             Cycles::zero(),
             PrincipalId::new_user_test_id(0),
             0.into(),
+            None,
         ))
         .with_config(config)
         .with_environment_variables(env_vars)
@@ -3552,6 +3570,7 @@ fn test_environment_variable_system_api_not_enabled() {
             Cycles::zero(),
             PrincipalId::new_user_test_id(0),
             0.into(),
+            None,
         ));
 
     let instance = builder.try_build();
@@ -3578,6 +3597,7 @@ fn run_instance_and_check_stats(
             Cycles::zero(),
             PrincipalId::new_user_test_id(0),
             0.into(),
+            None,
         ))
         .build();
 

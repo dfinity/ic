@@ -449,6 +449,7 @@ mod tests {
                     Cycles::new(100),
                     canister_test_id(1).get(),
                     CallContextId::new(10),
+                    None,
                 ),
                 globals: vec![
                     Global::I32(10),

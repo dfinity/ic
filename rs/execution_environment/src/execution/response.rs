@@ -1009,6 +1009,7 @@ pub fn execute_response(
             call_context_id,
             call_context.has_responded(),
             call_context.instructions_executed(),
+            call_context.sender_info().cloned(),
         ),
         Payload::Reject(context) => ApiType::reject_callback(
             time,

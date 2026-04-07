@@ -93,6 +93,7 @@ pub fn execute_non_replicated_query(
                     Cycles::zero(),
                     time,
                     RequestMetadata::for_new_call_tree(time),
+                    None,
                 )
                 .unwrap();
             (

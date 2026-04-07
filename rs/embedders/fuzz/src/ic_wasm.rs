@@ -468,6 +468,7 @@ pub fn get_system_api_type_for_wasm_method(wasm_method: WasmMethod) -> ApiType {
             Cycles::zero(),
             user_test_id(1).get(),
             CallContextId::from(1),
+            None,
         ),
         WasmMethod::Query(_) => ApiType::non_replicated_query(
             UNIX_EPOCH,
