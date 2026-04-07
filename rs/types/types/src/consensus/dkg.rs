@@ -217,7 +217,6 @@ impl DkgSummary {
         next_interval_length: Height,
         height: Height,
         initial_dkg_attempts: BTreeMap<NiDkgTargetId, u32>,
-        subnet_splitting_status: Option<SubnetSplittingStatus>,
     ) -> Self {
         Self {
             configs: configs
@@ -232,9 +231,7 @@ impl DkgSummary {
             next_interval_length,
             height,
             initial_dkg_attempts,
-            subnet_splitting_status: BackwardsCompatibleOption::new_for_test_only(
-                subnet_splitting_status,
-            ),
+            subnet_splitting_status: BackwardsCompatibleOption::default(),
         }
     }
 

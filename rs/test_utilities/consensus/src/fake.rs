@@ -67,7 +67,6 @@ impl Fake for DkgSummary {
             /*next_interval_length=*/ Height::new(59),
             /*height=*/ Height::new(0),
             /*initial_dkg_attempts=*/ BTreeMap::default(),
-            /*subnet_splitting_status=*/ None,
         )
     }
 }
