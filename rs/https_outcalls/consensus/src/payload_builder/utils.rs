@@ -1,7 +1,8 @@
 use CanisterHttpResponseContent::Reject;
+use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_interfaces::canister_http::{CanisterHttpPool, InvalidCanisterHttpPayloadReason};
 use ic_types::{
-    CountBytes, NodeId, NumBytes,
+    CountBytes, NodeId, NumBytes, RegistryVersion,
     batch::{
         FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
         FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
@@ -15,7 +16,7 @@ use ic_types::{
     signature::BasicSignature,
 };
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     mem::size_of,
 };
 
@@ -58,6 +59,106 @@ pub(crate) fn check_response_consistency(
             calculated_size,
         });
     }
+
+    Ok(())
+}
+
+/// Validates a single [`FlexibleCanisterHttpResponseWithProof`].
+///
+/// Checks callback-id consistency, share validity (using
+/// [`validate_response_share`]), content hash, and content size.
+pub(crate) fn validate_flexible_response_with_proof(
+    response_with_proof: &FlexibleCanisterHttpResponseWithProof,
+    callback_id: CallbackId,
+    flex_committee: &BTreeSet<NodeId>,
+    seen_signers: &mut HashSet<NodeId>,
+    consensus_registry_version: RegistryVersion,
+    crypto: &dyn ConsensusCrypto,
+) -> Result<(), InvalidCanisterHttpPayloadReason> {
+    if response_with_proof.response.id != callback_id {
+        return Err(
+            InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch {
+                callback_id,
+                mismatched_id: response_with_proof.response.id,
+            },
+        );
+    }
+
+    validate_response_share(
+        &response_with_proof.proof,
+        callback_id,
+        flex_committee,
+        seen_signers,
+        consensus_registry_version,
+        crypto,
+    )?;
+
+    let calculated_hash = crypto_hash(&response_with_proof.response);
+    if calculated_hash != response_with_proof.proof.content.content_hash {
+        return Err(InvalidCanisterHttpPayloadReason::ContentHashMismatch {
+            metadata_hash: response_with_proof.proof.content.content_hash.clone(),
+            calculated_hash,
+        });
+    }
+
+    let calculated_size = response_with_proof.response.content.count_bytes() as u32;
+    if calculated_size != response_with_proof.proof.content.content_size {
+        return Err(InvalidCanisterHttpPayloadReason::ContentSizeMismatch {
+            metadata_size: response_with_proof.proof.content.content_size,
+            calculated_size,
+        });
+    }
+
+    Ok(())
+}
+
+/// Validates a single [`CanisterHttpResponseShare`] (metadata + signature).
+///
+/// Checks callback-id consistency, duplicate signers, committee membership,
+/// registry version, and performs signature verification.
+pub(crate) fn validate_response_share(
+    share: &CanisterHttpResponseShare,
+    callback_id: CallbackId,
+    flex_committee: &BTreeSet<NodeId>,
+    seen_signers: &mut HashSet<NodeId>,
+    consensus_registry_version: RegistryVersion,
+    crypto: &dyn ConsensusCrypto,
+) -> Result<(), InvalidCanisterHttpPayloadReason> {
+    if share.content.id != callback_id {
+        return Err(
+            InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch {
+                callback_id,
+                mismatched_id: share.content.id,
+            },
+        );
+    }
+
+    let signer = share.signature.signer;
+    if !seen_signers.insert(signer) {
+        return Err(InvalidCanisterHttpPayloadReason::FlexibleDuplicateSigner {
+            callback_id,
+            signer,
+        });
+    }
+    if !flex_committee.contains(&signer) {
+        return Err(
+            InvalidCanisterHttpPayloadReason::FlexibleSignerNotInCommittee {
+                callback_id,
+                signer,
+            },
+        );
+    }
+
+    if share.content.registry_version != consensus_registry_version {
+        return Err(InvalidCanisterHttpPayloadReason::RegistryVersionMismatch {
+            expected: consensus_registry_version,
+            received: share.content.registry_version,
+        });
+    }
+
+    crypto
+        .verify(share, consensus_registry_version)
+        .map_err(|err| InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)))?;
 
     Ok(())
 }

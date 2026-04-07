@@ -8,6 +8,7 @@ use crate::{
             FlexibleFindResult, estimate_response_with_consensus_size, find_flexible_result,
             find_fully_replicated_response, find_non_replicated_response,
             group_shares_by_callback_id, grouped_shares_meet_divergence_criteria,
+            validate_flexible_response_with_proof, validate_response_share,
         },
     },
 };
@@ -47,7 +48,7 @@ use ic_types::{
         CanisterHttpResponseMetadata, CanisterHttpResponseWithConsensus, Replication,
     },
     consensus::Committee,
-    crypto::{Signed, crypto_hash},
+    crypto::Signed,
     messages::{CallbackId, Payload, RejectContext},
     registry::RegistryClientError,
     signature::BasicSignature,
@@ -667,28 +668,19 @@ impl CanisterHttpPayloadBuilderImpl {
 
             let mut seen_signers = HashSet::new();
 
-            for entry in &group.responses {
-                // Callback id consistency
-                if entry.response.id != callback_id {
-                    return invalid_artifact(
-                        InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch {
-                            callback_id,
-                            mismatched_id: entry.response.id,
-                        },
-                    );
-                }
-                if entry.proof.content.id != callback_id {
-                    return invalid_artifact(
-                        InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch {
-                            callback_id,
-                            mismatched_id: entry.proof.content.id,
-                        },
-                    );
-                }
+            for response_with_proof in &group.responses {
+                validate_flexible_response_with_proof(
+                    response_with_proof,
+                    callback_id,
+                    flex_committee,
+                    &mut seen_signers,
+                    consensus_registry_version,
+                    &*self.crypto,
+                )
+                .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
-                // Rejects are not allowed in flexible ok-responses
                 if matches!(
-                    entry.response.content,
+                    response_with_proof.response.content,
                     CanisterHttpResponseContent::Reject(_)
                 ) {
                     return invalid_artifact(
@@ -697,68 +689,6 @@ impl CanisterHttpPayloadBuilderImpl {
                         },
                     );
                 }
-
-                // No duplicate signers
-                let signer = entry.proof.signature.signer;
-                if !seen_signers.insert(signer) {
-                    return invalid_artifact(
-                        InvalidCanisterHttpPayloadReason::FlexibleDuplicateSigner {
-                            callback_id,
-                            signer,
-                        },
-                    );
-                }
-
-                // Signer must be in the flexible committee
-                if !flex_committee.contains(&signer) {
-                    return invalid_artifact(
-                        InvalidCanisterHttpPayloadReason::FlexibleSignerNotInCommittee {
-                            callback_id,
-                            signer,
-                        },
-                    );
-                }
-
-                // Content hash must match
-                let calculated_hash = crypto_hash(&entry.response);
-                if calculated_hash != entry.proof.content.content_hash {
-                    return invalid_artifact(
-                        InvalidCanisterHttpPayloadReason::ContentHashMismatch {
-                            metadata_hash: entry.proof.content.content_hash.clone(),
-                            calculated_hash,
-                        },
-                    );
-                }
-
-                // Content size must match
-                let calculated_size = entry.response.content.count_bytes() as u32;
-                if calculated_size != entry.proof.content.content_size {
-                    return invalid_artifact(
-                        InvalidCanisterHttpPayloadReason::ContentSizeMismatch {
-                            metadata_size: entry.proof.content.content_size,
-                            calculated_size,
-                        },
-                    );
-                }
-
-                // Registry version must match
-                if entry.proof.content.registry_version != consensus_registry_version {
-                    return invalid_artifact(
-                        InvalidCanisterHttpPayloadReason::RegistryVersionMismatch {
-                            expected: consensus_registry_version,
-                            received: entry.proof.content.registry_version,
-                        },
-                    );
-                }
-
-                // Verify the individual share signature
-                self.crypto
-                    .verify(&entry.proof, consensus_registry_version)
-                    .map_err(|err| {
-                        CanisterHttpPayloadValidationError::InvalidArtifact(
-                            InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)),
-                        )
-                    })?;
             }
         }
 
@@ -802,26 +732,19 @@ impl CanisterHttpPayloadBuilderImpl {
                 } => {
                     let mut seen_signers = HashSet::new();
 
-                    for entry in reject_responses {
-                        if entry.response.id != callback_id {
-                            return invalid_artifact(
-                                InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch {
-                                    callback_id,
-                                    mismatched_id: entry.response.id,
-                                },
-                            );
-                        }
-                        if entry.proof.content.id != callback_id {
-                            return invalid_artifact(
-                                InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch {
-                                    callback_id,
-                                    mismatched_id: entry.proof.content.id,
-                                },
-                            );
-                        }
+                    for response_with_proof in reject_responses {
+                        validate_flexible_response_with_proof(
+                            response_with_proof,
+                            callback_id,
+                            flex_committee,
+                            &mut seen_signers,
+                            consensus_registry_version,
+                            &*self.crypto,
+                        )
+                        .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
                         if !matches!(
-                            entry.response.content,
+                            response_with_proof.response.content,
                             CanisterHttpResponseContent::Reject(_)
                         ) {
                             return invalid_artifact(
@@ -830,61 +753,6 @@ impl CanisterHttpPayloadBuilderImpl {
                                 ),
                             );
                         }
-
-                        let signer = entry.proof.signature.signer;
-                        if !seen_signers.insert(signer) {
-                            return invalid_artifact(
-                                InvalidCanisterHttpPayloadReason::FlexibleDuplicateSigner {
-                                    callback_id,
-                                    signer,
-                                },
-                            );
-                        }
-                        if !flex_committee.contains(&signer) {
-                            return invalid_artifact(
-                                InvalidCanisterHttpPayloadReason::FlexibleSignerNotInCommittee {
-                                    callback_id,
-                                    signer,
-                                },
-                            );
-                        }
-
-                        let calculated_hash = crypto_hash(&entry.response);
-                        if calculated_hash != entry.proof.content.content_hash {
-                            return invalid_artifact(
-                                InvalidCanisterHttpPayloadReason::ContentHashMismatch {
-                                    metadata_hash: entry.proof.content.content_hash.clone(),
-                                    calculated_hash,
-                                },
-                            );
-                        }
-
-                        let calculated_size = entry.response.content.count_bytes() as u32;
-                        if calculated_size != entry.proof.content.content_size {
-                            return invalid_artifact(
-                                InvalidCanisterHttpPayloadReason::ContentSizeMismatch {
-                                    metadata_size: entry.proof.content.content_size,
-                                    calculated_size,
-                                },
-                            );
-                        }
-
-                        if entry.proof.content.registry_version != consensus_registry_version {
-                            return invalid_artifact(
-                                InvalidCanisterHttpPayloadReason::RegistryVersionMismatch {
-                                    expected: consensus_registry_version,
-                                    received: entry.proof.content.registry_version,
-                                },
-                            );
-                        }
-
-                        self.crypto
-                            .verify(&entry.proof, consensus_registry_version)
-                            .map_err(|err| {
-                                CanisterHttpPayloadValidationError::InvalidArtifact(
-                                    InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)),
-                                )
-                            })?;
                     }
 
                     let max_allowed_rejects =
@@ -905,49 +773,15 @@ impl CanisterHttpPayloadBuilderImpl {
                     let mut seen_signers = HashSet::new();
 
                     for share in metadata_shares {
-                        if share.content.id != callback_id {
-                            return invalid_artifact(
-                                InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch {
-                                    callback_id,
-                                    mismatched_id: share.content.id,
-                                },
-                            );
-                        }
-
-                        let signer = share.signature.signer;
-                        if !seen_signers.insert(signer) {
-                            return invalid_artifact(
-                                InvalidCanisterHttpPayloadReason::FlexibleDuplicateSigner {
-                                    callback_id,
-                                    signer,
-                                },
-                            );
-                        }
-                        if !flex_committee.contains(&signer) {
-                            return invalid_artifact(
-                                InvalidCanisterHttpPayloadReason::FlexibleSignerNotInCommittee {
-                                    callback_id,
-                                    signer,
-                                },
-                            );
-                        }
-
-                        if share.content.registry_version != consensus_registry_version {
-                            return invalid_artifact(
-                                InvalidCanisterHttpPayloadReason::RegistryVersionMismatch {
-                                    expected: consensus_registry_version,
-                                    received: share.content.registry_version,
-                                },
-                            );
-                        }
-
-                        self.crypto
-                            .verify(share, consensus_registry_version)
-                            .map_err(|err| {
-                                CanisterHttpPayloadValidationError::InvalidArtifact(
-                                    InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)),
-                                )
-                            })?;
+                        validate_response_share(
+                            share,
+                            callback_id,
+                            flex_committee,
+                            &mut seen_signers,
+                            consensus_registry_version,
+                            &*self.crypto,
+                        )
+                        .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
                     }
 
                     if metadata_shares.len() < *min_responses as usize {
