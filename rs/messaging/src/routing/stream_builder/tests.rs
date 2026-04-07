@@ -30,7 +30,7 @@ use ic_types::messages::{
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::xnet::{StreamIndex, StreamIndexedQueue};
 use ic_types::{CanisterId, SubnetId, Time};
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types_cycles::Cycles;
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
@@ -1669,7 +1669,6 @@ fn push_input(canister_state: &mut CanisterState, msg: RequestOrResponse) {
                 msg,
                 &mut subnet_available_memory,
                 SubnetType::Application,
-                CanisterCyclesCostSchedule::Normal,
                 InputQueueType::RemoteSubnet,
             )
             .unwrap()

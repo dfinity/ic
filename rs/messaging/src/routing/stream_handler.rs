@@ -1002,7 +1002,7 @@ impl StreamHandlerImpl {
             Some(host_subnet) if host_subnet == self.subnet_id => {
                 let cost_schedule = state.get_own_cost_schedule();
                 stream.push_accept_signal();
-                if state.credit_refund(refund, cost_schedule) {
+                if state.credit_refund(refund) {
                     self.observe_inducted_message_status(
                         LABEL_VALUE_TYPE_REFUND,
                         LABEL_VALUE_SUCCESS,

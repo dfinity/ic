@@ -3,10 +3,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow};
 use clap::{Parser, Subcommand};
-use ic_protobuf::registry::replica_version::v1::BlessedReplicaVersions;
-use ic_registry_keys::make_blessed_replica_versions_key;
+use ic_registry_keys::make_replica_version_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
-use prost::Message;
 use tracing::{info, warn};
 use url::Url;
 
@@ -20,7 +18,7 @@ use utils::to_cidr;
 
 /// Path to the SetupOS version file. Currently the GuestOS version is always
 /// the same as the SetupOS version. Therefore, the SetupOS version is used to
-/// determine if the GuestOS version is blessed.
+/// determine if the GuestOS version is elected.
 const VERSION_FILE_PATH: &str = "/opt/ic/share/version.txt";
 
 #[derive(Subcommand)]
@@ -35,8 +33,8 @@ pub enum Commands {
         #[arg(short, long, default_value_t = NodeType::SetupOS)]
         node_type: NodeType,
     },
-    /// Check if the current SetupOS(=GuestOS) version is blessed in the NNS registry.
-    CheckBlessedVersion {
+    /// Check if the current SetupOS(=GuestOS) version is elected in the NNS registry.
+    CheckElectedVersion {
         #[arg(short, long, default_value = VERSION_FILE_PATH, value_name = "FILE")]
         /// Path to the version file
         version_file: PathBuf,
@@ -114,11 +112,11 @@ pub fn main() -> Result<()> {
 
             Ok(())
         }
-        Some(Commands::CheckBlessedVersion { version_file }) => {
+        Some(Commands::CheckElectedVersion { version_file }) => {
             let setupos_config: SetupOSConfig =
                 deserialize_config(&opts.setupos_config_object_path)?;
 
-            check_blessed_version(&setupos_config, version_file.as_path())
+            check_elected_version(&setupos_config, version_file.as_path())
         }
         None => Err(anyhow!(
             "No subcommand specified. Run with '--help' for subcommands"
@@ -126,8 +124,8 @@ pub fn main() -> Result<()> {
     }
 }
 
-/// Checks if the current SetupOS(=GuestOS) version is blessed in the NNS registry.
-fn check_blessed_version(config: &SetupOSConfig, version_file: &Path) -> Result<()> {
+/// Checks if the current SetupOS(=GuestOS) version is in the NNS registry.
+fn check_elected_version(config: &SetupOSConfig, version_file: &Path) -> Result<()> {
     let current_version = fs::read_to_string(version_file)
         .map_err(|e| {
             anyhow!(
@@ -139,7 +137,7 @@ fn check_blessed_version(config: &SetupOSConfig, version_file: &Path) -> Result<
         .trim()
         .to_string();
 
-    info!("Checking if version '{}' is blessed...", current_version);
+    info!("Checking if version '{}' is elected...", current_version);
 
     let nns_urls: Vec<Url> = config.icos_settings.nns_urls.clone();
     if nns_urls.is_empty() {
@@ -151,33 +149,29 @@ fn check_blessed_version(config: &SetupOSConfig, version_file: &Path) -> Result<
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|e| anyhow!("Failed to create tokio runtime: {}", e))?;
 
-    let blessed_versions = runtime.block_on(async {
+    runtime.block_on(async {
         let registry_canister = RegistryCanister::new(nns_urls);
-        let result = registry_canister
+        let response = registry_canister
             .get_value(
-                make_blessed_replica_versions_key().as_bytes().to_vec(),
+                make_replica_version_key(&current_version)
+                    .as_bytes()
+                    .to_vec(),
                 None,
             )
-            .await
-            .map_err(|e| anyhow!("Failed to query registry: {:?}", e))?;
+            .await;
 
-        BlessedReplicaVersions::decode(&*result.0)
-            .map_err(|e| anyhow!("Failed to decode blessed versions: {}", e))
-    })?;
+        match response {
+            Ok(_) => {
+                eprintln!("Version '{current_version}' is elected.");
+            }
+            Err(ic_registry_transport::Error::KeyNotPresent(_)) => {
+                return Err(anyhow!("Version '{current_version}' is not elected."));
+            }
+            error => {
+                error?;
+            }
+        }
 
-    let is_blessed = blessed_versions
-        .blessed_version_ids
-        .iter()
-        .any(|v| v == &current_version);
-
-    if is_blessed {
-        info!("Version '{}' is blessed.", current_version);
         Ok(())
-    } else {
-        Err(anyhow!(
-            "Version '{}' is not blessed. Blessed versions: {:?}",
-            current_version,
-            blessed_versions.blessed_version_ids
-        ))
-    }
+    })
 }

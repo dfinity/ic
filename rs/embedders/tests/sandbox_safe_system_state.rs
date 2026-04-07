@@ -26,7 +26,7 @@ use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{ComputeAllocation, NumInstructions};
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, NominalCycles, NonConsumed,
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, NominalCycles,
 };
 use prometheus::IntCounter;
 use std::collections::BTreeSet;
@@ -317,7 +317,7 @@ fn correct_charging_source_canister_for_a_request() {
         cost_schedule,
     );
 
-    system_state.add_cycles(refund_cycles);
+    system_state.refund_cycles(prepayment_for_response_transmission, refund_cycles);
 
     // MAX_NUM_INSTRUCTIONS also gets partially refunded in the real
     // ExecutionEnvironmentImpl::execute_canister_response()
@@ -395,10 +395,7 @@ fn mint_cycles_large_value() {
         .canister_id(CYCLES_MINTING_CANISTER_ID)
         .build();
 
-    system_state.add_cycles(CompoundCycles::<NonConsumed>::new(
-        Cycles::from(1_000_000_000_000_000_u128),
-        CanisterCyclesCostSchedule::Normal,
-    ));
+    system_state.add_cycles(Cycles::from(1_000_000_000_000_000_u128));
 
     let api_type = ApiTypeBuilder::build_update_api();
     let mut api = get_system_api(api_type, &system_state, cycles_account_manager);
