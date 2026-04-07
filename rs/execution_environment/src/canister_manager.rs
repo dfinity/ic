@@ -746,6 +746,7 @@ impl CanisterManager {
         Ok(CanisterManagerResponse {
             canister_id: canister.canister_id(),
             reply: Some(EmptyBlob.encode()),
+            // TODO(DSM-123): set `heap_delta_increase` caused by canister logging
             heap_delta_increase: NumBytes::new(0),
             unflushed_checkpoint_op: None,
             deleted_call_context_responses: vec![],
