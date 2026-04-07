@@ -1185,12 +1185,9 @@ impl Scheduler for SchedulerImpl {
 
             long_running_canisters = state
                 .canister_states()
-                .keys()
-                .filter_map(|&canister_id| {
-                    if state
-                        .canister_state(&canister_id)?
-                        .has_long_execution_or_install_code()
-                    {
+                .iter()
+                .filter_map(|(canister_id, canister)| {
+                    if canister.has_long_execution_or_install_code() {
                         Some(canister_id)
                     } else {
                         None
