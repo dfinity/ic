@@ -3936,11 +3936,11 @@ fn test_active_neuron_gets_more_mature_than_less_active_one() {
 #[test]
 fn test_more_stakes_gets_more_maturity() {
     assert_eq!(
-        compute_maturities(vec![3, 1], vec!["Py"], USUAL_REWARD_POT_E8S),
+        compute_maturities(vec![3 * E8, 1 * E8], vec!["Py"], USUAL_REWARD_POT_E8S),
         vec![75, 25]
     );
     assert_eq!(
-        compute_maturities(vec![3, 1], vec!["yP"], USUAL_REWARD_POT_E8S),
+        compute_maturities(vec![3 * E8, 1 * E8], vec!["yP"], USUAL_REWARD_POT_E8S),
         vec![75, 25]
     );
 }
@@ -3951,7 +3951,7 @@ fn test_more_stakes_gets_more_maturity() {
 fn test_reward_complex_scenario() {
     assert_eq!(
         compute_maturities(
-            vec![3, 1, 1],
+            vec![3 * E8, 1 * E8, 1 * E8],
             vec!["-P-", "--P", "y-P", "P-n"],
             USUAL_REWARD_POT_E8S
         ),
