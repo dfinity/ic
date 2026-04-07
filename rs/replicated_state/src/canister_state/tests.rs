@@ -921,7 +921,7 @@ fn update_balance_and_consumed_cycles_by_use_case_correctly() {
     system_state.consume_cycles(prepaid_cycles);
 
     let refund =
-        CompoundCycles::<ic_types_cycles::Memory>::new(Cycles::from(100u128), cost_schedule);
+        CompoundCycles::<ic_types_cycles::Memory>::new(Cycles::from(100_u128), cost_schedule);
     system_state.refund_cycles(prepaid_cycles, refund);
     assert_eq!(
         system_state.balance(),
