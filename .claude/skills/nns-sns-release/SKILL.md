@@ -60,58 +60,26 @@ Parse the output to categorize each canister:
 (ledger/index/archive) is released separately by the DeFi team on a different cadence
 and commit. Do not show them in the table or suggest them for release.
 
-For each canister with interesting commits, inspect what those commits actually changed
-in the canister's source directory. Use `git diff --stat` or `git show --stat` to check
-whether the commit modified production code (e.g. `src/`, `canister/`, `*.rs` non-test files)
-or only test/doc/build files (e.g. `tests/`, `*_test.rs`, `*.md`, `BUILD.bazel`).
-
-Classify each interesting commit by inspecting the actual diff within the canister's
-code directory. Run:
-```
-git show $COMMIT_HASH -- $CANISTER_CODE_DIR
-```
-
-Then determine whether the changes affect production code or only test/doc/build artifacts.
-Be granular — in this codebase, tests often live alongside production code:
-- Changes inside `#[cfg(test)]` modules or `mod tests` blocks are **test only**
-- Changes to files under `tests/` directories or files named `*_test.rs`, `*_tests.rs` are **test only**
-- Changes to `BUILD.bazel`, `*.md`, `CHANGELOG.md` are **build/doc only**
-- Changes to `Cargo.toml` that only affect `[dev-dependencies]` are **test only**
-- Everything else (src code outside test blocks, `.did` files, `Cargo.toml` deps) is a **production change**
-
-A commit can have mixed changes — annotate it as production if ANY part of the diff
-modifies production code within the canister directory.
-
-A canister is a strong release candidate only if it has at least one commit with
-production changes. If all "interesting" commits only affect tests/docs/build within
-the canister directory, downgrade the recommendation to skip.
-
-The canister code directories can be determined from the `list-new-commits.sh` output
-(shown after the `git log` command in each section).
-
 Present each canister group (NNS, then SNS) to the user. For each canister, show:
 - The canister name, total commit count, and interesting commit count
 - **All commits** listed underneath, with interesting commits marked with `>>>` prefix
   to distinguish them from chore/refactor/test/docs commits
-- For each interesting commit, annotate whether it is a production change or test/doc only
-- A recommendation: release / skip / no changes
+- A recommendation: RELEASE (has interesting commits) / SKIP (chore-only or no commits)
 
 Example format:
 ```
 ### NNS governance (4 commits, 2 interesting) — RELEASE
-  >>> 077cec5e8f feat(nns): tag 8-year gang bonus base ... [production: src/governance.rs]
-  >>> 1855b0fd98 feat(NNS): add snapshot visibility ... [production: src/proposals.rs, canister/canister.rs]
+  >>> 077cec5e8f feat(nns): tag 8-year gang bonus base ...
+  >>> 1855b0fd98 feat(NNS): add snapshot visibility ...
       a0034d3203 chore(nervous-system): update changelog
       b608c374f2 chore: 42u64 -> 42_u64
 
-### NNS root (4 commits, 2 interesting) — SKIP (interesting commits are test/perf only)
-  >>> 1855b0fd98 feat(NNS): add snapshot visibility ... [production: src/lib.rs]
-  >>> d739eb3b60 perf: Speed up root canister integration tests [test only: tests/]
+### NNS root (2 commits, 0 interesting) — SKIP
       5458e72af6 chore(governance): Add separator ...
       a5e8364794 docs(governance): Updated changelogs ...
 ```
 
-After presenting all canisters, pre-select those with production changes and ask
+After presenting all canisters, pre-select those with interesting commits and ask
 the user to confirm or adjust the selection. The user can add or remove canisters.
 
 Store the selected canisters as `NNS_CANISTERS` and `SNS_CANISTERS`.
@@ -144,24 +112,27 @@ to be run manually.
 
 ## Step 4: Create Proposal Texts
 
+Capture the release date once and reuse it for all commands in this step:
+`RELEASE_DATE=$(date +%Y-%m-%d)`. Use `$RELEASE_DATE` consistently below.
+
 Create a proposals directory:
 ```
-mkdir -p ../proposals/release-$(date +%Y-%m-%d)
+mkdir -p ../proposals/release-$RELEASE_DATE
 ```
 
 For each NNS canister, run (note: `2>/dev/null` to avoid stderr warnings leaking into the file):
 ```
-./rs/nervous_system/tools/release/prepare-nns-upgrade-proposal-text.sh $CANISTER $RC_COMMIT 2>/dev/null > ../proposals/release-$(date +%Y-%m-%d)/nns-$CANISTER.md
+./rs/nervous_system/tools/release/prepare-nns-upgrade-proposal-text.sh $CANISTER $RC_COMMIT 2>/dev/null > ../proposals/release-$RELEASE_DATE/nns-$CANISTER.md
 ```
 
 Special case: for `cycles-minting`, ask the user for an upgrade arg (default `()`), then:
 ```
-./rs/nervous_system/tools/release/prepare-nns-upgrade-proposal-text.sh cycles-minting $RC_COMMIT "()" 2>/dev/null > ../proposals/release-$(date +%Y-%m-%d)/nns-cycles-minting.md
+./rs/nervous_system/tools/release/prepare-nns-upgrade-proposal-text.sh cycles-minting $RC_COMMIT "()" 2>/dev/null > ../proposals/release-$RELEASE_DATE/nns-cycles-minting.md
 ```
 
 For each SNS canister, run:
 ```
-./rs/nervous_system/tools/release/prepare-publish-sns-wasm-proposal-text.sh $CANISTER $RC_COMMIT ../proposals/release-$(date +%Y-%m-%d)/sns-$CANISTER.md
+./rs/nervous_system/tools/release/prepare-publish-sns-wasm-proposal-text.sh $CANISTER $RC_COMMIT ../proposals/release-$RELEASE_DATE/sns-$CANISTER.md
 ```
 (Note: the SNS script writes directly to the output file, no `>` redirect needed.)
 
@@ -321,18 +292,19 @@ Prepare the following for `#dev-nns` (private channel — search with `channel_t
 
 1. **Message:** `PTAL @ release changelog update $PR_URL`
 
-2. **Channel topic update.** Format:
+2. **Channel topic update.** Substitute the actual release date (human-readable,
+   e.g. `Apr 6, 2026`), RC commit, and canister lists. Format:
    ```
-   Apr 6, 2026:
+   $RELEASE_DATE:
 
    RC=$RC_COMMIT
 
    NNS_CANISTERS=(
-       governance
-       registry
+       $NNS_CANISTER_LIST
    )
 
    SNS_CANISTERS=(
+       $SNS_CANISTER_LIST
    )
    ```
    Before updating, read the existing channel topic and validate it follows this
