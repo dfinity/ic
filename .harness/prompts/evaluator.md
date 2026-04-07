@@ -27,10 +27,37 @@ You are the Evaluator agent. Your job is to independently verify a Generator's c
 - [ ] Spec doesn't contradict other capability specs (no overlap)
 - [ ] Traceability matrix entries match the spec IDs exactly
 
+### Assertion-to-Spec Audit (Phase 5.9 — NEW)
+When test files exist for the domain, audit assertion quality:
+- [ ] **Critical mismatch**: Assertion completely misses the requirement (e.g., tests only status code when spec requires schema validation) → hard-fail at Gate 2
+- [ ] **Partial mismatch**: Assertion covers some but not all conditions in the SCENARIO → warning at Gate 2, hard-fail at Gate 3
+- [ ] **Phantom coverage**: Test references a REQ-* but doesn't exercise the actual behavior → hard-fail
+
+### Reverse Spec Coverage (NEW)
+- [ ] Every test file with a traceability header references valid REQ-*/SCENARIO-* IDs
+- [ ] No orphan tests exist (tests without REQ-*/SCENARIO-* citations)
+
+### Conformance Fixtures (Phase 5.7 — when applicable)
+- [ ] Golden fixtures (known-conformant inputs) produce passing assertions
+- [ ] Poison fixtures (non-conformant inputs) cause targeted checks to fail
+- [ ] `must_not_trigger` guards prevent unrelated assertions from firing on poison inputs
+
+### Contract Tests (Phase 5.8 — when applicable)
+- [ ] Producer tests verify implementation matches schema
+- [ ] Consumer tests verify parsing matches schema
+- [ ] No silent schema drift between components
+
 ## Grading Scale
 - **PASS**: All hard-fails pass, quality ≥ 7/10
 - **PASS_WITH_NOTES**: All hard-fails pass, quality 5-6/10, notes for next iteration
 - **FAIL**: Any hard-fail, or quality < 5/10
+
+## Gate 3: Cross-Sprint Final Evaluation (NEW)
+When multiple sprints have been completed, perform a final cross-sprint evaluation:
+- Full SCENARIO-* regression suite: 100% pass
+- Cross-story E2E scenarios: 100% pass
+- Assertion-spec mismatches (partial): 0 remaining
+- Traceability consistency across all domains
 
 ## Output Format
 Write evaluation report to `.harness/evaluations/<domain>-evaluation.md`:

@@ -41,9 +41,14 @@ agents:
     writes: .harness/handoffs/
     enforces: .harness/contracts/
 
+tool_annotations:
+  readOnlyHint: true         # enables parallel tool execution for read-only tools
+  destructiveHint: false     # distinguishes read vs write tools for safety
+
 coverage_gates:
   spec_coverage: 100%       # every REQ-* has at least one test
   scenario_coverage: 100%   # every SCENARIO-* has integration or E2E test
+  reverse_spec_coverage: 100%  # every test must reference a REQ-*/SCENARIO-* (NEW)
   code_coverage_new: 80%    # line coverage on new files
   branch_coverage_new: 70%  # branch coverage on new files
 
@@ -52,6 +57,24 @@ hard_fail_conditions:
   - broken_build             # bazel build fails
   - security_regression      # security-relevant invariant broken
   - data_loss                # canister state can be corrupted/lost
+  - assertion_spec_mismatch_critical  # assertion completely misses requirement (NEW)
+
+evaluation_gates:
+  gate_1_generator:          # Generator self-check
+    - tests_pass
+    - coverage_thresholds_met
+    - no_orphan_tests         # tests without REQ-*/SCENARIO-* citations (NEW)
+  gate_2_evaluator:          # Independent evaluator verification
+    - independent_test_run
+    - spec_coverage_audit
+    - test_quality_check
+    - e2e_verification
+    - assertion_spec_audit    # critical mismatches = hard fail (NEW)
+  gate_3_final:              # Cross-sprint validation (NEW)
+    - full_scenario_regression_100_percent
+    - cross_story_e2e_100_percent
+    - assertion_spec_partial_mismatches_zero
+    - traceability_consistency
 
 migration_order:
   - execution-scheduler      # DONE — template

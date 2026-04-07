@@ -1,0 +1,23 @@
+# Skill Evolution Changelog
+# Tracks versioned prompt/skill improvements per Phase 8 (Trace2Skill)
+# https://github.com/ianblenke/agentic-refactor-rules
+
+schema_version: "1.0"
+
+# Prevalence tiers:
+#   high (>=30%): goes in main agent prompts
+#   medium (10-30%): goes in agent reference docs
+#   low (<10%): logged but not promoted
+
+evolutions: []
+
+# Example entry:
+# - version: "1.1"
+#   date: "2026-04-07"
+#   skill: "generator"
+#   change: "Add explicit TypeEnv threading reminder for Candid type resolution"
+#   prevalence: "high"
+#   trigger: "3/8 generator sessions forgot to pass TypeEnv to schema_mapper"
+#   pre_pass_rate: "62%"
+#   post_pass_rate: "88%"
+#   artifact: ".harness/prompts/generator.md"
