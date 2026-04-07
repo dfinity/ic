@@ -214,9 +214,11 @@ impl<'a> QueryContext<'a> {
         let query_kind = match &method {
             WasmMethod::Query(_) => NonReplicatedQueryKind::Pure {
                 caller: query.source(),
+                sender_info: query.sender_info(),
             },
             WasmMethod::CompositeQuery(_) => NonReplicatedQueryKind::Stateful {
                 call_origin: call_origin.clone(),
+                sender_info: query.sender_info(),
             },
             WasmMethod::Update(_) | WasmMethod::System(_) => {
                 unreachable!("Expected a Wasm query method");
@@ -851,6 +853,7 @@ impl<'a> QueryContext<'a> {
             request.method_payload.as_slice(),
             NonReplicatedQueryKind::Stateful {
                 call_origin: call_origin.clone(),
+                sender_info: None,
             },
             measurement_scope,
         );
