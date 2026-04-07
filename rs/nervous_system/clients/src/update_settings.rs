@@ -56,6 +56,15 @@ impl From<LogVisibility> for management_canister::LogVisibilityV2 {
     }
 }
 
+impl From<SnapshotVisibility> for management_canister::SnapshotVisibility {
+    fn from(original: SnapshotVisibility) -> Self {
+        match original {
+            SnapshotVisibility::Controllers => management_canister::SnapshotVisibility::Controllers,
+            SnapshotVisibility::Public => management_canister::SnapshotVisibility::Public,
+        }
+    }
+}
+
 impl From<CanisterSettings> for management_canister::CanisterSettingsArgs {
     fn from(original: CanisterSettings) -> Self {
         let CanisterSettings {
@@ -67,6 +76,7 @@ impl From<CanisterSettings> for management_canister::CanisterSettingsArgs {
             log_visibility,
             wasm_memory_limit,
             wasm_memory_threshold,
+            snapshot_visibility,
         } = original;
 
         management_canister::CanisterSettingsArgs {
@@ -76,7 +86,8 @@ impl From<CanisterSettings> for management_canister::CanisterSettingsArgs {
             freezing_threshold,
             reserved_cycles_limit,
             log_visibility: log_visibility.map(management_canister::LogVisibilityV2::from),
-            snapshot_visibility: None,
+            snapshot_visibility: snapshot_visibility
+                .map(management_canister::SnapshotVisibility::from),
             log_memory_limit: None,
             wasm_memory_limit,
             wasm_memory_threshold,
