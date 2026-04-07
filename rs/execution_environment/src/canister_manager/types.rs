@@ -7,7 +7,6 @@ use ic_interfaces::execution_environment::{CanisterOutOfCyclesError, HypervisorE
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterInstallModeV2, InstallChunkedCodeArgs, InstallCodeArgsV2,
-    UploadChunkReply,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -301,15 +300,11 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
     }
 }
 
-pub(crate) struct UploadChunkResult {
-    pub(crate) reply: UploadChunkReply,
-    pub(crate) heap_delta_increase: NumBytes,
-}
-
 /// Bundles the reply (success) to a management canister request (referred to as "current request")
 /// with changes to `ReplicatedState` that must be applied separately.
 /// This is because `CanisterManager` only mutates a single `CanisterState` (but no other parts of `ReplicatedState`)
 /// in cases when it returns `CanisterManagerResponse`.
+#[derive(Eq, PartialEq, Debug)]
 pub(crate) struct CanisterManagerResponse {
     /// The target canister of the current request.
     /// Only `CanisterState` of that canister could have been mutated
