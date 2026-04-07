@@ -5011,6 +5011,7 @@ impl StateMachine {
 
     /// Make sure the latest state is certified.
     pub fn certify_latest_state(&self) {
+        self.state_manager.flush_hash_channel();
         certify_latest_state_helper(self.state_manager.clone(), &self.secret_key, self.subnet_id)
     }
 
