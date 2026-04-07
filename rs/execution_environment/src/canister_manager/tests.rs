@@ -1340,10 +1340,11 @@ fn start_a_stopping_canister_with_no_stop_contexts() {
         state.put_canister_state(canister);
 
         let canister = state.canister_state_make_mut(&canister_id).unwrap();
-        assert_eq!(
-            canister_manager.start_canister(sender, canister, subnet_admins),
-            Ok(Vec::new())
-        );
+        let stop_contexts_to_reject = canister_manager
+            .start_canister(sender, canister, subnet_admins)
+            .unwrap()
+            .stop_contexts_to_reject;
+        assert_eq!(stop_contexts_to_reject, Vec::new());
     });
 }
 
@@ -1363,10 +1364,11 @@ fn start_a_stopping_canister_with_stop_contexts() {
         state.put_canister_state(canister);
 
         let canister = state.canister_state_make_mut(&canister_id).unwrap();
-        assert_eq!(
-            canister_manager.start_canister(sender, canister, subnet_admins),
-            Ok(vec![stop_context])
-        );
+        let stop_contexts_to_reject = canister_manager
+            .start_canister(sender, canister, subnet_admins)
+            .unwrap()
+            .stop_contexts_to_reject;
+        assert_eq!(stop_contexts_to_reject, vec![stop_context]);
     });
 }
 

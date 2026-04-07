@@ -234,14 +234,8 @@ impl CanisterHttpPayloadBuilderImpl {
                 .inspect(|_| {
                     total_share_count += 1;
                 })
-                // Filter out shares that are timed out or have the wrong registry versions
-                .filter(|&response| {
-                    utils::check_share_against_context(
-                        consensus_registry_version,
-                        response,
-                        validation_context,
-                    )
-                })
+                // Filter out shares with the wrong registry version
+                .filter(|&share| share.content.registry_version == consensus_registry_version)
                 .inspect(|_| {
                     active_shares += 1;
                 })
@@ -448,13 +442,15 @@ impl CanisterHttpPayloadBuilderImpl {
             utils::check_response_consistency(response)
                 .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
-            // Validate response against `ValidationContext`
-            utils::check_response_against_context(
-                consensus_registry_version,
-                response,
-                validation_context,
-            )
-            .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+            // Validate response against consensus registry version
+            if response.proof.content.registry_version != consensus_registry_version {
+                return invalid_artifact(
+                    InvalidCanisterHttpPayloadReason::RegistryVersionMismatch {
+                        expected: consensus_registry_version,
+                        received: response.proof.content.registry_version,
+                    },
+                );
+            }
 
             // Check that the response is not submitted twice
             if !delivered_ids.insert(response.content.id) {
@@ -720,24 +716,6 @@ impl CanisterHttpPayloadBuilderImpl {
                     );
                 }
 
-                // Metadata consistency (timeout)
-                if entry.proof.content.timeout != entry.response.timeout {
-                    return invalid_artifact(InvalidCanisterHttpPayloadReason::InvalidMetadata {
-                        metadata_id: entry.proof.content.id,
-                        content_id: entry.response.id,
-                        metadata_timeout: entry.proof.content.timeout,
-                        content_timeout: entry.response.timeout,
-                    });
-                }
-
-                // Response must not be timed out
-                if entry.response.timeout < validation_context.time {
-                    return invalid_artifact(InvalidCanisterHttpPayloadReason::Timeout {
-                        timed_out_at: entry.response.timeout,
-                        validation_time: validation_context.time,
-                    });
-                }
-
                 // Registry version must match
                 if entry.proof.content.registry_version != consensus_registry_version {
                     return invalid_artifact(
@@ -947,16 +925,11 @@ fn flexible_ok_responses_into_consensus_response(
 /// The first issue could point to some issue rate limiting (e.g. some replicas receive 429s) while the later would point to an
 /// issue with the transform function (e.g. some non-deterministic component such as timestamp has not been removed).
 ///
-/// The function includes request id and timeout, which are also part of the hashed value.
+/// The function includes request id, which is also part of the hashed value.
 fn divergence_response_into_reject(
     response: CanisterHttpResponseDivergence,
 ) -> Option<ConsensusResponse> {
-    // Get the id and timeout, which need to be reported in the error message as well
-    let Some((id, timeout)) = response
-        .shares
-        .first()
-        .map(|share| (share.content.id, share.content.timeout))
-    else {
+    let Some(id) = response.shares.first().map(|share| share.content.id) else {
         // NOTE: We skip delivering the divergence response, if it has no shares
         // Such a divergence response should never validate, therefore this should never happen
         // However, if it where ever to happen, we can ignore it here.
@@ -964,7 +937,7 @@ fn divergence_response_into_reject(
         return None;
     };
 
-    // Count the different content hashes, that we have encountered in the divergence resonse
+    // Count the different content hashes, that we have encountered in the divergence response
     let mut hash_counts = BTreeMap::new();
     response
         .shares
@@ -994,9 +967,8 @@ fn divergence_response_into_reject(
         Payload::Reject(RejectContext::new(
             RejectCode::SysTransient,
             format!(
-                "No consensus could be reached. Replicas had different responses. Details: request_id: {}, timeout: {}, hashes: {}",
+                "No consensus could be reached. Replicas had different responses. Details: request_id: {}, hashes: {}",
                 id,
-                timeout.as_nanos_since_unix_epoch(),
                 hash_counts.join(", ")
             ),
         )),

@@ -467,3 +467,36 @@ system_test_nns(
         "@crate_index//:slog",
     ],
 )
+
+system_test_nns(
+    name = "nidkg_performance_test",
+    additional_colocate_tags = [
+        "system_test_benchmark",
+    ],
+    colocated_test_driver_vm_required_host_features = [
+        "performance",
+        "spm",
+    ],
+    colocated_test_driver_vm_resources = {
+        "vcpus": 64,
+        "memory_kibibytes": 512142680,
+        "boot_image_minimal_size_gibibytes": 500,
+    },
+    enable_head_nns_variant = False,
+    enable_metrics = True,
+    prometheus_vm_required_host_features = ["performance"],
+    tags = [
+        "colocate",
+        "manual",
+    ],
+    test_timeout = "eternal",
+    deps = [
+        # Keep sorted.
+        "//rs/registry/canister",
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:futures",
+        "@crate_index//:slog",
+    ],
+)
