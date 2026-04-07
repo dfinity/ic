@@ -639,7 +639,7 @@ fn should_consume_allowance_on_regular_burn_after_authorized_burn() {
         // Regular burn via spender — should consume from the allowance
         .with_burn(
             &account_1,
-            &Some(spender.clone()),
+            &Some(spender),
             &Tokens::from(regular_burn_amount),
         )
         .build();
