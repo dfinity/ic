@@ -537,8 +537,6 @@ pub struct CanisterHttpRequest {
 pub struct CanisterHttpResponse {
     #[prost(uint64, tag = "1")]
     pub id: u64,
-    #[prost(uint64, tag = "2")]
-    pub timeout: u64,
     #[prost(message, optional, tag = "4")]
     pub canister_id: ::core::option::Option<CanisterId>,
     #[prost(message, optional, tag = "3")]
@@ -548,8 +546,6 @@ pub struct CanisterHttpResponse {
 pub struct CanisterHttpResponseMetadata {
     #[prost(uint64, tag = "1")]
     pub id: u64,
-    #[prost(uint64, tag = "2")]
-    pub timeout: u64,
     #[prost(bytes = "vec", tag = "3")]
     pub content_hash: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "4")]
