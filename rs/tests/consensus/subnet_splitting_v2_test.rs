@@ -68,7 +68,7 @@ const CHATTING_CANISTERS_ON_THIRD_SUBNET_COUNT: usize = 3;
 const FIRST_CHATTING_CANISTER_ID_TO_MIGRATE_OFFSET: usize = 3;
 const LAST_CHATTING_CANISTER_ID_TO_MIGRATE_OFFSET: usize = 8;
 
-const TEST_ENABLED: bool = true;
+const TEST_ENABLED: bool = false;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()

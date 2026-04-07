@@ -215,7 +215,7 @@ thread_local! {
         = const { Cell::new(true) };
 
     static ENABLE_SUBNET_SPLITTING_PROPOSALS: Cell<bool>
-        = const { Cell::new(true) };
+        = const { Cell::new(false) };
 
     // The planned effects of enabling this flag include
     //   1. Reduce max dissolve delay from 8 years to 2 years. This includes capping existing neurons via data migration.
