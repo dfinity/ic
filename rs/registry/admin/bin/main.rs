@@ -64,6 +64,7 @@ use ic_nns_governance_api::{
     subnet_rental::{RentalConditionId, SubnetRentalRequest},
     update_canister_settings::{
         CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
+        SnapshotVisibility as GovernanceSnapshotVisibility,
     },
 };
 use ic_nns_governance_conversions::convert_guest_launch_measurements_from_pb_to_api;
@@ -130,6 +131,7 @@ use registry_canister::mutations::{
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
     do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
+    do_migrate_node_operator_directly::MigrateNodeOperatorPayload,
     do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
     do_remove_node_operators::RemoveNodeOperatorsPayload,
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
@@ -168,8 +170,8 @@ use std::{
 };
 use types::{
     LogVisibility, NodeDetails, ProposalAction, ProposalMetadata, ProposalPayload,
-    ProvisionalWhitelistRecord, Registry, RegistryRecord, RegistryValue, SubnetDescriptor,
-    SubnetRecord,
+    ProvisionalWhitelistRecord, Registry, RegistryRecord, RegistryValue, SnapshotVisibility,
+    SubnetDescriptor, SubnetRecord,
 };
 use update_subnet::ProposeToUpdateSubnetCmd;
 use url::Url;
@@ -557,6 +559,9 @@ enum SubCommand {
 
     /// Swap nodes in subnet directly, without governance.
     SwapNodeInSubnetDirectly(SwapNodeInSubnetDirectlyCmd),
+
+    /// Migrate node operator for nodes directly, without governance.
+    MigrateNodeOperatorDirectly(MigrateNodeOperatorDirectlyCmd),
 
     /// Update local registry store by pulling from remote URL
     UpdateRegistryLocalStore(UpdateRegistryLocalStoreCmd),
@@ -1552,6 +1557,9 @@ struct ProposeToUpdateCanisterSettingsCmd {
     #[clap(long)]
     /// If set, it will update the canister's wasm memory threshold to this value.
     wasm_memory_threshold: Option<u64>,
+    #[clap(long)]
+    /// If set, it will update the canister's snapshot visibility to this value.
+    snapshot_visibility: Option<SnapshotVisibility>,
 }
 
 impl ProposalTitle for ProposeToUpdateCanisterSettingsCmd {
@@ -1587,6 +1595,13 @@ impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
             Some(LogVisibility::Public) => Some(GovernanceLogVisibility::Public as i32),
             None => None,
         };
+        let snapshot_visibility = match self.snapshot_visibility {
+            Some(SnapshotVisibility::Controllers) => {
+                Some(GovernanceSnapshotVisibility::Controllers as i32)
+            }
+            Some(SnapshotVisibility::Public) => Some(GovernanceSnapshotVisibility::Public as i32),
+            None => None,
+        };
 
         let update_settings = UpdateCanisterSettings {
             canister_id,
@@ -1598,6 +1613,7 @@ impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
                 wasm_memory_limit,
                 log_visibility,
                 wasm_memory_threshold,
+                snapshot_visibility,
             }),
         };
 
@@ -3252,6 +3268,18 @@ struct SwapNodeInSubnetDirectlyCmd {
     pub new_node_id: PrincipalId,
 }
 
+#[derive(Parser)]
+struct MigrateNodeOperatorDirectlyCmd {
+    /// The node operator principal to migrate from.
+    #[clap(long)]
+    pub old_node_operator_id: PrincipalId,
+
+    /// Represents the new identity to which the resources from the old operator
+    /// will be transfered to.
+    #[clap(long)]
+    pub new_node_operator_id: PrincipalId,
+}
+
 /// Sub-command to vote on a root proposal to upgrade the governance canister.
 #[derive(Parser)]
 struct VoteOnRootProposalToUpgradeGovernanceCanisterCmd {
@@ -4456,6 +4484,7 @@ async fn main() {
             SubCommand::ProposeToUpdateXdrIcpConversionRate(_) => (),
             SubCommand::SubmitRootProposalToUpgradeGovernanceCanister(_) => (),
             SubCommand::SwapNodeInSubnetDirectly(_) => (),
+            SubCommand::MigrateNodeOperatorDirectly(_) => (),
             SubCommand::VoteOnRootProposalToUpgradeGovernanceCanister(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
@@ -4463,8 +4492,7 @@ async fn main() {
             ),
         }
 
-        if opts.secret_key_pem.is_some() {
-            let secret_key_path = opts.secret_key_pem.unwrap();
+        if let Some(secret_key_path) = opts.secret_key_pem {
             let contents = read_to_string(secret_key_path).expect("Could not read key file");
             let sig_keys = SigKeys::from_pem(&contents).expect("Failed to parse pem file");
             Sender::SigKeys(sig_keys)
@@ -5226,6 +5254,9 @@ async fn main() {
         }
         SubCommand::SwapNodeInSubnetDirectly(cmd) => {
             swap_node_in_subnet_directly(registry_canister, cmd).await;
+        }
+        SubCommand::MigrateNodeOperatorDirectly(cmd) => {
+            migrate_node_operator_directly(registry_canister, cmd).await;
         }
         SubCommand::GetPendingRootProposalsToUpgradeGovernanceCanister => {
             get_pending_root_proposals_to_upgrade_governance_canister(make_canister_client(
@@ -6751,6 +6782,36 @@ async fn swap_node_in_subnet_directly(
     {
         Some(_) => println!("Nodes swapped successfully."),
         None => panic!("No response was received from swap_node_in_subnet_directly"),
+    }
+}
+
+async fn migrate_node_operator_directly(
+    registry_canister: RegistryCanister,
+    cmd: MigrateNodeOperatorDirectlyCmd,
+) {
+    let nonce = generate_nonce();
+    let request = MigrateNodeOperatorPayload {
+        new_node_operator_id: Some(cmd.new_node_operator_id),
+        old_node_operator_id: Some(cmd.old_node_operator_id),
+    };
+
+    let payload = Encode!(&request).expect("Failed to serialize migrate node operator request.");
+
+    let agent = registry_canister.choose_random_agent();
+
+    match agent
+        .execute_update(
+            &REGISTRY_CANISTER_ID,
+            &REGISTRY_CANISTER_ID,
+            "migrate_node_operator_directly",
+            payload,
+            nonce,
+        )
+        .await
+        .unwrap()
+    {
+        Some(_) => println!("Node operator migrated successfully."),
+        None => panic!("No response was received from migrate_node_operator_directly"),
     }
 }
 

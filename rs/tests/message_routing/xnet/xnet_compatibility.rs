@@ -30,7 +30,7 @@ use ic_consensus_system_test_utils::upgrade::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::ic::{InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, get_guestos_img_version,
@@ -44,8 +44,8 @@ use slog::{Logger, info};
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-const PER_TASK_TIMEOUT: Duration = Duration::from_secs(15 * 60);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+const PER_TASK_TIMEOUT: Duration = Duration::from_secs(25 * 60);
+const OVERALL_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 const DKG_INTERVAL: u64 = 9;
 const NODES_PER_SUBNET: usize = 1;
@@ -69,8 +69,12 @@ fn setup(env: TestEnv) {
         }
         subnet
     }
-    let ic = InternetComputer::new();
-    ic.add_subnet(subnet(SubnetType::System, None))
+    InternetComputer::new()
+        .with_resource_overrides(VmResourceOverrides {
+            vcpus: Some(NrOfVCPUs::new(16)),
+            ..VmResourceOverrides::default()
+        })
+        .add_subnet(subnet(SubnetType::System, None))
         .add_subnet(subnet(SubnetType::Application, Some(DKG_INTERVAL)))
         .add_subnet(subnet(SubnetType::Application, Some(DKG_INTERVAL)))
         .setup_and_start(&env)
@@ -112,14 +116,14 @@ pub async fn test_async(env: TestEnv) {
         .map(|node| runtime_from_url(node.get_public_url(), node.effective_canister_id()));
 
     // Use custom thresholds for the xnet_config because after upgrade/downgrade
-    // cycles the subnets need time to stabilize. A 30s window is too tight: the
-    // warm-up period after a version change causes the send rate to fall just below
-    // 0.3 and mean latency to exceed 20s. Using 60s and 30s respectively gives the
-    // subnets enough time to stabilize while still verifying the SLO.
+    // cycles the subnets need time to stabilize. A 60s window is too tight: the
+    // warm-up period after a version change causes the send rate to fall below
+    // 0.3 and mean latency to exceed 20s. Using 90s and 30s respectively gives
+    // the subnets enough time to stabilize while still verifying the SLO.
     let xnet_config = xnet_slo_test_lib::Config::new_with_custom_thresholds(
         2,
         1,
-        Duration::from_secs(60),
+        Duration::from_secs(90),
         10,
         0.3,
         5.0,

@@ -30,11 +30,13 @@ rust_library(
         "//rs/monitoring/metrics",
         "//rs/phantom_newtype",
         "//rs/protobuf",
+        "//rs/registry/resource_limits",
         "//rs/registry/routing_table",
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
         "//rs/sys",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/types/wasm_types",
@@ -99,6 +101,24 @@ rust_bench(
     ],
 )
 
+rust_bench(
+    name = "log_memory_store_bench",
+    testonly = True,
+    srcs = [
+        "benches/log_memory_store.rs",
+    ],
+    deps = [
+        # Keep sorted.
+        ":replicated_state",
+        "//rs/config",
+        "//rs/criterion_time",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:criterion",
+        "@crate_index//:more-asserts",
+    ],
+)
+
 rust_test_with_binary(
     name = "replicated_state_test",
     binary_name = "replicated_state_test_binary",
@@ -144,6 +164,7 @@ rust_test_suite(
         "//rs/test_utilities/state",
         "//rs/test_utilities/types",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:assert_matches",

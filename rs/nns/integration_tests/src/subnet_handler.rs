@@ -54,6 +54,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 chain_key_config: None,
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                 subnet_admins: vec![],
+                resource_limits: Default::default(),
                 recalled_replica_version_ids: vec![],
             };
 
@@ -91,6 +92,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 is_halted: Some(true),
                 halt_at_cup_height: Some(true),
                 features: None,
+                resource_limits: None,
                 max_number_of_canisters: Some(200),
                 ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
                 ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -176,6 +178,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                     chain_key_config: None,
                     canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                     subnet_admins: vec![],
+                    resource_limits: Default::default(),
                     recalled_replica_version_ids: vec![],
                 }
             );

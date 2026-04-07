@@ -8,13 +8,8 @@ use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
-use ic_protobuf::registry::{
-    replica_version::v1::BlessedReplicaVersions,
-    unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
-};
-use ic_registry_keys::{
-    make_blessed_replica_versions_key, make_unassigned_nodes_config_record_key,
-};
+use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
+use ic_registry_keys::make_unassigned_nodes_config_record_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::Error as RegistryTransportError;
@@ -46,7 +41,7 @@ use std::time::Duration;
 pub const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 pub const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
 
-pub const NODE_UPGRADE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+pub const NODE_UPGRADE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 pub const NODE_UPGRADE_BACKOFF: Duration = Duration::from_secs(5);
 
 /// Setup the basic IC infrastructure (testnet, NNS, gateway)
@@ -152,20 +147,17 @@ pub async fn get_unassigned_nodes_config(
     .map(|v| UnassignedNodesConfigRecord::decode(v.0.as_slice()).unwrap())
 }
 
-/// Get the blessed guestOS version from the NNS registry.
-pub async fn get_blessed_guestos_versions(nns_node: &IcNodeSnapshot) -> BlessedReplicaVersions {
-    let registry_canister = RegistryCanister::new(vec![nns_node.get_public_url()]);
-    let blessed_vers_result = registry_canister
-        .get_value(
-            make_blessed_replica_versions_key().as_bytes().to_vec(),
-            None,
-        )
-        .await
-        .unwrap();
-    BlessedReplicaVersions::decode(&*blessed_vers_result.0).unwrap()
+/// Get the elected guestOS version from the NNS registry.
+pub async fn get_elected_guestos_versions(topology: &TopologySnapshot) -> Vec<String> {
+    topology
+        .replica_version_records()
+        .unwrap()
+        .into_iter()
+        .map(|(k, _)| k)
+        .collect()
 }
 
-/// Get the blessed guestOS version from the NNS registry.
+/// Update unassigned nodes to the target version.
 pub async fn update_unassigned_nodes(nns_node: &IcNodeSnapshot, target_version: &ReplicaVersion) {
     let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance_canister = get_governance_canister(&nns);
@@ -322,18 +314,18 @@ pub async fn wait_for_expected_guest_version(
     .await
 }
 
-/// Get the current boot ID from a HostOS node.
-pub fn get_host_boot_id(node: &NestedVm) -> String {
-    block_on(get_host_boot_id_async(node))
+/// Try to get the current boot ID from a HostOS node.
+pub fn try_get_host_boot_id(node: &NestedVm) -> Result<String> {
+    block_on(try_get_host_boot_id_async(node))
 }
 
-/// Get the current boot ID from a HostOS node. Asynchronous version
-pub async fn get_host_boot_id_async(node: &NestedVm) -> String {
-    node.block_on_bash_script_async("journalctl -q --list-boots | tail -n1 | awk '{print $2}'")
+/// Try to get the current boot ID from a HostOS node. Asynchronous version.
+pub async fn try_get_host_boot_id_async(node: &NestedVm) -> Result<String> {
+    let output = node
+        .block_on_bash_script_async("journalctl -q --list-boots | tail -n1 | awk '{print $2}'")
         .await
-        .expect("Failed to retrieve boot ID")
-        .trim()
-        .to_string()
+        .with_context(|| "Failed to retrieve host boot ID via journalctl")?;
+    Ok(output.trim().to_string())
 }
 
 /// Execute a bash script on a node via SSH and log the output.

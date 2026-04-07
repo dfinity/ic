@@ -18,6 +18,11 @@ message Funds {
   Cycles cycles_struct = 3;
 }
 
+message CompoundCycles {
+  Cycles real = 1;
+  types.v1.NominalCycles nominal = 2;
+}
+
 enum RejectReason {
   REJECT_REASON_UNSPECIFIED = 0;
   REJECT_REASON_CANISTER_MIGRATING = 1;

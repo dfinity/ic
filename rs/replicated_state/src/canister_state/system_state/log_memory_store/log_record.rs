@@ -17,7 +17,12 @@ impl LogRecord {
         // IMPORTANT: do not check the content length here, as we can only
         // read the record header without loading the full content,
         // but still need to know the full size of the record.
-        8 + 8 + 4 + self.len as usize
+        Self::estimate_bytes_len(self.len as usize)
+    }
+
+    #[inline]
+    pub fn estimate_bytes_len(content_len: usize) -> usize {
+        8 + 8 + 4 + content_len
     }
 
     pub fn matches(&self, filter: &FetchCanisterLogsFilter) -> bool {

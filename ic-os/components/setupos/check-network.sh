@@ -179,8 +179,9 @@ function setup_ipv4_network() {
 
 function ping_ipv4_gateway() {
     echo "* Pinging IPv4 gateway..."
-    # wait 20 seconds maximum for any network changes to settle.
-    ping4 -c 2 -w 20 ${ipv4_gateway} >/dev/null 2>&1
+
+    # Wait for up 1m for the gateway to become reachable, exit as soon as we get a reply
+    ping4 -w 60 ${ipv4_gateway} | grep -qm1 'bytes from'
     log_and_halt_installation_on_error "${?}" "Unable to ping IPv4 gateway."
 
     echo "  success"
@@ -189,7 +190,8 @@ function ping_ipv4_gateway() {
 function ping_ipv6_gateway() {
     echo "* Pinging IPv6 gateway..."
 
-    ping6 -c 4 ${ipv6_gateway_system} >/dev/null 2>&1
+    # Wait for up 1m for the gateway to become reachable, exit as soon as we get a reply
+    ping6 -w 60 ${ipv6_gateway_system} | grep -qm1 'bytes from'
     log_and_halt_installation_on_error "${?}" "Unable to ping IPv6 gateway."
 
     echo "  success"

@@ -15,6 +15,7 @@ rust_library(
         "@crate_index//:ratatui",
         "@crate_index//:scopeguard",
         "@crate_index//:shell-escape",
+        "@crate_index//:tracing",
         "@crate_index//:tui-textarea",
     ],
 )

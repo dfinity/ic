@@ -4,11 +4,12 @@ use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::ReplicaLogger;
 use ic_types::Time;
 use ic_types::{
-    CanisterId, Cycles, NumBytes, PrincipalId,
+    CanisterId, NumBytes, PrincipalId,
     messages::{CallContextId, NO_DEADLINE, Request},
     methods::{Callback, WasmClosure},
     time::CoarseTime,
 };
+use ic_types_cycles::{CompoundCycles, Cycles, Instructions, RequestAndResponseTransmission};
 use ic_wasm_types::doc_ref;
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, time::Duration};
@@ -203,8 +204,8 @@ impl RequestInPrep {
 
 pub(crate) struct RequestWithPrepayment {
     pub request: Request,
-    pub prepayment_for_response_execution: Cycles,
-    pub prepayment_for_response_transmission: Cycles,
+    pub prepayment_for_response_execution: CompoundCycles<Instructions>,
+    pub prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
 }
 
 /// Turns a `RequestInPrep` into a `Request`.

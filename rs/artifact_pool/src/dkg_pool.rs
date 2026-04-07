@@ -150,6 +150,11 @@ impl ValidatedPoolReader<dkg::Message> for DkgPoolImpl {
     fn get(&self, id: &DkgMessageId) -> Option<dkg::Message> {
         self.validated.get(id).cloned()
     }
+
+    fn get_all_for_initial_broadcast(&self) -> Box<dyn Iterator<Item = dkg::Message> + '_> {
+        // NiDKG artifacts are not persisted.
+        Box::new(std::iter::empty())
+    }
 }
 
 impl DkgPool for DkgPoolImpl {

@@ -8,7 +8,9 @@ use ic_nns_common::types::NeuronId;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
-use ic_system_test_driver::driver::ic::{ImageSizeGiB, InternetComputer, Subnet, VmResources};
+use ic_system_test_driver::driver::ic::{
+    ImageSizeGiB, InternetComputer, Subnet, VmResourceOverrides,
+};
 use ic_system_test_driver::driver::ic_gateway_vm::{
     HasIcGatewayVm, IC_GATEWAY_VM_NAME, IcGatewayVm,
 };
@@ -32,10 +34,9 @@ use crate::proposals::NEURON_CONTROLLER;
 use crate::proposals::NEURON_SECRET_KEY_PEM;
 use crate::proposals::ProposalWithMainnetState;
 
-pub const MAINNET_NODE_VM_RESOURCES: VmResources = VmResources {
-    vcpus: None,
-    memory_kibibytes: None,
+pub const MAINNET_NODE_VM_RESOURCE_OVERRIDES: VmResourceOverrides = VmResourceOverrides {
     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(192)),
+    ..VmResourceOverrides::const_default()
 };
 
 // Default path to the mainnet NNS state tarball on the backup pod. Can be overridden through the
@@ -190,6 +191,12 @@ fn setup_recovered_nns(
         .join()
         .unwrap_or_else(|e| panic!("Failed to fetch the mainnet ic-replay because {e:?}"));
 
+    // Replace the subnet list record in the registry with a singleton containing only the
+    // recovered NNS subnet, so that this testnet does not try to connect to mainnet nodes through
+    // XNet connections.
+    patch_subnet_list(&env);
+    // Set up a dictator neuron with a large stake to be able to pass any proposal instantly during
+    // the test
     let neuron_id: NeuronId = setup_test_neuron(&env);
 
     // Wait until the aux node is setup and we have fetched ic-recovery before starting the recovery
@@ -229,6 +236,7 @@ fn setup_recovered_nns(
         is_halted: None,
         halt_at_cup_height: None,
         features: None,
+        resource_limits: None,
         chain_key_config: None,
         chain_key_signing_enable: None,
         chain_key_signing_disable: None,
@@ -374,6 +382,12 @@ fn fetch_ic_config(env: &TestEnv, nns_node: &IcNodeSnapshot) {
         logger,
         "Successfully scp-ed {nns_node_ip:?}:{PATH_IC_CONFIG_SRC_PATH:} to {destination:?}."
     );
+}
+
+fn patch_subnet_list(env: &TestEnv) {
+    ic_replay(env, |cmd| {
+        cmd.arg("overwrite-subnet-list-with-singleton");
+    });
 }
 
 fn setup_test_neuron(env: &TestEnv) -> NeuronId {
@@ -683,7 +697,7 @@ fn setup_ic(env: TestEnv) {
             .unwrap();
 
     InternetComputer::new()
-        .with_default_vm_resources(MAINNET_NODE_VM_RESOURCES)
+        .with_resource_overrides(MAINNET_NODE_VM_RESOURCE_OVERRIDES)
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .with_api_boundary_nodes(1)
         .with_unassigned_nodes(1)

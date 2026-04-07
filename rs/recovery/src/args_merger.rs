@@ -66,7 +66,6 @@ mod tests {
             admin_key_file: Some(PathBuf::from("/dir1/key_file")),
             test_mode: true,
             skip_prompts: true,
-            use_local_binaries: false,
         };
         let args2 = RecoveryArgs {
             dir: PathBuf::from("/dir2/"),
@@ -75,7 +74,6 @@ mod tests {
             admin_key_file: None,
             test_mode: false,
             skip_prompts: true,
-            use_local_binaries: false,
         };
 
         let expected = RecoveryArgs {
@@ -85,7 +83,6 @@ mod tests {
             admin_key_file: args1.admin_key_file.clone(),
             test_mode: args2.test_mode,
             skip_prompts: true,
-            use_local_binaries: false,
         };
 
         assert_eq!(expected, merge(&logger, "test", &args1, &args2).unwrap());

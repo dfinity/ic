@@ -3924,7 +3924,7 @@ mod tests {
     fn test_derived_state_to_get_derived_state_response() {
         let derived_state = DerivedState {
             buyer_total_icp_e8s: 400_000_000,
-            sns_tokens_per_icp: 2.5f32,
+            sns_tokens_per_icp: 2.5_f32,
             direct_participant_count: Some(1000),
             cf_participant_count: Some(100),
             cf_neuron_count: Some(200),
@@ -3933,7 +3933,7 @@ mod tests {
         };
 
         let response: GetDerivedStateResponse = derived_state.into();
-        assert_eq!(response.sns_tokens_per_icp, Some(2.5f64));
+        assert_eq!(response.sns_tokens_per_icp, Some(2.5_f64));
         assert_eq!(response.buyer_total_icp_e8s, Some(400_000_000));
         assert_eq!(response.direct_participant_count, Some(1000));
         assert_eq!(response.cf_participant_count, Some(100));

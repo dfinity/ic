@@ -17,6 +17,9 @@ ic-types = { path = "../../../types/types" }
 tokio = { workspace = true }
 systest-message-routing-common = { path = "../common" }
 canister-test = { path = "../../../rust_canisters/canister_test" }
+ic-agent = { workspace = true }
+ic-error-types = { path = "../../../../packages/ic-error-types" }
+ic-universal-canister = { path = "../../../universal_canister/lib" }
 
 [[bin]]
 name = "xnet_compatibility"
@@ -41,3 +44,7 @@ path = "xnet_slo_29_subnets_test.rs"
 [[bin]]
 name = "xnet_slo_120_subnets_staging_test"
 path = "xnet_slo_120_subnets_staging_test.rs"
+
+[[bin]]
+name = "xnet_cloud_engine_isolation_test"
+path = "xnet_cloud_engine_isolation_test.rs"

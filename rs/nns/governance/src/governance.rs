@@ -1,6 +1,7 @@
 #![allow(deprecated)]
 use crate::{
-    are_nf_fund_proposals_disabled, are_performance_based_rewards_enabled, decoder_config,
+    are_nf_fund_proposals_disabled, are_performance_based_rewards_enabled,
+    are_subnet_splitting_proposals_enabled, decoder_config,
     governance::{
         merge_neurons::{
             build_merge_neurons_response, calculate_merge_neurons_effect,
@@ -12,8 +13,8 @@ use crate::{
         HeapGovernanceData, XdrConversionRate, initialize_governance, reassemble_governance_proto,
         split_governance_proto,
     },
-    is_comprehensive_neuron_list_enabled, is_neuron_follow_restrictions_enabled,
-    is_self_describing_proposal_actions_enabled,
+    is_comprehensive_neuron_list_enabled, is_mission_70_voting_rewards_enabled,
+    is_neuron_follow_restrictions_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
@@ -199,9 +200,6 @@ pub const PROPOSAL_MOTION_TEXT_BYTES_MAX: usize = 10000;
 // The minimum neuron dissolve delay (set when a neuron is first claimed)
 pub const INITIAL_NEURON_DISSOLVE_DELAY: u64 = 7 * ONE_DAY_SECONDS;
 
-// The maximum dissolve delay allowed for a neuron.
-pub const MAX_DISSOLVE_DELAY_SECONDS: u64 = 8 * ONE_YEAR_SECONDS;
-
 // The age of a neuron that saturates the age bonus for the voting power
 // computation.
 pub const MAX_NEURON_AGE_FOR_AGE_BONUS: u64 = 4 * ONE_YEAR_SECONDS;
@@ -285,6 +283,21 @@ pub const MAX_NEURONS_FUND_PARTICIPANTS: u64 = 5_000;
 /// A key for the neuron rate limiter, to make sure all add_neuron operations are limited
 /// in the same limit.
 const NEURON_RATE_LIMITER_KEY: &str = "ADD_NEURON";
+
+// The maximum dissolve delay allowed for a neuron.
+pub const MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70: u64 = 8 * ONE_YEAR_SECONDS;
+pub const MAX_DISSOLVE_DELAY_SECONDS_POST_MISSION_70: u64 = 2 * ONE_YEAR_SECONDS;
+
+/// Returns the maximum dissolve delay allowed for a neuron. After the flag is enabled, we can
+/// replace `max_dissolve_delay_seconds()` with `MAX_DISSOLVE_DELAY_SECONDS` and set
+/// `MAX_DISSOLVE_DELAY_SECONDS` to `MAX_DISSOLVE_DELAY_SECONDS_POST_MISSION_70`.
+pub fn max_dissolve_delay_seconds() -> u64 {
+    if is_mission_70_voting_rewards_enabled() {
+        MAX_DISSOLVE_DELAY_SECONDS_POST_MISSION_70
+    } else {
+        MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70
+    }
+}
 
 impl GovernanceError {
     pub fn new(error_type: ErrorType) -> Self {
@@ -837,13 +850,13 @@ mod test_wait_for_quiet {
         /// `evaluate_wait_for_quiet` fire, and that the wait-for-quiet
         /// deadline is only ever increased, if at all.
         #[test]
-        fn test_evaluate_wait_for_quiet(voting_period_seconds in 3600u64..604_800,
-                                        now_seconds in 0u64..1_000_000,
-                                        old_yes in 0u64..1_000_000,
-                                        old_no in 0u64..1_000_000,
-                                        old_total in 10_000_000u64..100_000_000,
-                                        yes_votes in 0u64..1_000_000,
-                                        no_votes in 0u64..1_000_000,
+        fn test_evaluate_wait_for_quiet(voting_period_seconds in 3600_u64..604_800,
+                                        now_seconds in 0_u64..1_000_000,
+                                        old_yes in 0_u64..1_000_000,
+                                        old_no in 0_u64..1_000_000,
+                                        old_total in 10_000_000_u64..100_000_000,
+                                        yes_votes in 0_u64..1_000_000,
+                                        no_votes in 0_u64..1_000_000,
     ) {
             let current_deadline_timestamp_seconds = voting_period_seconds;
             let proposal_timestamp_seconds = 0; // initial timestamp is always 0
@@ -1311,7 +1324,7 @@ impl Governance {
             randomness.seed_rng(rng_seed);
         }
 
-        Self {
+        let mut governance = Self {
             heap_data: heap_governance_proto,
             neuron_store: NeuronStore::new_restored(),
             env,
@@ -1323,7 +1336,38 @@ impl Governance {
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
             rate_limiter: new_rate_limiter(),
+        };
+
+        // A one-time data migration.
+        governance.maybe_set_eight_year_gang_bonus_base();
+
+        // Clamp all neuron dissolve delays to the Mission 70 maximum exactly once.
+        // The snapshot serves as the idempotency guard: if it's already populated,
+        // clamping has already run and we must not overwrite the pre-clamp record.
+        if is_mission_70_voting_rewards_enabled()
+            && governance
+                .heap_data
+                .neuron_id_to_pre_clamp_dissolve_state
+                .is_empty()
+        {
+            let now = governance.env.now();
+            governance.heap_data.neuron_id_to_pre_clamp_dissolve_state = governance
+                .neuron_store
+                .clamp_dissolve_delay_for_all_neurons_or_panic(now);
         }
+
+        governance
+    }
+
+    fn maybe_set_eight_year_gang_bonus_base(&mut self) {
+        if self.heap_data.eight_year_gang_bonus_migration_done {
+            return;
+        }
+
+        self.neuron_store
+            .set_eight_year_gang_bonus_base_e8s_for_all_neurons_or_panic();
+
+        self.heap_data.eight_year_gang_bonus_migration_done = true;
     }
 
     /// After calling this method, the proto and neuron_store (the heap neurons at least)
@@ -2274,12 +2318,17 @@ impl Governance {
         }
 
         // Read the maturity and staked maturity again after the ledger call, to avoid stale values.
-        let (parent_maturity_e8s, parent_staked_maturity_e8s) = self
+        let (
+            parent_maturity_e8s,
+            parent_staked_maturity_e8s,
+            parent_eight_year_gang_bonus_base_e8s,
+        ) = self
             .neuron_store
             .with_neuron(id, |neuron| {
                 (
                     neuron.maturity_e8s_equivalent,
                     neuron.staked_maturity_e8s_equivalent.unwrap_or(0),
+                    neuron.eight_year_gang_bonus_base_e8s,
                 )
             })
             .expect("Expected the parent neuron to exist");
@@ -2290,11 +2339,13 @@ impl Governance {
         let SplitNeuronEffect {
             transfer_maturity_e8s,
             transfer_staked_maturity_e8s,
+            transfer_eight_year_gang_bonus_base_e8s,
         } = calculate_split_neuron_effect(
             split_amount_e8s,
             minted_stake_e8s,
             parent_maturity_e8s,
             parent_staked_maturity_e8s,
+            parent_eight_year_gang_bonus_base_e8s,
         );
 
         // Decrease maturity and staked maturity of the parent neuron.
@@ -2313,6 +2364,10 @@ impl Governance {
             } else {
                 None
             };
+            parent_neuron.eight_year_gang_bonus_base_e8s = parent_neuron
+                .eight_year_gang_bonus_base_e8s
+                .checked_sub(transfer_eight_year_gang_bonus_base_e8s)
+                .expect("Eight year gang bonus base underflows");
         })
         .expect("Expected the parent neuron to exist");
 
@@ -2336,6 +2391,10 @@ impl Governance {
             } else {
                 None
             };
+            child_neuron.eight_year_gang_bonus_base_e8s = child_neuron
+                .eight_year_gang_bonus_base_e8s
+                .checked_add(transfer_eight_year_gang_bonus_base_e8s)
+                .expect("Eight year gang bonus base overflows");
         })
         .expect("Expected the child neuron to exist");
 
@@ -2599,7 +2658,7 @@ impl Governance {
 
         // Check if the least possible stake this neuron would be spawned with
         // is more than the minimum neuron stake.
-        let least_possible_stake = (maturity_to_spawn as f64 * (1f64 - 0.05)) as u64;
+        let least_possible_stake = (maturity_to_spawn as f64 * (1_f64 - 0.05)) as u64;
 
         if least_possible_stake < economics.neuron_minimum_stake_e8s {
             return Err(GovernanceError::new_with_message(
@@ -2708,6 +2767,13 @@ impl Governance {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 "Can't perform operation on neuron: Neuron is spawning.",
+            ));
+        }
+
+        if neuron_state == NeuronState::Dissolved {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Can't perform operation on neuron: Neuron is dissolved.",
             ));
         }
 
@@ -2927,7 +2993,7 @@ impl Governance {
 
         let dissolve_delay_seconds = std::cmp::min(
             disburse_to_neuron.dissolve_delay_seconds,
-            MAX_DISSOLVE_DELAY_SECONDS,
+            max_dissolve_delay_seconds(),
         );
 
         let dissolve_state_and_age = if dissolve_delay_seconds > 0 {
@@ -3375,10 +3441,9 @@ impl Governance {
     ) -> Vec<ProposalInfo> {
         let now = self.env.now();
         let caller_neurons = self.get_neuron_ids_by_principal(caller);
-        let return_self_describing_action = is_self_describing_proposal_actions_enabled()
-            && req
-                .and_then(|r| r.return_self_describing_action)
-                .unwrap_or(false);
+        let return_self_describing_action = req
+            .and_then(|r| r.return_self_describing_action)
+            .unwrap_or(false);
         self.heap_data
             .proposals
             .values()
@@ -3496,8 +3561,7 @@ impl Governance {
             req.include_reward_status.iter().cloned().collect();
         let include_status: HashSet<i32> = req.include_status.iter().cloned().collect();
         let caller_neurons = self.get_neuron_ids_by_principal(caller);
-        let return_self_describing_action = is_self_describing_proposal_actions_enabled()
-            && req.return_self_describing_action.unwrap_or(false);
+        let return_self_describing_action = req.return_self_describing_action.unwrap_or(false);
         let now = self.env.now();
         let proposal_matches_request = |data: &ProposalData| -> bool {
             let topic = data.topic();
@@ -3769,7 +3833,7 @@ impl Governance {
                 let nid = self.neuron_store.new_neuron_id(&mut *self.randomness)?;
                 let dissolve_delay_seconds = std::cmp::min(
                     reward_to_neuron.dissolve_delay_seconds,
-                    MAX_DISSOLVE_DELAY_SECONDS,
+                    max_dissolve_delay_seconds(),
                 );
 
                 let dissolve_state_and_age = if dissolve_delay_seconds > 0 {
@@ -4845,6 +4909,13 @@ impl Governance {
                 Self::validate_add_or_remove_data_centers_payload(&update.payload)
                     .map_err(invalid_proposal_error)?;
             }
+            ValidNnsFunction::SplitSubnet => {
+                if !are_subnet_splitting_proposals_enabled() {
+                    return Err(invalid_proposal_error(String::from(
+                        "Subnet Splitting proposals not yet enabled",
+                    )));
+                }
+            }
             _ => {}
         };
 
@@ -5037,16 +5108,21 @@ impl Governance {
             ));
         }
 
-        let self_describing_action = if is_self_describing_proposal_actions_enabled()
-            && cfg!(target_arch = "wasm32")
-            && !cfg!(feature = "canbench-rs")
-        {
-            // TODO(NNS1-4271): handle the error case when the self-describing action is fully
-            // implemented.
-            action.to_self_describing(self.env.clone()).await.ok()
-        } else {
-            None
-        };
+        let self_describing_action =
+            if cfg!(target_arch = "wasm32") && !cfg!(feature = "canbench-rs") {
+                match action.to_self_describing(self.env.clone()).await {
+                    Ok(self_describing_action) => Some(self_describing_action),
+                    Err(e) => {
+                        println!(
+                            "{}Failed to get self_describing_action for proposal: {:?}",
+                            LOG_PREFIX, e
+                        );
+                        None
+                    }
+                }
+            } else {
+                None
+            };
 
         // Before actually modifying anything, we first make sure that
         // the neuron is allowed to make this proposal and create the
@@ -7812,6 +7888,7 @@ impl Governance {
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
             spawning_neurons_count,
+            total_maturity_disbursements_in_progress_e8s_equivalent,
             non_self_authenticating_controller_neuron_subset_metrics,
             public_neuron_subset_metrics,
             declining_voting_power_neuron_subset_metrics,
@@ -7876,6 +7953,7 @@ impl Governance {
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
             spawning_neurons_count,
+            total_maturity_disbursements_in_progress_e8s_equivalent,
             total_staked_e8s_non_self_authenticating_controller,
             total_voting_power_non_self_authenticating_controller,
 

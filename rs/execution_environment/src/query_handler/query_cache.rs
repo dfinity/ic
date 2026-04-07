@@ -7,11 +7,12 @@ use ic_query_stats::QueryStatsCollector;
 use ic_replicated_state::ReplicatedState;
 use ic_replicated_state::metrics::duration_histogram;
 use ic_types::{
-    Cycles, DiskBytes, Time, UserId,
+    DiskBytes, Time, UserId,
     batch::QueryStats,
     ingress::WasmResult,
     messages::{CertificateDelegationFormat, CertificateDelegationMetadata, Query},
 };
+use ic_types_cycles::Cycles;
 use ic_utils_lru_cache::LruCache;
 use prometheus::{Histogram, IntCounter, IntGauge};
 use std::{collections::BTreeMap, sync::Mutex, time::Duration};

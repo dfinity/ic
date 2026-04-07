@@ -184,7 +184,7 @@ impl<A: CanisterApi> AddsConfig for ConfigAdder<A> {
 }
 
 fn generate_random_uuid() -> Result<Uuid, anyhow::Error> {
-    let mut buf = [0u8; 16];
+    let mut buf = [0_u8; 16];
     getrandom::getrandom(&mut buf)
         .map_err(|e| anyhow::anyhow!(e))
         .context("Failed to generate random bytes")?;
@@ -269,7 +269,7 @@ mod tests {
     // A comprehensive test for adding new rate-limit configs
     #[test]
     fn test_add_config_success() {
-        let current_time = 10u64;
+        let current_time = 10_u64;
         let schema_version = 1;
         let canister_state = CanisterState::from_static();
         // Add init config_1 corresponding to version=1 to the canister state
@@ -546,7 +546,7 @@ mod tests {
     #[test]
     fn test_add_config_fails_with_invalid_inputs() {
         // Arrange
-        let current_time = 10u64;
+        let current_time = 10_u64;
         let canister_state = CanisterState::from_static();
         let invalid_config_1 = api::InputConfig {
             schema_version: 1,
@@ -620,7 +620,7 @@ mod tests {
         // Arrange
         let canister_state = CanisterState::from_static();
         let adder = ConfigAdder::new(canister_state);
-        let current_time = 10u64;
+        let current_time = 10_u64;
         let config = api::InputConfig {
             schema_version: 1,
             rules: vec![],
@@ -674,7 +674,7 @@ mod tests {
         };
         // Act & assert
         let adder = ConfigAdder::new(canister_state);
-        let error = adder.add_config(config, 1u64).unwrap_err();
+        let error = adder.add_config(config, 1_u64).unwrap_err();
         assert!(
             matches!(error, AddConfigError::LinkingRuleToDisclosedIncident{index, incident_id} if index == 1 && incident_id == incident_id_2)
         );

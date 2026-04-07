@@ -6,13 +6,13 @@ use crate::consensus::{
     metrics::{BatchStats, BlockStats},
     status::{self, Status},
 };
+use ic_consensus_chain_key::ChainKeyPayloadBuilderImpl;
 use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_consensus_idkg::utils::{
     generate_responses_to_signature_request_contexts,
     get_idkg_subnet_public_keys_and_pre_signatures,
 };
 use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
-use ic_consensus_vetkd::VetKdPayloadBuilderImpl;
 use ic_error_types::RejectCode;
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_interfaces::{
@@ -348,9 +348,9 @@ fn generate_responses_to_subnet_calls(
         consensus_responses.append(&mut http_responses);
         stats.canister_http = http_stats;
 
-        let mut vetkd_responses =
-            VetKdPayloadBuilderImpl::into_messages(&block_payload.batch.vetkd);
-        consensus_responses.append(&mut vetkd_responses);
+        let mut chain_key_responses =
+            ChainKeyPayloadBuilderImpl::into_messages(&block_payload.batch.chain_key);
+        consensus_responses.append(&mut chain_key_responses);
     }
     consensus_responses
 }
@@ -690,7 +690,7 @@ mod tests {
         let payload = ConsensusPayload::new(ic_types::crypto::crypto_hash, block_payload);
 
         let block = Block::new(
-            CryptoHashOf::from(CryptoHash(vec![0u8; 32])),
+            CryptoHashOf::from(CryptoHash(vec![0_u8; 32])),
             payload,
             Height::from(1),
             Rank(0),

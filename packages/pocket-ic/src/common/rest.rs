@@ -656,6 +656,7 @@ pub struct InstanceConfig {
     pub incomplete_state: Option<IncompleteStateFlag>,
     pub initial_time: Option<InitialTime>,
     pub mainnet_nns_subnet_id: Option<bool>,
+    pub disable_ingress_validation: Option<bool>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
@@ -667,6 +668,7 @@ pub struct ExtendedSubnetConfigSet {
     pub bitcoin: Option<SubnetSpec>,
     pub system: Vec<SubnetSpec>,
     pub application: Vec<SubnetSpec>,
+    #[serde(default)]
     pub cloud_engine: Vec<SubnetSpec>,
     pub verified_application: Vec<SubnetSpec>,
 }
@@ -677,6 +679,8 @@ pub struct SubnetSpec {
     state_config: SubnetStateConfig,
     instruction_config: SubnetInstructionConfig,
     subnet_admins: Option<Vec<RawPrincipalId>>,
+    #[serde(default)]
+    cost_schedule: CanisterCyclesCostSchedule,
 }
 
 impl SubnetSpec {
@@ -716,10 +720,19 @@ impl SubnetSpec {
         self
     }
 
+    pub fn with_cost_schedule(mut self, cost_schedule: CanisterCyclesCostSchedule) -> SubnetSpec {
+        self.cost_schedule = cost_schedule;
+        self
+    }
+
     pub fn get_subnet_admins(&self) -> Option<Vec<Principal>> {
         self.subnet_admins
             .clone()
             .map(|subnet_admins| subnet_admins.into_iter().map(Principal::from).collect())
+    }
+
+    pub fn get_cost_schedule(&self) -> CanisterCyclesCostSchedule {
+        self.cost_schedule
     }
 }
 
@@ -729,6 +742,7 @@ impl Default for SubnetSpec {
             state_config: SubnetStateConfig::New,
             instruction_config: SubnetInstructionConfig::Production,
             subnet_admins: None,
+            cost_schedule: Default::default(),
         }
     }
 }
@@ -790,7 +804,7 @@ impl ExtendedSubnetConfigSet {
     }
 
     pub fn validate(&self) -> Result<(), String> {
-        let all_but_cloud_engine = self
+        let all_but_application_and_cloud_engine = self
             .nns
             .iter()
             .chain(&self.sns)
@@ -798,22 +812,54 @@ impl ExtendedSubnetConfigSet {
             .chain(&self.fiduciary)
             .chain(&self.bitcoin)
             .chain(&self.system)
-            .chain(&self.application)
             .chain(&self.verified_application);
 
+        let all = all_but_application_and_cloud_engine
+            .clone()
+            .chain(&self.application)
+            .chain(&self.cloud_engine);
+
         // 1. Check for invalid admins using a clone of the iterator (to prevent its consumption).
-        if all_but_cloud_engine
+        if all_but_application_and_cloud_engine
             .clone()
             .any(|spec| spec.subnet_admins.is_some())
         {
             return Err(
-                "Subnet admins can only be specified for subnet of kind `CloudEngine`".into(),
+                "Subnet admins can only be specified for subnet of kind `Application` or `CloudEngine`".into(),
             );
         }
 
-        // 2. Check for existence across everything (again cloning the iterator to prevent its consumption)
-        let has_any =
-            all_but_cloud_engine.clone().next().is_some() || !self.cloud_engine.is_empty();
+        // 2. Check for invalid cost schedules using a clone of the iterator (to prevent its consumption).
+        if all_but_application_and_cloud_engine
+            .clone()
+            .any(|spec| spec.cost_schedule != Default::default())
+        {
+            return Err("Non-default cost schedule can only be specified for subnet of kind `Application` or `CloudEngine`".into());
+        }
+
+        // 3. Check for invalid combinations of subnet admins and cost schedule using a clone of the iterator (to prevent its consumption).
+        if all.clone().any(|spec| {
+            spec.subnet_admins.is_some() && spec.cost_schedule != CanisterCyclesCostSchedule::Free
+        }) {
+            return Err(
+                "Subnet admins can only be specified for subnet with cost schedule of kind `Free`"
+                    .into(),
+            );
+        }
+
+        // 4. Cloud engines must have a "free" cost schedule.
+        if self
+            .cloud_engine
+            .iter()
+            .any(|spec| spec.cost_schedule != CanisterCyclesCostSchedule::Free)
+        {
+            return Err(
+                "Every subnet of kind `CloudEngine` must have cost schedule of kind `Free`".into(),
+            );
+        }
+
+        // 5. Check for existence across everything (again cloning the iterator to prevent its consumption).
+        let has_any = all.clone().next().is_some();
 
         if !has_any {
             return Err("ExtendedSubnetConfigSet must contain at least one subnet".into());
@@ -888,11 +934,34 @@ impl ExtendedSubnetConfigSet {
     }
 }
 
+/// Specifies how to charge canisters for their use of computational resources (such as
+/// executing instructions, storing data, network, etc.).
+#[derive(
+    Debug,
+    Default,
+    Hash,
+    Clone,
+    Copy,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+)]
+pub enum CanisterCyclesCostSchedule {
+    #[default]
+    Normal,
+    Free,
+}
+
 /// Configuration details for a subnet, returned by PocketIc server
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema)]
 pub struct SubnetConfig {
     pub subnet_kind: SubnetKind,
     pub subnet_admins: Option<Vec<RawPrincipalId>>,
+    pub cost_schedule: CanisterCyclesCostSchedule,
     pub subnet_seed: [u8; 32],
     /// Instruction limits for canister execution on this subnet.
     pub instruction_config: SubnetInstructionConfig,

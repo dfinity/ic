@@ -31,7 +31,7 @@ use ic_sns_wasm::{init::SnsWasmCanisterInitPayload, pb::v1::AddWasmRequest};
 use ic_test_utilities::universal_canister::{
     UNIVERSAL_CANISTER_WASM, call_args, wasm as universal_canister_argument_builder,
 };
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use ic_xrc_types::{Asset, AssetClass, ExchangeRateMetadata};
 use icp_ledger as ledger;
 use ledger::LedgerCanisterInitPayload;
@@ -565,6 +565,22 @@ pub async fn create_and_install_mock_exchange_rate_canister(
     // Step 2.2: Actually install the WASM, and pass init_payload to it.
     let mut mock_exchange_rate_canister = Canister::new(runtime, EXCHANGE_RATE_CANISTER_ID);
     install_mock_exchange_rate_canister(&mut mock_exchange_rate_canister, init_payload).await;
+}
+
+/// Warning: This assumes that canisters with ID smaller than that of the
+/// Subnet Rental canister have all already been created.
+pub async fn create_and_install_mock_subnet_rental_canister(runtime: &'_ Runtime) -> Canister<'_> {
+    // Create canisters in a loop until we hit SUBNET_RENTAL_CANISTER_ID.
+    // This is a hack similar to the one in `create_and_install_mock_exchange_rate_canister`.
+    // See the comment there for more details.
+    for _ in 0..100 {
+        let mut canister = runtime.create_canister(Some(0)).await.unwrap();
+        if canister.canister_id() == SUBNET_RENTAL_CANISTER_ID {
+            install_universal_canister(&mut canister).await;
+            return canister;
+        }
+    }
+    panic!("Could not set up mock subnet rental canister");
 }
 
 /// Compiles the governance canister, builds it's initial payload and installs

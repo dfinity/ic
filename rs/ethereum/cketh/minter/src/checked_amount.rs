@@ -185,7 +185,7 @@ impl<Unit> TryFrom<candid::Nat> for CheckedAmountOf<Unit> {
 
     fn try_from(value: candid::Nat) -> Result<Self, Self::Error> {
         let value_bytes = value.0.to_bytes_be();
-        let mut value_u256 = [0u8; 32];
+        let mut value_u256 = [0_u8; 32];
         if value_bytes.len() <= 32 {
             value_u256[32 - value_bytes.len()..].copy_from_slice(&value_bytes);
         } else {

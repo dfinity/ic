@@ -347,10 +347,21 @@ mod test {
         // Make sure we can subscribe again if we disconnect one of the subscribers
         drop(socket3);
 
-        let (mut socket3, _) =
-            tokio_tungstenite::connect_async(format!("ws://{addr}/logs/canister/aaaaa-aa"))
+        // Retry connecting since the server needs some time to detect the
+        // disconnect and decrement the subscriber counter.
+        let mut socket3 = None;
+        for _ in 0..50 {
+            match tokio_tungstenite::connect_async(format!("ws://{addr}/logs/canister/aaaaa-aa"))
                 .await
-                .unwrap();
+            {
+                Ok((s, _)) => {
+                    socket3 = Some(s);
+                    break;
+                }
+                Err(_) => tokio::time::sleep(std::time::Duration::from_millis(100)).await,
+            }
+        }
+        let mut socket3 = socket3.expect("failed to reconnect after dropping socket3");
 
         // But we can subscribe to another canister
         let (mut socket4, _) =

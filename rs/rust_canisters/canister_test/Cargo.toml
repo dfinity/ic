@@ -20,6 +20,7 @@ ic-management-canister-types-private = { path = "../../types/management_canister
 ic-registry-transport = { path = "../../registry/transport" }
 ic-replica-tests = { path = "../../replica_tests" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
+ic-types-cycles = { path = "../../types/cycles" }
 ic-types = { path = "../../types/types" }
 on_wire = { path = "../on_wire" }
 rand = { workspace = true }
