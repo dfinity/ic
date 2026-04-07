@@ -949,6 +949,15 @@ fn corrupt_latest_cup(
     };
     let bytes = corrupted_proto_cup.encode_to_vec();
 
+    // Stop all replicas first to prevent restarted nodes from fetching valid CUPs
+    // from peers that haven't been corrupted yet.
+    for node in subnet.nodes() {
+        info!(logger, "Stopping replica on node {:?}", node.get_ip_addr());
+        node.block_on_bash_script("sudo systemctl stop ic-replica")
+            .expect("stop replica");
+    }
+
+    // Upload corrupted CUPs to all nodes.
     for node in subnet.nodes() {
         info!(
             logger,
@@ -957,24 +966,39 @@ fn corrupt_latest_cup(
             node.get_ip_addr()
         );
         let session = node.block_on_ssh_session().unwrap();
-        app_node
-            .block_on_bash_script_from_session(
-                &session,
-                &format!("sudo touch {NEW_CUP_PATH}; sudo chmod a+rw {NEW_CUP_PATH}"),
-            )
-            .expect("touch");
+        node.block_on_bash_script_from_session(
+            &session,
+            &format!("sudo touch {NEW_CUP_PATH}; sudo chmod a+rw {NEW_CUP_PATH}"),
+        )
+        .expect("touch");
+
         let mut channel = session
             .scp_send(Path::new(NEW_CUP_PATH), 0o666, bytes.len() as u64, None)
             .unwrap();
         channel.write_all(&bytes).unwrap();
+        // Ensure the SCP upload has fully completed before moving the CUP file.
+        channel.flush().unwrap();
+        channel.send_eof().unwrap();
+        channel.wait_eof().unwrap();
+        channel.close().unwrap();
+        channel.wait_close().unwrap();
 
-        info!(logger, "Restarting node {:?}", node.get_ip_addr());
-        app_node
-            .block_on_bash_script_from_session(
-                &session,
-                &format!("sudo mv {NEW_CUP_PATH} {CUP_PATH}; sudo systemctl restart ic-replica"),
-            )
-            .expect("restart");
+        node.block_on_bash_script_from_session(
+            &session,
+            &format!("sudo mv {NEW_CUP_PATH} {CUP_PATH}"),
+        )
+        .expect("replace CUP");
+    }
+
+    // Restart ic-replica on all nodes with the corrupted CUPs.
+    for node in subnet.nodes() {
+        info!(
+            logger,
+            "Starting ic-replica on node {:?}",
+            node.get_ip_addr()
+        );
+        node.block_on_bash_script("sudo systemctl start ic-replica")
+            .expect("start replica");
     }
 
     assert!(

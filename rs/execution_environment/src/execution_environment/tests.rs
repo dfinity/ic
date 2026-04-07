@@ -2121,13 +2121,13 @@ fn management_canister_xnet_to_nns_called_from_non_nns() {
     test.inject_call_to_ic00(
         Method::CreateCanister,
         EmptyBlob.encode(),
-        test.canister_creation_fee(),
+        test.canister_creation_fee().real(),
     );
     test.inject_call_to_ic00(Method::RawRand, EmptyBlob.encode(), Cycles::from(0_u64));
     test.inject_call_to_ic00(
         Method::HttpRequest,
         EmptyBlob.encode(),
-        test.http_request_fee(NumBytes::from(0), None),
+        test.http_request_fee(NumBytes::from(0), None).real(),
     );
     test.execute_all();
     for response in test.xnet_messages().clone() {
@@ -2220,13 +2220,13 @@ fn management_canister_xnet_called_from_non_nns() {
     test.inject_call_to_ic00(
         Method::CreateCanister,
         EmptyBlob.encode(),
-        test.canister_creation_fee(),
+        test.canister_creation_fee().real(),
     );
     test.inject_call_to_ic00(Method::RawRand, EmptyBlob.encode(), Cycles::from(0_u64));
     test.inject_call_to_ic00(
         Method::HttpRequest,
         EmptyBlob.encode(),
-        test.http_request_fee(NumBytes::from(0), None),
+        test.http_request_fee(NumBytes::from(0), None).real(),
     );
     test.execute_all();
     for response in test.xnet_messages().clone() {
@@ -2254,7 +2254,7 @@ fn create_canister_xnet_called_from_nns() {
     test.inject_call_to_ic00(
         Method::CreateCanister,
         EmptyBlob.encode(),
-        test.canister_creation_fee(),
+        test.canister_creation_fee().real(),
     );
     test.execute_all();
     let response = test.xnet_messages()[0].clone();
@@ -2285,7 +2285,7 @@ fn setup_initial_dkg_sender_on_nns() {
     test.inject_call_to_ic00(
         Method::SetupInitialDKG,
         args.encode(),
-        test.canister_creation_fee(),
+        test.canister_creation_fee().real(),
     );
     test.execute_all();
     assert_eq!(0, test.xnet_messages().len());
@@ -2307,7 +2307,7 @@ fn setup_initial_dkg_sender_not_on_nns() {
     test.inject_call_to_ic00(
         Method::SetupInitialDKG,
         args.encode(),
-        test.canister_creation_fee(),
+        test.canister_creation_fee().real(),
     );
     test.execute_all();
     let response = test.xnet_messages()[0].clone();
@@ -2317,7 +2317,7 @@ fn setup_initial_dkg_sender_not_on_nns() {
             originator: other_canister,
             respondent: CanisterId::from(own_subnet),
             originator_reply_callback: CallbackId::new(0),
-            refund: test.canister_creation_fee(),
+            refund: test.canister_creation_fee().real(),
             response_payload: Payload::Reject(RejectContext::new(
                 RejectCode::CanisterError,
                 format!(
@@ -2426,12 +2426,12 @@ fn ingress_deducts_execution_cost_from_canister_balance() {
     let execution_cost_after = test.canister_execution_cost(canister);
     assert_eq!(
         balance_before - balance_after,
-        execution_cost_after - execution_cost_before
+        (execution_cost_after - execution_cost_before).real()
     );
     // Ensure that we charged some cycles. The actual value is unknown to us at
     // this point but it is definitely larger that 1000.
     assert_gt!(
-        execution_cost_after - execution_cost_before,
+        (execution_cost_after - execution_cost_before).real(),
         Cycles::new(1_000)
     );
 }
@@ -3044,10 +3044,10 @@ fn execute_canister_http_request() {
         http_request_context.variable_parts_size(),
         Some(NumBytes::from(response_size_limit)),
     );
-    assert_eq!(http_request_context.request.payment, payment - fee);
+    assert_eq!(http_request_context.request.payment, payment - fee.real());
 
     assert_eq!(
-        NominalCycles::new(fee.get()),
+        fee.nominal(),
         test.state()
             .metadata
             .subnet_metrics
@@ -3055,7 +3055,7 @@ fn execute_canister_http_request() {
     );
 
     assert_eq!(
-        NominalCycles::new(fee.get()),
+        fee.nominal(),
         *test
             .state()
             .metadata
@@ -3642,15 +3642,15 @@ fn replicated_query_refunds_all_sent_cycles() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
-            - test.call_fee("query", &b_callback)
-            - test.reply_fee(&b_callback)
+            - test.canister_execution_cost(a_id).real()
+            - test.call_fee("query", &b_callback).real()
+            - test.reply_fee(&b_callback).real()
     );
 
     // Canister B doesn't get the transferred cycles.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(b_id)
+        initial_cycles - test.canister_execution_cost(b_id).real()
     );
 }
 
@@ -3726,16 +3726,16 @@ fn replicated_query_can_accept_cycles() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
-            - test.call_fee("query", &b_callback)
-            - test.reply_fee(&response_payload)
+            - test.canister_execution_cost(a_id).real()
+            - test.call_fee("query", &b_callback).real()
+            - test.reply_fee(&response_payload).real()
             - transferred_cycles
     );
 
     // Canister B gets the transferred cycles.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(b_id) + transferred_cycles
+        initial_cycles - test.canister_execution_cost(b_id).real() + transferred_cycles
     );
 }
 
@@ -3812,15 +3812,15 @@ fn replicated_query_does_not_accept_cycles_on_trap() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
-            - test.call_fee("query", &b_callback)
-            - test.reject_fee(reject_message)
+            - test.canister_execution_cost(a_id).real()
+            - test.call_fee("query", &b_callback).real()
+            - test.reject_fee(reject_message).real()
     );
 
     // Canister B does not get any cycles.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(b_id)
+        initial_cycles - test.canister_execution_cost(b_id).real()
     );
 }
 
@@ -3848,7 +3848,7 @@ fn replicated_query_can_burn_cycles() {
     // Canister A loses `cycles_to_burn` from its balance (in addition to execution cost)...
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(canister_id) - cycles_to_burn
+        initial_cycles - test.canister_execution_cost(canister_id).real() - cycles_to_burn
     );
 
     // ...and the burned cycles are accounted for in the canister's metrics.
@@ -3888,7 +3888,7 @@ fn replicated_query_does_not_burn_cycles_on_trap() {
     // Canister A only loses cycles due to executing but not `cycles_to_burn` (since it trapped)...
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(canister_id)
+        initial_cycles - test.canister_execution_cost(canister_id).real()
     );
 
     // ...and no burned cycles are accounted for in the canister's metrics.
@@ -4002,7 +4002,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     // Check that canister A's balance is updated correctly.
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
-        initial_cycles - execution_cost - transmission_cost - transferred_cycles
+        initial_cycles - execution_cost.real() - transmission_cost.real() - transferred_cycles
     );
 
     assert_eq!(
@@ -4032,12 +4032,12 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     // Check that consumed cycles are correct for both use cases.
     assert_eq!(
         transmission_consumption_after_response,
-        NominalCycles::new(transmission_cost.get())
+        transmission_cost.nominal(),
     );
 
     assert_eq!(
         instruction_consumption_after_response,
-        NominalCycles::new(execution_cost.get())
+        execution_cost.nominal(),
     );
 
     // Consumed cycles after the response should be smaller than before
@@ -4054,7 +4054,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     // Check that canister B's balance is updated correctly.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(b_id) + transferred_cycles
+        initial_cycles - test.canister_execution_cost(b_id).real() + transferred_cycles
     );
 
     // Check that consumed cycles are correct only for the `Instructions` use case.
@@ -4075,7 +4075,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::Instructions)
             .unwrap(),
-        NominalCycles::new(test.canister_execution_cost(b_id).get())
+        test.canister_execution_cost(b_id).nominal(),
     );
 }
 

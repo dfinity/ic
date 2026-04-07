@@ -1,24 +1,20 @@
-use crate::{
-    canister_logs::fetch_canister_logs,
-    canister_manager::{
-        CanisterManager,
-        types::{
-            CanisterManagerError, CanisterManagerResponse, DtsInstallCodeResult,
-            InstallCodeContext, PausedInstallCodeExecution, UploadChunkResult,
-        },
-    },
-    canister_settings::CanisterSettings,
-    execution::{
-        call_or_task::execute_call_or_task, common::validate_controller, inspect_message,
-        response::execute_response,
-    },
-    execution_environment_metrics::{
-        ExecutionEnvironmentMetrics, SUBMITTED_OUTCOME_LABEL, SUCCESS_STATUS_LABEL,
-    },
-    hypervisor::Hypervisor,
-    ic00_permissions::Ic00MethodPermissions,
-    metrics::{CallTreeMetrics, CallTreeMetricsImpl, IngressFilterMetrics},
+use crate::canister_logs::fetch_canister_logs;
+use crate::canister_manager::CanisterManager;
+use crate::canister_manager::types::{
+    CanisterManagerError, CanisterManagerResponse, DtsInstallCodeResult, InstallCodeContext,
+    PausedInstallCodeExecution, UploadChunkResult,
 };
+use crate::canister_settings::CanisterSettings;
+use crate::execution::call_or_task::execute_call_or_task;
+use crate::execution::common::validate_controller;
+use crate::execution::inspect_message;
+use crate::execution::response::execute_response;
+use crate::execution_environment_metrics::{
+    ExecutionEnvironmentMetrics, SUBMITTED_OUTCOME_LABEL, SUCCESS_STATUS_LABEL,
+};
+use crate::hypervisor::Hypervisor;
+use crate::ic00_permissions::Ic00MethodPermissions;
+use crate::metrics::{CallTreeMetrics, CallTreeMetricsImpl, IngressFilterMetrics};
 use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
@@ -30,7 +26,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
 };
-use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, MAX_PAIRED_PRE_SIGNATURES};
+use ic_limits::MAX_PAIRED_PRE_SIGNATURES;
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
@@ -52,55 +48,51 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::{NextExecution, system_state::PausedExecutionId};
+use ic_replicated_state::metadata_state::subnet_call_context_manager::{
+    EcdsaArguments, InstallCodeCall, InstallCodeCallId, PreSignatureStash, ReshareChainKeyContext,
+    SchnorrArguments, SetupInitialDkgContext, SignWithThresholdContext, StopCanisterCall,
+    SubnetCallContext, ThresholdArguments, VetKdArguments,
+};
 use ic_replicated_state::{
     CanisterState, CanisterStatus, ExecutionTask, NetworkTopology, ReplicatedState,
-    canister_state::NextExecution,
-    canister_state::system_state::PausedExecutionId,
-    metadata_state::subnet_call_context_manager::{
-        EcdsaArguments, InstallCodeCall, InstallCodeCallId, PreSignatureStash,
-        ReshareChainKeyContext, SchnorrArguments, SetupInitialDkgContext, SignWithThresholdContext,
-        StopCanisterCall, SubnetCallContext, ThresholdArguments, VetKdArguments,
-    },
 };
+use ic_types::batch::ChainKeyData;
+use ic_types::canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES};
+use ic_types::consensus::idkg::IDkgMasterPublicKeyId;
+use ic_types::crypto::{
+    ExtendedDerivationPath,
+    canister_threshold_sig::{MasterPublicKey, PublicKey},
+    threshold_sig::ni_dkg::{NiDkgMasterPublicKeyId, NiDkgTargetId},
+};
+use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
+use ic_types::messages::{
+    CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask, CanisterTask,
+    MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MessageId, Payload, RejectContext, Request, Response,
+    SignedIngress, StopCanisterCallId, StopCanisterContext, SubnetMessage,
+    extract_effective_canister_id,
+};
+use ic_types::methods::{Callback, SystemMethod, WasmMethod};
 use ic_types::{
     CanisterId, ExecutionRound, Height, NumBytes, NumInstructions, RegistryVersion, ReplicaVersion,
     SubnetId, Time,
-    batch::ChainKeyData,
-    canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES},
-    consensus::idkg::IDkgMasterPublicKeyId,
-    crypto::{
-        ExtendedDerivationPath,
-        canister_threshold_sig::{MasterPublicKey, PublicKey},
-        threshold_sig::ni_dkg::{NiDkgMasterPublicKeyId, NiDkgTargetId},
-    },
-    ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{
-        CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask, CanisterTask,
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, RejectContext, Request, Response,
-        SignedIngress, StopCanisterCallId, StopCanisterContext, SubnetMessage,
-        extract_effective_canister_id,
-    },
-    methods::{Callback, SystemMethod},
 };
-use ic_types::{messages::MessageId, methods::WasmMethod};
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, ECDSAOutcalls,
-    NominalCycles, NonConsumed, SchnorrOutcalls, VetKd,
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, ECDSAOutcalls, Instructions,
+    NominalCycles, SchnorrOutcalls, VetKd,
 };
 use ic_utils_thread::deallocator_thread::{DeallocationSender, DeallocatorThread};
 use ic_wasm_types::WasmHash;
 use phantom_newtype::AmountOf;
 use prometheus::IntCounter;
 use rand::RngCore;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::convert::{Into, TryFrom};
+use std::fmt;
 use std::num::NonZeroU64;
-use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
-    convert::{Into, TryFrom},
-    fmt,
-    str::FromStr,
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
-};
+use std::str::FromStr;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use strum::ParseError;
 
 #[cfg(test)]
@@ -326,7 +318,10 @@ pub trait PausedExecution: std::fmt::Debug + Send {
 
     /// Aborts the paused execution.
     /// Returns the original message and the cycles prepaid for execution.
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterMessageOrTask, Cycles);
+    fn abort(
+        self: Box<Self>,
+        log: &ReplicaLogger,
+    ) -> (CanisterMessageOrTask, CompoundCycles<Instructions>);
 
     /// Returns a reference to the message or task being executed.
     fn input(&self) -> CanisterMessageOrTask;
@@ -1056,7 +1051,10 @@ impl ExecutionEnvironment {
                     response: Err(err),
                     refund: msg.take_cycles(),
                 },
-                Ok(args) => self.deposit_cycles(args.get_canister_id(), &mut msg, &mut state),
+                Ok(args) => {
+                    let canister_id = args.get_canister_id();
+                    self.deposit_cycles(canister_id, &mut msg, &mut state)
+                }
             },
 
             Ok(Ic00Method::FlexibleHttpRequest) => match &msg {
@@ -2074,7 +2072,7 @@ impl ExecutionEnvironment {
         instruction_limits: InstructionLimits,
         max_instructions_per_query_message: NumInstructions,
         input: CanisterMessageOrTask,
-        prepaid_execution_cycles: Option<Cycles>,
+        prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
         time: Time,
         network_topology: Arc<NetworkTopology>,
         round_limits: &mut RoundLimits,
@@ -2082,16 +2080,11 @@ impl ExecutionEnvironment {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> ExecuteMessageResult {
-        match canister.next_execution() {
-            NextExecution::None | NextExecution::StartNew => {}
-            NextExecution::ContinueLong | NextExecution::ContinueInstallCode => {
-                // We should never try to execute a canister message in
-                // replicated mode if there is a pending long execution.
-                panic!(
-                    "Replicated execution with another pending DTS execution: {:?}",
-                    canister.next_execution()
-                );
-            }
+        if canister.has_long_execution_or_install_code() {
+            panic!(
+                "Replicated execution with a pending DTS task: {:?}",
+                canister.system_state.task_queue.paused_or_aborted_task()
+            );
         }
 
         let round_counters = RoundCounters {
@@ -2242,7 +2235,7 @@ impl ExecutionEnvironment {
         &self,
         canister: CanisterState,
         task: CanisterTask,
-        prepaid_execution_cycles: Option<Cycles>,
+        prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
         instruction_limits: InstructionLimits,
         round: RoundContext,
         round_limits: &mut RoundLimits,
@@ -2390,34 +2383,25 @@ impl ExecutionEnvironment {
         msg: &mut CanisterCall,
         state: &mut ReplicatedState,
     ) -> ExecuteSubnetMessageResult {
-        let cost_schedule = state.get_own_cost_schedule();
         match state.canister_state_make_mut(&canister_id) {
-            None => ExecuteSubnetMessageResult::Finished {
-                response: Err(UserError::new(
+            None => {
+                let err = UserError::new(
                     ErrorCode::CanisterNotFound,
                     format!("Canister {} not found.", &canister_id),
-                )),
-                refund: msg.take_cycles(),
-            },
+                );
+                ExecuteSubnetMessageResult::Finished {
+                    response: Err(err),
+                    refund: msg.take_cycles(),
+                }
+            }
 
             Some(canister_state) => {
                 let cycles = msg.take_cycles();
-                canister_state
-                    .system_state
-                    .add_cycles(CompoundCycles::<NonConsumed>::new(cycles, cost_schedule));
-                if cycles.get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
-                    info!(
-                        self.log,
-                        "Canister {} deposited {} cycles to canister {}.",
-                        msg.sender(),
-                        cycles,
-                        canister_id.get(),
-                    );
-                }
-                ExecuteSubnetMessageResult::Finished {
-                    response: Ok((EmptyBlob.encode(), Some(canister_id))),
-                    refund: Cycles::zero(),
-                }
+                let sender = *msg.sender();
+                let response = self
+                    .canister_manager
+                    .deposit_cycles(canister_state, cycles, sender);
+                self.process_canister_manager_response(response, state, msg)
             }
         }
     }
@@ -2524,16 +2508,9 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         provisional_whitelist: &ProvisionalWhitelist,
     ) -> Result<Vec<u8>, UserError> {
-        let cost_schedule = state.get_own_cost_schedule();
         let canister = canister_make_mut(canister_id, state)?;
         self.canister_manager
-            .add_cycles(
-                sender,
-                cycles,
-                canister,
-                provisional_whitelist,
-                cost_schedule,
-            )
+            .add_cycles(sender, cycles, canister, provisional_whitelist)
             .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into())
     }
@@ -3778,7 +3755,7 @@ impl ExecutionEnvironment {
         &self,
         mut msg: CanisterCall,
         call_id: Option<InstallCodeCallId>,
-        prepaid_execution_cycles: Option<Cycles>,
+        prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
         dts_status: DtsInstallCodeStatus,
         mut state: ReplicatedState,
         instruction_limits: InstructionLimits,
@@ -3829,13 +3806,10 @@ impl ExecutionEnvironment {
         };
 
         // Check the precondition.
-        match old_canister.next_execution() {
-            NextExecution::None | NextExecution::StartNew => {}
-            NextExecution::ContinueLong | NextExecution::ContinueInstallCode => {
-                panic!(
-                    "Attempt to start a new `install_code` execution while the previous execution is still in progress."
-                );
-            }
+        if old_canister.has_long_execution_or_install_code() {
+            panic!(
+                "Attempt to start a new `install_code` execution while the previous execution is still in progress."
+            );
         }
 
         let canister_id = old_canister.canister_id();
@@ -4639,7 +4613,7 @@ pub struct ExecuteCanisterResult {
 /// This is a helper for `execute_canister()`.
 fn execute_canister_input(
     input: CanisterMessageOrTask,
-    prepaid_execution_cycles: Option<Cycles>,
+    prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
     exec_env: &ExecutionEnvironment,
     mut canister: CanisterState,
     instruction_limits: InstructionLimits,

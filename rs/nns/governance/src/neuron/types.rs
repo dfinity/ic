@@ -1,18 +1,19 @@
 use crate::{
     DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
     governance::{
-        LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
-        MAX_NUM_HOT_KEYS_PER_NEURON,
+        LOG_PREFIX, MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NUM_HOT_KEYS_PER_NEURON,
+        max_dissolve_delay_seconds,
     },
     neuron::{combine_aged_stakes, dissolve_state_and_age::DissolveStateAndAge, neuron_stake_e8s},
     neuron_store::NeuronStoreError,
     pb::v1::{
         self as pb, AbridgedNeuron, Ballot, BallotInfo, Followees, GovernanceError,
-        KnownNeuronData, MaturityDisbursement, NeuronStakeTransfer, NeuronState, NeuronType, Topic,
-        Vote, VotingPowerEconomics,
+        KnownNeuronData, MaturityDisbursement, NeuronDissolveStateSnapshot, NeuronStakeTransfer,
+        NeuronState, NeuronType, Topic, Vote, VotingPowerEconomics,
         abridged_neuron::DissolveState,
         governance_error::ErrorType,
         manage_neuron::{Configure, configure::Operation},
+        neuron_dissolve_state_snapshot,
     },
 };
 use ic_base_types::PrincipalId;
@@ -351,11 +352,11 @@ impl Neuron {
         // future.
         let d = std::cmp::min(
             self.dissolve_delay_seconds(now_seconds),
-            MAX_DISSOLVE_DELAY_SECONDS,
+            max_dissolve_delay_seconds(),
         ) as u128;
         // 'd_stake' is the stake with bonus for dissolve delay.
-        let d_stake =
-            stake.saturating_add((stake.saturating_mul(d)) / (MAX_DISSOLVE_DELAY_SECONDS as u128));
+        let d_stake = stake
+            .saturating_add((stake.saturating_mul(d)) / (max_dissolve_delay_seconds() as u128));
         // Sanity check.
         assert!(d_stake <= 2 * stake);
         // The voting power is also a function of the age of the
@@ -893,6 +894,7 @@ impl Neuron {
             deciding_voting_power: Some(deciding_voting_power),
             potential_voting_power: Some(potential_voting_power),
             voting_power: potential_voting_power,
+            eight_year_gang_bonus_base_e8s: Some(self.eight_year_gang_bonus_base_e8s),
         }
     }
 
@@ -1173,6 +1175,7 @@ impl TryFrom<api::Neuron> for Neuron {
             neuron_type,
             visibility,
             voting_power_refreshed_timestamp_seconds,
+            eight_year_gang_bonus_base_e8s,
 
             // We do not allow these fields to be initialized by the user.
             deciding_voting_power: _,
@@ -1244,7 +1247,7 @@ impl TryFrom<api::Neuron> for Neuron {
         // Step 6: some fields that are not set by the API type.
         let recent_ballots_next_entry_index = None;
         let maturity_disbursements_in_progress = vec![];
-        let eight_year_gang_bonus_base_e8s = 0;
+        let eight_year_gang_bonus_base_e8s = eight_year_gang_bonus_base_e8s.unwrap_or(0);
 
         // Step 7: build the neuron.
         Ok(Neuron {
@@ -1313,11 +1316,11 @@ impl Neuron {
             neuron_type,
             voting_power_refreshed_timestamp_seconds,
             maturity_disbursements_in_progress,
+            eight_year_gang_bonus_base_e8s,
 
             // Not used.
             visibility: _,
             recent_ballots_next_entry_index: _,
-            eight_year_gang_bonus_base_e8s: _,
         } = self;
 
         let id = Some(id);
@@ -1379,6 +1382,7 @@ impl Neuron {
 
             potential_voting_power,
             deciding_voting_power,
+            eight_year_gang_bonus_base_e8s: Some(eight_year_gang_bonus_base_e8s),
         }
     }
 }
@@ -2038,6 +2042,70 @@ impl TryFrom<StoredDissolveStateAndAge> for DissolveStateAndAge {
                 }
             }
         }
+    }
+}
+
+impl AbridgedNeuron {
+    /// Clamps the dissolve delay to the current maximum, and returns a snapshot of the original
+    /// dissolve state for disaster recovery.
+    pub fn clamp_dissolve_delay_or_panic(
+        &mut self,
+        now_seconds: u64,
+    ) -> NeuronDissolveStateSnapshot {
+        // Usually, when we want to modify a neuron, we should use `with_neuron_mut`, which should
+        // allow us the work with the "Validated" types, and not have to handle the "raw" data in
+        // the storage layer. However, since we would like to change every neuron in the
+        // post_upgrade, and given that `with_neuron_mut` can be expensive as it reads every
+        // collection (e.g. recent ballots, followees, etc.), we will use the "raw" data in the
+        // storage layer here and do the same conversions to the "Validated" types as
+        // `with_neuron_mut` does. Therefore, there are 4 steps involved: convert the "raw" data to
+        // the "validated" types, record a snapshot of the original dissolve state, clamp the
+        // dissolve delay, and convert back to the "raw" data.
+
+        // Step 1. Convert the "raw" data to the "validated" types.
+        let stored_dissolve_state_and_age = StoredDissolveStateAndAge {
+            dissolve_state: self.dissolve_state,
+            aging_since_timestamp_seconds: self.aging_since_timestamp_seconds,
+        };
+        let validated_dissolve_state_and_age =
+            DissolveStateAndAge::try_from(stored_dissolve_state_and_age)
+                .expect("Expected the dissolve state and age to be valid");
+
+        // Step 2. Record the original dissolve state before clamping.
+        let original_dissolve_state_snapshot = match validated_dissolve_state_and_age {
+            DissolveStateAndAge::NotDissolving {
+                dissolve_delay_seconds,
+                aging_since_timestamp_seconds: _,
+            } => NeuronDissolveStateSnapshot {
+                dissolve_state: Some(
+                    neuron_dissolve_state_snapshot::DissolveState::DissolveDelaySeconds(
+                        dissolve_delay_seconds,
+                    ),
+                ),
+            },
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds,
+            } => NeuronDissolveStateSnapshot {
+                dissolve_state: Some(
+                    neuron_dissolve_state_snapshot::DissolveState::WhenDissolvedTimestampSeconds(
+                        when_dissolved_timestamp_seconds,
+                    ),
+                ),
+            },
+        };
+
+        // Step 3. Clamp the dissolve delay.
+        let clamped_dissolve_state_and_age = validated_dissolve_state_and_age
+            .clamp_dissolve_delay(max_dissolve_delay_seconds(), now_seconds);
+
+        // Step 4. Convert back to the "raw" data and update the neuron.
+        let clamped_stored_dissolve_state_and_age =
+            StoredDissolveStateAndAge::from(clamped_dissolve_state_and_age);
+        self.dissolve_state = clamped_stored_dissolve_state_and_age.dissolve_state;
+        self.aging_since_timestamp_seconds =
+            clamped_stored_dissolve_state_and_age.aging_since_timestamp_seconds;
+
+        original_dissolve_state_snapshot
     }
 }
 

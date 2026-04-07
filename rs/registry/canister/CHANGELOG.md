@@ -11,6 +11,20 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-03-27: Proposal 141091
+
+http://dashboard.internetcomputer.org/proposal/141091
+
+## Added
+
+* Subnet deletion endpoint. Limited to CloudEngine subnets. 
+* Implemented the `do_split_subnet` method
+* Added an optional field `maximum_state_delta` to `ResourceLimits` in `CreateSubnetPayload` which, when present,
+  sets a soft limit on the maximum (replicated) state *delta* (kept in main memory) in bytes.
+* Added an optional field `resource_limits` to `UpdateSubnetPayload` which, when present,
+  sets all subnet resource limits to the provided values.
+
+
 # 2026-03-20: Proposal 140960
 
 http://dashboard.internetcomputer.org/proposal/140960
