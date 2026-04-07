@@ -84,8 +84,8 @@
     "tag": "release-2026-04-03"
   },
   "internet_identity_frontend": {
-    "sha256": "2d254b49d7b8db4f71dbb09052eae939d2683a47fe1a153af1b3032a40eb2d7d",
-    "tag": "release-2026-03-27"
+    "sha256": "bbbac12ca3ccf84301dd6e1fc29c197cdfbb282e664a430c4322e52257377cbf",
+    "tag": "release-2026-04-03"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
