@@ -181,6 +181,9 @@ pub mod timer_tasks;
 mod voting;
 mod voting_history_store;
 
+/// As of Feb 2026, outside of this crate, this is only used by an integration test.
+pub use neuron::dissolve_delay_bonus_multiplier;
+
 /// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
 /// The value of 10_000 follows the Candid recommendation.
 const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
