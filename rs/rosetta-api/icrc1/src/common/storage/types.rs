@@ -822,6 +822,7 @@ mod tests {
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::Memo;
     use icrc_ledger_types::icrc107::schema::SET_FEE_COL_107;
+    use icrc_ledger_types::icrc122::schema::{BTYPE_122_BURN, BTYPE_122_MINT};
     use num_bigint::BigUint;
     use proptest::collection::vec;
     use proptest::prelude::{Just, any};
@@ -929,6 +930,44 @@ mod tests {
             )
     }
 
+    fn arb_authorized_mint() -> impl Strategy<Value = IcrcOperation> {
+        (
+            arb_account(),               // to
+            arb_nat(),                   // amount
+            option::of(arb_principal()), // caller
+            option::of("[a-z]{3,10}"),   // mthd
+            option::of("[a-z]{3,20}"),   // reason
+        )
+            .prop_map(
+                |(to, amount, caller, mthd, reason)| IcrcOperation::AuthorizedMint {
+                    to,
+                    amount,
+                    caller,
+                    mthd,
+                    reason,
+                },
+            )
+    }
+
+    fn arb_authorized_burn() -> impl Strategy<Value = IcrcOperation> {
+        (
+            arb_account(),               // from
+            arb_nat(),                   // amount
+            option::of(arb_principal()), // caller
+            option::of("[a-z]{3,10}"),   // mthd
+            option::of("[a-z]{3,20}"),   // reason
+        )
+            .prop_map(|(from, amount, caller, mthd, reason)| {
+                IcrcOperation::AuthorizedBurn {
+                    from,
+                    amount,
+                    caller,
+                    mthd,
+                    reason,
+                }
+            })
+    }
+
     fn arb_op() -> impl Strategy<Value = IcrcOperation> {
         prop_oneof![
             arb_approve(),
@@ -936,6 +975,8 @@ mod tests {
             arb_mint(),
             arb_transfer(),
             arb_fee_collector(),
+            arb_authorized_mint(),
+            arb_authorized_burn(),
         ]
     }
 
@@ -983,6 +1024,8 @@ mod tests {
                             caller: _,
                             mthd: _,
                         } => Some(BTYPE_107.to_string()),
+                        IcrcOperation::AuthorizedMint { .. } => Some(BTYPE_122_MINT.to_string()),
+                        IcrcOperation::AuthorizedBurn { .. } => Some(BTYPE_122_BURN.to_string()),
                         _ => None,
                     },
                 },
@@ -994,6 +1037,8 @@ mod tests {
         proptest!(|(op in arb_op().no_shrink())| {
             let btype = match op {
                 IcrcOperation::FeeCollector { .. } => Some(BTYPE_107.to_string()),
+                IcrcOperation::AuthorizedMint { .. } => Some(BTYPE_122_MINT.to_string()),
+                IcrcOperation::AuthorizedBurn { .. } => Some(BTYPE_122_BURN.to_string()),
                 _ => None,
             };
             let actual_op = match IcrcOperation::try_from((btype, BTreeMap::from(op.clone()))) {
@@ -1009,6 +1054,8 @@ mod tests {
         proptest!(|(tx in arb_transaction().no_shrink())| {
             let btype = match tx.operation {
                 IcrcOperation::FeeCollector { .. } => Some(BTYPE_107.to_string()),
+                IcrcOperation::AuthorizedMint { .. } => Some(BTYPE_122_MINT.to_string()),
+                IcrcOperation::AuthorizedBurn { .. } => Some(BTYPE_122_BURN.to_string()),
                 _ => None,
             };
             let actual_tx = match IcrcTransaction::try_from((btype, Value::from(tx.clone()))) {
