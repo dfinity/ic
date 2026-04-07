@@ -602,7 +602,7 @@ mod tests {
         SetupInitialDkgContext {
             request: RequestBuilder::new().build(),
             nodes_in_target_subnet: BTreeSet::from([node_test_id(1)]),
-            target_id: NiDkgTargetId::new([7u8; NiDkgTargetId::SIZE]),
+            target_id: NiDkgTargetId::new([7_u8; NiDkgTargetId::SIZE]),
             registry_version,
             time: UNIX_EPOCH,
         }
