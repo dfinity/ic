@@ -35,7 +35,7 @@ fn block_validator(
         is_map(),
         item("mthd", strict_req.clone(), is_text()),
         item(account_field, Required, is_account()),
-        item("amt", Required, is_more_or_equal_to(0)),
+        item("amt", Required, is_more_or_equal_to(1)),
         item("caller", strict_req.clone(), is_principal()),
         item("reason", Optional, is_text()),
         item("ts", strict_req, is_created_at_time),
