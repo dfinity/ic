@@ -1211,6 +1211,7 @@ pub struct CanisterInstaller<'a> {
     arg: Option<Vec<u8>>,
     cycles_amount: Option<u128>,
     effective_canister_id: PrincipalId,
+    retry_duration: Option<Duration>,
 }
 
 impl<'a> CanisterInstaller<'a> {
@@ -1228,6 +1229,7 @@ impl<'a> CanisterInstaller<'a> {
             cycles_amount: None,
             effective_canister_id: node.effective_canister_id(),
             node,
+            retry_duration: None,
         }
     }
 
@@ -1249,11 +1251,32 @@ impl<'a> CanisterInstaller<'a> {
         self
     }
 
+    pub fn with_retries(mut self, max_duration: Duration) -> Self {
+        self.retry_duration = Some(max_duration);
+
+        self
+    }
+
     pub fn block_on_install(self) -> Result<Principal> {
         block_on(self.install())
     }
 
     pub async fn install(self) -> Result<Principal> {
+        if let Some(retry_duration) = self.retry_duration {
+            retry_async(
+                "Installing canister",
+                &self.node.test_env().logger(),
+                retry_duration,
+                Duration::from_secs(5),
+                || self.try_install(),
+            )
+            .await
+        } else {
+            self.try_install().await
+        }
+    }
+
+    async fn try_install(&self) -> Result<Principal> {
         let agent = self.node.build_default_agent_async().await;
         // Create a canister.
         let mgr = ManagementCanister::create(&agent);
@@ -1267,8 +1290,8 @@ impl<'a> CanisterInstaller<'a> {
             .0;
 
         let mut install_code = mgr.install_code(&canister_id, &self.wasm);
-        if let Some(arg) = self.arg {
-            install_code = install_code.with_raw_arg(arg)
+        if let Some(arg) = &self.arg {
+            install_code = install_code.with_raw_arg(arg.clone())
         }
         install_code
             .call_and_wait()
