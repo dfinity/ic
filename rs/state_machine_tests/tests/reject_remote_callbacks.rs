@@ -175,6 +175,7 @@ fn reject_remote_callbacks() {
     // We reject remote callbacks twice in a row to confirm that this operation is idempotent.
     sm.reject_remote_callbacks();
     sm.tick();
+    sm.tick();
 
     let mut expected_reject = 2_u32.to_le_bytes().to_vec();
     expected_reject.extend_from_slice("Remote callback rejected by StateMachine test.".as_bytes());
