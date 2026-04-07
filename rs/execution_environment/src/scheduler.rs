@@ -1188,7 +1188,7 @@ impl Scheduler for SchedulerImpl {
                 .iter()
                 .filter_map(|(canister_id, canister)| {
                     if canister.has_long_execution_or_install_code() {
-                        Some(canister_id)
+                        Some(*canister_id)
                     } else {
                         None
                     }
