@@ -7,12 +7,11 @@ on:
         description: The commit sha to run the CI on
         required: true
         type: string
-    inputs:
       release-build:
         description: Whether this CI run is for a release build, which may require additional steps such as uploading artifacts.
         required: false
-        default: false
-        type: boolean
+        default: ''
+        type: string
 
 permissions:
   actions: write # needed for uploading artifacts to github
@@ -132,7 +131,7 @@ jobs:
               skip_long_tests="true"
           fi
 
-          # if release build was set manually, override whatever was inferreb above
+          # if release build was set, override whatever was determined above
           if [[ '${{ inputs.release-build }}' != '' ]]; then
               release_build=${{ inputs.release-build }}
           fi
