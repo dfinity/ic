@@ -342,22 +342,22 @@ impl ReplicatedStateMetrics {
                 }
                 CanisterStatus::Stopped => num_stopped_canisters += 1,
             }
-            match canister.next_task() {
-                Some(&ExecutionTask::PausedExecution { .. }) => {
+            match canister.system_state.task_queue.paused_or_aborted_task() {
+                Some(ExecutionTask::PausedExecution { .. }) => {
                     num_paused_exec += 1;
                 }
-                Some(&ExecutionTask::PausedInstallCode(_)) => {
+                Some(ExecutionTask::PausedInstallCode(_)) => {
                     num_paused_install += 1;
                 }
-                Some(&ExecutionTask::AbortedExecution { .. }) => {
+                Some(ExecutionTask::AbortedExecution { .. }) => {
                     num_aborted_exec += 1;
                 }
-                Some(&ExecutionTask::AbortedInstallCode { .. }) => {
+                Some(ExecutionTask::AbortedInstallCode { .. }) => {
                     num_aborted_install += 1;
                 }
-                Some(&ExecutionTask::Heartbeat)
-                | Some(&ExecutionTask::GlobalTimer)
-                | Some(&ExecutionTask::OnLowWasmMemory)
+                Some(ExecutionTask::Heartbeat)
+                | Some(ExecutionTask::GlobalTimer)
+                | Some(ExecutionTask::OnLowWasmMemory)
                 | None => {}
             }
             consumed_cycles_total += canister.system_state.canister_metrics().consumed_cycles();

@@ -27,7 +27,7 @@ use ic_types::messages::{
 use ic_types::methods::{Callback, FuncRef, WasmClosure};
 use ic_types::{NumBytes, NumInstructions, Time};
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, Instructions, NonConsumed,
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, Instructions,
     RequestAndResponseTransmission,
 };
 use ic_utils_thread::deallocator_thread::DeallocationSender;
@@ -111,6 +111,7 @@ const RESERVED_CLEANUP_INSTRUCTIONS_IN_PERCENT: u64 = 5;
 #[derive(Debug)]
 struct PausedResponseHelper {
     refund_for_sent_cycles: Cycles,
+    prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
     refund_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
     initial_cycles_balance: Cycles,
     response_sender: CanisterId,
@@ -121,6 +122,7 @@ struct PausedResponseHelper {
 struct ResponseHelper {
     canister: CanisterState,
     refund_for_sent_cycles: Cycles,
+    prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
     refund_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
     initial_cycles_balance: Cycles,
     response_sender: CanisterId,
@@ -185,6 +187,9 @@ impl ResponseHelper {
         let mut helper = Self {
             canister,
             refund_for_sent_cycles,
+            prepayment_for_response_transmission: original
+                .callback
+                .prepayment_for_response_transmission,
             refund_for_response_transmission,
             initial_cycles_balance,
             response_sender,
@@ -200,17 +205,15 @@ impl ResponseHelper {
     ///
     /// These are the only state changes to the initial canister state before
     /// executing Wasm code.
-    fn apply_initial_refunds(&mut self, cost_schedule: CanisterCyclesCostSchedule) {
+    fn apply_initial_refunds(&mut self) {
         self.canister
             .system_state
-            .add_cycles(CompoundCycles::<NonConsumed>::new(
-                self.refund_for_sent_cycles,
-                cost_schedule,
-            ));
+            .add_cycles(self.refund_for_sent_cycles);
 
-        self.canister
-            .system_state
-            .add_cycles(self.refund_for_response_transmission);
+        self.canister.system_state.refund_cycles(
+            self.prepayment_for_response_transmission,
+            self.refund_for_response_transmission,
+        );
     }
 
     /// Checks that the canister has not been uninstalled:
@@ -284,6 +287,7 @@ impl ResponseHelper {
         self.deallocation_sender.send(Box::new(self.canister));
         PausedResponseHelper {
             refund_for_sent_cycles: self.refund_for_sent_cycles,
+            prepayment_for_response_transmission: self.prepayment_for_response_transmission,
             refund_for_response_transmission: self.refund_for_response_transmission,
             initial_cycles_balance: self.initial_cycles_balance,
             response_sender: self.response_sender,
@@ -323,6 +327,7 @@ impl ResponseHelper {
         let mut helper = Self {
             canister: clean_canister.clone(),
             refund_for_sent_cycles: paused.refund_for_sent_cycles,
+            prepayment_for_response_transmission: paused.prepayment_for_response_transmission,
             refund_for_response_transmission: paused.refund_for_response_transmission,
             initial_cycles_balance: clean_canister.system_state.balance(),
             response_sender: paused.response_sender,
@@ -332,7 +337,7 @@ impl ResponseHelper {
 
         helper.apply_subnet_memory_reservation(round_limits);
 
-        helper.apply_initial_refunds(round.cost_schedule);
+        helper.apply_initial_refunds();
 
         // This validation succeeded in `execute_response()` and we expect it to
         // succeed here too.
@@ -980,7 +985,7 @@ pub fn execute_response(
         round_limits,
         deallocation_sender,
     );
-    helper.apply_initial_refunds(round.cost_schedule);
+    helper.apply_initial_refunds();
     let helper = match helper.validate(&call_context, &original, &round, round_limits) {
         Ok(helper) => helper,
         Err(result) => {

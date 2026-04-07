@@ -2226,7 +2226,6 @@ fn add_cycles_sender_in_whitelist() {
             Some(123),
             canister,
             &ProvisionalWhitelist::Set(btreeset! { canister_test_id(1).get() }),
-            CanisterCyclesCostSchedule::Normal,
         )
         .unwrap();
 
@@ -2256,7 +2255,6 @@ fn add_cycles_sender_not_in_whitelist() {
                 Some(123),
                 canister,
                 &ProvisionalWhitelist::Set(BTreeSet::new()),
-                CanisterCyclesCostSchedule::Normal,
             ),
             Err(CanisterManagerError::SenderNotInWhitelist(sender))
         );
