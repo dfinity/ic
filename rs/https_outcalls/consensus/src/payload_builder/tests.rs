@@ -3319,49 +3319,6 @@ fn flexible_error_responses_too_large_registry_version_mismatch() {
 }
 
 #[test]
-fn flexible_error_responses_too_large_share_timed_out() {
-    let num_nodes = 4;
-    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
-    let callback_id = CallbackId::from(42);
-
-    let huge = (MAX_CANISTER_HTTP_PAYLOAD_SIZE as u32 / 2) + 100_000;
-    setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, _pool| {
-        let share_ok = metadata_share_with_content_size(callback_id.get(), 0, huge);
-        let mut share_expired = metadata_share_with_content_size(callback_id.get(), 1, huge);
-        share_expired.content.timeout = UNIX_EPOCH + Duration::from_secs(1);
-
-        let far_future_context = ValidationContext {
-            registry_version: RegistryVersion::new(1),
-            certified_height: Height::new(0),
-            time: UNIX_EPOCH + Duration::from_secs(100),
-        };
-
-        let payload = CanisterHttpPayload {
-            flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
-                callback_id,
-                metadata_shares: vec![share_ok, share_expired],
-            }],
-            ..Default::default()
-        };
-        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
-        let result = pb.validate_payload(
-            Height::new(1),
-            &test_proposal_context(&far_future_context),
-            &payload_bytes,
-            &[],
-        );
-        assert_matches!(
-            result,
-            Err(ValidationError::InvalidArtifact(
-                InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::Timeout { .. }
-                )
-            ))
-        );
-    });
-}
-
-#[test]
 fn flexible_error_responses_too_large_invalid_signature() {
     let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
@@ -3780,97 +3737,6 @@ fn flexible_error_too_many_request_errors_proof_id_mismatch() {
 }
 
 #[test]
-fn flexible_error_too_many_request_errors_metadata_timeout_mismatch() {
-    let num_nodes = 4;
-    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
-    let callback_id = CallbackId::from(42);
-
-    setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
-        let entry_ok = flexible_reject_response(callback_id.get(), 0);
-        let mut entry_bad = flexible_reject_response(callback_id.get(), 1);
-        entry_bad.proof.content.timeout = UNIX_EPOCH + Duration::from_secs(999);
-
-        let payload = CanisterHttpPayload {
-            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
-                callback_id,
-                reject_responses: vec![entry_ok, entry_bad],
-            }],
-            ..Default::default()
-        };
-        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
-        let result = pb.validate_payload(
-            Height::new(1),
-            &test_proposal_context(&default_validation_context()),
-            &payload_bytes,
-            &[],
-        );
-        assert_matches!(
-            result,
-            Err(ValidationError::InvalidArtifact(
-                InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::InvalidMetadata { .. }
-                )
-            ))
-        );
-    });
-}
-
-#[test]
-fn flexible_error_too_many_request_errors_entry_timed_out() {
-    let num_nodes = 4;
-    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
-    let callback_id = CallbackId::from(42);
-
-    setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
-        use ic_types::canister_http::CanisterHttpReject;
-
-        let entry_ok = flexible_reject_response(callback_id.get(), 0);
-        // Create a reject response with a very early timeout
-        let (response, metadata) = test_response_and_metadata_full(
-            callback_id.get(),
-            UNIX_EPOCH + Duration::from_secs(1),
-            CanisterHttpResponseContent::Reject(CanisterHttpReject {
-                reject_code: RejectCode::SysTransient,
-                message: "expired entry".to_string(),
-            }),
-        );
-        let entry_expired = FlexibleCanisterHttpResponseWithProof {
-            response,
-            proof: metadata_to_share(1, &metadata),
-        };
-
-        let far_future_context = ValidationContext {
-            registry_version: RegistryVersion::new(1),
-            certified_height: Height::new(0),
-            time: UNIX_EPOCH + Duration::from_secs(100),
-        };
-
-        let payload = CanisterHttpPayload {
-            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
-                callback_id,
-                reject_responses: vec![entry_ok, entry_expired],
-            }],
-            ..Default::default()
-        };
-        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
-        let result = pb.validate_payload(
-            Height::new(1),
-            &test_proposal_context(&far_future_context),
-            &payload_bytes,
-            &[],
-        );
-        assert_matches!(
-            result,
-            Err(ValidationError::InvalidArtifact(
-                InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::Timeout { .. }
-                )
-            ))
-        );
-    });
-}
-
-#[test]
 fn flexible_error_too_many_request_errors_invalid_signature() {
     let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
@@ -4082,7 +3948,6 @@ fn metadata_share_with_content_size(
 ) -> CanisterHttpResponseShare {
     let metadata = CanisterHttpResponseMetadata {
         id: CallbackId::new(callback_id),
-        timeout: UNIX_EPOCH + Duration::from_secs(10),
         content_hash: CryptoHashOf::new(CryptoHash(vec![0xAB; 32])),
         content_size,
         registry_version: RegistryVersion::new(1),

@@ -869,24 +869,6 @@ impl CanisterHttpPayloadBuilderImpl {
                             );
                         }
 
-                        if entry.proof.content.timeout != entry.response.timeout {
-                            return invalid_artifact(
-                                InvalidCanisterHttpPayloadReason::InvalidMetadata {
-                                    metadata_id: entry.proof.content.id,
-                                    content_id: entry.response.id,
-                                    metadata_timeout: entry.proof.content.timeout,
-                                    content_timeout: entry.response.timeout,
-                                },
-                            );
-                        }
-
-                        if entry.response.timeout < validation_context.time {
-                            return invalid_artifact(InvalidCanisterHttpPayloadReason::Timeout {
-                                timed_out_at: entry.response.timeout,
-                                validation_time: validation_context.time,
-                            });
-                        }
-
                         if entry.proof.content.registry_version != consensus_registry_version {
                             return invalid_artifact(
                                 InvalidCanisterHttpPayloadReason::RegistryVersionMismatch {
@@ -930,13 +912,6 @@ impl CanisterHttpPayloadBuilderImpl {
                                     mismatched_id: share.content.id,
                                 },
                             );
-                        }
-
-                        if share.content.timeout < validation_context.time {
-                            return invalid_artifact(InvalidCanisterHttpPayloadReason::Timeout {
-                                timed_out_at: share.content.timeout,
-                                validation_time: validation_context.time,
-                            });
                         }
 
                         let signer = share.signature.signer;
