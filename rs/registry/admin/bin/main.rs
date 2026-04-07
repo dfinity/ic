@@ -1606,14 +1606,28 @@ impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
 }
 
 /// Sub-command to submit a proposal to bless an alternative GuestOS version.
+///
+/// Three ingredients are required:
+///   1. Chip IDs of the targeted nodes (identify which nodes can run the alternative GuestOS).
+///   2. Base launch measurements of the GuestOS currently running on those nodes (identify "what"
+///      is currently running).
+///   3. Rootfs hash of the Recovery-GuestOS that is allowed to run (identify "what" will run).
+///
+/// --rootfs-hash provides (3).
+///
+/// For (1) and (2), there are two modes:
+///   a) --subnet: Fetches both chip IDs and base launch measurements from the registry.
+///      --node-ids and/or --chip-ids can additionally filter which nodes are targeted (union is
+///      taken if both are specified); by default all SEV nodes in the subnet are included.
+///   b) --base-launch-measurements + (--node-ids and/or --chip-ids): Reads measurements from a
+///      JSON file and uses the nodes identified by --node-ids and/or --chip-ids.
 #[derive_common_proposal_fields]
 #[derive(Parser, ProposalMetadata)]
 struct ProposeToBlessAlternativeGuestOsVersionCmd {
     /// Subnet to query for chip IDs and launch measurements.
-    /// If specified, base_launch_measurements are automatically fetched from the registry.
-    /// If --node-ids or --chip-ids are also provided, they act as filters (must be part of the subnet).
-    /// Otherwise, chip IDs for all subnet members are used.
-    /// Either --subnet or (--chip-ids/--node-ids and --base-launch-measurements) must be provided.
+    /// If specified, base launch measurements are automatically fetched from the registry.
+    /// If --node-ids and/or --chip-ids are also provided, they act as filters (must be part of
+    /// the subnet); otherwise chip IDs for all SEV nodes in the subnet are used.
     #[clap(
         long,
         conflicts_with = "base_launch_measurements",
@@ -1623,58 +1637,64 @@ struct ProposeToBlessAlternativeGuestOsVersionCmd {
 
     /// Node IDs of nodes to bless the alternative Guest OS version on.
     /// If --subnet is provided, all the node IDs in this list must be part of that subnet.
-    /// If --subnet is not provided, --base-launch-measurements must be specified.
-    #[clap(long, num_args(1..), value_parser = parse_node_id, conflicts_with = "chip_ids")]
+    #[clap(long, num_args(1..), value_parser = parse_node_id)]
     node_ids: Vec<NodeId>,
 
     /// Hex-encoded chip IDs (AMD Secure Processor chip IDs). Each must be exactly 64 bytes.
-    /// Multiple values can be passed.
+    /// Multiple distinct values can be passed.
     /// If --subnet is provided, all the chip IDs must belong to nodes in that subnet.
-    /// If --subnet is not provided, --base-launch-measurements must be specified.
-    #[clap(long, num_args(1..), conflicts_with = "node_ids")]
+    #[clap(long, num_args(1..))]
     chip_ids: Vec<String>,
 
     /// Hexadecimal fingerprint of the Recovery-GuestOS rootfs that is allowed to run on the nodes
     /// if the proposal is accepted.
+    /// Together with base_guest_launch_measurements (derived from --subnet or
+    /// --base-launch-measurements), these two fields fully constrain which OS is allowed to run on
+    /// the targeted nodes.
     #[clap(long, required = true)]
     rootfs_hash: String,
 
-    /// Path to JSON file containing GuestLaunchMeasurements of the broken base GuestOS that needs
-    /// to be recovered using the Recovery-GuestOS. Can be extracted from a ReplicaVersionRecord.
-    /// Only nodes with this launch measurement can run the Recovery-GuestOS.
-    /// Either --subnet or (--chip-ids/--node-ids and --base-launch-measurements) must be provided.
+    /// Path to a JSON file containing GuestLaunchMeasurements for the base GuestOS that needs to
+    /// be recovered. These measurements identify which OS is currently running and authorize it to
+    /// boot the Recovery-GuestOS. The file must be a JSON-serialized GuestLaunchMeasurements
+    /// struct, e.g.:
+    ///   {"guest_launch_measurements":[{"measurement":[1,2,3,...],"metadata":{"kernel_cmdline":"..."}}]}
+    ///
+    /// In practice, this file is extracted from the registry: fetch the ReplicaVersionRecord of
+    /// the broken GuestOS version and serialize its guest_launch_measurements field to JSON using
+    /// serde_json. Recovery coordinators typically obtain this from the registry rather than
+    /// generating it from scratch.
     #[clap(long, conflicts_with = "subnet", required_unless_present = "subnet")]
     base_launch_measurements: Option<PathBuf>,
 }
 
 impl ProposalTitle for ProposeToBlessAlternativeGuestOsVersionCmd {
     fn title(&self) -> String {
-        match &self.proposal_title {
-            Some(title) => title.clone(),
-            None => {
-                if let Some(subnet) = self.subnet {
-                    format!(
-                        "Bless alternative Guest OS with rootfs hash {} on subnet {}",
-                        self.rootfs_hash,
-                        shortened_subnet_string(&subnet)
-                    )
-                } else {
-                    format!(
-                        "Bless alternative Guest OS with rootfs hash {} for {} nodes",
-                        self.rootfs_hash,
-                        self.node_ids.len() + self.chip_ids.len()
-                    )
-                }
-            }
+        if let Some(title) = &self.proposal_title {
+            return title.clone();
         }
+
+        if let Some(subnet) = self.subnet {
+            return format!(
+                "Bless alternative Guest OS with rootfs hash {} on subnet {}",
+                self.rootfs_hash,
+                shortened_subnet_string(&subnet)
+            );
+        }
+
+        format!(
+            "Bless alternative Guest OS with rootfs hash {} for {} nodes",
+            self.rootfs_hash,
+            self.node_ids.len() + self.chip_ids.len()
+        )
     }
 }
 
 impl ProposeToBlessAlternativeGuestOsVersionCmd {
-    /// Returns chip IDs for a subnet, optionally filtered by node IDs or chip IDs.
+    /// Returns chip IDs for a subnet, optionally filtered by --node-ids and/or --chip-ids.
     ///
-    /// `select_node_ids` and `select_chip_ids` are mutually exclusive and must refer to a subset
-    /// of the subnet's nodes.
+    /// If both `select_node_ids` and `select_chip_ids` are provided, their results are unioned.
+    /// Both must refer to nodes that are members of the subnet.
     async fn get_chip_ids_from_subnet(
         subnet_descriptor: &SubnetDescriptor,
         subnet_record: &SubnetRecord,
@@ -1682,56 +1702,73 @@ impl ProposeToBlessAlternativeGuestOsVersionCmd {
         select_chip_ids: &[String],
         registry_canister: &RegistryCanister,
     ) -> Vec<Vec<u8>> {
-        assert!(
-            select_node_ids.is_empty() || select_chip_ids.is_empty(),
-            "--node-ids and --chip-ids are mutually exclusive"
-        );
+        let subnet_node_ids = Self::get_subnet_node_ids(subnet_record);
 
-        let subnet_member_node_ids = Self::get_subnet_member_node_ids(subnet_record);
-
-        // No selection: use all nodes in the subnet.
+        // No selection: use all SEV nodes in the subnet (non-SEV nodes are skipped).
         if select_node_ids.is_empty() && select_chip_ids.is_empty() {
             return Self::get_chip_ids_from_node_ids(
                 registry_canister,
-                &subnet_member_node_ids,
-                false,
+                &subnet_node_ids,
+                false, // Subnets may contain non-SEV nodes; skip them rather than panic.
             )
             .await;
         }
 
+        let mut result: HashSet<Vec<u8>> = HashSet::new();
+
         // Select node IDs: validate membership, then fetch their chip IDs.
         if !select_node_ids.is_empty() {
-            let subnet_node_id_set: HashSet<&NodeId> = subnet_member_node_ids.iter().collect();
-            for node_id in select_node_ids {
-                assert!(
-                    subnet_node_id_set.contains(node_id),
-                    "Node ID {node_id} is not a member of subnet {}",
-                    shortened_subnet_string(subnet_descriptor),
-                );
-            }
-            return Self::get_chip_ids_from_node_ids(registry_canister, select_node_ids, true)
-                .await;
-        }
+            let subnet_node_id_set: HashSet<&NodeId> = subnet_node_ids.iter().collect();
+            let select_node_id_set: HashSet<&NodeId> = select_node_ids.iter().collect();
+            let extra: Vec<_> = select_node_id_set.difference(&subnet_node_id_set).collect();
 
-        // Select chip IDs: validate against the subnet's actual chip IDs.
-        let all_subnet_chip_ids: HashSet<Vec<u8>> =
-            Self::get_chip_ids_from_node_ids(registry_canister, &subnet_member_node_ids, false)
-                .await
-                .into_iter()
-                .collect();
-        let decoded = Self::decode_chip_ids(select_chip_ids);
-        for chip_id in &decoded {
             assert!(
-                all_subnet_chip_ids.contains(chip_id),
-                "Chip ID {} does not belong to any node in subnet {}",
-                hex::encode(chip_id),
+                extra.is_empty(),
+                "Node IDs [{}] are not members of subnet {}",
+                extra
+                    .iter()
+                    .map(|id| id.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
                 shortened_subnet_string(subnet_descriptor),
             );
+
+            result.extend(
+                Self::get_chip_ids_from_node_ids(registry_canister, select_node_ids, true).await,
+            );
         }
-        decoded
+
+        // Select chip IDs directly: validate against the subnet's actual chip IDs.
+        if !select_chip_ids.is_empty() {
+            // Fetch all subnet chip IDs for validation; non-SEV nodes are skipped (false).
+            let all_subnet_chip_ids: HashSet<Vec<u8>> =
+                Self::get_chip_ids_from_node_ids(registry_canister, &subnet_node_ids, false)
+                    .await
+                    .into_iter()
+                    .collect();
+            let decoded: HashSet<Vec<u8>> =
+                Self::decode_chip_ids(select_chip_ids).into_iter().collect();
+
+            let extra: Vec<_> = decoded.difference(&all_subnet_chip_ids).collect();
+
+            assert!(
+                extra.is_empty(),
+                "Chip IDs [{}] do not belong to any node in subnet {}",
+                extra
+                    .iter()
+                    .map(|id| hex::encode(id))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                shortened_subnet_string(subnet_descriptor),
+            );
+
+            result.extend(decoded);
+        }
+
+        result.into_iter().collect()
     }
 
-    fn get_subnet_member_node_ids(subnet_record: &SubnetRecord) -> Vec<NodeId> {
+    fn get_subnet_node_ids(subnet_record: &SubnetRecord) -> Vec<NodeId> {
         subnet_record
             .membership
             .iter()
@@ -1814,21 +1851,23 @@ impl ProposeToBlessAlternativeGuestOsVersionCmd {
                     });
 
                 // Extract chip_id
-                if let Some(chip_id) = node_record.chip_id {
-                    if chip_id.len() != 64 {
-                        panic!(
-                            "Chip ID for node {node_id} must be exactly 64 bytes, got {} bytes",
-                            chip_id.len()
-                        );
-                    }
-                    Some(chip_id)
-                } else {
+                let Some(chip_id) = node_record.chip_id else {
                     if panic_on_missing_chip_id {
                         panic!("Node {node_id} does not have a chip_id in the registry");
                     }
+
                     println!("Node {node_id} does not have a chip_id in the registry, will skip");
-                    None
+                    return None;
+                };
+
+                if chip_id.len() != 64 {
+                    panic!(
+                        "Chip ID for node {node_id} must be exactly 64 bytes, got {} bytes",
+                        chip_id.len()
+                    );
                 }
+
+                Some(chip_id)
             }
         });
 
@@ -1876,54 +1915,81 @@ impl ProposeToBlessAlternativeGuestOsVersionCmd {
 
         convert_guest_launch_measurements_from_pb_to_api(guest_launch_measurements_proto)
     }
+
+    /// Determines chip IDs and launch measurements when `--subnet` is provided.
+    /// Fetches the subnet's replica version from the registry to derive measurements,
+    /// then collects chip IDs from all (or a filtered subset of) nodes in the subnet.
+    async fn chip_ids_and_measurements_for_subnet(
+        &self,
+        registry_canister: &RegistryCanister,
+    ) -> (Vec<Vec<u8>>, ic_nns_governance_api::GuestLaunchMeasurements) {
+        let subnet = self.subnet.as_ref().expect("subnet must be set");
+        let subnet_record = Self::fetch_subnet_record(registry_canister, subnet).await;
+
+        let measurements = Self::get_guest_launch_measurements_from_replica_version(
+            registry_canister,
+            &subnet_record.replica_version_id,
+        )
+        .await;
+
+        let chip_ids = Self::get_chip_ids_from_subnet(
+            subnet,
+            &subnet_record,
+            &self.node_ids,
+            &self.chip_ids,
+            registry_canister,
+        )
+        .await;
+
+        assert!(
+            !chip_ids.is_empty(),
+            "No SEV nodes with chip IDs found in subnet {}",
+            shortened_subnet_string(subnet)
+        );
+
+        (chip_ids, measurements)
+    }
+
+    /// Determines chip IDs and launch measurements when `--subnet` is not provided.
+    /// Reads measurements from `--base-launch-measurements` and chip IDs from
+    /// `--chip-ids` and/or `--node-ids` (union of both if both are specified).
+    async fn chip_ids_and_measurements_from_flags(
+        &self,
+        registry_canister: &RegistryCanister,
+    ) -> (Vec<Vec<u8>>, ic_nns_governance_api::GuestLaunchMeasurements) {
+        let measurements = read_from_json_file::<ic_nns_governance_api::GuestLaunchMeasurements>(
+            self.base_launch_measurements
+                .as_ref()
+                .expect("--base-launch-measurements must be provided if --subnet is not provided"),
+        );
+
+        let mut chip_id_set: HashSet<Vec<u8>> = HashSet::new();
+        if !self.chip_ids.is_empty() {
+            chip_id_set.extend(Self::decode_chip_ids(&self.chip_ids));
+        }
+        if !self.node_ids.is_empty() {
+            chip_id_set.extend(
+                Self::get_chip_ids_from_node_ids(registry_canister, &self.node_ids, true).await,
+            );
+        }
+        let chip_ids: Vec<Vec<u8>> = chip_id_set.into_iter().collect();
+
+        (chip_ids, measurements)
+    }
 }
 
 #[async_trait]
 impl ProposalAction for ProposeToBlessAlternativeGuestOsVersionCmd {
     async fn action(&self, agent: &Agent) -> ProposalActionRequest {
-        let chip_ids: Vec<Vec<u8>>;
-        let measurements: ic_nns_governance_api::GuestLaunchMeasurements;
         let registry_canister = RegistryCanister::new_with_agent(agent.clone());
 
-        if let Some(subnet) = &self.subnet {
-            let subnet_record = Self::fetch_subnet_record(&registry_canister, subnet).await;
-
-            measurements = Self::get_guest_launch_measurements_from_replica_version(
-                &registry_canister,
-                &subnet_record.replica_version_id,
-            )
-            .await;
-            chip_ids = Self::get_chip_ids_from_subnet(
-                subnet,
-                &subnet_record,
-                &self.node_ids,
-                &self.chip_ids,
-                &registry_canister,
-            )
-            .await;
-
-            assert!(
-                !chip_ids.is_empty(),
-                "No SEV nodes with chip IDs found in subnet {}",
-                shortened_subnet_string(subnet)
-            );
+        let (chip_ids, measurements) = if self.subnet.is_some() {
+            self.chip_ids_and_measurements_for_subnet(&registry_canister)
+                .await
         } else {
-            measurements = read_from_json_file::<ic_nns_governance_api::GuestLaunchMeasurements>(
-                self.base_launch_measurements.as_ref().expect(
-                    "--base-launch-measurements must be provided if --subnet is not provided",
-                ),
-            );
-
-            if !self.chip_ids.is_empty() && self.node_ids.is_empty() {
-                chip_ids = Self::decode_chip_ids(&self.chip_ids);
-            } else if !self.node_ids.is_empty() && self.chip_ids.is_empty() {
-                chip_ids =
-                    Self::get_chip_ids_from_node_ids(&registry_canister, &self.node_ids, true)
-                        .await;
-            } else {
-                panic!("Exactly one of --chip-ids or --node-ids must be provided");
-            }
-        }
+            self.chip_ids_and_measurements_from_flags(&registry_canister)
+                .await
+        };
 
         ProposalActionRequest::BlessAlternativeGuestOsVersion(
             ic_nns_governance_api::BlessAlternativeGuestOsVersion {
