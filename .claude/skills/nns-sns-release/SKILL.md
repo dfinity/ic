@@ -317,7 +317,7 @@ Tell the user: "PR can be merged before the proposals are executed."
 
 ## Step 9: Post to Slack
 
-Prepare the following for `#dev-nns`:
+Prepare the following for `#dev-nns` (private channel — search with `channel_types=private_channel`):
 
 1. **Message:** `PTAL @ release changelog update $PR_URL`
 
@@ -339,6 +339,9 @@ Prepare the following for `#dev-nns`:
    expected format (date, RC=, NNS_CANISTERS, SNS_CANISTERS). If it does not match,
    warn the user instead of overwriting.
 
-If Slack MCP tools are available (`mcp__plugin_slack_slack__*`), post the message and
-update the topic automatically. If Slack MCP is NOT available, print both the message
-and topic text for the user to post manually to `#dev-nns`.
+If Slack MCP tools are available (`mcp__plugin_slack_slack__*`), create a draft message
+using `slack_send_message_draft` so the user can review before sending. The Slack MCP cannot update channel topics, so always print the topic
+text and copy it to clipboard (`pbcopy`) for the user to paste via `/topic` in Slack.
+
+If Slack MCP is NOT available, print both the message and topic text for the user
+to post manually to `#dev-nns`.
