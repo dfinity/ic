@@ -894,6 +894,7 @@ impl Neuron {
             deciding_voting_power: Some(deciding_voting_power),
             potential_voting_power: Some(potential_voting_power),
             voting_power: potential_voting_power,
+            eight_year_gang_bonus_base_e8s: Some(self.eight_year_gang_bonus_base_e8s),
         }
     }
 
@@ -1174,6 +1175,7 @@ impl TryFrom<api::Neuron> for Neuron {
             neuron_type,
             visibility,
             voting_power_refreshed_timestamp_seconds,
+            eight_year_gang_bonus_base_e8s,
 
             // We do not allow these fields to be initialized by the user.
             deciding_voting_power: _,
@@ -1245,7 +1247,7 @@ impl TryFrom<api::Neuron> for Neuron {
         // Step 6: some fields that are not set by the API type.
         let recent_ballots_next_entry_index = None;
         let maturity_disbursements_in_progress = vec![];
-        let eight_year_gang_bonus_base_e8s = 0;
+        let eight_year_gang_bonus_base_e8s = eight_year_gang_bonus_base_e8s.unwrap_or(0);
 
         // Step 7: build the neuron.
         Ok(Neuron {
@@ -1314,11 +1316,11 @@ impl Neuron {
             neuron_type,
             voting_power_refreshed_timestamp_seconds,
             maturity_disbursements_in_progress,
+            eight_year_gang_bonus_base_e8s,
 
             // Not used.
             visibility: _,
             recent_ballots_next_entry_index: _,
-            eight_year_gang_bonus_base_e8s: _,
         } = self;
 
         let id = Some(id);
@@ -1380,6 +1382,7 @@ impl Neuron {
 
             potential_voting_power,
             deciding_voting_power,
+            eight_year_gang_bonus_base_e8s: Some(eight_year_gang_bonus_base_e8s),
         }
     }
 }

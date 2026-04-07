@@ -31,8 +31,8 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
 
 # Download and verify node_exporter
 RUN cd /tmp/ && \
-    curl -L -O https://github.com/prometheus/node_exporter/releases/download/v1.8.1/node_exporter-1.8.1.linux-amd64.tar.gz && \
-    echo "fbadb376afa7c883f87f70795700a8a200f7fd45412532cc1938a24d41078011  node_exporter-1.8.1.linux-amd64.tar.gz" > node_exporter.sha256 && \
+    curl -L -O https://github.com/prometheus/node_exporter/releases/download/v1.10.2/node_exporter-1.10.2.linux-amd64.tar.gz && \
+    echo "c46e5b6f53948477ff3a19d97c58307394a29fe64a01905646f026ddc32cb65b  node_exporter-1.10.2.linux-amd64.tar.gz" > node_exporter.sha256 && \
     sha256sum -c node_exporter.sha256
 
 #
@@ -69,8 +69,8 @@ RUN apt-get -y update && \
     rm /tmp/packages.*
 
 # Install node_exporter
-COPY --from=download /tmp/node_exporter-1.8.1.linux-amd64.tar.gz /tmp/node_exporter-1.8.1.linux-amd64.tar.gz
+COPY --from=download /tmp/node_exporter-1.10.2.linux-amd64.tar.gz /tmp/node_exporter-1.10.2.linux-amd64.tar.gz
 RUN cd /tmp/ && \
     mkdir -p /etc/node_exporter && \
-    tar --strip-components=1 -C /usr/local/bin/ -zvxf node_exporter-1.8.1.linux-amd64.tar.gz node_exporter-1.8.1.linux-amd64/node_exporter && \
-    rm /tmp/node_exporter-1.8.1.linux-amd64.tar.gz
+    tar --strip-components=1 -C /usr/local/bin/ -zvxf node_exporter-1.10.2.linux-amd64.tar.gz node_exporter-1.10.2.linux-amd64/node_exporter && \
+    rm /tmp/node_exporter-1.10.2.linux-amd64.tar.gz
