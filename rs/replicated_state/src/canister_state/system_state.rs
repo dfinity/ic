@@ -1848,8 +1848,7 @@ impl SystemState {
         );
     }
 
-    /// Decreases 'cycles_balance' for 'requested_amount' from the canister's
-    /// main balance.
+    /// Decreases the canister's cycles balance by the provided amount.
     ///
     /// If you need to have metrics about consumed cycles updated use
     /// `consume_cycles` instead.
@@ -1857,9 +1856,14 @@ impl SystemState {
         self.cycles_balance -= requested_amount;
     }
 
-    /// Decreases 'cycles_balance' for 'requested_amount'.
+    /// Decreases the canister's cycles balance by the provided amount.
     /// The resource use cases first drain the `reserved_balance` and only after
     /// that drain the main `cycles_balance`.
+    ///
+    /// Similar to `remove_cycles` but additionally updates the metrics to match
+    /// the consumed amount. Should be used either for cases where a prepayment
+    /// needs to be made (that will be refunded later with `refund_cycles`) or
+    /// a direct charge happens without a prepayment (e.g. when paying for memory).
     pub fn consume_cycles<T: CyclesUseCaseKind>(&mut self, requested_amount: CompoundCycles<T>) {
         let requested_real = requested_amount.real();
         let use_case = T::cycles_use_case();
@@ -1960,7 +1964,7 @@ impl SystemState {
             "Non-consumed cycles should not be tracked in the canister metrics."
         );
 
-        // `prepayment`` must be greater or equal to `refund`.
+        // `prepayment` must be greater or equal to `refund`.
         // `refund` must be 0 when we are handling a prepayment.
         debug_assert!(
             prepayment >= refund,
