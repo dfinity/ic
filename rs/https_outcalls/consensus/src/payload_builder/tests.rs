@@ -39,8 +39,8 @@ use ic_test_utilities_types::{
 use ic_types::{
     CountBytes, Height, NodeId, NumBytes, RegistryVersion, ReplicaVersion, Time,
     batch::{
-        CanisterHttpPayload, FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
-        MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
+        CanisterHttpPayload, FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
+        FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
     },
     canister_http::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL, CanisterHttpMethod,
@@ -2860,6 +2860,1206 @@ fn flexible_ok_responses_into_messages_decode_failure_is_skipped() {
     assert_eq!(stats.flexible_ok_responses_candid_failures, 1);
 }
 
+#[test]
+fn flexible_build_timeout() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, _pool| {
+        let timed_out_context = ValidationContext {
+            registry_version: RegistryVersion::new(1),
+            certified_height: Height::new(0),
+            time: UNIX_EPOCH + CANISTER_HTTP_TIMEOUT_INTERVAL + Duration::from_secs(1),
+        };
+        let parsed = build_and_validate_and_parse_payload_with_context(&pb, &timed_out_context);
+
+        // Should NOT be in regular timeouts
+        assert!(parsed.timeouts.is_empty());
+        // Should be a flexible timeout error
+        assert_eq!(parsed.flexible_errors.len(), 1);
+        assert_matches!(
+            &parsed.flexible_errors[0],
+            FlexibleCanisterHttpError::Timeout { callback_id: cb } => {
+                assert_eq!(*cb, callback_id);
+            }
+        );
+    });
+}
+
+#[test]
+fn flexible_build_responses_too_large() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    // min_responses = 2; we add 2 OK responses each >1 MiB so that the smallest
+    // 2 exceed MAX_CANISTER_HTTP_PAYLOAD_SIZE when summed.
+    let body_size = (MAX_CANISTER_HTTP_PAYLOAD_SIZE / 2) + 100_000;
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, pool| {
+        {
+            let mut pool_access = pool.write().unwrap();
+            for node_idx in 0..2_u64 {
+                let body = vec![0xAA_u8; body_size];
+                let (response, metadata) = test_response_and_metadata_with_content(
+                    callback_id.get(),
+                    CanisterHttpResponseContent::Success(body),
+                );
+                let share = metadata_to_share(node_idx, &metadata);
+                add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
+            }
+        }
+
+        let parsed = build_and_validate_and_parse_payload(&pb);
+
+        assert!(parsed.flexible_responses.is_empty());
+        assert_eq!(parsed.flexible_errors.len(), 1);
+        assert_matches!(
+            &parsed.flexible_errors[0],
+            FlexibleCanisterHttpError::ResponsesTooLarge {
+                callback_id: cb,
+                metadata_shares,
+            } => {
+                assert_eq!(*cb, callback_id);
+                assert_eq!(metadata_shares.len(), 2);
+            }
+        );
+    });
+}
+
+#[test]
+fn flexible_build_too_many_request_errors() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    // min_responses=3, so at most 1 reject is tolerable. 2 rejects should trigger TooManyRequestErrors.
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, pool| {
+        {
+            use ic_types::canister_http::CanisterHttpReject;
+
+            let mut pool_access = pool.write().unwrap();
+            // Nodes 0 and 1 produce Reject responses
+            for node_idx in 0..2_u64 {
+                let (response, metadata) = test_response_and_metadata_with_content(
+                    callback_id.get(),
+                    CanisterHttpResponseContent::Reject(CanisterHttpReject {
+                        reject_code: RejectCode::SysTransient,
+                        message: format!("error_{node_idx}"),
+                    }),
+                );
+                let share = metadata_to_share(node_idx, &metadata);
+                add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
+            }
+            // Nodes 2 and 3 produce OK responses
+            for node_idx in 2..4_u64 {
+                let (response, metadata) = test_response_and_metadata_with_content(
+                    callback_id.get(),
+                    CanisterHttpResponseContent::Success(format!("resp_{node_idx}").into_bytes()),
+                );
+                let share = metadata_to_share(node_idx, &metadata);
+                add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
+            }
+        }
+
+        let parsed = build_and_validate_and_parse_payload(&pb);
+
+        assert!(parsed.flexible_responses.is_empty());
+        assert_eq!(parsed.flexible_errors.len(), 1);
+        assert_matches!(
+            &parsed.flexible_errors[0],
+            FlexibleCanisterHttpError::TooManyRequestErrors {
+                callback_id: cb,
+                reject_responses,
+            } => {
+                assert_eq!(*cb, callback_id);
+                assert_eq!(reject_responses.len(), 2);
+                for entry in reject_responses {
+                    assert_matches!(
+                        entry.response.content,
+                        CanisterHttpResponseContent::Reject(_)
+                    );
+                }
+            }
+        );
+    });
+}
+
+#[test]
+fn flexible_build_not_enough_rejects_stays_pending() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    // min_responses=3, so at most 1 reject is tolerable. Only 1 reject + 1 OK → pending.
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, pool| {
+        {
+            use ic_types::canister_http::CanisterHttpReject;
+
+            let mut pool_access = pool.write().unwrap();
+            // Node 0 produces a Reject
+            let (response, metadata) = test_response_and_metadata_with_content(
+                callback_id.get(),
+                CanisterHttpResponseContent::Reject(CanisterHttpReject {
+                    reject_code: RejectCode::SysTransient,
+                    message: "error".to_string(),
+                }),
+            );
+            let share = metadata_to_share(0, &metadata);
+            add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
+            // Node 1 produces an OK response
+            let (response, metadata) = test_response_and_metadata_with_content(
+                callback_id.get(),
+                CanisterHttpResponseContent::Success(b"ok_resp".to_vec()),
+            );
+            let share = metadata_to_share(1, &metadata);
+            add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
+        }
+
+        let parsed = build_and_validate_and_parse_payload(&pb);
+
+        assert!(parsed.flexible_responses.is_empty());
+        assert!(parsed.flexible_errors.is_empty());
+    });
+}
+
+#[test]
+fn flexible_build_ok_takes_precedence_over_rejects() {
+    let num_nodes = 5;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    // min_responses=2, max_responses=5. 2 rejects + 3 OK → OkResponses even though
+    // reject_count(2) > committee.len()-min_responses(3). Because we have enough OK responses.
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 5, |pb, pool| {
+        {
+            use ic_types::canister_http::CanisterHttpReject;
+
+            let mut pool_access = pool.write().unwrap();
+            for node_idx in 0..2_u64 {
+                let (response, metadata) = test_response_and_metadata_with_content(
+                    callback_id.get(),
+                    CanisterHttpResponseContent::Reject(CanisterHttpReject {
+                        reject_code: RejectCode::SysTransient,
+                        message: format!("error_{node_idx}"),
+                    }),
+                );
+                let share = metadata_to_share(node_idx, &metadata);
+                add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
+            }
+            for node_idx in 2..5_u64 {
+                let (response, metadata) = test_response_and_metadata_with_content(
+                    callback_id.get(),
+                    CanisterHttpResponseContent::Success(format!("resp_{node_idx}").into_bytes()),
+                );
+                let share = metadata_to_share(node_idx, &metadata);
+                add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
+            }
+        }
+
+        let parsed = build_and_validate_and_parse_payload(&pb);
+
+        assert_eq!(parsed.flexible_responses.len(), 1);
+        assert!(parsed.flexible_errors.is_empty());
+    });
+}
+
+#[test]
+fn flexible_error_timeout_valid() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_contexts(
+        num_nodes,
+        vec![(callback_id, flexible_request_context(committee, 2, 4))],
+        |pb, _pool| {
+            let timed_out_context = ValidationContext {
+                registry_version: RegistryVersion::new(1),
+                certified_height: Height::new(0),
+                time: UNIX_EPOCH + CANISTER_HTTP_TIMEOUT_INTERVAL + Duration::from_secs(1),
+            };
+            let payload = CanisterHttpPayload {
+                flexible_errors: vec![FlexibleCanisterHttpError::Timeout { callback_id }],
+                ..Default::default()
+            };
+            let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+            assert_matches!(
+                pb.validate_payload(
+                    Height::new(1),
+                    &test_proposal_context(&timed_out_context),
+                    &payload_bytes,
+                    &[],
+                ),
+                Ok(())
+            );
+        },
+    );
+}
+
+#[test]
+fn flexible_error_timeout_invalid_not_expired() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, _pool| {
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::Timeout { callback_id }],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::NotTimedOut(_)
+                )
+            ))
+        );
+    });
+}
+
+#[test]
+fn flexible_error_timeout_invalid_non_flexible_request() {
+    let num_nodes = 4;
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_contexts(num_nodes, fully_replicated_contexts([42]), |pb, _pool| {
+        let timed_out_context = ValidationContext {
+            registry_version: RegistryVersion::new(1),
+            certified_height: Height::new(0),
+            time: UNIX_EPOCH + CANISTER_HTTP_TIMEOUT_INTERVAL + Duration::from_secs(1),
+        };
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::Timeout { callback_id }],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&timed_out_context),
+            &payload_bytes,
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::InvalidPayloadSection(_)
+                )
+            ))
+        );
+    });
+}
+
+#[test]
+fn flexible_error_duplicate_callback_id() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_contexts(
+        num_nodes,
+        vec![(callback_id, flexible_request_context(committee, 2, 4))],
+        |pb, _pool| {
+            let timed_out_context = ValidationContext {
+                registry_version: RegistryVersion::new(1),
+                certified_height: Height::new(0),
+                time: UNIX_EPOCH + CANISTER_HTTP_TIMEOUT_INTERVAL + Duration::from_secs(1),
+            };
+            let payload = CanisterHttpPayload {
+                flexible_errors: vec![
+                    FlexibleCanisterHttpError::Timeout { callback_id },
+                    FlexibleCanisterHttpError::Timeout { callback_id },
+                ],
+                ..Default::default()
+            };
+            let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+            let result = pb.validate_payload(
+                Height::new(1),
+                &test_proposal_context(&timed_out_context),
+                &payload_bytes,
+                &[],
+            );
+            assert_matches!(
+                result,
+                Err(ValidationError::InvalidArtifact(
+                    InvalidPayloadReason::InvalidCanisterHttpPayload(
+                        InvalidCanisterHttpPayloadReason::DuplicateResponse(_)
+                    )
+                ))
+            );
+        },
+    );
+}
+
+#[test]
+fn flexible_error_responses_too_large_valid() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    // min_responses = 2; each share claims ~1.1 MiB of content → 2 × ~1.1 MiB > 2 MiB.
+    let huge_content_size = (MAX_CANISTER_HTTP_PAYLOAD_SIZE as u32 / 2) + 100_000;
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, _pool| {
+        let share_a = metadata_share_with_content_size(callback_id.get(), 0, huge_content_size);
+        let share_b = metadata_share_with_content_size(callback_id.get(), 1, huge_content_size);
+
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
+                callback_id,
+                metadata_shares: vec![share_a, share_b],
+            }],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+        assert_matches!(
+            pb.validate_payload(
+                Height::new(1),
+                &test_proposal_context(&default_validation_context()),
+                &payload_bytes,
+                &[],
+            ),
+            Ok(())
+        );
+    });
+}
+
+#[test]
+fn flexible_error_responses_too_large_invalid_when_small() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    // Shares with small content_size should not pass the ResponsesTooLarge check
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, _pool| {
+        let entry_a = flexible_response(callback_id.get(), 0, b"small_a");
+        let entry_b = flexible_response(callback_id.get(), 1, b"small_b");
+
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
+                callback_id,
+                metadata_shares: vec![entry_a.proof.clone(), entry_b.proof.clone()],
+            }],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::FlexibleResponsesNotTooLarge(_)
+                )
+            ))
+        );
+    });
+}
+
+#[test]
+fn flexible_error_responses_too_large_too_few_shares() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    // min_responses = 3 but only 2 shares provided → invalid
+    let huge = (MAX_CANISTER_HTTP_PAYLOAD_SIZE as u32 / 2) + 100_000;
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
+        let share_a = metadata_share_with_content_size(callback_id.get(), 0, huge);
+        let share_b = metadata_share_with_content_size(callback_id.get(), 1, huge);
+
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
+                callback_id,
+                metadata_shares: vec![share_a, share_b],
+            }],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::FlexibleResponsesNotTooLarge(_)
+                )
+            ))
+        );
+    });
+}
+
+#[test]
+fn flexible_error_responses_too_large_callback_id_mismatch() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    let huge = (MAX_CANISTER_HTTP_PAYLOAD_SIZE as u32 / 2) + 100_000;
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, _pool| {
+        let share_ok = metadata_share_with_content_size(callback_id.get(), 0, huge);
+        // Share with wrong callback_id
+        let share_wrong = metadata_share_with_content_size(999, 1, huge);
+
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
+                callback_id,
+                metadata_shares: vec![share_ok, share_wrong],
+            }],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch { .. }
+                )
+            ))
+        );
+    });
+}
+
+#[test]
+fn flexible_error_responses_too_large_duplicate_signer() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    let huge = (MAX_CANISTER_HTTP_PAYLOAD_SIZE as u32 / 2) + 100_000;
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, _pool| {
+        // Both shares from the same signer (node 0)
+        let share_a = metadata_share_with_content_size(callback_id.get(), 0, huge);
+        let share_b = metadata_share_with_content_size(callback_id.get(), 0, huge);
+
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
+                callback_id,
+                metadata_shares: vec![share_a, share_b],
+            }],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::FlexibleDuplicateSigner { .. }
+                )
+            ))
+        );
+    });
+}
+
+#[test]
+fn flexible_error_responses_too_large_signer_not_in_committee() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    let huge = (MAX_CANISTER_HTTP_PAYLOAD_SIZE as u32 / 2) + 100_000;
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, _pool| {
+        let share_ok = metadata_share_with_content_size(callback_id.get(), 0, huge);
+        let share_bad = metadata_share_with_content_size(callback_id.get(), 99, huge);
+
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
+                callback_id,
+                metadata_shares: vec![share_ok, share_bad],
+            }],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::FlexibleSignerNotInCommittee { .. }
+                )
+            ))
+        );
+    });
+}
+
+#[test]
+fn flexible_error_responses_too_large_registry_version_mismatch() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    let huge = (MAX_CANISTER_HTTP_PAYLOAD_SIZE as u32 / 2) + 100_000;
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, _pool| {
+        let share_ok = metadata_share_with_content_size(callback_id.get(), 0, huge);
+        // Share with wrong registry version
+        let mut share_bad = metadata_share_with_content_size(callback_id.get(), 1, huge);
+        share_bad.content.registry_version = RegistryVersion::new(999);
+
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
+                callback_id,
+                metadata_shares: vec![share_ok, share_bad],
+            }],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::RegistryVersionMismatch { .. }
+                )
+            ))
+        );
+    });
+}
+
+#[test]
+fn flexible_error_responses_too_large_share_timed_out() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    let huge = (MAX_CANISTER_HTTP_PAYLOAD_SIZE as u32 / 2) + 100_000;
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, _pool| {
+        let share_ok = metadata_share_with_content_size(callback_id.get(), 0, huge);
+        let mut share_expired = metadata_share_with_content_size(callback_id.get(), 1, huge);
+        share_expired.content.timeout = UNIX_EPOCH + Duration::from_secs(1);
+
+        let far_future_context = ValidationContext {
+            registry_version: RegistryVersion::new(1),
+            certified_height: Height::new(0),
+            time: UNIX_EPOCH + Duration::from_secs(100),
+        };
+
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
+                callback_id,
+                metadata_shares: vec![share_ok, share_expired],
+            }],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&far_future_context),
+            &payload_bytes,
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::Timeout { .. }
+                )
+            ))
+        );
+    });
+}
+
+#[test]
+fn flexible_error_responses_too_large_invalid_signature() {
+    let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    let huge = (MAX_CANISTER_HTTP_PAYLOAD_SIZE as u32 / 2) + 100_000;
+    setup_test_with_flexible_context(
+        4,
+        callback_id,
+        committee,
+        2,
+        4,
+        |mut payload_builder, _pool| {
+            let mut mock_crypto = MockCrypto::new();
+            mock_crypto
+                .expect_verify_basic_sig_http()
+                .returning(|_, _, _, _| {
+                    Err(ic_types::crypto::CryptoError::SignatureVerification {
+                        algorithm: ic_types::crypto::AlgorithmId::Ed25519,
+                        public_key_bytes: vec![],
+                        sig_bytes: vec![],
+                        internal_error: "mock rejection".to_string(),
+                    })
+                });
+            payload_builder.crypto = Arc::new(mock_crypto);
+
+            let share_a = metadata_share_with_content_size(callback_id.get(), 0, huge);
+            let share_b = metadata_share_with_content_size(callback_id.get(), 1, huge);
+
+            let payload = CanisterHttpPayload {
+                flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
+                    callback_id,
+                    metadata_shares: vec![share_a, share_b],
+                }],
+                ..Default::default()
+            };
+            let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+            let result = payload_builder.validate_payload(
+                Height::new(1),
+                &test_proposal_context(&default_validation_context()),
+                &payload_bytes,
+                &[],
+            );
+            assert_matches!(
+                result,
+                Err(ValidationError::InvalidArtifact(
+                    InvalidPayloadReason::InvalidCanisterHttpPayload(
+                        InvalidCanisterHttpPayloadReason::SignatureError(_)
+                    )
+                ))
+            );
+        },
+    );
+}
+
+#[test]
+fn flexible_error_too_many_request_errors_valid() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    // min_responses=3, committee=4. max_allowed_rejects = 4-3 = 1.
+    // 2 rejects should be valid for TooManyRequestErrors.
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
+        let reject_entries: Vec<_> = (0..2_u64)
+            .map(|node_idx| flexible_reject_response(callback_id.get(), node_idx))
+            .collect();
+
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+                callback_id,
+                reject_responses: reject_entries,
+            }],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+        assert_matches!(
+            pb.validate_payload(
+                Height::new(1),
+                &test_proposal_context(&default_validation_context()),
+                &payload_bytes,
+                &[],
+            ),
+            Ok(())
+        );
+    });
+}
+
+#[test]
+fn flexible_error_too_many_request_errors_insufficient_rejects() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    // min_responses=3, committee=4. max_allowed_rejects = 1.
+    // Only 1 reject → not enough for TooManyRequestErrors.
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
+        let reject_entries: Vec<_> = (0..1_u64)
+            .map(|node_idx| flexible_reject_response(callback_id.get(), node_idx))
+            .collect();
+
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+                callback_id,
+                reject_responses: reject_entries,
+            }],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::FlexibleInsufficientRejectCount { .. }
+                )
+            ))
+        );
+    });
+}
+
+#[test]
+fn flexible_error_too_many_request_errors_non_reject_content() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
+        let ok_entry = flexible_response(callback_id.get(), 0, b"ok data");
+        let reject_entry = flexible_reject_response(callback_id.get(), 1);
+
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+                callback_id,
+                reject_responses: vec![ok_entry, reject_entry],
+            }],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::FlexibleRejectExpectedInErrorResponse(_)
+                )
+            ))
+        );
+    });
+}
+
+#[test]
+fn flexible_error_too_many_request_errors_duplicate_signer() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
+        let entry_a = flexible_reject_response(callback_id.get(), 0);
+        let entry_b = flexible_reject_response(callback_id.get(), 0);
+
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+                callback_id,
+                reject_responses: vec![entry_a, entry_b],
+            }],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::FlexibleDuplicateSigner { .. }
+                )
+            ))
+        );
+    });
+}
+
+#[test]
+fn flexible_error_too_many_request_errors_signer_not_in_committee() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
+        // Node 99 is not in the committee
+        let entry_a = flexible_reject_response(callback_id.get(), 0);
+        let entry_b = flexible_reject_response(callback_id.get(), 99);
+
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+                callback_id,
+                reject_responses: vec![entry_a, entry_b],
+            }],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::FlexibleSignerNotInCommittee { .. }
+                )
+            ))
+        );
+    });
+}
+
+#[test]
+fn flexible_error_too_many_request_errors_callback_id_mismatch_in_response() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
+        let entry_ok = flexible_reject_response(callback_id.get(), 0);
+        // Entry with wrong callback_id
+        let entry_wrong = flexible_reject_response(999, 1);
+
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+                callback_id,
+                reject_responses: vec![entry_ok, entry_wrong],
+            }],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch { .. }
+                )
+            ))
+        );
+    });
+}
+
+#[test]
+fn flexible_error_too_many_request_errors_registry_version_mismatch() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
+        let entry_ok = flexible_reject_response(callback_id.get(), 0);
+        let mut entry_bad = flexible_reject_response(callback_id.get(), 1);
+        entry_bad.proof.content.registry_version = RegistryVersion::new(999);
+
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+                callback_id,
+                reject_responses: vec![entry_ok, entry_bad],
+            }],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::RegistryVersionMismatch { .. }
+                )
+            ))
+        );
+    });
+}
+
+#[test]
+fn flexible_error_too_many_request_errors_content_hash_mismatch() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
+        let entry_ok = flexible_reject_response(callback_id.get(), 0);
+        let mut entry_bad = flexible_reject_response(callback_id.get(), 1);
+        entry_bad.proof.content.content_hash = CryptoHashOf::new(CryptoHash(vec![0xFF; 32]));
+
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+                callback_id,
+                reject_responses: vec![entry_ok, entry_bad],
+            }],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::ContentHashMismatch { .. }
+                )
+            ))
+        );
+    });
+}
+
+#[test]
+fn flexible_error_too_many_request_errors_content_size_mismatch() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
+        let entry_ok = flexible_reject_response(callback_id.get(), 0);
+        let mut entry_bad = flexible_reject_response(callback_id.get(), 1);
+        entry_bad.proof.content.content_size = 999_999;
+
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+                callback_id,
+                reject_responses: vec![entry_ok, entry_bad],
+            }],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::ContentSizeMismatch { .. }
+                )
+            ))
+        );
+    });
+}
+
+#[test]
+fn flexible_error_too_many_request_errors_proof_id_mismatch() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
+        let entry_ok = flexible_reject_response(callback_id.get(), 0);
+        let mut entry_bad = flexible_reject_response(callback_id.get(), 1);
+        // response.id stays correct, but proof.content.id is wrong
+        entry_bad.proof.content.id = CallbackId::new(999);
+
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+                callback_id,
+                reject_responses: vec![entry_ok, entry_bad],
+            }],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch {
+                        mismatched_id,
+                        ..
+                    }
+                )
+            )) => {
+                assert_eq!(mismatched_id, CallbackId::new(999));
+            }
+        );
+    });
+}
+
+#[test]
+fn flexible_error_too_many_request_errors_metadata_timeout_mismatch() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
+        let entry_ok = flexible_reject_response(callback_id.get(), 0);
+        let mut entry_bad = flexible_reject_response(callback_id.get(), 1);
+        entry_bad.proof.content.timeout = UNIX_EPOCH + Duration::from_secs(999);
+
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+                callback_id,
+                reject_responses: vec![entry_ok, entry_bad],
+            }],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::InvalidMetadata { .. }
+                )
+            ))
+        );
+    });
+}
+
+#[test]
+fn flexible_error_too_many_request_errors_entry_timed_out() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
+        use ic_types::canister_http::CanisterHttpReject;
+
+        let entry_ok = flexible_reject_response(callback_id.get(), 0);
+        // Create a reject response with a very early timeout
+        let (response, metadata) = test_response_and_metadata_full(
+            callback_id.get(),
+            UNIX_EPOCH + Duration::from_secs(1),
+            CanisterHttpResponseContent::Reject(CanisterHttpReject {
+                reject_code: RejectCode::SysTransient,
+                message: "expired entry".to_string(),
+            }),
+        );
+        let entry_expired = FlexibleCanisterHttpResponseWithProof {
+            response,
+            proof: metadata_to_share(1, &metadata),
+        };
+
+        let far_future_context = ValidationContext {
+            registry_version: RegistryVersion::new(1),
+            certified_height: Height::new(0),
+            time: UNIX_EPOCH + Duration::from_secs(100),
+        };
+
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+                callback_id,
+                reject_responses: vec![entry_ok, entry_expired],
+            }],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&far_future_context),
+            &payload_bytes,
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::Timeout { .. }
+                )
+            ))
+        );
+    });
+}
+
+#[test]
+fn flexible_error_too_many_request_errors_invalid_signature() {
+    let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_flexible_context(
+        4,
+        callback_id,
+        committee,
+        3,
+        4,
+        |mut payload_builder, _pool| {
+            let mut mock_crypto = MockCrypto::new();
+            mock_crypto
+                .expect_verify_basic_sig_http()
+                .returning(|_, _, _, _| {
+                    Err(ic_types::crypto::CryptoError::SignatureVerification {
+                        algorithm: ic_types::crypto::AlgorithmId::Ed25519,
+                        public_key_bytes: vec![],
+                        sig_bytes: vec![],
+                        internal_error: "mock rejection".to_string(),
+                    })
+                });
+            payload_builder.crypto = Arc::new(mock_crypto);
+
+            let reject_entries: Vec<_> = (0..2_u64)
+                .map(|node_idx| flexible_reject_response(callback_id.get(), node_idx))
+                .collect();
+
+            let payload = CanisterHttpPayload {
+                flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+                    callback_id,
+                    reject_responses: reject_entries,
+                }],
+                ..Default::default()
+            };
+            let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+            let result = payload_builder.validate_payload(
+                Height::new(1),
+                &test_proposal_context(&default_validation_context()),
+                &payload_bytes,
+                &[],
+            );
+            assert_matches!(
+                result,
+                Err(ValidationError::InvalidArtifact(
+                    InvalidPayloadReason::InvalidCanisterHttpPayload(
+                        InvalidCanisterHttpPayloadReason::SignatureError(_)
+                    )
+                ))
+            );
+        },
+    );
+}
+
 fn setup_test_with_contexts(
     num_nodes: usize,
     contexts: Vec<(CallbackId, CanisterHttpRequestContext)>,
@@ -3010,6 +4210,22 @@ fn flexible_payload(groups: Vec<FlexibleCanisterHttpResponses>) -> CanisterHttpP
     }
 }
 
+fn metadata_share_with_content_size(
+    callback_id: u64,
+    signer_node: u64,
+    content_size: u32,
+) -> CanisterHttpResponseShare {
+    let metadata = CanisterHttpResponseMetadata {
+        id: CallbackId::new(callback_id),
+        timeout: UNIX_EPOCH + Duration::from_secs(10),
+        content_hash: CryptoHashOf::new(CryptoHash(vec![0xAB; 32])),
+        content_size,
+        registry_version: RegistryVersion::new(1),
+        replica_version: ReplicaVersion::default(),
+    };
+    metadata_to_share(signer_node, &metadata)
+}
+
 fn add_flexible_shares_to_pool(
     pool: &Arc<RwLock<CanisterHttpPoolImpl>>,
     callback_id: CallbackId,
@@ -3029,13 +4245,22 @@ fn add_flexible_shares_to_pool(
 fn build_and_validate_and_parse_payload(
     payload_builder: &CanisterHttpPayloadBuilderImpl,
 ) -> CanisterHttpPayload {
-    let context = default_validation_context();
+    build_and_validate_and_parse_payload_with_context(
+        payload_builder,
+        &default_validation_context(),
+    )
+}
+
+fn build_and_validate_and_parse_payload_with_context(
+    payload_builder: &CanisterHttpPayloadBuilderImpl,
+    context: &ValidationContext,
+) -> CanisterHttpPayload {
     let max_size = NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64);
-    let payload = payload_builder.build_payload(Height::new(1), max_size, &[], &context);
+    let payload = payload_builder.build_payload(Height::new(1), max_size, &[], context);
     assert_matches!(
         payload_builder.validate_payload(
             Height::new(1),
-            &test_proposal_context(&context),
+            &test_proposal_context(context),
             &payload,
             &[],
         ),

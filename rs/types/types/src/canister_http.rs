@@ -69,7 +69,6 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeSet,
     convert::{TryFrom, TryInto},
-    mem::size_of,
     time::Duration,
 };
 use strum::FromRepr;
@@ -994,7 +993,12 @@ pub struct CanisterHttpResponseMetadata {
 
 impl CountBytes for CanisterHttpResponseMetadata {
     fn count_bytes(&self) -> usize {
-        size_of::<CanisterHttpResponseMetadata>()
+        size_of_val(&self.id)
+            + size_of_val(&self.timeout)
+            + self.content_hash.get_ref().0.len()
+            + size_of_val(&self.content_size)
+            + size_of_val(&self.registry_version)
+            + self.replica_version.as_ref().len()
     }
 }
 

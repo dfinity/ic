@@ -1,8 +1,10 @@
+use CanisterHttpResponseContent::Reject;
 use ic_interfaces::canister_http::{CanisterHttpPool, InvalidCanisterHttpPayloadReason};
 use ic_types::{
     CountBytes, NodeId, NumBytes, RegistryVersion,
     batch::{
-        FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses, ValidationContext,
+        FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
+        FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
     },
     canister_http::{
         CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseMetadata,
@@ -244,14 +246,32 @@ pub(crate) fn estimate_response_with_consensus_size(
         + content.count_bytes()
 }
 
-/// Collects distinct HTTP outcall OK-responses from flexible committee members.
+/// Result of scanning flexible HTTP outcall shares for a single callback.
+pub(crate) enum FlexibleFindResult {
+    /// Collected enough OK responses for consensus.
+    OkResponses(FlexibleCanisterHttpResponses, usize),
+    /// Detected an error condition (too many rejects or responses too large).
+    Error(FlexibleCanisterHttpError, usize),
+    /// Not enough data to decide yet; more shares may arrive.
+    Pending,
+}
+
+/// Scans grouped shares for a flexible HTTP outcall and determines the result.
 ///
-/// Gathers up to `max_responses` individually-signed `(ok-response, share)` pairs
-/// from unique committee members while disregarding rejects, and skipping any
-/// that would exceed `max_payload_size`.
-/// Returns the group and its accumulated byte size if at least `min_responses`
-/// were collected.
-pub(crate) fn find_flexible_responses(
+/// Iterates shares sorted by `content_size` ascending (preferring smaller
+/// responses), collecting OK responses from distinct committee members.
+///
+/// If enough OK responses are gathered, returns [`FlexibleFindResult::OkResponses`].
+///
+/// Otherwise checks for error conditions:
+/// - **TooManyRequestErrors**: more nodes returned rejects than the slack
+///   allows (`committee.len() - min_responses`).
+/// - **ResponsesTooLarge**: even the smallest `min_responses` many OK responses
+///   (approximated by `count_bytes()`) exceed [`MAX_CANISTER_HTTP_PAYLOAD_SIZE`].
+/// - **Pending**: not enough data to decide yet.
+///
+/// The cloning of the share is only done when building the [`FlexibleCanisterHttpResponses`] result.
+pub(crate) fn find_flexible_result(
     callback_id: CallbackId,
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
     committee: &BTreeSet<NodeId>,
@@ -260,57 +280,106 @@ pub(crate) fn find_flexible_responses(
     accumulated_size: usize,
     max_payload_size: NumBytes,
     pool_access: &dyn CanisterHttpPool,
-) -> Option<(FlexibleCanisterHttpResponses, usize)> {
-    let mut flexible_responses = Vec::new();
-    let mut flexible_responses_size = size_of::<CallbackId>();
-    let mut signers = BTreeSet::new();
+) -> FlexibleFindResult {
+    let mut entries_sorted_asc: Vec<_> = grouped_shares.iter().collect();
+    entries_sorted_asc.sort_unstable_by_key(|(metadata, _)| metadata.content_size);
 
-    'outer: for (metadata, shares) in grouped_shares {
-        for share in shares {
-            if flexible_responses.len() >= max_responses as usize {
+    let mut ok_responses: Vec<(CanisterHttpResponse, &CanisterHttpResponseShare)> = Vec::new();
+    let mut ok_responses_size = size_of::<CallbackId>();
+    let mut seen_signers = BTreeSet::new();
+    let mut reject_responses: Vec<(CanisterHttpResponse, &CanisterHttpResponseShare)> = Vec::new();
+    let mut all_ok_shares_sorted_asc: Vec<(&CanisterHttpResponseShare, usize)> = Vec::new();
+
+    'outer: for (metadata, shares) in entries_sorted_asc {
+        for &share in shares {
+            if ok_responses.len() >= max_responses as usize {
                 break 'outer;
             }
-            if !committee.contains(&share.signature.signer)
-                || !signers.insert(share.signature.signer)
-            {
+            let signer = share.signature.signer;
+            if !committee.contains(&signer) || !seen_signers.insert(signer) {
                 continue;
             }
-            if let Some(http_response) =
-                pool_access.get_response_content_by_hash(&metadata.content_hash)
-            {
-                if matches!(
-                    http_response.content,
-                    CanisterHttpResponseContent::Reject(_)
-                ) {
-                    // Disregard rejects, as we are collecting ok-responses.
-                    continue;
-                }
-                let response = FlexibleCanisterHttpResponseWithProof {
-                    response: http_response,
-                    proof: (*share).clone(),
-                };
-                let response_size = response.count_bytes();
-                let new_total = NumBytes::new(
-                    (accumulated_size + flexible_responses_size + response_size) as u64,
-                );
-                if new_total >= max_payload_size {
-                    continue;
-                }
-                flexible_responses_size += response_size;
-                flexible_responses.push(response);
+            let Some(response) = pool_access.get_response_content_by_hash(&metadata.content_hash)
+            else {
+                continue;
+            };
+
+            if matches!(response.content, Reject(_)) {
+                reject_responses.push((response, share));
+                continue;
             }
+
+            let response_with_proof_size =
+                FlexibleCanisterHttpResponseWithProof::count_bytes(&response, share);
+            all_ok_shares_sorted_asc.push((share, response_with_proof_size));
+
+            let new_total = NumBytes::new(
+                (accumulated_size + ok_responses_size + response_with_proof_size) as u64,
+            );
+            if new_total >= max_payload_size {
+                continue;
+            }
+            ok_responses_size += response_with_proof_size;
+            ok_responses.push((response, share));
         }
     }
 
-    if flexible_responses.len() >= min_responses as usize {
-        Some((
+    // 1. Enough OK responses collected?
+    if ok_responses.len() >= min_responses as usize {
+        return FlexibleFindResult::OkResponses(
             FlexibleCanisterHttpResponses {
                 callback_id,
-                responses: flexible_responses,
+                responses: ok_responses
+                    .into_iter()
+                    .map(|(response, share)| FlexibleCanisterHttpResponseWithProof {
+                        response,
+                        proof: share.clone(),
+                    })
+                    .collect(),
             },
-            flexible_responses_size,
-        ))
-    } else {
-        None
+            ok_responses_size,
+        );
     }
+
+    // 2. Too many nodes returned rejects (so that we can never reach min_responses OK responses)?
+    if reject_responses.len() > committee.len().saturating_sub(min_responses as usize) {
+        let error = FlexibleCanisterHttpError::TooManyRequestErrors {
+            callback_id,
+            reject_responses: reject_responses
+                .into_iter()
+                .map(|(response, share)| FlexibleCanisterHttpResponseWithProof {
+                    response,
+                    proof: share.clone(),
+                })
+                .collect(),
+        };
+        let error_size = error.count_bytes();
+        return FlexibleFindResult::Error(error, error_size);
+    }
+
+    // 3. Even the smallest OK responses exceed the absolute payload limit?
+    if all_ok_shares_sorted_asc.len() >= min_responses as usize {
+        let mut truncated_to_min = all_ok_shares_sorted_asc;
+        truncated_to_min.truncate(min_responses as usize);
+
+        let smallest_content_sum: usize = truncated_to_min
+            .iter()
+            .map(|(_share, response_with_proof_size)| response_with_proof_size)
+            .sum();
+
+        if smallest_content_sum > MAX_CANISTER_HTTP_PAYLOAD_SIZE {
+            let error = FlexibleCanisterHttpError::ResponsesTooLarge {
+                callback_id,
+                metadata_shares: truncated_to_min
+                    .into_iter()
+                    .map(|(share, _size)| share.clone())
+                    .collect(),
+            };
+            let error_size = error.count_bytes();
+            return FlexibleFindResult::Error(error, error_size);
+        }
+    }
+
+    // 4. Not enough data yet
+    FlexibleFindResult::Pending
 }
