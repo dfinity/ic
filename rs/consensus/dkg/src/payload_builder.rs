@@ -684,6 +684,7 @@ fn process_subnet_call_context(
     Ok((dkg_configs, dkg_errors, dkg_valid_target_ids))
 }
 
+#[allow(clippy::type_complexity)]
 fn process_reshare_chain_key_contexts(
     this_subnet_id: SubnetId,
     start_block_height: Height,
