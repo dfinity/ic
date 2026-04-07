@@ -103,6 +103,13 @@ pub struct NeuronInfo {
     pub deciding_voting_power: Option<u64>,
     /// See analogous field in Neuron.
     pub potential_voting_power: Option<u64>,
+
+    /// Base value (in e8s) used for the "8-year gang" dissolve delay bonus.
+    /// For neurons that had the maximum dissolve delay of 8 years before the
+    /// maximum dissolve delay was reduced, this is set to the total staked value
+    /// net of fees (including staked maturity) captured at the time of migration.
+    /// For all other neurons, this is 0.
+    pub eight_year_gang_bonus_base_e8s: Option<u64>,
 }
 
 impl NeuronInfo {
@@ -327,6 +334,13 @@ pub struct Neuron {
     ///
     /// Per NNS policy, this is opt. Nevertheless, it will never be null.
     pub potential_voting_power: Option<u64>,
+
+    /// Base value (in e8s) used for the "8-year gang" dissolve delay bonus.
+    /// For neurons that had the maximum dissolve delay of 8 years before the
+    /// maximum dissolve delay was reduced, this is set to the total staked value
+    /// net of fees (including staked maturity) captured at the time of migration.
+    /// For all other neurons, this is 0.
+    pub eight_year_gang_bonus_base_e8s: Option<u64>,
 
     /// The maturity disbursements in progress for this neuron.
     pub maturity_disbursements_in_progress: Option<Vec<MaturityDisbursement>>,

@@ -191,6 +191,12 @@ fn setup_recovered_nns(
         .join()
         .unwrap_or_else(|e| panic!("Failed to fetch the mainnet ic-replay because {e:?}"));
 
+    // Replace the subnet list record in the registry with a singleton containing only the
+    // recovered NNS subnet, so that this testnet does not try to connect to mainnet nodes through
+    // XNet connections.
+    patch_subnet_list(&env);
+    // Set up a dictator neuron with a large stake to be able to pass any proposal instantly during
+    // the test
     let neuron_id: NeuronId = setup_test_neuron(&env);
 
     // Wait until the aux node is setup and we have fetched ic-recovery before starting the recovery
@@ -376,6 +382,12 @@ fn fetch_ic_config(env: &TestEnv, nns_node: &IcNodeSnapshot) {
         logger,
         "Successfully scp-ed {nns_node_ip:?}:{PATH_IC_CONFIG_SRC_PATH:} to {destination:?}."
     );
+}
+
+fn patch_subnet_list(env: &TestEnv) {
+    ic_replay(env, |cmd| {
+        cmd.arg("overwrite-subnet-list-with-singleton");
+    });
 }
 
 fn setup_test_neuron(env: &TestEnv) -> NeuronId {
