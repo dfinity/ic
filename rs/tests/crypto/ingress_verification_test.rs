@@ -862,8 +862,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                     // v3/v4 sync calls may return 202 under load
                     let response =
                         if api_ver >= 3 && response.status() == 202 && include_mgmt_canister_id {
-                            await_ingress_via_read_state(&test_info, sender, &request_id)
-                                .await
+                            await_ingress_via_read_state(&test_info, sender, &request_id).await
                         } else {
                             response
                         };
@@ -925,8 +924,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                         // v3 sync call may return 202 under load; use read_state
                         // to wait for the ingress to be processed
                         let response = if response.status() == 202 {
-                            await_ingress_via_read_state(&test_info, sender, &request_id)
-                                .await
+                            await_ingress_via_read_state(&test_info, sender, &request_id).await
                         } else {
                             assert_eq!(response.status(), 200);
                             response
@@ -1836,7 +1834,9 @@ fn ingress_status_from_read_state_response(
                     String::from_utf8(bytes.clone()).expect("Invalid UTF-8 in reject_message")
                 }
                 // The reject_message is always supposed to be there for a rejected message
-                _ => panic!("The request_status was rejected but the required reject_message field was missing"),
+                _ => panic!(
+                    "The request_status was rejected but the required reject_message field was missing"
+                ),
             };
             Some(IngressStatus::Rejected {
                 reject_code,
