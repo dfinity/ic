@@ -2,7 +2,7 @@ name: Schedule RC
 
 on:
   schedule:
-    - cron: "0 4 * * *"
+    - cron: "14 3 * * *" # 3:14 UTC - slightly offset to avoid high-load times of other scheduled workflows
   workflow_dispatch:
 
 jobs:
