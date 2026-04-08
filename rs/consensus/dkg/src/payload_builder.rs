@@ -2130,7 +2130,8 @@ mod tests {
     #[test]
     fn test_select_dealings_prioritizes_remote_target_with_lower_remaining_capacity() {
         let remote_low_remaining_id = remote_dkg_id_with_target(NiDkgTag::LowThreshold, [0_u8; 32]);
-        let remote_high_remaining_id = remote_dkg_id_with_target(NiDkgTag::LowThreshold, [1_u8; 32]);
+        let remote_high_remaining_id =
+            remote_dkg_id_with_target(NiDkgTag::LowThreshold, [1_u8; 32]);
 
         // collection_threshold = 3 for both
         let configs: BTreeMap<_, _> = [
