@@ -438,7 +438,7 @@ mod tests {
         );
         let sender_info = SenderInfo {
             info: vec![42, 43, 44],
-            signer: CanisterId::try_from(&[42_u8; 29][..]).unwrap(),
+            signer: CanisterId::from_u64(8),
         };
         let msg = Request::StartExecution(StartExecutionRequest {
             exec_id: ExecId::new(),

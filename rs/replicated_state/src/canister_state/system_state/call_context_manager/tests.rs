@@ -359,7 +359,7 @@ fn call_context_roundtrip_encoding() {
 
     let sender_info = SenderInfo {
         info: vec![42, 43, 44],
-        signer: CanisterId::try_from(&[42_u8; 29][..]).unwrap(),
+        signer: CanisterId::from_u64(8),
     };
     let minimal_call_context = CallContext::new(
         CallOrigin::Ingress(user_test_id(1), message_test_id(2), String::from("")),
@@ -706,7 +706,7 @@ fn roundtrip_encode() {
     // Create a new call context.
     let sender_info = SenderInfo {
         info: vec![42, 43, 44],
-        signer: CanisterId::try_from(&[42_u8; 29][..]).unwrap(),
+        signer: CanisterId::from_u64(8),
     };
     let call_context_id = ccm.new_call_context(
         CallOrigin::CanisterUpdate(other, CallbackId::new(13), NO_DEADLINE, String::from("")),
