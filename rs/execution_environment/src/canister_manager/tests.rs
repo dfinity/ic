@@ -1340,10 +1340,11 @@ fn start_a_stopping_canister_with_no_stop_contexts() {
         state.put_canister_state(canister);
 
         let canister = state.canister_state_make_mut(&canister_id).unwrap();
-        assert_eq!(
-            canister_manager.start_canister(sender, canister, subnet_admins),
-            Ok(Vec::new())
-        );
+        let stop_contexts_to_reject = canister_manager
+            .start_canister(sender, canister, subnet_admins)
+            .unwrap()
+            .stop_contexts_to_reject;
+        assert_eq!(stop_contexts_to_reject, Vec::new());
     });
 }
 
@@ -1363,10 +1364,11 @@ fn start_a_stopping_canister_with_stop_contexts() {
         state.put_canister_state(canister);
 
         let canister = state.canister_state_make_mut(&canister_id).unwrap();
-        assert_eq!(
-            canister_manager.start_canister(sender, canister, subnet_admins),
-            Ok(vec![stop_context])
-        );
+        let stop_contexts_to_reject = canister_manager
+            .start_canister(sender, canister, subnet_admins)
+            .unwrap()
+            .stop_contexts_to_reject;
+        assert_eq!(stop_contexts_to_reject, vec![stop_context]);
     });
 }
 
@@ -2226,7 +2228,6 @@ fn add_cycles_sender_in_whitelist() {
             Some(123),
             canister,
             &ProvisionalWhitelist::Set(btreeset! { canister_test_id(1).get() }),
-            CanisterCyclesCostSchedule::Normal,
         )
         .unwrap();
 
@@ -2256,7 +2257,6 @@ fn add_cycles_sender_not_in_whitelist() {
                 Some(123),
                 canister,
                 &ProvisionalWhitelist::Set(BTreeSet::new()),
-                CanisterCyclesCostSchedule::Normal,
             ),
             Err(CanisterManagerError::SenderNotInWhitelist(sender))
         );

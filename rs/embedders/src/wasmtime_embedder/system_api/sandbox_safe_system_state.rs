@@ -34,7 +34,7 @@ use ic_types::{
 };
 use ic_types_cycles::{
     BurnedCycles, CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCaseKind,
-    Instructions, NonConsumed, RequestAndResponseTransmission,
+    Instructions, RequestAndResponseTransmission,
 };
 use ic_wasm_types::WasmEngineError;
 use serde::{Deserialize, Serialize};
@@ -412,11 +412,8 @@ impl SystemStateModifications {
             .append_delta_log(&mut self.canister_log);
 
         // Verify total cycle change is not positive and update cycles balance.
-        let cost_schedule = network_topology
-            .get_cost_schedule(&own_subnet_id)
-            .unwrap_or_default();
         self.validate_cycle_change(system_state.canister_id() == CYCLES_MINTING_CANISTER_ID)?;
-        self.apply_balance_changes(system_state, cost_schedule);
+        self.apply_balance_changes(system_state);
 
         if let Some(hook_condition_check_result) =
             self.on_low_wasm_memory_hook_condition_check_result
@@ -605,11 +602,7 @@ impl SystemStateModifications {
     }
 
     /// Applies the balance change to the given state.
-    pub fn apply_balance_changes(
-        &self,
-        state: &mut SystemState,
-        cost_schedule: CanisterCyclesCostSchedule,
-    ) {
+    pub fn apply_balance_changes(&self, state: &mut SystemState) {
         let initial_balance = state.balance();
 
         // `self.cycles_balance_change` consists of:
@@ -631,12 +624,8 @@ impl SystemStateModifications {
 
         // Apply the main cycles balance change without the consumed and reserved cycles.
         match adjusted_balance_change {
-            CyclesBalanceChange::Added(added) => {
-                state.add_cycles(CompoundCycles::<NonConsumed>::new(added, cost_schedule))
-            }
-            CyclesBalanceChange::Removed(removed) => {
-                state.remove_cycles(CompoundCycles::<NonConsumed>::new(removed, cost_schedule))
-            }
+            CyclesBalanceChange::Added(added) => state.add_cycles(added),
+            CyclesBalanceChange::Removed(removed) => state.remove_cycles(removed),
         }
 
         // Apply the consumed cycles with the use case metrics recording.
@@ -646,13 +635,13 @@ impl SystemStateModifications {
             request_and_response_transmission,
         } = self.consumed_cycles_by_use_case;
         if let Some(x) = burned {
-            state.remove_cycles(x);
+            state.consume_cycles(x);
         }
         if let Some(x) = instructions {
-            state.remove_cycles(x);
+            state.consume_cycles(x);
         }
         if let Some(x) = request_and_response_transmission {
-            state.remove_cycles(x);
+            state.consume_cycles(x);
         }
 
         // Apply the reserved cycles. This must succeed because the cycle
@@ -1618,7 +1607,7 @@ mod tests {
             },
         );
 
-        system_state_modifications.apply_balance_changes(&mut system_state, cost_schedule);
+        system_state_modifications.apply_balance_changes(&mut system_state);
 
         assert_eq!(initial_cycles_balance - removed, system_state.balance());
 
@@ -1637,7 +1626,7 @@ mod tests {
             },
         );
 
-        system_state_modifications.apply_balance_changes(&mut system_state, cost_schedule);
+        system_state_modifications.apply_balance_changes(&mut system_state);
 
         assert_eq!(initial_cycles_balance - removed, system_state.balance());
 
@@ -1656,7 +1645,7 @@ mod tests {
             },
         );
 
-        system_state_modifications.apply_balance_changes(&mut system_state, cost_schedule);
+        system_state_modifications.apply_balance_changes(&mut system_state);
 
         assert_eq!(initial_cycles_balance + added, system_state.balance());
 
@@ -1675,7 +1664,7 @@ mod tests {
             },
         );
 
-        system_state_modifications.apply_balance_changes(&mut system_state, cost_schedule);
+        system_state_modifications.apply_balance_changes(&mut system_state);
 
         assert_eq!(initial_cycles_balance + added, system_state.balance());
     }

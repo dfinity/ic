@@ -13,7 +13,7 @@ use ic_sys::PAGE_SIZE;
 use ic_types::ingress::IngressState;
 use ic_types::messages::{CallbackId, RequestMetadata};
 use ic_types::{NumBytes, NumInstructions, NumOsPages};
-use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Cycles, NonConsumed};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_universal_canister::{call_args, wasm};
 use more_asserts::assert_gt;
 use std::time::Duration;
@@ -760,10 +760,7 @@ fn dts_replicated_execution_resume_fails_due_to_cycles_change() {
         let balance = test.canister_state(a_id).system_state.balance();
         test.canister_state_mut(a_id)
             .system_state
-            .add_cycles(CompoundCycles::<NonConsumed>::new(
-                balance + Cycles::new(1),
-                CanisterCyclesCostSchedule::Normal,
-            ));
+            .add_cycles(balance + Cycles::new(1));
 
         test.execute_slice(a_id);
 

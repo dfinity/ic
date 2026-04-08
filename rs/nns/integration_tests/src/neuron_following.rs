@@ -36,9 +36,9 @@ const VALID_TOPIC: i32 = Topic::ParticipantManagement as i32;
 const INVALID_TOPIC: i32 = 69420;
 const PROTOCOAL_CANISTER_MANAGEMENT_TOPIC: i32 = Topic::ProtocolCanisterManagement as i32;
 const NEURON_MANAGEMENT_TOPIC: i32 = Topic::NeuronManagement as i32;
-const VOTING_POWER_NEURON_1: u64 = 1_866_016_426;
-const VOTING_POWER_NEURON_2: u64 = 186_601_642;
-const VOTING_POWER_NEURON_3: u64 = 18_660_163;
+const VOTING_POWER_NEURON_1: u64 = 1_857_161_981;
+const VOTING_POWER_NEURON_2: u64 = 185_716_198;
+const VOTING_POWER_NEURON_3: u64 = 18_571_619;
 
 fn setup_state_machine_with_nns_canisters() -> StateMachine {
     let state_machine = state_machine_builder_for_nns_tests().build();
@@ -255,7 +255,7 @@ fn vote_propagation_with_following() {
         Vote::Yes,
     );
     let votes = get_yes_votes(&state_machine, &proposal_id);
-    assert_eq!(votes, 2_052_618_068);
+    assert_eq!(votes, VOTING_POWER_NEURON_1 + VOTING_POWER_NEURON_2);
     let ballot_n1 = check_ballots(&state_machine, &proposal_id, &n1);
     assert_eq!(ballot_n1, (VOTING_POWER_NEURON_1, Vote::Yes));
 
@@ -300,6 +300,7 @@ fn vote_propagation_with_following() {
         principal_id: n1.principal_id,
     };
 
+    // Public neurons can be followed.
     nns_make_neuron_public(&state_machine, n1.principal_id, n1a.neuron_id)
         .expect("Failed to make neuron public");
 
@@ -381,19 +382,25 @@ fn vote_propagation_with_following() {
     let proposal_id = submit_proposal(&state_machine, &n1);
 
     // verify that all four neurons did vote
-    let votes = get_yes_votes(&state_machine, &proposal_id);
-    assert_eq!(
-        votes,
-        933_008_212 + 932_989_552 + VOTING_POWER_NEURON_2 + VOTING_POWER_NEURON_3
-    );
+    const POST_SPLIT_NEURON_1_VOTING_POWER: u64 = 928_580_990;
+    const NEURON_1_DAUGHTER_VOTING_POWER: u64 = 928_562_419;
     let ballot_n1 = check_ballots(&state_machine, &proposal_id, &n1);
-    assert_eq!(ballot_n1, (933_008_212, Vote::Yes));
+    assert_eq!(ballot_n1, (POST_SPLIT_NEURON_1_VOTING_POWER, Vote::Yes));
     let ballot_n1a = check_ballots(&state_machine, &proposal_id, &n1a);
-    assert_eq!(ballot_n1a, (932_989_552, Vote::Yes));
+    assert_eq!(ballot_n1a, (NEURON_1_DAUGHTER_VOTING_POWER, Vote::Yes));
     let ballot_n2 = check_ballots(&state_machine, &proposal_id, &n2);
     assert_eq!(ballot_n2, (VOTING_POWER_NEURON_2, Vote::Yes));
     let ballot_n3 = check_ballots(&state_machine, &proposal_id, &n3);
     assert_eq!(ballot_n3, (VOTING_POWER_NEURON_3, Vote::Yes));
+
+    let votes = get_yes_votes(&state_machine, &proposal_id);
+    assert_eq!(
+        votes,
+        POST_SPLIT_NEURON_1_VOTING_POWER
+            + NEURON_1_DAUGHTER_VOTING_POWER
+            + VOTING_POWER_NEURON_2
+            + VOTING_POWER_NEURON_3
+    );
 }
 
 /// Each neuron in this scenario represents a different case:

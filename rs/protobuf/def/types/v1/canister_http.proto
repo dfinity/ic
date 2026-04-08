@@ -18,14 +18,14 @@ message CanisterHttpRequest {
 
 message CanisterHttpResponse {
   uint64 id = 1;
-  uint64 timeout = 2;
+  reserved 2;
   types.v1.CanisterId canister_id = 4;
   CanisterHttpResponseContent content = 3;
 }
 
 message CanisterHttpResponseMetadata {
   uint64 id = 1;
-  uint64 timeout = 2;
+  reserved 2;
   bytes content_hash = 3;
   uint64 registry_version = 4;
   string replica_version = 5;

@@ -2,7 +2,7 @@ name: Schedule Daily
 
 on:
   schedule:
-    - cron: "0 2 * * *"
+    - cron: "47 1 * * *" # 1:47 UTC - slightly offset to avoid high-load times of other scheduled workflows
   workflow_dispatch:
 
 env:

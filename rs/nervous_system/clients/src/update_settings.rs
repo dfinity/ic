@@ -1,5 +1,6 @@
 use candid::CandidType;
 use ic_base_types::PrincipalId;
+use ic_management_canister_types_private as management_canister;
 use ic_management_canister_types_private::IC_00;
 use ic_nervous_system_runtime::Runtime;
 use serde::Deserialize;
@@ -44,6 +45,55 @@ pub struct CanisterSettings {
     pub snapshot_visibility: Option<SnapshotVisibility>,
     pub wasm_memory_limit: Option<candid::Nat>,
     pub wasm_memory_threshold: Option<candid::Nat>,
+}
+
+impl From<LogVisibility> for management_canister::LogVisibilityV2 {
+    fn from(original: LogVisibility) -> Self {
+        match original {
+            LogVisibility::Controllers => management_canister::LogVisibilityV2::Controllers,
+            LogVisibility::Public => management_canister::LogVisibilityV2::Public,
+        }
+    }
+}
+
+impl From<SnapshotVisibility> for management_canister::SnapshotVisibility {
+    fn from(original: SnapshotVisibility) -> Self {
+        match original {
+            SnapshotVisibility::Controllers => management_canister::SnapshotVisibility::Controllers,
+            SnapshotVisibility::Public => management_canister::SnapshotVisibility::Public,
+        }
+    }
+}
+
+impl From<CanisterSettings> for management_canister::CanisterSettingsArgs {
+    fn from(original: CanisterSettings) -> Self {
+        let CanisterSettings {
+            controllers,
+            compute_allocation,
+            memory_allocation,
+            freezing_threshold,
+            reserved_cycles_limit,
+            log_visibility,
+            wasm_memory_limit,
+            wasm_memory_threshold,
+            snapshot_visibility,
+        } = original;
+
+        management_canister::CanisterSettingsArgs {
+            controllers: controllers.map(management_canister::BoundedControllers::new),
+            compute_allocation,
+            memory_allocation,
+            freezing_threshold,
+            reserved_cycles_limit,
+            log_visibility: log_visibility.map(management_canister::LogVisibilityV2::from),
+            snapshot_visibility: snapshot_visibility
+                .map(management_canister::SnapshotVisibility::from),
+            log_memory_limit: None,
+            wasm_memory_limit,
+            wasm_memory_threshold,
+            environment_variables: None,
+        }
+    }
 }
 
 /// A wrapper call to the management canister `update_settings` API.
