@@ -3859,6 +3859,7 @@ fn run_wasm_and_get_instructions_used(
             Cycles::zero(),
             PrincipalId::new_user_test_id(0),
             0.into(),
+            None,
         ))
         .build();
 
@@ -4196,6 +4197,7 @@ fn deterministic_tracker_exhausts_instructions_on_page_faults() {
             Cycles::zero(),
             PrincipalId::new_user_test_id(0),
             0.into(),
+            None,
         ))
         .build();
 
@@ -4261,6 +4263,7 @@ fn deterministic_tracker_reports_correct_page_stats() {
             Cycles::zero(),
             PrincipalId::new_user_test_id(0),
             0.into(),
+            None,
         ))
         .build();
 
@@ -4318,6 +4321,7 @@ fn deterministic_tracker_reports_zero_dirty_pages_for_reads() {
             Cycles::zero(),
             PrincipalId::new_user_test_id(0),
             0.into(),
+            None,
         ))
         .build();
 
