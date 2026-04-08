@@ -90,7 +90,6 @@ use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_registry_canister_api::GetChunkRequest;
 use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
 use ic_registry_nns_data_provider::registry::registry_deltas_to_registry_records;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -4648,17 +4647,8 @@ impl Operation for CallRequest {
                 let node = &subnet.nodes[0];
                 let (s, mut r) = mpsc::channel(MAX_P2P_IO_CHANNEL_SIZE);
                 let ingress_filter = subnet.ingress_filter.clone();
-
-                let root_of_trust_registry_client = subnet.registry_client.clone();
-                let root_of_trust_factory = Arc::new(move |registry_version| {
-                    RegistryRootOfTrustProvider::new_for_testing(
-                        root_of_trust_registry_client.clone(),
-                        registry_version,
-                        Some(IcRootOfTrust::from(
-                            icp_mainnet_root_public_key_for_testing(),
-                        )),
-                    )
-                });
+                let mainnet_root_of_trust =
+                    IcRootOfTrust::from(icp_mainnet_root_public_key_for_testing());
                 let ingress_validator = IngressValidatorBuilder::builder(
                     subnet.replica_logger.clone(),
                     node.node_id,
@@ -4671,7 +4661,7 @@ impl Operation for CallRequest {
                 )
                 .with_malicious_flags(pic.malicious_flags.clone())
                 .with_time_source(subnet.time_source.clone())
-                .with_root_of_trust_factory(root_of_trust_factory)
+                .with_additional_root_of_trust(mainnet_root_of_trust)
                 .build();
 
                 // Task that waits for call service to submit the ingress message, and
@@ -4812,16 +4802,8 @@ impl Operation for QueryRequest {
                 let node = &subnet.nodes[0];
                 subnet.certify_latest_state();
                 let query_handler = subnet.query_handler.lock().unwrap().clone();
-                let root_of_trust_registry_client = subnet.registry_client.clone();
-                let root_of_trust_factory = Arc::new(move |registry_version| {
-                    RegistryRootOfTrustProvider::new_for_testing(
-                        root_of_trust_registry_client.clone(),
-                        registry_version,
-                        Some(IcRootOfTrust::from(
-                            icp_mainnet_root_public_key_for_testing(),
-                        )),
-                    )
-                });
+                let mainnet_root_of_trust =
+                    IcRootOfTrust::from(icp_mainnet_root_public_key_for_testing());
                 let svc = QueryServiceBuilder::builder(
                     subnet.replica_logger.clone(),
                     node.node_id,
@@ -4834,7 +4816,7 @@ impl Operation for QueryRequest {
                 )
                 .with_malicious_flags(pic.malicious_flags.clone())
                 .with_time_source(subnet.time_source.clone())
-                .with_root_of_trust_factory(root_of_trust_factory)
+                .with_additional_root_of_trust(mainnet_root_of_trust)
                 .build_service();
 
                 let version_str = match self.version {
@@ -4906,16 +4888,8 @@ impl Operation for CanisterReadStateRequest {
                 let (_, delegation_rx) = watch::channel(builder);
                 subnet.certify_latest_state();
                 let metrics = HttpHandlerMetrics::new(&MetricsRegistry::new());
-                let root_of_trust_registry_client = subnet.registry_client.clone();
-                let root_of_trust_factory = Arc::new(move |registry_version| {
-                    RegistryRootOfTrustProvider::new_for_testing(
-                        root_of_trust_registry_client.clone(),
-                        registry_version,
-                        Some(IcRootOfTrust::from(
-                            icp_mainnet_root_public_key_for_testing(),
-                        )),
-                    )
-                });
+                let mainnet_root_of_trust =
+                    IcRootOfTrust::from(icp_mainnet_root_public_key_for_testing());
                 let svc = CanisterReadStateServiceBuilder::builder(
                     subnet.replica_logger.clone(),
                     metrics,
@@ -4928,7 +4902,7 @@ impl Operation for CanisterReadStateRequest {
                 )
                 .with_malicious_flags(pic.malicious_flags.clone())
                 .with_time_source(subnet.time_source.clone())
-                .with_root_of_trust_factory(root_of_trust_factory)
+                .with_additional_root_of_trust(mainnet_root_of_trust)
                 .build_service();
 
                 let version_str = match self.version {

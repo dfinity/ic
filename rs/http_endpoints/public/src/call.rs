@@ -6,7 +6,7 @@ mod ingress_watcher;
 pub use ingress_watcher::{IngressWatcher, IngressWatcherHandle};
 
 use crate::{
-    HttpError, IngressFilterService, RootOfTrustFactory,
+    HttpError, IngressFilterService,
     common::{build_validator, certified_state_unavailable_error, validation_error_to_http_error},
 };
 use hyper::StatusCode;
@@ -26,6 +26,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_types::{
     CanisterId, CountBytes, NodeId, RegistryVersion, SubnetId,
     artifact::UnvalidatedArtifactMutation,
+    crypto::threshold_sig::IcRootOfTrust,
     malicious_flags::MaliciousFlags,
     messages::{
         HttpCallContent, HttpRequestEnvelope, MessageId, SignedIngress, SignedIngressContent,
@@ -49,7 +50,7 @@ pub struct IngressValidatorBuilder {
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
     ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
-    root_of_trust_factory: RootOfTrustFactory,
+    additional_root_of_trust: Option<IcRootOfTrust>,
 }
 
 impl IngressValidatorBuilder {
@@ -63,13 +64,6 @@ impl IngressValidatorBuilder {
         ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
         ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
     ) -> Self {
-        let root_of_trust_registry_client = registry_client.clone();
-        let root_of_trust_factory = Arc::new(move |registry_version| {
-            RegistryRootOfTrustProvider::new(
-                root_of_trust_registry_client.clone(),
-                registry_version,
-            )
-        });
         Self {
             log,
             node_id,
@@ -81,7 +75,7 @@ impl IngressValidatorBuilder {
             ingress_filter,
             ingress_throttler,
             ingress_tx,
-            root_of_trust_factory,
+            additional_root_of_trust: None,
         }
     }
 
@@ -95,8 +89,11 @@ impl IngressValidatorBuilder {
         self
     }
 
-    pub fn with_root_of_trust_factory(mut self, root_of_trust_factory: RootOfTrustFactory) -> Self {
-        self.root_of_trust_factory = root_of_trust_factory;
+    pub fn with_additional_root_of_trust(
+        mut self,
+        additional_root_of_trust: IcRootOfTrust,
+    ) -> Self {
+        self.additional_root_of_trust = Some(additional_root_of_trust);
         self
     }
 
@@ -112,7 +109,7 @@ impl IngressValidatorBuilder {
             ingress_filter: self.ingress_filter,
             ingress_throttler: self.ingress_throttler,
             ingress_tx: self.ingress_tx,
-            root_of_trust_factory: self.root_of_trust_factory,
+            additional_root_of_trust: self.additional_root_of_trust,
         }
     }
 }
@@ -198,7 +195,7 @@ pub struct IngressValidator {
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
     ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
-    root_of_trust_factory: RootOfTrustFactory,
+    additional_root_of_trust: Option<IcRootOfTrust>,
 }
 
 impl IngressValidator {
@@ -221,7 +218,7 @@ impl IngressValidator {
             ingress_filter,
             ingress_throttler,
             ingress_tx,
-            root_of_trust_factory,
+            additional_root_of_trust,
         } = self;
 
         // Load shed the request if the ingress pool is full.
@@ -278,7 +275,16 @@ impl IngressValidator {
             })?;
         }
 
-        let root_of_trust_provider = root_of_trust_factory(registry_version);
+        let root_of_trust_provider =
+            if let Some(additional_root_of_trust) = additional_root_of_trust {
+                RegistryRootOfTrustProvider::new_with_additional_root_of_trust(
+                    registry_client,
+                    registry_version,
+                    additional_root_of_trust,
+                )
+            } else {
+                RegistryRootOfTrustProvider::new(registry_client, registry_version)
+            };
         // Since spawn blocking requires 'static we can't use any references
         let request_c = msg.as_ref().clone();
 

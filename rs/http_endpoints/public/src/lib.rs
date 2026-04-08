@@ -75,12 +75,11 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_metrics::{MetricsRegistry, histogram_vec_timer::HistogramVecTimer};
 use ic_pprof::PprofCollector;
-use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_tracing::ReloadHandles;
 use ic_types::{
-    Height, NodeId, RegistryVersion, SubnetId,
+    Height, NodeId, SubnetId,
     artifact::UnvalidatedArtifactMutation,
     malicious_flags::MaliciousFlags,
     messages::{MessageId, QueryResponseHash, ReplicaHealthStatus, SignedIngress},
@@ -101,9 +100,6 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tower::{BoxError, Service, ServiceBuilder, limit::GlobalConcurrencyLimitLayer};
 use tower_http::{limit::RequestBodyLimitLayer, trace::TraceLayer};
-
-pub(crate) type RootOfTrustFactory =
-    Arc<dyn Fn(RegistryVersion) -> RegistryRootOfTrustProvider + Send + Sync>;
 
 /// [TLS Application-Layer Protocol Negotiation (ALPN) Protocol `HTTP/2 over TLS` ID][spec]
 /// [spec]: https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids)

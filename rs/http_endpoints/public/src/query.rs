@@ -1,7 +1,7 @@
 //! Module that deals with requests to /api/v2/canister/.../query
 
 use crate::{
-    ReplicaHealthStatus, RootOfTrustFactory,
+    ReplicaHealthStatus,
     common::{
         Cbor, WithTimeout, build_validator, certified_state_unavailable_error,
         validation_error_to_http_error,
@@ -30,6 +30,7 @@ use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_types::{
     CanisterId, NodeId,
+    crypto::threshold_sig::IcRootOfTrust,
     ingress::WasmResult,
     malicious_flags::MaliciousFlags,
     messages::{
@@ -64,7 +65,7 @@ pub struct QueryService {
     time_source: Arc<dyn TimeSource>,
     validator: Arc<dyn HttpRequestVerifier<Query, RegistryRootOfTrustProvider>>,
     registry_client: Arc<dyn RegistryClient>,
-    root_of_trust_factory: RootOfTrustFactory,
+    additional_root_of_trust: Option<IcRootOfTrust>,
     query_execution_service: Arc<Mutex<QueryExecutionService>>,
     version: Version,
 }
@@ -79,7 +80,7 @@ pub struct QueryServiceBuilder {
     time_source: Option<Arc<dyn TimeSource>>,
     ingress_verifier: Arc<dyn IngressSigVerifier>,
     registry_client: Arc<dyn RegistryClient>,
-    root_of_trust_factory: RootOfTrustFactory,
+    additional_root_of_trust: Option<IcRootOfTrust>,
     query_execution_service: QueryExecutionService,
     version: Version,
 }
@@ -104,13 +105,6 @@ impl QueryServiceBuilder {
         query_execution_service: QueryExecutionService,
         version: Version,
     ) -> Self {
-        let root_of_trust_registry_client = registry_client.clone();
-        let root_of_trust_factory = Arc::new(move |registry_version| {
-            RegistryRootOfTrustProvider::new(
-                root_of_trust_registry_client.clone(),
-                registry_version,
-            )
-        });
         Self {
             log,
             node_id,
@@ -121,7 +115,7 @@ impl QueryServiceBuilder {
             time_source: None,
             ingress_verifier,
             registry_client,
-            root_of_trust_factory,
+            additional_root_of_trust: None,
             query_execution_service,
             version,
         }
@@ -145,8 +139,11 @@ impl QueryServiceBuilder {
         self
     }
 
-    pub fn with_root_of_trust_factory(mut self, root_of_trust_factory: RootOfTrustFactory) -> Self {
-        self.root_of_trust_factory = root_of_trust_factory;
+    pub fn with_additional_root_of_trust(
+        mut self,
+        additional_root_of_trust: IcRootOfTrust,
+    ) -> Self {
+        self.additional_root_of_trust = Some(additional_root_of_trust);
         self
     }
 
@@ -163,7 +160,7 @@ impl QueryServiceBuilder {
             time_source: self.time_source.unwrap_or(Arc::new(SysTimeSource::new())),
             validator: build_validator(self.ingress_verifier, self.malicious_flags),
             registry_client: self.registry_client,
-            root_of_trust_factory: self.root_of_trust_factory,
+            additional_root_of_trust: self.additional_root_of_trust,
             query_execution_service: Arc::new(Mutex::new(self.query_execution_service)),
             version: self.version,
         };
@@ -192,7 +189,7 @@ pub(crate) async fn query(
         health_status,
         signer,
         nns_delegation_reader,
-        root_of_trust_factory,
+        additional_root_of_trust,
         query_execution_service,
         version,
     }): State<QueryService>,
@@ -228,7 +225,15 @@ pub(crate) async fn query(
         return (status, text).into_response();
     }
 
-    let root_of_trust_provider = root_of_trust_factory(registry_version);
+    let root_of_trust_provider = if let Some(additional_root_of_trust) = additional_root_of_trust {
+        RegistryRootOfTrustProvider::new_with_additional_root_of_trust(
+            registry_client,
+            registry_version,
+            additional_root_of_trust,
+        )
+    } else {
+        RegistryRootOfTrustProvider::new(registry_client, registry_version)
+    };
     // Since spawn blocking requires 'static we can't use any references
     let request_c = request.clone();
     match tokio::task::spawn_blocking(move || {
