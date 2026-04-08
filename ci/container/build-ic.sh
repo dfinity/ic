@@ -8,7 +8,7 @@ if [ "${BUILD_IC_NESTED:-}" == 1 ]; then
     echo "$0 nested, aborting"
     exit 1
 fi
-export BUILD_IC_NESTED= 1
+export BUILD_IC_NESTED=1
 
 export ROOT_DIR="$(git rev-parse --show-toplevel)"
 
@@ -69,7 +69,7 @@ export BUILD_CAN=false
 export BUILD_IMG=false
 release_build=true
 
-if [ "$#" == 0 ]; then
+if [ $# == 0 ]; then
     echo_red "ERROR: Please specify one of '-b', '-c' or '-i'" >&2
     echo ""
     usage && exit 1
