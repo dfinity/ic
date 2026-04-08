@@ -3,7 +3,7 @@ use crate::validation::ValidationError;
 use ic_base_types::RegistryVersion;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
-    NodeId, Time,
+    NodeId,
     artifact::CanisterHttpResponseId,
     canister_http::{
         CanisterHttpResponse, CanisterHttpResponseArtifact, CanisterHttpResponseShare,
@@ -29,8 +29,6 @@ pub enum InvalidCanisterHttpPayloadReason {
     InvalidMetadata {
         metadata_id: CallbackId,
         content_id: CallbackId,
-        metadata_timeout: Time,
-        content_timeout: Time,
     },
     /// The content hash of the signed metadata does not match the actual hash of the content
     ContentHashMismatch {
@@ -41,11 +39,6 @@ pub enum InvalidCanisterHttpPayloadReason {
     ContentSizeMismatch {
         metadata_size: u32,
         calculated_size: u32,
-    },
-    /// The response has already timed out
-    Timeout {
-        timed_out_at: Time,
-        validation_time: Time,
     },
     /// A timeout refers to a CallbackId that is unknown by the StateManager
     UnknownCallbackId(CallbackId),

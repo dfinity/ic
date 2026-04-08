@@ -1,5 +1,6 @@
 use super::*;
 use crate::{
+    governance::max_dissolve_delay_seconds,
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{
         self as pb, VotingPowerEconomics,
