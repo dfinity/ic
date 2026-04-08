@@ -38,7 +38,10 @@
 use anyhow::Result;
 
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
-use ic_protobuf::registry::dc::v1::{DataCenterRecord, Gps};
+use ic_protobuf::registry::{
+    dc::v1::{DataCenterRecord, Gps},
+    node::v1::NodeRewardType,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
@@ -50,7 +53,8 @@ use ic_system_test_driver::driver::{
 };
 use ic_types::PrincipalId;
 use nns_dapp::{
-    install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
+    install_ii_nns_dapp_and_subnet_rental_with_dummy_auth, nns_dapp_customizations,
+    set_authorized_subnets,
 };
 use std::collections::BTreeMap;
 use std::net::Ipv4Addr;
@@ -116,7 +120,7 @@ pub fn setup(env: TestEnv) {
 
     // Build CloudEngine subnet and unassigned nodes distributed across 4 datacenters.
     // Each datacenter gets its own node operator with 1 CloudEngine node + 1 unassigned node.
-    let mut cloud_engine_subnet = Subnet::new(SubnetType::CloudEngine);
+    // let mut cloud_engine_subnet = Subnet::new(SubnetType::CloudEngine);
     for (i, dc) in DATA_CENTERS.iter().enumerate() {
         let operator_principal = PrincipalId::new_user_test_id(1000 + i as u64);
         let provider_principal = PrincipalId::new_user_test_id(2000 + i as u64);
@@ -141,16 +145,27 @@ pub fn setup(env: TestEnv) {
             });
 
         // 1 CloudEngine node per DC
-        cloud_engine_subnet = cloud_engine_subnet
-            .add_node(Node::new().with_node_operator_principal_id(operator_principal));
+        // cloud_engine_subnet = cloud_engine_subnet.add_node(
+        //     Node::new()
+        //         .with_node_operator_principal_id(operator_principal)
+        //         .with_node_reward_type(NodeRewardType::Type4),
+        // );
 
         // 1 unassigned node per DC
-        ic = ic
-            .with_unassigned_node(Node::new().with_node_operator_principal_id(operator_principal));
+        ic = ic.with_unassigned_node(
+            Node::new()
+                .with_node_operator_principal_id(operator_principal)
+                .with_node_reward_type(NodeRewardType::Type4),
+        );
+        ic = ic.with_unassigned_node(
+            Node::new()
+                .with_node_operator_principal_id(operator_principal)
+                .with_node_reward_type(NodeRewardType::Type4),
+        );
     }
 
     ic = ic
-        .add_subnet(cloud_engine_subnet)
+        //.add_subnet(cloud_engine_subnet)
         .with_api_boundary_nodes_playnet(1);
 
     ic.setup_and_start(&env)
@@ -185,5 +200,5 @@ pub fn setup(env: TestEnv) {
     set_authorized_subnets(&env);
 
     // install II, NNS dapp, and Subnet Rental Canister
-    install_ii_nns_dapp_and_subnet_rental(&env, &ic_gateway_url, None);
+    install_ii_nns_dapp_and_subnet_rental_with_dummy_auth(&env, &ic_gateway_url, None);
 }
