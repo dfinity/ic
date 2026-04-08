@@ -470,9 +470,6 @@ system_test_nns(
 
 system_test_nns(
     name = "nidkg_performance_test",
-    additional_colocate_tags = [
-        "system_test_benchmark",
-    ],
     colocated_test_driver_vm_required_host_features = [
         "performance",
         "spm",
