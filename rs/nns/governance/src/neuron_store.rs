@@ -1,7 +1,7 @@
 use crate::{
     CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS, Clock, IcClock,
     governance::{LOG_PREFIX, TimeWarp},
-    neuron::types::Neuron,
+    neuron::Neuron,
     neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
     pb::v1::{
         GovernanceError, NeuronDissolveStateSnapshot, Topic, VotingPowerEconomics,

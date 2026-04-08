@@ -17,6 +17,8 @@ on the process that this file is part of, see
 
 ## Removed
 
+* The Kong Swap SNS extension is no longer blessed, because they will cease operations on April 6.
+
 ## Fixed
 
 ## Security
