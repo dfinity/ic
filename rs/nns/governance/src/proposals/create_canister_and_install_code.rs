@@ -61,11 +61,10 @@ impl CreateCanisterAndInstallCode {
         }
 
         // Validate canister_settings.
-        if let Some(settings) = canister_settings {
-            if let Err(err) = RootCanisterSettings::try_from(settings) {
+        if let Some(settings) = canister_settings
+            && let Err(err) = RootCanisterSettings::try_from(settings) {
                 defects.push(err.error_message);
             }
-        }
 
         // Assemble (and return) final result.
         if !defects.is_empty() {
