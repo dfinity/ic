@@ -1711,7 +1711,7 @@ async fn await_ingress_via_read_state(
         if status == 200 {
             // A 200 means the read_state HTTP request succeeded, but we must
             // inspect the certificate to determine the actual request status.
-            match ingress_status_from_read_state_response(&response, &request_id) {
+            match ingress_status_from_read_state_response(&response, request_id) {
                 Some(IngressStatus::Replied { reply }) => {
                     // Reconstruct a ReplicaResponse matching the v3/v4 sync
                     // call response format:
