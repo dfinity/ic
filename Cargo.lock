@@ -7910,6 +7910,7 @@ dependencies = [
  "ic-interfaces-state-manager",
  "ic-logger",
  "ic-metrics",
+ "ic-registry-client-helpers",
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-test-utilities",

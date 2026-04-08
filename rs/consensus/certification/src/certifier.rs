@@ -4,6 +4,7 @@ use ic_canonical_state_tree_hash::lazy_tree::materialize::materialize;
 use ic_consensus_utils::{
     MINIMUM_CHAIN_LENGTH, active_high_threshold_nidkg_id, aggregate,
     bouncer_metrics::BouncerMetrics, membership::Membership, registry_version_at_height,
+    subnet_splitting_status_at_height,
 };
 use ic_crypto_tree_hash::{Witness, recompute_digest};
 use ic_interfaces::{
@@ -14,7 +15,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateHashMetadata, StateManager};
-use ic_logger::{ReplicaLogger, debug, error, trace};
+use ic_logger::{ReplicaLogger, debug, error, info, trace, warn};
 use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -25,6 +26,7 @@ use ic_types::{
         certification::{
             Certification, CertificationContent, CertificationMessage, CertificationShare,
         },
+        dkg::SubnetSplittingStatus,
     },
     crypto::{CryptoHash, Signed},
     replica_config::ReplicaConfig,
@@ -354,6 +356,18 @@ impl CertifierImpl {
                     .shares_at_height(state_hash_metadata.height)
                     .all(|share| share.signed.signature.signer != self.replica_config.node_id)
             })
+            // Filter out all heights, where the subnet splitting is taking place
+            .filter(|state_hash_metadata| {
+                self.should_skip_due_to_subnet_splitting(state_hash_metadata.height)
+                    .inspect_err(|err| {
+                        warn!(
+                            self.log,
+                            "Failed to check the subnet splitting status: {err}. \
+                            Skipping creation of the certificate share"
+                        )
+                    })
+                    .is_ok_and(|should_skip| !should_skip)
+            })
             .cloned()
             .filter_map(|state_hash_metadata| {
                 let content = CertificationContent::new(state_hash_metadata.hash);
@@ -493,6 +507,28 @@ impl CertifierImpl {
         let registry_version =
             registry_version_at_height(self.consensus_pool_cache.as_ref(), certification.height)?;
 
+        match self.should_skip_due_to_subnet_splitting(certification.height) {
+            Ok(true) => {
+                info!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "Skipping the validation of a certification at height {} because a
+                    subnet splitting is taking place",
+                    certification.height
+                );
+                return None;
+            }
+            Ok(false) => {}
+            Err(err) => {
+                warn!(
+                    self.log,
+                    "Failed to check the subnet splitting status: {err}. \
+                    Skipping validation of the certificate"
+                );
+                return None;
+            }
+        }
+
         // check if the certification is indeed valid for the specified height. If
         // not, we consider the certification invalid.
         if let Err(e) = validate_height_witness(
@@ -530,6 +566,28 @@ impl CertifierImpl {
     ) -> Option<ChangeAction> {
         let msg = CertificationMessage::CertificationShare(share.clone());
         let content = &share.signed.content;
+
+        match self.should_skip_due_to_subnet_splitting(share.height) {
+            Ok(true) => {
+                info!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "Skipping the validation of a certification share at height {} because a
+                    subnet splitting is taking place",
+                    share.height
+                );
+                return None;
+            }
+            Ok(false) => {}
+            Err(err) => {
+                warn!(
+                    self.log,
+                    "Failed to check the subnet splitting status: {err}. \
+                    Skipping validation of the certificate share"
+                );
+                return None;
+            }
+        }
 
         // If the share has an invalid content or does not belong to the
         // committee
@@ -593,6 +651,24 @@ impl CertifierImpl {
                         }
                     },
                 )
+            }
+        }
+    }
+
+    /// Checks if we should skip the creation and/or validation of certifications/shares
+    /// at the given height, due to an ongoing subnet splitting.
+    fn should_skip_due_to_subnet_splitting(&self, height: Height) -> Result<bool, String> {
+        match subnet_splitting_status_at_height(self.consensus_pool_cache.as_ref(), height) {
+            None => Err(format!(
+                "Missing finalized summary block for height {height}"
+            )),
+            Some(SubnetSplittingStatus::NotScheduled) => Ok(false),
+            // Don't produce certifications in the dkg interval where the subnet splitting is
+            // happening as it will be skipped by consensus anyways
+            Some(SubnetSplittingStatus::Scheduled { .. }) => Ok(true),
+            // Wait for the replica to be restarted with the new `subnet_id`
+            Some(SubnetSplittingStatus::Done { new_subnet_id }) => {
+                Ok(new_subnet_id != self.replica_config.subnet_id)
             }
         }
     }

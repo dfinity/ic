@@ -24,7 +24,7 @@ use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{
     Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
-    consensus::{CatchUpPackage, HasHeight},
+    consensus::{CatchUpPackage, HasHeight, dkg::SubnetSplittingStatus},
     crypto::{
         canister_threshold_sig::MasterPublicKey,
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetSubnet},
@@ -764,6 +764,13 @@ fn get_subnet_id(registry: &dyn RegistryClient, cup: &CatchUpPackage) -> Result<
         .as_ref()
         .as_summary()
         .dkg;
+
+    // If this is the first CUP created right after the subnet was split, infer the subnet id from
+    // the subnet splitting status in the dkg summary.
+    if let SubnetSplittingStatus::Done { new_subnet_id } = dkg_summary.subnet_splitting_status() {
+        return Ok(new_subnet_id);
+    }
+
     // Note that although sometimes CUPs have no signatures (e.g. genesis and
     // recovery CUPs) they always have the signer id (the DKG id), which is taken
     // from the high-threshold transcript when we build a genesis/recovery CUP.
