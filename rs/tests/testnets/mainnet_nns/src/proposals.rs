@@ -41,7 +41,7 @@ use url::Url;
 * proposals.
 */
 
-// Test neuron ID and secret key of its controller encoded in PEM format.
+/// Test neuron ID and secret key of its controller encoded in PEM format.
 pub(crate) static RECOVERED_NNS_DICTATOR_NEURON_IDENTITY: OnceCell<(NeuronId, String)> =
     OnceCell::new();
 
