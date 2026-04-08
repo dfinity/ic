@@ -46,7 +46,10 @@ use ic_nns_governance_api::{
     UpdateCanisterSettings,
     add_or_remove_node_provider::Change,
     bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
-    canister_settings::{Controllers, LogVisibility as GovernanceLogVisibility},
+    canister_settings::{
+        Controllers, LogVisibility as GovernanceLogVisibility,
+        SnapshotVisibility as GovernanceSnapshotVisibility,
+    },
     create_service_nervous_system::{
         GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
         governance_parameters::{CustomProposalCriticality, VotingRewardParameters},
