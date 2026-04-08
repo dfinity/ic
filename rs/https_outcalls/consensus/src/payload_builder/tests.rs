@@ -2177,9 +2177,9 @@ fn flexible_invalid_callback_id_mismatch_in_proof() {
             result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch { callback_id, mismatched_id }
+                    InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch { callback_id: cb_id, mismatched_id: mm_id }
                 )
-            )) if callback_id == callback_id && mismatched_id == mismatched_id
+            )) if cb_id == callback_id && mm_id == mismatched_id
         );
     });
 }
@@ -2485,9 +2485,9 @@ fn flexible_invalid_callback_id_mismatch_in_response() {
             result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch { callback_id, mismatched_id }
+                    InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch { callback_id: cb_id, mismatched_id: mm_id }
                 )
-            )) if callback_id == callback_id && mismatched_id == mismatched_id
+            )) if cb_id == callback_id && mm_id == mismatched_id
         );
     });
 }
@@ -2541,18 +2541,7 @@ fn flexible_invalid_signature_error() {
         1,
         4,
         |mut payload_builder, _pool| {
-            let mut mock_crypto = MockCrypto::new();
-            mock_crypto
-                .expect_verify_basic_sig_http()
-                .returning(|_, _, _, _| {
-                    Err(ic_types::crypto::CryptoError::SignatureVerification {
-                        algorithm: ic_types::crypto::AlgorithmId::Ed25519,
-                        public_key_bytes: vec![],
-                        sig_bytes: vec![],
-                        internal_error: "mock rejection".to_string(),
-                    })
-                });
-            payload_builder.crypto = Arc::new(mock_crypto);
+            payload_builder.crypto = Arc::new(mock_crypto_rejecting_signatures());
 
             let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
                 callback_id,
@@ -2883,8 +2872,8 @@ fn flexible_build_not_enough_rejects_stays_pending() {
 
         let parsed = build_and_validate_and_parse_payload(&pb);
 
-        assert!(parsed.flexible_responses.is_empty());
-        assert!(parsed.flexible_errors.is_empty());
+        assert_eq!(parsed.flexible_responses, vec![]);
+        assert_eq!(parsed.flexible_errors, vec![]);
     });
 }
 
@@ -2925,7 +2914,7 @@ fn flexible_build_ok_takes_precedence_over_rejects() {
         let parsed = build_and_validate_and_parse_payload(&pb);
 
         assert_eq!(parsed.flexible_responses.len(), 1);
-        assert!(parsed.flexible_errors.is_empty());
+        assert_eq!(parsed.flexible_errors, vec![]);
     });
 }
 
@@ -2948,16 +2937,13 @@ fn flexible_error_timeout_valid() {
                 flexible_errors: vec![FlexibleCanisterHttpError::Timeout { callback_id }],
                 ..Default::default()
             };
-            let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
-            assert_matches!(
-                pb.validate_payload(
-                    Height::new(1),
-                    &test_proposal_context(&timed_out_context),
-                    &payload_bytes,
-                    &[],
-                ),
-                Ok(())
+            let result = pb.validate_payload(
+                Height::new(1),
+                &test_proposal_context(&timed_out_context),
+                &payload_to_bytes_max_4mb(payload),
+                &[],
             );
+            assert_matches!(result, Ok(()));
         },
     );
 }
@@ -2973,20 +2959,19 @@ fn flexible_error_timeout_invalid_not_expired() {
             flexible_errors: vec![FlexibleCanisterHttpError::Timeout { callback_id }],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
         let result = pb.validate_payload(
             Height::new(1),
             &test_proposal_context(&default_validation_context()),
-            &payload_bytes,
+            &payload_to_bytes_max_4mb(payload),
             &[],
         );
         assert_matches!(
             result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::NotTimedOut(_)
+                    InvalidCanisterHttpPayloadReason::NotTimedOut(id)
                 )
-            ))
+            )) if id == callback_id
         );
     });
 }
@@ -2996,6 +2981,7 @@ fn flexible_error_timeout_invalid_non_flexible_request() {
     let num_nodes = 4;
     let callback_id = CallbackId::from(42);
 
+    // A non-flexible request should not be able to produce a flexible timeout error
     setup_test_with_contexts(num_nodes, fully_replicated_contexts([42]), |pb, _pool| {
         let timed_out_context = ValidationContext {
             registry_version: RegistryVersion::new(1),
@@ -3006,20 +2992,19 @@ fn flexible_error_timeout_invalid_non_flexible_request() {
             flexible_errors: vec![FlexibleCanisterHttpError::Timeout { callback_id }],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
         let result = pb.validate_payload(
             Height::new(1),
             &test_proposal_context(&timed_out_context),
-            &payload_bytes,
+            &payload_to_bytes_max_4mb(payload),
             &[],
         );
         assert_matches!(
             result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::InvalidPayloadSection(_)
+                    InvalidCanisterHttpPayloadReason::InvalidPayloadSection(id)
                 )
-            ))
+            )) if id == callback_id
         );
     });
 }
@@ -3030,39 +3015,34 @@ fn flexible_error_duplicate_callback_id() {
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_test_with_contexts(
-        num_nodes,
-        vec![(callback_id, flexible_request_context(committee, 2, 4))],
-        |pb, _pool| {
-            let timed_out_context = ValidationContext {
-                registry_version: RegistryVersion::new(1),
-                certified_height: Height::new(0),
-                time: UNIX_EPOCH + CANISTER_HTTP_TIMEOUT_INTERVAL + Duration::from_secs(1),
-            };
-            let payload = CanisterHttpPayload {
-                flexible_errors: vec![
-                    FlexibleCanisterHttpError::Timeout { callback_id },
-                    FlexibleCanisterHttpError::Timeout { callback_id },
-                ],
-                ..Default::default()
-            };
-            let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
-            let result = pb.validate_payload(
-                Height::new(1),
-                &test_proposal_context(&timed_out_context),
-                &payload_bytes,
-                &[],
-            );
-            assert_matches!(
-                result,
-                Err(ValidationError::InvalidArtifact(
-                    InvalidPayloadReason::InvalidCanisterHttpPayload(
-                        InvalidCanisterHttpPayloadReason::DuplicateResponse(_)
-                    )
-                ))
-            );
-        },
-    );
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, _pool| {
+        let timed_out_context = ValidationContext {
+            registry_version: RegistryVersion::new(1),
+            certified_height: Height::new(0),
+            time: UNIX_EPOCH + CANISTER_HTTP_TIMEOUT_INTERVAL + Duration::from_secs(1),
+        };
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![
+                FlexibleCanisterHttpError::Timeout { callback_id },
+                FlexibleCanisterHttpError::Timeout { callback_id },
+            ],
+            ..Default::default()
+        };
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&timed_out_context),
+            &payload_to_bytes_max_4mb(payload),
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::DuplicateResponse(id)
+                )
+            )) if id == callback_id
+        );
+    });
 }
 
 #[test]
@@ -3084,16 +3064,13 @@ fn flexible_error_responses_too_large_valid() {
             }],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
-        assert_matches!(
-            pb.validate_payload(
-                Height::new(1),
-                &test_proposal_context(&default_validation_context()),
-                &payload_bytes,
-                &[],
-            ),
-            Ok(())
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_to_bytes_max_4mb(payload),
+            &[],
         );
+        assert_matches!(result, Ok(()));
     });
 }
 
@@ -3115,20 +3092,19 @@ fn flexible_error_responses_too_large_invalid_when_small() {
             }],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
         let result = pb.validate_payload(
             Height::new(1),
             &test_proposal_context(&default_validation_context()),
-            &payload_bytes,
+            &payload_to_bytes_max_4mb(payload),
             &[],
         );
         assert_matches!(
             result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::FlexibleResponsesNotTooLarge(_)
+                    InvalidCanisterHttpPayloadReason::FlexibleResponsesNotTooLarge(id)
                 )
-            ))
+            )) if id == callback_id
         );
     });
 }
@@ -3152,20 +3128,19 @@ fn flexible_error_responses_too_large_too_few_shares() {
             }],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
         let result = pb.validate_payload(
             Height::new(1),
             &test_proposal_context(&default_validation_context()),
-            &payload_bytes,
+            &payload_to_bytes_max_4mb(payload),
             &[],
         );
         assert_matches!(
             result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::FlexibleResponsesNotTooLarge(_)
+                    InvalidCanisterHttpPayloadReason::FlexibleResponsesNotTooLarge(id)
                 )
-            ))
+            )) if id == callback_id
         );
     });
 }
@@ -3180,7 +3155,8 @@ fn flexible_error_responses_too_large_callback_id_mismatch() {
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, _pool| {
         let share_ok = metadata_share_with_content_size(callback_id.get(), 0, huge);
         // Share with wrong callback_id
-        let share_wrong = metadata_share_with_content_size(999, 1, huge);
+        let mismatched_id = CallbackId::new(999);
+        let share_wrong = metadata_share_with_content_size(mismatched_id.get(), 1, huge);
 
         let payload = CanisterHttpPayload {
             flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
@@ -3189,20 +3165,19 @@ fn flexible_error_responses_too_large_callback_id_mismatch() {
             }],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
         let result = pb.validate_payload(
             Height::new(1),
             &test_proposal_context(&default_validation_context()),
-            &payload_bytes,
+            &payload_to_bytes_max_4mb(payload),
             &[],
         );
         assert_matches!(
             result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch { .. }
+                    InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch { callback_id: cb_id, mismatched_id: mm_id }
                 )
-            ))
+            )) if cb_id == callback_id && mm_id == mismatched_id
         );
     });
 }
@@ -3226,20 +3201,19 @@ fn flexible_error_responses_too_large_duplicate_signer() {
             }],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
         let result = pb.validate_payload(
             Height::new(1),
             &test_proposal_context(&default_validation_context()),
-            &payload_bytes,
+            &payload_to_bytes_max_4mb(payload),
             &[],
         );
         assert_matches!(
             result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::FlexibleDuplicateSigner { .. }
+                    InvalidCanisterHttpPayloadReason::FlexibleDuplicateSigner { callback_id: cb_id, signer: s }
                 )
-            ))
+            )) if cb_id == callback_id && s == node_test_id(0)
         );
     });
 }
@@ -3262,20 +3236,19 @@ fn flexible_error_responses_too_large_signer_not_in_committee() {
             }],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
         let result = pb.validate_payload(
             Height::new(1),
             &test_proposal_context(&default_validation_context()),
-            &payload_bytes,
+            &payload_to_bytes_max_4mb(payload),
             &[],
         );
         assert_matches!(
             result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::FlexibleSignerNotInCommittee { .. }
+                    InvalidCanisterHttpPayloadReason::FlexibleSignerNotInCommittee { callback_id: cb_id, signer: s }
                 )
-            ))
+            )) if cb_id == callback_id && s == node_test_id(99)
         );
     });
 }
@@ -3300,20 +3273,19 @@ fn flexible_error_responses_too_large_registry_version_mismatch() {
             }],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
         let result = pb.validate_payload(
             Height::new(1),
             &test_proposal_context(&default_validation_context()),
-            &payload_bytes,
+            &payload_to_bytes_max_4mb(payload),
             &[],
         );
         assert_matches!(
             result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::RegistryVersionMismatch { .. }
+                    InvalidCanisterHttpPayloadReason::RegistryVersionMismatch { expected: e, received: r }
                 )
-            ))
+            )) if e == RegistryVersion::new(1) && r == RegistryVersion::new(999)
         );
     });
 }
@@ -3324,53 +3296,34 @@ fn flexible_error_responses_too_large_invalid_signature() {
     let callback_id = CallbackId::from(42);
 
     let huge = (MAX_CANISTER_HTTP_PAYLOAD_SIZE as u32 / 2) + 100_000;
-    setup_test_with_flexible_context(
-        4,
-        callback_id,
-        committee,
-        2,
-        4,
-        |mut payload_builder, _pool| {
-            let mut mock_crypto = MockCrypto::new();
-            mock_crypto
-                .expect_verify_basic_sig_http()
-                .returning(|_, _, _, _| {
-                    Err(ic_types::crypto::CryptoError::SignatureVerification {
-                        algorithm: ic_types::crypto::AlgorithmId::Ed25519,
-                        public_key_bytes: vec![],
-                        sig_bytes: vec![],
-                        internal_error: "mock rejection".to_string(),
-                    })
-                });
-            payload_builder.crypto = Arc::new(mock_crypto);
+    setup_test_with_flexible_context(4, callback_id, committee, 2, 4, |mut pb, _pool| {
+        pb.crypto = Arc::new(mock_crypto_rejecting_signatures());
 
-            let share_a = metadata_share_with_content_size(callback_id.get(), 0, huge);
-            let share_b = metadata_share_with_content_size(callback_id.get(), 1, huge);
+        let share_a = metadata_share_with_content_size(callback_id.get(), 0, huge);
+        let share_b = metadata_share_with_content_size(callback_id.get(), 1, huge);
 
-            let payload = CanisterHttpPayload {
-                flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
-                    callback_id,
-                    metadata_shares: vec![share_a, share_b],
-                }],
-                ..Default::default()
-            };
-            let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
-            let result = payload_builder.validate_payload(
-                Height::new(1),
-                &test_proposal_context(&default_validation_context()),
-                &payload_bytes,
-                &[],
-            );
-            assert_matches!(
-                result,
-                Err(ValidationError::InvalidArtifact(
-                    InvalidPayloadReason::InvalidCanisterHttpPayload(
-                        InvalidCanisterHttpPayloadReason::SignatureError(_)
-                    )
-                ))
-            );
-        },
-    );
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
+                callback_id,
+                metadata_shares: vec![share_a, share_b],
+            }],
+            ..Default::default()
+        };
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_to_bytes_max_4mb(payload),
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::SignatureError(_)
+                )
+            ))
+        );
+    });
 }
 
 #[test]
@@ -3393,16 +3346,13 @@ fn flexible_error_too_many_request_errors_valid() {
             }],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
-        assert_matches!(
-            pb.validate_payload(
-                Height::new(1),
-                &test_proposal_context(&default_validation_context()),
-                &payload_bytes,
-                &[],
-            ),
-            Ok(())
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_to_bytes_max_4mb(payload),
+            &[],
         );
+        assert_matches!(result, Ok(()));
     });
 }
 
@@ -3426,20 +3376,23 @@ fn flexible_error_too_many_request_errors_insufficient_rejects() {
             }],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
         let result = pb.validate_payload(
             Height::new(1),
             &test_proposal_context(&default_validation_context()),
-            &payload_bytes,
+            &payload_to_bytes_max_4mb(payload),
             &[],
         );
         assert_matches!(
             result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::FlexibleInsufficientRejectCount { .. }
+                    InvalidCanisterHttpPayloadReason::FlexibleInsufficientRejectCount {
+                        callback_id: cb_id,
+                        reject_count: rc,
+                        min_needed: mn,
+                    }
                 )
-            ))
+            )) if cb_id == callback_id && rc == 1 && mn == 2
         );
     });
 }
@@ -3461,20 +3414,19 @@ fn flexible_error_too_many_request_errors_non_reject_content() {
             }],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
         let result = pb.validate_payload(
             Height::new(1),
             &test_proposal_context(&default_validation_context()),
-            &payload_bytes,
+            &payload_to_bytes_max_4mb(payload),
             &[],
         );
         assert_matches!(
             result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::FlexibleRejectExpectedInErrorResponse(_)
+                    InvalidCanisterHttpPayloadReason::FlexibleRejectExpectedInErrorResponse(cb_id)
                 )
-            ))
+            )) if cb_id == callback_id
         );
     });
 }
@@ -3496,20 +3448,19 @@ fn flexible_error_too_many_request_errors_duplicate_signer() {
             }],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
         let result = pb.validate_payload(
             Height::new(1),
             &test_proposal_context(&default_validation_context()),
-            &payload_bytes,
+            &payload_to_bytes_max_4mb(payload),
             &[],
         );
         assert_matches!(
             result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::FlexibleDuplicateSigner { .. }
+                    InvalidCanisterHttpPayloadReason::FlexibleDuplicateSigner { callback_id: cb_id, signer: s }
                 )
-            ))
+            )) if cb_id == callback_id && s == node_test_id(0)
         );
     });
 }
@@ -3532,20 +3483,19 @@ fn flexible_error_too_many_request_errors_signer_not_in_committee() {
             }],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
         let result = pb.validate_payload(
             Height::new(1),
             &test_proposal_context(&default_validation_context()),
-            &payload_bytes,
+            &payload_to_bytes_max_4mb(payload),
             &[],
         );
         assert_matches!(
             result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::FlexibleSignerNotInCommittee { .. }
+                    InvalidCanisterHttpPayloadReason::FlexibleSignerNotInCommittee { callback_id: cb_id, signer: s }
                 )
-            ))
+            )) if cb_id == callback_id && s == node_test_id(99)
         );
     });
 }
@@ -3568,20 +3518,19 @@ fn flexible_error_too_many_request_errors_callback_id_mismatch_in_response() {
             }],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
         let result = pb.validate_payload(
             Height::new(1),
             &test_proposal_context(&default_validation_context()),
-            &payload_bytes,
+            &payload_to_bytes_max_4mb(payload),
             &[],
         );
         assert_matches!(
             result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch { .. }
+                    InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch { callback_id: cb_id, mismatched_id: mm_id }
                 )
-            ))
+            )) if cb_id == callback_id && mm_id == CallbackId::new(999)
         );
     });
 }
@@ -3604,20 +3553,19 @@ fn flexible_error_too_many_request_errors_registry_version_mismatch() {
             }],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
         let result = pb.validate_payload(
             Height::new(1),
             &test_proposal_context(&default_validation_context()),
-            &payload_bytes,
+            &payload_to_bytes_max_4mb(payload),
             &[],
         );
         assert_matches!(
             result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::RegistryVersionMismatch { .. }
+                    InvalidCanisterHttpPayloadReason::RegistryVersionMismatch { expected: e, received: r }
                 )
-            ))
+            )) if e == RegistryVersion::new(1) && r == RegistryVersion::new(999)
         );
     });
 }
@@ -3640,20 +3588,19 @@ fn flexible_error_too_many_request_errors_content_hash_mismatch() {
             }],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
         let result = pb.validate_payload(
             Height::new(1),
             &test_proposal_context(&default_validation_context()),
-            &payload_bytes,
+            &payload_to_bytes_max_4mb(payload),
             &[],
         );
         assert_matches!(
             result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::ContentHashMismatch { .. }
+                    InvalidCanisterHttpPayloadReason::ContentHashMismatch { metadata_hash: mh, calculated_hash: ch }
                 )
-            ))
+            )) if mh == CryptoHashOf::new(CryptoHash(vec![0xFF; 32])) && ch != mh
         );
     });
 }
@@ -3676,20 +3623,19 @@ fn flexible_error_too_many_request_errors_content_size_mismatch() {
             }],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
         let result = pb.validate_payload(
             Height::new(1),
             &test_proposal_context(&default_validation_context()),
-            &payload_bytes,
+            &payload_to_bytes_max_4mb(payload),
             &[],
         );
         assert_matches!(
             result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::ContentSizeMismatch { .. }
+                    InvalidCanisterHttpPayloadReason::ContentSizeMismatch { metadata_size: ms, calculated_size: cs }
                 )
-            ))
+            )) if ms == 999_999 && cs < ms && cs != 0
         );
     });
 }
@@ -3713,11 +3659,10 @@ fn flexible_error_too_many_request_errors_proof_id_mismatch() {
             }],
             ..Default::default()
         };
-        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
         let result = pb.validate_payload(
             Height::new(1),
             &test_proposal_context(&default_validation_context()),
-            &payload_bytes,
+            &payload_to_bytes_max_4mb(payload),
             &[],
         );
         assert_matches!(
@@ -3725,13 +3670,12 @@ fn flexible_error_too_many_request_errors_proof_id_mismatch() {
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
                     InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch {
-                        mismatched_id,
+                        callback_id: cb_id,
+                        mismatched_id: mm_id,
                         ..
                     }
                 )
-            )) => {
-                assert_eq!(mismatched_id, CallbackId::new(999));
-            }
+            )) if cb_id == callback_id && mm_id == CallbackId::new(999)
         );
     });
 }
@@ -3741,54 +3685,35 @@ fn flexible_error_too_many_request_errors_invalid_signature() {
     let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_test_with_flexible_context(
-        4,
-        callback_id,
-        committee,
-        3,
-        4,
-        |mut payload_builder, _pool| {
-            let mut mock_crypto = MockCrypto::new();
-            mock_crypto
-                .expect_verify_basic_sig_http()
-                .returning(|_, _, _, _| {
-                    Err(ic_types::crypto::CryptoError::SignatureVerification {
-                        algorithm: ic_types::crypto::AlgorithmId::Ed25519,
-                        public_key_bytes: vec![],
-                        sig_bytes: vec![],
-                        internal_error: "mock rejection".to_string(),
-                    })
-                });
-            payload_builder.crypto = Arc::new(mock_crypto);
+    setup_test_with_flexible_context(4, callback_id, committee, 3, 4, |mut pb, _pool| {
+        pb.crypto = Arc::new(mock_crypto_rejecting_signatures());
 
-            let reject_entries: Vec<_> = (0..2_u64)
-                .map(|node_idx| flexible_reject_response(callback_id.get(), node_idx))
-                .collect();
+        let reject_entries: Vec<_> = (0..2_u64)
+            .map(|node_idx| flexible_reject_response(callback_id.get(), node_idx))
+            .collect();
 
-            let payload = CanisterHttpPayload {
-                flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
-                    callback_id,
-                    reject_responses: reject_entries,
-                }],
-                ..Default::default()
-            };
-            let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
-            let result = payload_builder.validate_payload(
-                Height::new(1),
-                &test_proposal_context(&default_validation_context()),
-                &payload_bytes,
-                &[],
-            );
-            assert_matches!(
-                result,
-                Err(ValidationError::InvalidArtifact(
-                    InvalidPayloadReason::InvalidCanisterHttpPayload(
-                        InvalidCanisterHttpPayloadReason::SignatureError(_)
-                    )
-                ))
-            );
-        },
-    );
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+                callback_id,
+                reject_responses: reject_entries,
+            }],
+            ..Default::default()
+        };
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_to_bytes_max_4mb(payload),
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::SignatureError(_)
+                )
+            ))
+        );
+    });
 }
 
 fn setup_test_with_contexts(
@@ -4001,4 +3926,19 @@ fn build_and_validate_and_parse_payload_with_context(
 
 fn payload_to_bytes_max_4mb(payload: CanisterHttpPayload) -> Vec<u8> {
     payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES)
+}
+
+fn mock_crypto_rejecting_signatures() -> MockCrypto {
+    let mut mock_crypto = MockCrypto::new();
+    mock_crypto
+        .expect_verify_basic_sig_http()
+        .returning(|_, _, _, _| {
+            Err(ic_types::crypto::CryptoError::SignatureVerification {
+                algorithm: ic_types::crypto::AlgorithmId::Ed25519,
+                public_key_bytes: vec![],
+                sig_bytes: vec![],
+                internal_error: "mock rejection".to_string(),
+            })
+        });
+    mock_crypto
 }
