@@ -11,6 +11,18 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-03-27: Proposal 141090
+
+http://dashboard.internetcomputer.org/proposal/141090
+
+## Added
+
+- Support for `snapshot_visibility` in `UpdateCanisterSettings` proposals.
+- Tag neurons that have the maximum dissolve delay of 8 years with their bonus base
+  (`eight_year_gang_bonus_base_e8s`), in preparation for the dissolve delay bonus
+  grandfathering when the maximum dissolve delay is reduced to 2 years.
+
+
 # 2026-03-20: Proposal 140958
 
 http://dashboard.internetcomputer.org/proposal/140958

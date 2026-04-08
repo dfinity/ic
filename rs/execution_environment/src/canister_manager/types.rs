@@ -7,7 +7,6 @@ use ic_interfaces::execution_environment::{CanisterOutOfCyclesError, HypervisorE
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterInstallModeV2, InstallChunkedCodeArgs, InstallCodeArgsV2,
-    UploadChunkReply,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -23,7 +22,7 @@ use ic_types::{
     ingress::IngressStatus,
     messages::{CanisterCall, MessageId, RejectContext, StopCanisterCallId, StopCanisterContext},
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CompoundCycles, Cycles, Instructions};
 use ic_wasm_types::{AsErrorHelp, CanisterModule, ErrorHelp, WasmHash, doc_ref};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -301,15 +300,11 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
     }
 }
 
-pub(crate) struct UploadChunkResult {
-    pub(crate) reply: UploadChunkReply,
-    pub(crate) heap_delta_increase: NumBytes,
-}
-
 /// Bundles the reply (success) to a management canister request (referred to as "current request")
 /// with changes to `ReplicatedState` that must be applied separately.
 /// This is because `CanisterManager` only mutates a single `CanisterState` (but no other parts of `ReplicatedState`)
 /// in cases when it returns `CanisterManagerResponse`.
+#[derive(Eq, PartialEq, Debug)]
 pub(crate) struct CanisterManagerResponse {
     /// The target canister of the current request.
     /// Only `CanisterState` of that canister could have been mutated
@@ -1223,5 +1218,12 @@ pub(crate) trait PausedInstallCodeExecution: Send + std::fmt::Debug {
     /// Aborts the paused execution.
     /// Returns the original message, the cycles prepaid for execution,
     /// and a call id that exist only for inter-canister messages.
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, InstallCodeCallId, Cycles);
+    fn abort(
+        self: Box<Self>,
+        log: &ReplicaLogger,
+    ) -> (
+        CanisterCall,
+        InstallCodeCallId,
+        CompoundCycles<Instructions>,
+    );
 }

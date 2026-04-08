@@ -4,14 +4,14 @@ use crate::invariants::common::RegistrySnapshot;
 use ic_base_types::SubnetId;
 use ic_protobuf::{
     registry::{
-        node::v1::NodeRecord,
+        node::v1::{NodeRecord, NodeRewardType},
         subnet::v1::{
             CanisterCyclesCostSchedule, SubnetFeatures, SubnetListRecord, SubnetRecord, SubnetType,
         },
     },
     types::v1::PrincipalId as PrincipalIdPb,
 };
-use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
+use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key, make_subnet_record_key};
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, user_test_id};
 
 #[test]
@@ -39,15 +39,6 @@ fn only_application_subnets_and_engines_can_be_free_cycles_cost_schedule() {
     );
     check_subnet_invariants(&snapshot).unwrap();
 
-    // Another happy case: CloudEngine
-    test_subnet_record.subnet_type = i32::from(SubnetType::CloudEngine);
-    test_subnet_record.canister_cycles_cost_schedule = i32::from(CanisterCyclesCostSchedule::Free);
-    snapshot.insert(
-        make_subnet_record_key(test_subnet_id).into_bytes(),
-        test_subnet_record.encode_to_vec(),
-    );
-    check_subnet_invariants(&snapshot).unwrap();
-
     // System or verified application subnets cannot be on "free" cycles cost schedule.
     test_subnet_record.subnet_type = i32::from(SubnetType::System);
     snapshot.insert(
@@ -68,6 +59,14 @@ fn only_application_subnets_and_engines_can_be_free_cycles_cost_schedule() {
         &snapshot,
         "is not an application subnet or CloudEngine but has a free cycles cost schedule",
     );
+
+    // Another happy case: CloudEngine
+    turn_to_compliant_cloud_engine(&mut snapshot, &mut test_subnet_record);
+    snapshot.insert(
+        make_subnet_record_key(test_subnet_id).into_bytes(),
+        test_subnet_record.encode_to_vec(),
+    );
+    check_subnet_invariants(&snapshot).unwrap();
 }
 
 #[test]
@@ -226,8 +225,7 @@ fn cloud_engine_subnets_can_have_subnet_admins() {
         );
 
     // CloudEngine subnets can have subnet admins with free cost schedule.
-    test_subnet_record.subnet_type = i32::from(SubnetType::CloudEngine);
-    test_subnet_record.canister_cycles_cost_schedule = i32::from(CanisterCyclesCostSchedule::Free);
+    turn_to_compliant_cloud_engine(&mut snapshot, &mut test_subnet_record);
     test_subnet_record.subnet_admins = vec![PrincipalIdPb::from(user_test_id(1).get())];
     snapshot.insert(
         make_subnet_record_key(test_subnet_id).into_bytes(),
@@ -268,6 +266,97 @@ fn non_rented_application_subnets_cannot_have_subnet_admins() {
     assert_non_compliant_record(
         &snapshot,
         "is not a rented or cloud engine subnet but has a non-empty subnet admins list",
+    );
+}
+
+#[test]
+fn cloud_engine_subnets_must_have_type4_nodes() {
+    let system_subnet_id = subnet_test_id(1);
+    let test_subnet_id = subnet_test_id(2);
+    let (mut snapshot, mut test_subnet_record) =
+        setup_minimal_registry_snapshot_for_check_subnet_invariants(
+            system_subnet_id,
+            test_subnet_id,
+            1,     // num_nodes_in_test_subnet
+            false, // with_chip_id
+        );
+
+    // Happy case: CloudEngine subnet with Type4 nodes.
+    turn_to_compliant_cloud_engine(&mut snapshot, &mut test_subnet_record);
+    snapshot.insert(
+        make_subnet_record_key(test_subnet_id).into_bytes(),
+        test_subnet_record.encode_to_vec(),
+    );
+    check_subnet_invariants(&snapshot).unwrap();
+
+    // Sad case: CloudEngine subnet with nodes that have a non-Type4 reward type.
+    for reward_type in [
+        None,
+        Some(NodeRewardType::Unspecified),
+        Some(NodeRewardType::Type0),
+        Some(NodeRewardType::Type1),
+        Some(NodeRewardType::Type2),
+        Some(NodeRewardType::Type3),
+        Some(NodeRewardType::Type3dot1),
+        Some(NodeRewardType::Type1dot1),
+    ] {
+        println!(
+            "Ensuring that a node with reward type {reward_type:?} cannot be part of a CloudEngine subnet"
+        );
+        set_node_reward_type(&mut snapshot, node_test_id(100), reward_type);
+        assert_non_compliant_record(
+            &snapshot,
+            "is a cloud engine subnet but some nodes do not have reward type 4",
+        );
+    }
+}
+
+#[test]
+fn only_cloud_engine_subnets_can_have_type4_nodes() {
+    let system_subnet_id = subnet_test_id(1);
+    let test_subnet_id = subnet_test_id(2);
+    let (mut snapshot, mut test_subnet_record) =
+        setup_minimal_registry_snapshot_for_check_subnet_invariants(
+            system_subnet_id,
+            test_subnet_id,
+            1,     // num_nodes_in_test_subnet
+            false, // with_chip_id
+        );
+
+    // Trivial case: non-cloud-engine subnet with non-Type4 nodes is compliant.
+    check_subnet_invariants(&snapshot).unwrap();
+
+    // Sad case: Application subnet with Type4 node.
+    set_node_reward_type(
+        &mut snapshot,
+        node_test_id(100),
+        Some(NodeRewardType::Type4),
+    );
+    assert_non_compliant_record(
+        &snapshot,
+        "is not a cloud engine subnet but some nodes have reward type 4",
+    );
+
+    // Sad case: System subnet with Type4 node.
+    test_subnet_record.subnet_type = i32::from(SubnetType::System);
+    snapshot.insert(
+        make_subnet_record_key(test_subnet_id).into_bytes(),
+        test_subnet_record.encode_to_vec(),
+    );
+    assert_non_compliant_record(
+        &snapshot,
+        "is not a cloud engine subnet but some nodes have reward type 4",
+    );
+
+    // Sad case: VerifiedApplication subnet with Type4 node.
+    test_subnet_record.subnet_type = i32::from(SubnetType::VerifiedApplication);
+    snapshot.insert(
+        make_subnet_record_key(test_subnet_id).into_bytes(),
+        test_subnet_record.encode_to_vec(),
+    );
+    assert_non_compliant_record(
+        &snapshot,
+        "is not a cloud engine subnet but some nodes have reward type 4",
     );
 }
 
@@ -339,6 +428,31 @@ fn setup_minimal_registry_snapshot_for_check_subnet_invariants(
     );
 
     (snapshot, test_subnet_record)
+}
+
+fn turn_to_compliant_cloud_engine(
+    snapshot: &mut RegistrySnapshot,
+    subnet_record: &mut SubnetRecord,
+) {
+    subnet_record.subnet_type = i32::from(SubnetType::CloudEngine);
+    // An invariant ensures the cost schedule is free
+    subnet_record.canister_cycles_cost_schedule = i32::from(CanisterCyclesCostSchedule::Free);
+    // An invariant ensures that all nodes have reward type 4
+    for node_bytes in &subnet_record.membership {
+        let node_id = NodeId::from(PrincipalId::try_from(node_bytes.as_slice()).unwrap());
+        set_node_reward_type(snapshot, node_id, Some(NodeRewardType::Type4));
+    }
+}
+
+fn set_node_reward_type(
+    snapshot: &mut RegistrySnapshot,
+    node_id: NodeId,
+    reward_type: Option<NodeRewardType>,
+) {
+    let key = make_node_record_key(node_id).into_bytes();
+    let mut node_record = NodeRecord::decode(snapshot.get(&key).unwrap().as_slice()).unwrap();
+    node_record.node_reward_type = reward_type.map(i32::from);
+    snapshot.insert(key, node_record.encode_to_vec());
 }
 
 fn assert_non_compliant_record(snapshot: &RegistrySnapshot, error_msg: &str) {

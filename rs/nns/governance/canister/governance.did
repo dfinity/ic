@@ -777,6 +777,12 @@ type Neuron = record {
   // Per NNS policy, this is opt. Nevertheless, it will never be null.
   potential_voting_power : opt nat64;
 
+  // Base value (in e8s) used for the "8-year gang" dissolve delay bonus. For neurons that had the
+  // maximum dissolve delay of 8 years before the maximum was reduced, this is set to the total
+  // staked value net of fees (including staked maturity) captured at the time of migration.
+  // For all other neurons, this is 0.
+  eight_year_gang_bonus_base_e8s : opt nat64;
+
   // The maturity disbursements in progress, i.e. the disbursements that are initiated but not
   // finalized. The finalization happens 7 days after the disbursement is initiated.
   maturity_disbursements_in_progress : opt vec MaturityDisbursement;
@@ -871,6 +877,8 @@ type NeuronInfo = record {
   voting_power_refreshed_timestamp_seconds : opt nat64;
   deciding_voting_power : opt nat64;
   potential_voting_power : opt nat64;
+  // See analogous field in Neuron.
+  eight_year_gang_bonus_base_e8s : opt nat64;
 };
 
 type NeuronStakeTransfer = record {

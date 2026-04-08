@@ -44,7 +44,7 @@ benches:
   compute_ballots_for_new_proposal_with_stable_neurons:
     total:
       calls: 1
-      instructions: 1890848
+      instructions: 2450000
       heap_increase: 0
       stable_memory_increase: 256
     scopes: {}
@@ -107,7 +107,7 @@ benches:
   neuron_metrics_calculation:
     total:
       calls: 1
-      instructions: 3046508
+      instructions: 3620000
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}

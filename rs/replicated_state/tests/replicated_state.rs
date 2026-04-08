@@ -41,7 +41,7 @@ use ic_types::messages::{
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::xnet::StreamIndex;
 use ic_types::{CountBytes, MemoryAllocation, SnapshotId, Time};
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Cycles};
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::collections::{BTreeMap, VecDeque};
@@ -1350,7 +1350,10 @@ fn online_split() {
             .enqueue(ExecutionTask::AbortedInstallCode {
                 message: CanisterCall::Request(RequestBuilder::default().build().into()),
                 call_id: InstallCodeCallId::new(3_u64),
-                prepaid_execution_cycles: Cycles::new(3),
+                prepaid_execution_cycles: CompoundCycles::new(
+                    Cycles::new(3),
+                    CanisterCyclesCostSchedule::Normal,
+                ),
             });
     };
     add_aborted_install_code_task(CANISTER_1);
@@ -1502,10 +1505,9 @@ fn credit_refund() {
     let initial_balance = fixture.canister_balance(&CANISTER_ID).unwrap();
 
     // Refund 10 cycles to `CANISTER_ID`.
-    let credited = fixture.state.credit_refund(
-        &Refund::anonymous(CANISTER_ID, Cycles::new(10)),
-        CanisterCyclesCostSchedule::Normal,
-    );
+    let credited = fixture
+        .state
+        .credit_refund(&Refund::anonymous(CANISTER_ID, Cycles::new(10)));
     assert!(credited);
     assert_eq!(
         Some(initial_balance + Cycles::new(10)),
@@ -1513,10 +1515,9 @@ fn credit_refund() {
     );
 
     // Refunding to a non-existent canister is a no-op.
-    let credited = fixture.state.credit_refund(
-        &Refund::anonymous(OTHER_CANISTER_ID, Cycles::new(11)),
-        CanisterCyclesCostSchedule::Normal,
-    );
+    let credited = fixture
+        .state
+        .credit_refund(&Refund::anonymous(OTHER_CANISTER_ID, Cycles::new(11)));
     assert!(!credited);
     assert_eq!(
         Some(initial_balance + Cycles::new(10)),

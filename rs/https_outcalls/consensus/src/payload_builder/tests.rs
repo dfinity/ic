@@ -37,7 +37,7 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
-    CountBytes, Height, NodeId, NumBytes, RegistryVersion, ReplicaVersion, Time,
+    CountBytes, Height, NodeId, NumBytes, RegistryVersion, ReplicaVersion,
     batch::{
         CanisterHttpPayload, FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
         MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
@@ -120,7 +120,6 @@ fn single_request_test() {
 /// Submit a number of requests to the payload builder:
 ///
 /// - One has insufficient support
-/// - One has timed out
 /// - One has wrong registry version
 /// - One is oversized (Larger than 2 MiB)
 /// - Two are valid, but one is already in pasts payloads
@@ -138,7 +137,7 @@ fn multiple_payload_test() {
             true,
             subnet_size,
             |mut payload_builder, canister_http_pool| {
-                inject_request_contexts(&mut payload_builder, fully_replicated_contexts(0..=5));
+                inject_request_contexts(&mut payload_builder, fully_replicated_contexts(0..=4));
 
                 // Add response and shares to pool
                 let (past_response, past_metadata) = {
@@ -164,19 +163,8 @@ fn multiple_payload_test() {
                         );
                     }
 
-                    // Add a response that is already timed out
-                    let (mut response, mut metadata) = test_response_and_metadata(2);
-                    response.timeout = UNIX_EPOCH;
-                    metadata.timeout = UNIX_EPOCH;
-                    let shares = metadata_to_shares(subnet_size, &metadata);
-                    add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
-                    add_received_shares_to_pool(
-                        pool_access.deref_mut(),
-                        shares[1..subnet_size].to_vec(),
-                    );
-
                     // Add a response with mismatching registry version
-                    let (response, mut metadata) = test_response_and_metadata(3);
+                    let (response, mut metadata) = test_response_and_metadata(2);
                     metadata.registry_version = RegistryVersion::new(5);
                     let shares = metadata_to_shares(subnet_size, &metadata);
                     add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
@@ -186,7 +174,7 @@ fn multiple_payload_test() {
                     );
 
                     // Add a oversized response
-                    let (mut response, metadata) = test_response_and_metadata(4);
+                    let (mut response, metadata) = test_response_and_metadata(3);
                     response.content =
                         CanisterHttpResponseContent::Success(vec![123; 2 * 1024 * 1024]);
                     let shares = metadata_to_shares(subnet_size, &metadata);
@@ -197,7 +185,7 @@ fn multiple_payload_test() {
                     );
 
                     // Add response which is valid but we will put it into past_payloads
-                    let (past_response, past_metadata) = test_response_and_metadata(5);
+                    let (past_response, past_metadata) = test_response_and_metadata(4);
                     let shares = metadata_to_shares(subnet_size, &past_metadata);
                     add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &past_response);
                     add_received_shares_to_pool(
@@ -566,31 +554,6 @@ fn content_size_validation() {
     );
 }
 
-/// Test that payloads which are timed out don't validate
-#[test]
-fn timeout_validation() {
-    let validation_result = run_validatation_test(
-        true,
-        |_, _| { /* Nothing to modify */ },
-        &ValidationContext {
-            // Set the time further in the future, such that this payload is timed out
-            time: UNIX_EPOCH + Duration::from_secs(20),
-            ..default_validation_context()
-        },
-    );
-    match validation_result {
-        Err(ValidationError::InvalidArtifact(
-            InvalidPayloadReason::InvalidCanisterHttpPayload(
-                InvalidCanisterHttpPayloadReason::Timeout {
-                    timed_out_at,
-                    validation_time,
-                },
-            ),
-        )) if timed_out_at < validation_time => (),
-        x => panic!("Expected Timeout, got {x:?}"),
-    }
-}
-
 /// Test that payloads don't validate, if registry for height does not exist
 #[test]
 fn registry_unavailable_validation() {
@@ -821,7 +784,7 @@ fn divergence_error_message() {
         Payload::Reject(RejectContext::new(
             RejectCode::SysTransient,
             "No consensus could be reached. Replicas had different responses. \
-            Details: request_id: 1, timeout: 10000000000, hashes: \
+            Details: request_id: 1, hashes: \
             [30bb6555f891c35fbc820c74a7db7c1ae621f924340712e12febe78a9be0a908: 3], \
             [e93edfdefc581e2bdb54a08b55dd67bc675afafbbb32697ef6b8bf9cc75fe69b: 2], \
             [af4dcbc617e83bc998190e3031123dbd26bcf0c5a5013b5465017234a98f7d74: 1], \
@@ -1396,32 +1359,18 @@ pub(crate) fn test_response_and_metadata(
     )
 }
 
-/// Create response and metadata with a specified content, with
-/// a 10-second timeout default.
+/// Create response and metadata with a specified content.
 fn test_response_and_metadata_with_content(
     callback_id: u64,
     content: CanisterHttpResponseContent,
 ) -> (CanisterHttpResponse, CanisterHttpResponseMetadata) {
-    test_response_and_metadata_full(callback_id, UNIX_EPOCH + Duration::from_secs(10), content)
-}
-
-/// Create a response and a supporting metadata object from the response content.
-fn test_response_and_metadata_full(
-    callback_id: u64,
-    timeout: Time,
-    content: CanisterHttpResponseContent,
-) -> (CanisterHttpResponse, CanisterHttpResponseMetadata) {
-    // Build a response
     let response = CanisterHttpResponse {
         id: CallbackId::new(callback_id),
-        timeout,
         canister_id: canister_test_id(0),
         content,
     };
-    // Create metadata of response
     let metadata = CanisterHttpResponseMetadata {
         id: response.id,
-        timeout: response.timeout,
         content_hash: crypto_hash(&response),
         content_size: response.content.count_bytes() as u32,
         registry_version: RegistryVersion::new(1),
@@ -2539,90 +2488,6 @@ fn flexible_invalid_callback_id_mismatch_in_response() {
                     InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch { callback_id, mismatched_id }
                 )
             )) if callback_id == callback_id && mismatched_id == mismatched_id
-        );
-    });
-}
-
-#[test]
-fn flexible_invalid_metadata_timeout_mismatch() {
-    let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
-    let callback_id = CallbackId::from(42);
-
-    setup_test_with_flexible_context(4, callback_id, committee, 1, 4, |payload_builder, _pool| {
-        let mut entry = flexible_response(42, 0, b"data");
-        let wrong_metadata_timeout = UNIX_EPOCH + Duration::from_secs(99);
-        entry.proof.content.timeout = wrong_metadata_timeout;
-        let expected_content_timeout = entry.response.timeout;
-
-        let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
-            callback_id,
-            responses: vec![entry],
-        }]);
-
-        let result = payload_builder.validate_payload(
-            Height::from(1),
-            &test_proposal_context(&default_validation_context()),
-            &payload_to_bytes_max_4mb(payload),
-            &[],
-        );
-        assert_matches!(
-            result,
-            Err(ValidationError::InvalidArtifact(
-                InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::InvalidMetadata {
-                        metadata_id,
-                        content_id,
-                        metadata_timeout,
-                        content_timeout,
-                    }
-                )
-            )) if metadata_id == callback_id
-                && content_id == callback_id
-                && metadata_timeout == wrong_metadata_timeout
-                && content_timeout == expected_content_timeout
-        );
-    });
-}
-
-#[test]
-fn flexible_invalid_response_timed_out() {
-    let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
-    let callback_id = CallbackId::from(42);
-
-    setup_test_with_flexible_context(4, callback_id, committee, 1, 4, |payload_builder, _pool| {
-        let timed_out_at = UNIX_EPOCH + Duration::from_secs(1);
-        let validation_context = default_validation_context();
-        let (response, metadata) = test_response_and_metadata_full(
-            42,
-            timed_out_at,
-            CanisterHttpResponseContent::Success(b"data".to_vec()),
-        );
-        let entry = FlexibleCanisterHttpResponseWithProof {
-            response,
-            proof: metadata_to_share(0, &metadata),
-        };
-
-        let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
-            callback_id,
-            responses: vec![entry],
-        }]);
-
-        let result = payload_builder.validate_payload(
-            Height::from(1),
-            &test_proposal_context(&validation_context),
-            &payload_to_bytes_max_4mb(payload),
-            &[],
-        );
-        assert_matches!(
-            result,
-            Err(ValidationError::InvalidArtifact(
-                InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::Timeout {
-                        timed_out_at: got_timed_out_at,
-                        validation_time: got_validation_time,
-                    }
-                )
-            )) if got_timed_out_at == timed_out_at && got_validation_time == validation_context.time
         );
     });
 }
