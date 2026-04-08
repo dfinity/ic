@@ -119,7 +119,14 @@ fn create_data_payload(
 ///
 /// Filters dealings to only include those for ongoing DKGs from unique dealers.
 /// Never includes more dealings than the collection_threshold for any config.
-/// Prioritizes dealings for remote DKGs.
+/// Prioritizes remote DKG dealings only while fewer than
+/// `MAX_REMOTE_DKGS_PER_INTERVAL` remote targets have exhausted their remaining
+/// capacity (collection threshold minus dealings already on chain).
+///
+/// Candidate ordering is:
+/// 1. Remote before local if remote is prioritized, otherwise local before remote.
+/// 2. Among remote targets, lower remaining target capacity first.
+/// 3. `target_subnet` as a deterministic tie-breaker.
 fn select_dealings_for_payload(
     configs: &BTreeMap<NiDkgId, NiDkgConfig>,
     dealers_from_chain: &HashSet<(NiDkgId, NodeId)>,
@@ -137,13 +144,22 @@ fn select_dealings_for_payload(
         }
     }
 
-    // Filter dealings whose dealer has no dealing on the chain yet, and for which
-    // the collection_threshold hasn't been reached. Prioritize remote DKGs.
-    let (remote_priority, rest): (Vec<_>, Vec<_>) = dkg_pool
+    // Compute the total remaining capacity for remote target IDs.
+    let mut remaining_remote_target_capacity: BTreeMap<NiDkgTargetId, usize> = BTreeMap::new();
+    for (dkg_id, cap) in &remaining_capacity {
+        if let NiDkgTargetSubnet::Remote(target_id) = dkg_id.target_subnet {
+            remaining_remote_target_capacity
+                .entry(target_id)
+                .and_modify(|target_cap| *target_cap += *cap)
+                .or_insert(*cap);
+        }
+    }
+
+    // Only select dealings whose dealer has no dealing on chain yet and for configs
+    // that still have capacity left, while accounting for newly selected dealings.
+    let mut prioritized_candidates: Vec<_> = dkg_pool
         .get_validated()
         .filter(|msg| {
-            // Make sure the message relates to one of the ongoing DKGs, it's from a unique
-            // dealer, and the collection_threshold hasn't been reached yet.
             let Some(cap) = remaining_capacity.get_mut(&msg.content.dkg_id) else {
                 return false;
             };
@@ -157,16 +173,38 @@ fn select_dealings_for_payload(
                 false
             }
         })
-        .partition(|msg| {
-            matches!(
-                msg.content.dkg_id.target_subnet,
-                NiDkgTargetSubnet::Remote(_)
-            )
-        });
+        .collect();
 
-    remote_priority
+    // Count the number of remote target IDs with no remaining capacity.
+    let remote_target_ids_with_no_capacity = remaining_remote_target_capacity
+        .values()
+        .filter(|cap| **cap == 0)
+        .count();
+    // If the number of remote target IDs with no remaining capacity is less than the maximum
+    // number of remote DKGs per interval, then we prioritize remote DKGs.
+    let prioritize_remote = remote_target_ids_with_no_capacity < MAX_REMOTE_DKGS_PER_INTERVAL;
+
+    // 1. Prioritize remote DKGs first, if requested, otherwise prioritize local DKGs.
+    // 2. For remote targets, prioritize dealings for targets that are closer to their threshold.
+    // 3. Use the target subnet as a tie-breaker.
+    prioritized_candidates.sort_unstable_by_key(|msg| match msg.content.dkg_id.target_subnet {
+        NiDkgTargetSubnet::Local => (
+            prioritize_remote,
+            usize::MAX,
+            &msg.content.dkg_id.target_subnet,
+        ),
+        NiDkgTargetSubnet::Remote(target_id) => (
+            !prioritize_remote,
+            remaining_remote_target_capacity
+                .get(&target_id)
+                .copied()
+                .unwrap_or(usize::MAX),
+            &msg.content.dkg_id.target_subnet,
+        ),
+    });
+
+    prioritized_candidates
         .into_iter()
-        .chain(rest)
         .take(max_dealings_per_block)
         .cloned()
         .collect()
@@ -1948,11 +1986,15 @@ mod tests {
     }
 
     fn remote_dkg_id(tag: NiDkgTag) -> NiDkgId {
+        remote_dkg_id_with_target(tag, [0u8; 32])
+    }
+
+    fn remote_dkg_id_with_target(tag: NiDkgTag, target_id: [u8; 32]) -> NiDkgId {
         NiDkgId {
             start_block_height: Height::from(0),
             dealer_subnet: subnet_test_id(0),
             dkg_tag: tag,
-            target_subnet: NiDkgTargetSubnet::Remote(NiDkgTargetId::new([0u8; 32])),
+            target_subnet: NiDkgTargetSubnet::Remote(NiDkgTargetId::new(target_id)),
         }
     }
 
@@ -2083,5 +2125,129 @@ mod tests {
         assert_eq!(selected[3].content.dkg_id, local_id);
         assert_eq!(selected[2].signature.signer, node_test_id(0));
         assert_eq!(selected[3].signature.signer, node_test_id(1));
+    }
+
+    #[test]
+    fn test_select_dealings_prioritizes_remote_target_with_lower_remaining_capacity() {
+        let remote_low_remaining_id = remote_dkg_id_with_target(NiDkgTag::LowThreshold, [0u8; 32]);
+        let remote_high_remaining_id = remote_dkg_id_with_target(NiDkgTag::LowThreshold, [1u8; 32]);
+
+        // collection_threshold = 3 for both
+        let configs: BTreeMap<_, _> = [
+            (
+                remote_low_remaining_id.clone(),
+                make_test_config(remote_low_remaining_id.clone(), 2),
+            ),
+            (
+                remote_high_remaining_id.clone(),
+                make_test_config(remote_high_remaining_id.clone(), 2),
+            ),
+        ]
+        .into();
+
+        // Some dealings already included on chain:
+        // - remote_low_remaining has 2 on chain, so 1 remaining.
+        // - remote_high_remaining has 1 on chain, so 2 remaining.
+        let dealers_from_chain: HashSet<_> = [
+            (remote_low_remaining_id.clone(), node_test_id(0)),
+            (remote_low_remaining_id.clone(), node_test_id(1)),
+            (remote_high_remaining_id.clone(), node_test_id(0)),
+        ]
+        .into();
+
+        let pool = TestDkgPool {
+            messages: vec![
+                create_dealing(1, remote_high_remaining_id.clone()),
+                create_dealing(2, remote_low_remaining_id.clone()),
+            ],
+        };
+
+        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 1);
+
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].content.dkg_id, remote_low_remaining_id);
+    }
+
+    #[test]
+    fn test_select_dealings_remote_priority_requires_completed_remote_below_interval_limit() {
+        let local_id = local_dkg_id(NiDkgTag::LowThreshold);
+        let remote_completed_id = remote_dkg_id_with_target(NiDkgTag::LowThreshold, [0u8; 32]);
+        let remote_active_id = remote_dkg_id_with_target(NiDkgTag::LowThreshold, [1u8; 32]);
+
+        // collection_threshold = 2 for all configs
+        let configs: BTreeMap<_, _> = [
+            (local_id.clone(), make_test_config(local_id.clone(), 1)),
+            (
+                remote_completed_id.clone(),
+                make_test_config(remote_completed_id.clone(), 1),
+            ),
+            (
+                remote_active_id.clone(),
+                make_test_config(remote_active_id.clone(), 1),
+            ),
+        ]
+        .into();
+
+        // remote_completed has no remaining capacity, so with
+        // MAX_REMOTE_DKGS_PER_INTERVAL = 1 we should not prioritize remote.
+        let dealers_from_chain: HashSet<_> = [
+            (remote_completed_id.clone(), node_test_id(0)),
+            (remote_completed_id.clone(), node_test_id(1)),
+        ]
+        .into();
+
+        let pool = TestDkgPool {
+            messages: vec![
+                create_dealing(0, remote_active_id.clone()),
+                create_dealing(1, remote_completed_id.clone()),
+                create_dealing(2, local_id.clone()),
+                create_dealing(3, local_id.clone()),
+                create_dealing(4, local_id.clone()),
+            ],
+        };
+
+        // With max_dealings_per_block = 1, we should prioritize local.
+        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 1);
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].content.dkg_id, local_id);
+
+        // With max_dealings_per_block = 10, we should prioritize local (although it has higher remaining capacity).
+        // We should aslo include remote, once local is capped at collection_threshold.
+        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 10);
+        assert_eq!(selected.len(), 3);
+        assert_eq!(selected[0].content.dkg_id, local_id);
+        assert_eq!(selected[1].content.dkg_id, local_id);
+        assert_eq!(selected[2].content.dkg_id, remote_active_id);
+    }
+
+    #[test]
+    fn test_select_dealings_uses_target_subnet_as_tie_breaker() {
+        let remote_target_0 = remote_dkg_id_with_target(NiDkgTag::LowThreshold, [0u8; 32]);
+        let remote_target_1 = remote_dkg_id_with_target(NiDkgTag::LowThreshold, [1u8; 32]);
+
+        // collection_threshold = 2 for both, so remaining capacities tie.
+        let configs: BTreeMap<_, _> = [
+            (
+                remote_target_0.clone(),
+                make_test_config(remote_target_0.clone(), 1),
+            ),
+            (
+                remote_target_1.clone(),
+                make_test_config(remote_target_1.clone(), 1),
+            ),
+        ]
+        .into();
+
+        let pool = TestDkgPool {
+            messages: vec![
+                create_dealing(0, remote_target_1.clone()),
+                create_dealing(1, remote_target_0.clone()),
+            ],
+        };
+
+        let selected = select_dealings_for_payload(&configs, &HashSet::new(), &pool, 1);
+
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].content.dkg_id, remote_target_0);
     }
 }
