@@ -1369,7 +1369,7 @@ mod tests {
                 // For each artifact type, add two artifacts to the pool,
                 // one for ourselves (NODE_1) and one for NODE_2.
                 let mut change_set = Vec::new();
-                for (i, node) in [(1u8, NODE_1), (2u8, NODE_2)] {
+                for (i, node) in [(1_u8, NODE_1), (2_u8, NODE_2)] {
                     let tid = dummy_idkg_transcript_id_for_tests(i as u64);
 
                     let mut dealing_content = dummy_idkg_dealing_for_tests();

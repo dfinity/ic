@@ -26,8 +26,8 @@ use ic_state_machine_tests::{
     PayloadBuilder, StateMachine, StateMachineBuilder, UserError, WasmResult,
 };
 use ic_test_utilities_load_wasm::load_wasm;
-use ic_types::Cycles;
 use ic_types::ingress::{IngressState, IngressStatus};
+use ic_types_cycles::Cycles;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use num_traits::cast::ToPrimitive;

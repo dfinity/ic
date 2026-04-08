@@ -13,8 +13,8 @@ use ic_protobuf::{
         node::v1::NodeRecord,
         subnet::v1::{
             CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb, CatchUpPackageContents,
-            ChainKeyConfig as ChainKeyConfigPb, GenesisArgs, SubnetFeatures as SubnetFeaturesPb,
-            SubnetRecord, catch_up_package_contents::CupType,
+            ChainKeyConfig as ChainKeyConfigPb, GenesisArgs, ResourceLimits as ResourceLimitsPb,
+            SubnetFeatures as SubnetFeaturesPb, SubnetRecord, catch_up_package_contents::CupType,
         },
     },
     types::v1::PrincipalId as PrincipalIdPb,
@@ -23,6 +23,7 @@ use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
     make_node_record_key, make_subnet_list_record_key, make_subnet_record_key,
 };
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::{KeyConfig as KeyConfigInternal, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::pb::v1::{RegistryMutation, RegistryValue, registry_mutation};
@@ -295,6 +296,8 @@ pub struct CreateSubnetPayload {
     pub canister_cycles_cost_schedule: Option<CanisterCyclesCostSchedule>,
 
     pub subnet_admins: Option<Vec<PrincipalId>>,
+
+    pub resource_limits: Option<ResourceLimits>,
 
     // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
     pub ingress_bytes_per_block_soft_cap: u64,
@@ -571,6 +574,10 @@ impl From<CreateSubnetPayload> for SubnetRecord {
                 .into_iter()
                 .map(PrincipalIdPb::from)
                 .collect(),
+
+            resource_limits: Some(ResourceLimitsPb::from(
+                val.resource_limits.unwrap_or_default(),
+            )),
 
             recalled_replica_version_ids: vec![],
         }

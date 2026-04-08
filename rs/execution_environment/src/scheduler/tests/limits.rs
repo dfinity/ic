@@ -257,6 +257,9 @@ fn dont_execute_any_canisters_if_not_enough_instructions_in_round() {
         })
         .build();
 
+    // Bump up the round number to 1.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
     for _ in 0..3 {
         let canister = test.create_canister();
         test.send_ingress(canister, ingress(instructions_per_message.get()));
@@ -267,12 +270,7 @@ fn dont_execute_any_canisters_if_not_enough_instructions_in_round() {
     for canister_state in test.state().canisters_iter() {
         let system_state = &canister_state.system_state;
         assert_eq!(system_state.queues().ingress_queue_size(), 1);
-        assert_eq!(
-            test.state()
-                .canister_priority(&canister_state.canister_id())
-                .last_full_execution_round,
-            ExecutionRound::from(0)
-        );
+        assert!(!test.was_fully_executed(canister_state.canister_id()));
         assert_eq!(system_state.canister_metrics().rounds_scheduled(), 1);
         assert_eq!(system_state.canister_metrics().executed(), 0);
         assert_eq!(
@@ -314,12 +312,7 @@ fn can_execute_messages_with_just_enough_instructions() {
     for canister_state in test.state().canisters_iter() {
         let system_state = &canister_state.system_state;
         assert_eq!(system_state.queues().ingress_queue_size(), 0);
-        assert_eq!(
-            test.state()
-                .canister_priority(&canister_state.canister_id())
-                .last_full_execution_round,
-            ExecutionRound::from(1)
-        );
+        assert!(test.was_fully_executed(canister_state.canister_id()));
         assert_eq!(system_state.canister_metrics().rounds_scheduled(), 1);
         assert_eq!(system_state.canister_metrics().executed(), 1);
         assert_eq!(
@@ -440,13 +433,12 @@ fn can_fully_execute_canisters_deterministically_until_out_of_instructions() {
 
     let mut executed_canisters = 0;
     for canister in test.state().canisters_iter() {
-        let priority = test.state().canister_priority(&canister.canister_id());
         if canister.system_state.queues().ingress_queue_size() == 0 {
-            assert_eq!(priority.last_full_execution_round, ExecutionRound::from(1));
+            assert!(test.was_fully_executed(canister.canister_id()));
             executed_canisters += 1;
         } else {
             assert_eq!(canister.system_state.queues().ingress_queue_size(), 10);
-            assert_eq!(priority.last_full_execution_round, ExecutionRound::from(0));
+            assert!(!test.was_fully_executed(canister.canister_id()));
         }
     }
     assert_eq!(executed_canisters, 2);
@@ -504,12 +496,7 @@ fn can_execute_messages_from_multiple_canisters_until_out_of_instructions() {
                 .interrupted_during_execution(),
             0
         );
-        assert_eq!(
-            test.state()
-                .canister_priority(&canister.canister_id())
-                .last_full_execution_round,
-            ExecutionRound::from(1)
-        );
+        assert!(test.was_fully_executed(canister.canister_id()));
     }
 
     assert_eq!(

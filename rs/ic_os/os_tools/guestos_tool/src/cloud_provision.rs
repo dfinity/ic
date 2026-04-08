@@ -8,6 +8,7 @@ use anyhow::{Context, Error, Result, bail};
 use config_tool::guestos::{cloud::CloudType, network::get_best_interface_name};
 use config_types::GuestOSConfig;
 use nix::{sys::signal::Signal::SIGTERM, unistd::Pid};
+use tracing::info;
 
 /// Assigns IPv4 DHCP address to the interface and unassigns it when dropped
 #[derive(Debug)]
@@ -72,7 +73,7 @@ pub fn obtain_guestos_config(systemd_network_dir: PathBuf) -> Result<GuestOSConf
         match get_best_interface_name() {
             Ok(v) => break v,
             Err(e) => {
-                println!("unable to choose interface: {e:#}");
+                info!("unable to choose interface: {e:#}");
                 retries -= 1;
                 if retries == 0 {
                     bail!("unable to choose interface: retries exhausted");
@@ -86,11 +87,11 @@ pub fn obtain_guestos_config(systemd_network_dir: PathBuf) -> Result<GuestOSConf
     // Configure it with a DHCP
     let _dhcp = DHCPConfig::new(intf.clone(), systemd_network_dir)
         .context("unable to configure IPv4 DHCP")?;
-    println!("DHCP on the interface {intf} configured");
+    info!("DHCP on the interface {intf} configured");
 
     // Discover the cloud we're running in.
     let cloud_type = CloudType::discover().context("unable to discover cloud type")?;
-    println!("Cloud type detected: {cloud_type:?}");
+    info!("Cloud type detected: {cloud_type:?}");
 
     // Get the config from the MDS
     let config = cloud_type

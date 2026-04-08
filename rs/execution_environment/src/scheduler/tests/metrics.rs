@@ -28,12 +28,13 @@ use ic_test_utilities_metrics::{
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
 use ic_types::NumBytes;
 use ic_types::batch::ConsensusResponse;
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::messages::{
     CallbackId, Payload, RejectContext, StopCanisterCallId, StopCanisterContext,
 };
-use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::UNIX_EPOCH;
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, CompoundCycles, Instructions, NominalCycles, NominalCyclesTesting,
+};
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use more_asserts::assert_ge;
 use std::time::Duration;
@@ -187,9 +188,14 @@ fn can_record_metrics_for_a_round() {
     assert_eq!(metrics.canister_age.get_sample_sum() as i64, 0);
     assert_eq!(metrics.round_preparation_duration.get_sample_count(), 1);
     assert_eq!(metrics.round_preparation_ingress.get_sample_count(), 1);
-    // Once for `apply_scheduling_strategy()`, once for `finish_round()`.
-    assert_eq!(metrics.round_scheduling_duration.get_sample_count(), 2);
-    assert_ge!(metrics.round_inner_iteration_prep.get_sample_count(), 1);
+    assert_eq!(metrics.round_scheduling_duration.get_sample_count(), 1);
+    assert_eq!(metrics.round_finalization_scheduling.get_sample_count(), 1);
+    assert_eq!(
+        metrics.round_inner_iteration_scheduling.get_sample_count(),
+        1
+    );
+    // Available memory is only recomputed starting with the second iteration.
+    assert_ge!(metrics.round_inner_iteration_prep.get_sample_count(), 0);
     assert_ge!(metrics.round_inner_iteration_exe.get_sample_count(), 1);
     assert_ge!(metrics.round_inner_iteration_fin.get_sample_count(), 1);
     assert_eq!(metrics.round_finalization_duration.get_sample_count(), 1);
@@ -199,8 +205,6 @@ fn can_record_metrics_for_a_round() {
     );
     assert_eq!(metrics.round_finalization_ingress.get_sample_count(), 1);
     assert_eq!(metrics.round_finalization_charge.get_sample_count(), 1);
-    // Compute allocation violation is not observed for newly created canisters.
-    assert_eq!(metrics.canister_compute_allocation_violation.get(), 0);
 
     // `2 * scheduler_cores` messages were executed.
     assert_eq!(
@@ -233,8 +237,6 @@ fn can_record_metrics_for_a_round() {
     let metrics = &test.scheduler().metrics;
     // The canister age metric should be observed now.
     assert_eq!(metrics.canister_age.get_sample_sum() as i64, 12);
-    // Compute allocation violation should also be observed now.
-    assert_eq!(metrics.canister_compute_allocation_violation.get(), 1);
 }
 
 /// Check that when a canister is scheduled and can't prepay for execution, the
@@ -859,7 +861,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
         &no_op_logger(),
     );
 
-    let consumed_cycles_before = NominalCycles::from(
+    let consumed_cycles_before = NominalCycles::new(
         fetch_gauge(
             test.metrics_registry(),
             "replicated_state_consumed_cycles_since_replica_started",
@@ -895,7 +897,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
         0.into(),
         &no_op_logger(),
     );
-    let consumed_cycles_after = NominalCycles::from(
+    let consumed_cycles_after = NominalCycles::new(
         fetch_gauge(
             test.metrics_registry(),
             "replicated_state_consumed_cycles_since_replica_started",
@@ -904,7 +906,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
     );
 
     assert_eq!(
-        consumed_cycles_before + NominalCycles::from(fee.get()),
+        consumed_cycles_before + NominalCycles::new(fee.get()),
         consumed_cycles_after
     );
 
@@ -931,7 +933,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
         &no_op_logger(),
     );
 
-    let consumed_cycles_before = NominalCycles::from(
+    let consumed_cycles_before = NominalCycles::new(
         fetch_gauge(
             test.metrics_registry(),
             "replicated_state_consumed_cycles_since_replica_started",
@@ -941,7 +943,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
 
     // Create payload of the request.
     let url = "https://".to_string();
-    let response_size_limit = 1000u64;
+    let response_size_limit = 1000_u64;
     let transform_method_name = "transform".to_string();
     let transform_context = vec![0, 1, 2];
     let args = CanisterHttpRequestArgs {
@@ -996,7 +998,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
         0.into(),
         &no_op_logger(),
     );
-    let consumed_cycles_after = NominalCycles::from(
+    let consumed_cycles_after = NominalCycles::new(
         fetch_gauge(
             test.metrics_registry(),
             "replicated_state_consumed_cycles_since_replica_started",
@@ -1005,7 +1007,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
     );
 
     assert_eq!(
-        consumed_cycles_before + NominalCycles::from(fee.get()),
+        consumed_cycles_before + NominalCycles::new(fee.get()),
         consumed_cycles_after
     );
 
@@ -1031,7 +1033,7 @@ fn http_outcalls_free() {
 
     // Create payload of the request.
     let url = "https://".to_string();
-    let response_size_limit = 1000u64;
+    let response_size_limit = 1000_u64;
     let transform_method_name = "transform".to_string();
     let transform_context = vec![0, 1, 2];
     let args = CanisterHttpRequestArgs {
@@ -1089,7 +1091,7 @@ fn consumed_cycles_are_updated_from_valid_canisters() {
     let mut test = SchedulerTestBuilder::new().build();
 
     let canister_id = test.create_canister_with(
-        Cycles::from(5_000_000_000_000u128),
+        Cycles::from(5_000_000_000_000_u128),
         ComputeAllocation::zero(),
         MemoryAllocation::default(),
         None,
@@ -1097,10 +1099,13 @@ fn consumed_cycles_are_updated_from_valid_canisters() {
         None,
     );
 
-    let removed_cycles = Cycles::from(1000u128);
+    let consumed_cycles = CompoundCycles::<Instructions>::new(
+        Cycles::from(1000_u128),
+        CanisterCyclesCostSchedule::Normal,
+    );
     test.canister_state_mut(canister_id)
         .system_state
-        .remove_cycles(removed_cycles, CyclesUseCase::Instructions);
+        .consume_cycles(consumed_cycles);
 
     test.scheduler().state_metrics.observe(
         test.scheduler().own_subnet_id,
@@ -1114,14 +1119,17 @@ fn consumed_cycles_are_updated_from_valid_canisters() {
             test.metrics_registry(),
             "replicated_state_consumed_cycles_from_replica_start",
         ),
-        metric_vec(&[(&[("use_case", "Instructions")], removed_cycles.get() as f64),]),
+        metric_vec(&[(
+            &[("use_case", "Instructions")],
+            consumed_cycles.nominal().get() as f64
+        ),]),
     );
 }
 
 #[test]
 fn consumed_cycles_are_updated_from_deleted_canisters() {
     let mut test = SchedulerTestBuilder::new().build();
-    let initial_balance = Cycles::from(5_000_000_000_000u128);
+    let initial_balance = Cycles::from(5_000_000_000_000_u128);
     let canister_id = test.create_canister_with(
         initial_balance,
         ComputeAllocation::zero(),
@@ -1131,15 +1139,18 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
         Some(CanisterStatusType::Stopped),
     );
 
-    let removed_cycles = Cycles::from(1000u128);
+    let consumed_cycles = CompoundCycles::<Instructions>::new(
+        Cycles::from(1000_u128),
+        CanisterCyclesCostSchedule::Normal,
+    );
     test.canister_state_mut(canister_id)
         .system_state
-        .remove_cycles(removed_cycles, CyclesUseCase::Instructions);
+        .consume_cycles(consumed_cycles);
 
     test.inject_call_to_ic00(
         Method::DeleteCanister,
         CanisterIdRecord::from(canister_id).encode(),
-        Cycles::from(1_000_000_000_000u128),
+        Cycles::from(1_000_000_000_000_u128),
         CanisterId::try_from(user_test_id(1).get()).unwrap(),
         InputQueueType::RemoteSubnet,
     );
@@ -1158,10 +1169,13 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
             "replicated_state_consumed_cycles_from_replica_start",
         ),
         metric_vec(&[
-            (&[("use_case", "Instructions")], removed_cycles.get() as f64),
+            (
+                &[("use_case", "Instructions")],
+                consumed_cycles.nominal().get() as f64
+            ),
             (
                 &[("use_case", "DeletedCanisters")],
-                (initial_balance.get() - removed_cycles.get()) as f64
+                (initial_balance.get() - consumed_cycles.nominal().get()) as f64
             )
         ]),
     );

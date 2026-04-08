@@ -9,6 +9,7 @@ use manual_guestos_recovery::GuestOSRecoveryApp;
 use network::generate_network_config;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use std::path::Path;
+use tracing::warn;
 use utils::to_cidr;
 
 mod guestos_alternative;
@@ -71,6 +72,8 @@ struct HostOSArgs {
 }
 
 pub fn main() -> Result<()> {
+    ic_os_logging::init_logging();
+
     #[cfg(not(target_os = "linux"))]
     {
         eprintln!("ERROR: this only runs on Linux.");
@@ -86,7 +89,7 @@ pub fn main() -> Result<()> {
         Some(Commands::GenerateNetworkConfig { output_directory }) => {
             let hostos_config: HostOSConfig = deserialize_config(&opts.hostos_config_object_path)?;
 
-            eprintln!(
+            warn!(
                 "Network settings config: {:?}",
                 &hostos_config.network_settings
             );
@@ -106,7 +109,7 @@ pub fn main() -> Result<()> {
         Some(Commands::GenerateIpv6Address { node_type }) => {
             let hostos_config: HostOSConfig = deserialize_config(&opts.hostos_config_object_path)?;
 
-            eprintln!(
+            warn!(
                 "Network settings config: {:?}",
                 &hostos_config.network_settings
             );
@@ -117,7 +120,7 @@ pub fn main() -> Result<()> {
                 node_type,
             );
 
-            eprintln!("Using generated mac address {generated_mac}");
+            warn!("Using generated mac address {generated_mac}");
 
             let Ipv6Config::Deterministic(ipv6_config) =
                 &hostos_config.network_settings.ipv6_config
@@ -135,7 +138,7 @@ pub fn main() -> Result<()> {
         Some(Commands::GenerateMacAddress { node_type }) => {
             let hostos_config: HostOSConfig = deserialize_config(&opts.hostos_config_object_path)?;
 
-            eprintln!(
+            warn!(
                 "Network settings config: {:?}",
                 &hostos_config.network_settings
             );

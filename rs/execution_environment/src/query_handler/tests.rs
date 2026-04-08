@@ -8,10 +8,11 @@ use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
-    Cycles, NumInstructions,
+    NumInstructions,
     ingress::WasmResult,
     messages::{Query, QuerySource},
 };
+use ic_types_cycles::Cycles;
 use more_asserts::{assert_gt, assert_lt};
 use std::sync::Arc;
 
@@ -479,6 +480,7 @@ fn query_compiled_once() {
                 user_id: user_test_id(2),
                 ingress_expiry: 0,
                 nonce: None,
+                sender_info: None,
             },
             receiver: canister_id,
             method_name: "query".to_string(),
@@ -514,7 +516,7 @@ fn queries_to_frozen_canisters_are_rejected() {
     //          41_070 cycles are needed to cover freeze_threshold_cycles
     //                 of the canister history memory usage (134 bytes)
     let low_cycles = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-        Cycles::new(300_008_835_260)
+        Cycles::new(300_012_517_130)
     } else {
         Cycles::new(300_005_633_530)
     };
@@ -572,6 +574,7 @@ fn composite_query_works_in_non_replicated_mode() {
                     user_id: user_test_id(0),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: canister,
                 method_name: "query".to_string(),
@@ -601,6 +604,7 @@ fn composite_query_fails_if_disabled() {
                     user_id: user_test_id(0),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: canister,
                 method_name: "query".to_string(),
@@ -669,6 +673,7 @@ fn composite_query_single_user_response() {
                     user_id: user_test_id(2),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
@@ -717,6 +722,7 @@ fn composite_query_single_canister_response() {
                     user_id: user_test_id(2),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
@@ -764,6 +770,7 @@ fn composite_query_no_user_response() {
                     user_id: user_test_id(2),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
@@ -822,6 +829,7 @@ fn composite_query_no_canister_response() {
                     user_id: user_test_id(2),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
@@ -864,6 +872,7 @@ fn composite_query_chained_calls() {
                     user_id: user_test_id(2),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: canister_a,
                 method_name: "composite_query".to_string(),
@@ -1271,6 +1280,7 @@ fn query_call_exceeds_instructions_limit() {
                     user_id: user_test_id(1),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: canister,
                 method_name: "query".to_string(),

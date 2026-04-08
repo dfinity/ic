@@ -1172,7 +1172,7 @@ fn minted_event(index: u128) -> MintedEvent {
             ..received_eth_event()
         }
         .into(),
-        mint_block_index: LedgerMintIndex::new(1u64),
+        mint_block_index: LedgerMintIndex::new(1_u64),
         token_symbol: "ckETH".to_string(),
         erc20_contract_address: None,
     }
@@ -1298,8 +1298,8 @@ fn received_eth_event() -> ReceivedEthEvent {
         transaction_hash: "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2"
             .parse()
             .unwrap(),
-        block_number: BlockNumber::new(3960623u128),
-        log_index: LogIndex::from(29u8),
+        block_number: BlockNumber::new(3960623_u128),
+        log_index: LogIndex::from(29_u8),
         from_address: "0xdd2851cdd40ae6536831558dd46db62fac7a844d"
             .parse()
             .unwrap(),

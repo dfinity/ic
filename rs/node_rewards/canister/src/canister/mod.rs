@@ -2,6 +2,7 @@ use crate::chrono_utils::last_unix_timestamp_nanoseconds;
 use crate::metrics::MetricsManager;
 use crate::registry_querier::RegistryQuerier;
 use crate::storage::{NaiveDateStorable, VM};
+use candid::Principal;
 use chrono::{DateTime, NaiveDate};
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_node_rewards_canister_api::RewardsCalculationAlgorithmVersion;
@@ -10,7 +11,7 @@ use ic_node_rewards_canister_api::monthly_rewards::{
     NodeProvidersMonthlyXdrRewards,
 };
 use ic_node_rewards_canister_api::provider_rewards_calculation::{
-    DailyResults, GetNodeProvidersRewardsCalculationRequest,
+    DailyResults as ApiDailyResults, GetNodeProvidersRewardsCalculationRequest,
     GetNodeProvidersRewardsCalculationResponse,
 };
 use ic_node_rewards_canister_api::providers_rewards::{
@@ -27,7 +28,7 @@ use ic_registry_node_provider_rewards::{RewardsPerNodeProvider, calculate_reward
 use ic_stable_structures::StableCell;
 use ic_types::{RegistryVersion, Time};
 use rewards_calculation::AlgorithmVersion;
-use rewards_calculation::performance_based_algorithm::results::RewardsCalculatorResults;
+use rewards_calculation::performance_based_algorithm::results::DailyResults;
 use rewards_calculation::performance_based_algorithm::{
     v1::RewardsCalculationV1, v2::RewardsCalculationV2,
 };
@@ -161,24 +162,21 @@ impl NodeRewardsCanister {
         Ok(())
     }
 
-    fn calculate_rewards(
+    fn calculate_rewards_for_date(
         &self,
-        request: GetNodeProvidersRewardsRequest,
-    ) -> Result<RewardsCalculatorResults, String> {
-        let start_day = NaiveDate::try_from(request.from_day)?;
-        let end_day = NaiveDate::try_from(request.to_day)?;
-        self.validate_reward_period(start_day, end_day)?;
-
+        date: &NaiveDate,
+        algorithm_version: Option<RewardsCalculationAlgorithmVersion>,
+    ) -> Result<DailyResults, String> {
         // Default to currently used algorithm
-        let rewards_calculator_version = request.algorithm_version.unwrap_or_default();
+        let rewards_calculator_version = algorithm_version.unwrap_or_default();
 
         match rewards_calculator_version.version {
             RewardsCalculationV1::VERSION => {
-                RewardsCalculationV1::calculate_rewards(start_day, end_day, self)
+                RewardsCalculationV1::calculate_rewards_for_date(date, &self)
                     .map_err(|e| format!("Could not calculate rewards: {e:?}"))
             }
             RewardsCalculationV2::VERSION => {
-                RewardsCalculationV2::calculate_rewards(start_day, end_day, self)
+                RewardsCalculationV2::calculate_rewards_for_date(date, &self)
                     .map_err(|e| format!("Could not calculate rewards: {e:?}"))
             }
             _ => Err(format!(
@@ -297,25 +295,45 @@ impl NodeRewardsCanister {
         }
     }
 
-    pub fn get_node_providers_rewards(
+    pub async fn get_node_providers_rewards(
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProvidersRewardsRequest,
     ) -> GetNodeProvidersRewardsResponse {
-        let result = canister.with_borrow(|canister| canister.calculate_rewards(request))?;
+        let from_date = NaiveDate::try_from(request.from_day)?;
+        let to_date = NaiveDate::try_from(request.to_day)?;
+        canister.with_borrow(|c| c.validate_reward_period(from_date, to_date))?;
 
-        let rewards_xdr_permyriad = result
-            .total_rewards_xdr_permyriad
-            .into_iter()
-            .map(|(k, v)| (k.0, v))
-            .collect();
+        let mut rewards_per_node_provider: BTreeMap<Principal, u64> = BTreeMap::new();
 
-        let algorithm_version = RewardsCalculationAlgorithmVersion {
-            version: result.algorithm_version,
-        };
+        let algorithm_version = request.algorithm_version.unwrap_or_default();
+        for day in from_date.iter_days().take_while(|d| *d <= to_date) {
+            let result_for_day = canister
+                .with_borrow(|canister| {
+                    canister.calculate_rewards_for_date(&day, request.algorithm_version)
+                })
+                .map_err(|e| format!("Could not calculate rewards: {e:?}"))?;
+
+            for (provider_id, provider_rewards) in &result_for_day.provider_results {
+                rewards_per_node_provider
+                    .entry(provider_id.0)
+                    .and_modify(|total| {
+                        *total += provider_rewards.total_adjusted_rewards_xdr_permyriad
+                    })
+                    .or_insert(provider_rewards.total_adjusted_rewards_xdr_permyriad);
+            }
+
+            #[cfg(target_arch = "wasm32")]
+            let _ = ic_cdk::call::Call::bounded_wait(
+                ic_cdk::api::canister_self(),
+                "reset_instructions",
+            )
+            .await
+            .unwrap();
+        }
 
         Ok(NodeProvidersRewards {
             algorithm_version,
-            rewards_xdr_permyriad,
+            rewards_xdr_permyriad: rewards_per_node_provider,
         })
     }
 
@@ -323,20 +341,14 @@ impl NodeRewardsCanister {
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProvidersRewardsCalculationRequest,
     ) -> GetNodeProvidersRewardsCalculationResponse {
-        let request_inner = GetNodeProvidersRewardsRequest {
-            from_day: request.day,
-            to_day: request.day,
-            algorithm_version: request.algorithm_version,
-        };
-        let mut result =
-            canister.with_borrow(|canister| canister.calculate_rewards(request_inner))?;
-
-        let day = NaiveDate::try_from(request.day)?;
-        let daily_results = result
-            .daily_results
-            .remove(&day)
-            .ok_or("Could not find daily results for the requested day")?;
-        DailyResults::try_from(daily_results)
+        let date = NaiveDate::try_from(request.day)?;
+        canister.with_borrow(|c| c.validate_reward_period(date, date))?;
+        let daily_results = canister
+            .with_borrow(|canister| {
+                canister.calculate_rewards_for_date(&date, request.algorithm_version)
+            })
+            .map_err(|e| format!("Could not calculate rewards: {e:?}"))?;
+        ApiDailyResults::try_from(daily_results)
     }
 }
 

@@ -5,11 +5,13 @@ use crate::{
     payload_builder::{
         parse::bytes_to_payload,
         utils::{
-            find_flexible_responses, find_fully_replicated_response, find_non_replicated_response,
+            estimate_response_with_consensus_size, find_flexible_responses,
+            find_fully_replicated_response, find_non_replicated_response,
             group_shares_by_callback_id, grouped_shares_meet_divergence_criteria,
         },
     },
 };
+use candid::{Decode, Encode};
 use ic_consensus_utils::{
     crypto::ConsensusCrypto, membership::Membership, registry_version_at_height,
 };
@@ -27,19 +29,22 @@ use ic_interfaces::{
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, warn};
+use ic_management_canister_types_private::{
+    CanisterHttpResponsePayload, FlexibleHttpRequestResult,
+};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
     batch::{
-        CanisterHttpPayload, ConsensusResponse, MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
+        CanisterHttpPayload, ConsensusResponse, FlexibleCanisterHttpResponses,
+        MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
     },
     canister_http::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
         CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
-        CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseWithConsensus,
-        Replication,
+        CanisterHttpResponseMetadata, CanisterHttpResponseWithConsensus, Replication,
     },
     consensus::Committee,
     crypto::{Signed, crypto_hash},
@@ -49,7 +54,6 @@ use ic_types::{
 };
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
-    mem::size_of,
     sync::{Arc, RwLock},
 };
 
@@ -69,6 +73,8 @@ pub struct CanisterHttpBatchStats {
     pub timeouts: usize,
     pub divergence_responses: usize,
     pub single_signature_responses: usize,
+    pub flexible_ok_responses: usize,
+    pub flexible_ok_responses_candid_failures: usize,
     pub payload_bytes: usize,
 }
 
@@ -228,14 +234,8 @@ impl CanisterHttpPayloadBuilderImpl {
                 .inspect(|_| {
                     total_share_count += 1;
                 })
-                // Filter out shares that are timed out or have the wrong registry versions
-                .filter(|&response| {
-                    utils::check_share_against_context(
-                        consensus_registry_version,
-                        response,
-                        validation_context,
-                    )
-                })
+                // Filter out shares with the wrong registry version
+                .filter(|&share| share.content.registry_version == consensus_registry_version)
                 .inspect(|_| {
                     active_shares += 1;
                 })
@@ -282,7 +282,7 @@ impl CanisterHttpPayloadBuilderImpl {
                             find_fully_replicated_response(grouped_shares, threshold, &*pool_access)
                         {
                             let candidate_size =
-                                size_of::<CanisterHttpResponseProof>() + content.count_bytes();
+                                estimate_response_with_consensus_size(&metadata, &shares, &content);
                             let size = NumBytes::new((accumulated_size + candidate_size) as u64);
                             if size < max_payload_size {
                                 candidates.push((metadata, shares, content));
@@ -316,7 +316,7 @@ impl CanisterHttpPayloadBuilderImpl {
                             &*pool_access,
                         ) {
                             let candidate_size =
-                                size_of::<CanisterHttpResponseProof>() + content.count_bytes();
+                                estimate_response_with_consensus_size(&metadata, &shares, &content);
                             let size = NumBytes::new((accumulated_size + candidate_size) as u64);
                             if size < max_payload_size {
                                 candidates.push((metadata, shares, content));
@@ -359,6 +359,7 @@ impl CanisterHttpPayloadBuilderImpl {
             timeouts,
             divergence_responses,
             flexible_responses,
+            flexible_errors: vec![],
         }
     }
 
@@ -441,13 +442,15 @@ impl CanisterHttpPayloadBuilderImpl {
             utils::check_response_consistency(response)
                 .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
-            // Validate response against `ValidationContext`
-            utils::check_response_against_context(
-                consensus_registry_version,
-                response,
-                validation_context,
-            )
-            .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+            // Validate response against consensus registry version
+            if response.proof.content.registry_version != consensus_registry_version {
+                return invalid_artifact(
+                    InvalidCanisterHttpPayloadReason::RegistryVersionMismatch {
+                        expected: consensus_registry_version,
+                        received: response.proof.content.registry_version,
+                    },
+                );
+            }
 
             // Check that the response is not submitted twice
             if !delivered_ids.insert(response.content.id) {
@@ -658,6 +661,18 @@ impl CanisterHttpPayloadBuilderImpl {
                     );
                 }
 
+                // Rejects are not allowed in flexible ok-responses
+                if matches!(
+                    entry.response.content,
+                    CanisterHttpResponseContent::Reject(_)
+                ) {
+                    return invalid_artifact(
+                        InvalidCanisterHttpPayloadReason::FlexibleRejectNotAllowedInOkResponses {
+                            callback_id,
+                        },
+                    );
+                }
+
                 // No duplicate signers
                 let signer = entry.proof.signature.signer;
                 if !seen_signers.insert(signer) {
@@ -690,22 +705,15 @@ impl CanisterHttpPayloadBuilderImpl {
                     );
                 }
 
-                // Metadata consistency (timeout)
-                if entry.proof.content.timeout != entry.response.timeout {
-                    return invalid_artifact(InvalidCanisterHttpPayloadReason::InvalidMetadata {
-                        metadata_id: entry.proof.content.id,
-                        content_id: entry.response.id,
-                        metadata_timeout: entry.proof.content.timeout,
-                        content_timeout: entry.response.timeout,
-                    });
-                }
-
-                // Response must not be timed out
-                if entry.response.timeout < validation_context.time {
-                    return invalid_artifact(InvalidCanisterHttpPayloadReason::Timeout {
-                        timed_out_at: entry.response.timeout,
-                        validation_time: validation_context.time,
-                    });
+                // Content size must match
+                let calculated_size = entry.response.content.count_bytes() as u32;
+                if calculated_size != entry.proof.content.content_size {
+                    return invalid_artifact(
+                        InvalidCanisterHttpPayloadReason::ContentSizeMismatch {
+                            metadata_size: entry.proof.content.content_size,
+                            calculated_size,
+                        },
+                    );
                 }
 
                 // Registry version must match
@@ -850,19 +858,62 @@ impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
             )
         });
 
-        let divergece_responses = messages
+        let divergence_responses = messages
             .divergence_responses
-            .iter()
+            .into_iter()
             .filter_map(divergence_response_into_reject)
             .inspect(|_| stats.divergence_responses += 1);
 
+        let flexible_ok_responses = messages
+            .flexible_responses
+            .into_iter()
+            .map(flexible_ok_responses_into_consensus_response)
+            .inspect(|result| match result {
+                Some(_) => stats.flexible_ok_responses += 1,
+                None => stats.flexible_ok_responses_candid_failures += 1,
+            })
+            .flatten();
+
         let responses = responses
             .chain(timeouts)
-            .chain(divergece_responses)
+            .chain(divergence_responses)
+            .chain(flexible_ok_responses)
             .collect();
 
         (responses, stats)
     }
+}
+
+/// Converts a [`FlexibleCanisterHttpResponses`] into a [`ConsensusResponse`].
+///
+/// Returns `None` if Candid decoding/encoding fails, which leads to skipping
+/// the delivery of this response. This should never occur, but if it does,
+/// eventually a timeout will gracefully end the outstanding callback.
+fn flexible_ok_responses_into_consensus_response(
+    response_group: FlexibleCanisterHttpResponses,
+) -> Option<ConsensusResponse> {
+    let payloads: Vec<_> = response_group
+        .responses
+        .into_iter()
+        .filter_map(|entry| match entry.response.content {
+            CanisterHttpResponseContent::Success(data) => {
+                Some(Decode!(&data, CanisterHttpResponsePayload).ok())
+            }
+            CanisterHttpResponseContent::Reject(_) => {
+                // Unreachable: payload building/validation ensure
+                // that there are no rejects in the ok-responses.
+                None
+            }
+        })
+        // Decoding errors short-circuit the collection and None is returned.
+        .collect::<Option<_>>()?;
+
+    let bytes = Encode!(&FlexibleHttpRequestResult::Ok(payloads)).ok()?;
+
+    Some(ConsensusResponse::new(
+        response_group.callback_id,
+        Payload::Data(bytes),
+    ))
 }
 
 /// Turns a [`CanisterHttpResponseDivergence`] into a [`ConsensusResponse`] containing a rejection.
@@ -874,16 +925,11 @@ impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
 /// The first issue could point to some issue rate limiting (e.g. some replicas receive 429s) while the later would point to an
 /// issue with the transform function (e.g. some non-deterministic component such as timestamp has not been removed).
 ///
-/// The function includes request id and timeout, which are also part of the hashed value.
+/// The function includes request id, which is also part of the hashed value.
 fn divergence_response_into_reject(
-    response: &CanisterHttpResponseDivergence,
+    response: CanisterHttpResponseDivergence,
 ) -> Option<ConsensusResponse> {
-    // Get the id and timeout, which need to be reported in the error message as well
-    let Some((id, timeout)) = response
-        .shares
-        .first()
-        .map(|share| (share.content.id, share.content.timeout))
-    else {
+    let Some(id) = response.shares.first().map(|share| share.content.id) else {
         // NOTE: We skip delivering the divergence response, if it has no shares
         // Such a divergence response should never validate, therefore this should never happen
         // However, if it where ever to happen, we can ignore it here.
@@ -891,15 +937,15 @@ fn divergence_response_into_reject(
         return None;
     };
 
-    // Count the different content hashes, that we have encountered in the divergence resonse
+    // Count the different content hashes, that we have encountered in the divergence response
     let mut hash_counts = BTreeMap::new();
     response
         .shares
-        .iter()
-        .map(|share| share.content.content_hash.clone().get().0)
-        .for_each(|share| {
+        .into_iter()
+        .map(|share| share.content.content_hash.get().0)
+        .for_each(|hash| {
             hash_counts
-                .entry(share)
+                .entry(hash)
                 .and_modify(|count| *count += 1)
                 .or_insert(1);
         });
@@ -921,9 +967,8 @@ fn divergence_response_into_reject(
         Payload::Reject(RejectContext::new(
             RejectCode::SysTransient,
             format!(
-                "No consensus could be reached. Replicas had different responses. Details: request_id: {}, timeout: {}, hashes: {}",
+                "No consensus could be reached. Replicas had different responses. Details: request_id: {}, hashes: {}",
                 id,
-                timeout.as_nanos_since_unix_epoch(),
                 hash_counts.join(", ")
             ),
         )),

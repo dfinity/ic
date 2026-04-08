@@ -206,7 +206,7 @@ impl<Tokens: TokensType> BlockBuilder<Tokens> {
 
         // Add parent hash for blocks after the first
         if self.block_id > 0 {
-            let parent_hash = self.parent_hash.unwrap_or_else(|| vec![0u8; 32]); // Simplified parent hash for testing
+            let parent_hash = self.parent_hash.unwrap_or_else(|| vec![0_u8; 32]); // Simplified parent hash for testing
             block_map.insert(
                 "phash".to_string(),
                 ICRC3Value::Blob(ByteBuf::from(parent_hash)),

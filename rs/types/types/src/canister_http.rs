@@ -42,7 +42,7 @@
 //! the timestamp of a request plus the timeout interval. This condition is verifiable by the other nodes in the network.
 //! Once a timeout has made it into a finalized block, the request is answered with an error message.
 use crate::{
-    CanisterId, CountBytes, Cycles, RegistryVersion, ReplicaVersion, Time,
+    CanisterId, CountBytes, RegistryVersion, ReplicaVersion, Time,
     artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
     crypto::{CryptoHashOf, Signed},
     messages::{CallbackId, RejectContext, Request},
@@ -62,6 +62,7 @@ use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
     state::system_metadata::v1 as pb_metadata,
 };
+use ic_types_cycles::Cycles;
 use rand::RngCore;
 use rand::seq::IteratorRandom;
 use serde::{Deserialize, Serialize};
@@ -783,8 +784,6 @@ impl From<CanisterHttpRequestContextError> for UserError {
 /// client to make a request
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct CanisterHttpRequest {
-    /// Timestamp indicating when this request will be considered timed out.
-    pub timeout: Time,
     /// This requests unique identifier
     pub id: CanisterHttpRequestId,
     /// The context of the request which captures all the metadata about this request
@@ -800,7 +799,6 @@ pub struct CanisterHttpRequest {
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponse {
     pub id: CanisterHttpRequestId,
-    pub timeout: Time,
     pub canister_id: CanisterId,
     pub content: CanisterHttpResponseContent,
 }
@@ -809,14 +807,10 @@ impl CountBytes for CanisterHttpResponse {
     fn count_bytes(&self) -> usize {
         let CanisterHttpResponse {
             id,
-            timeout,
             canister_id,
             content,
         } = &self;
-        size_of_val(id)
-            + size_of_val(timeout)
-            + canister_id.get_ref().data_size()
-            + content.count_bytes()
+        size_of_val(id) + canister_id.get_ref().data_size() + content.count_bytes()
     }
 }
 
@@ -984,8 +978,8 @@ impl CountBytes for CanisterHttpResponseDivergence {
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponseMetadata {
     pub id: CallbackId,
-    pub timeout: Time,
     pub content_hash: CryptoHashOf<CanisterHttpResponse>,
+    pub content_size: u32,
     pub registry_version: RegistryVersion,
     pub replica_version: ReplicaVersion,
 }
@@ -1035,15 +1029,9 @@ impl PbArtifact for CanisterHttpResponseArtifact {
 pub type CanisterHttpResponseProof =
     Signed<CanisterHttpResponseMetadata, BasicSignatureBatch<CanisterHttpResponseMetadata>>;
 
-impl CountBytes for CanisterHttpResponseProof {
-    fn count_bytes(&self) -> usize {
-        size_of::<CanisterHttpResponseProof>()
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::{Cycles, messages::NO_DEADLINE, time::UNIX_EPOCH};
+    use crate::{messages::NO_DEADLINE, time::UNIX_EPOCH};
 
     use super::*;
 

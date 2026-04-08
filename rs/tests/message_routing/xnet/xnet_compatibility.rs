@@ -30,7 +30,7 @@ use ic_consensus_system_test_utils::upgrade::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::ic::{InternetComputer, NrOfVCPUs, Subnet, VmResources};
+use ic_system_test_driver::driver::ic::{InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, get_guestos_img_version,
@@ -44,8 +44,8 @@ use slog::{Logger, info};
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-const PER_TASK_TIMEOUT: Duration = Duration::from_secs(15 * 60);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+const PER_TASK_TIMEOUT: Duration = Duration::from_secs(25 * 60);
+const OVERALL_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 const DKG_INTERVAL: u64 = 9;
 const NODES_PER_SUBNET: usize = 1;
@@ -70,10 +70,9 @@ fn setup(env: TestEnv) {
         subnet
     }
     InternetComputer::new()
-        .with_default_vm_resources(VmResources {
+        .with_resource_overrides(VmResourceOverrides {
             vcpus: Some(NrOfVCPUs::new(16)),
-            memory_kibibytes: None,
-            boot_image_minimal_size_gibibytes: None,
+            ..VmResourceOverrides::default()
         })
         .add_subnet(subnet(SubnetType::System, None))
         .add_subnet(subnet(SubnetType::Application, Some(DKG_INTERVAL)))

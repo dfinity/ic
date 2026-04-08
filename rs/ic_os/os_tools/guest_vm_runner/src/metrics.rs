@@ -3,6 +3,7 @@ use anyhow::{Context, Result};
 use ic_os_metrics_utils::write_registry_to_file;
 use prometheus::{IntGaugeVec, Opts, Registry};
 use std::path::PathBuf;
+use tracing::warn;
 
 /// Metrics for the guest VM runner service
 pub struct GuestVmMetrics {
@@ -63,7 +64,7 @@ impl GuestVmMetrics {
             .set(if success { 1 } else { 0 });
 
         if let Err(e) = write_registry_to_file(&self.registry, &self.metrics_file_path) {
-            eprintln!("Failed to write metrics to file: {e}");
+            warn!("Failed to write metrics to file: {e}");
         }
     }
 
@@ -74,7 +75,7 @@ impl GuestVmMetrics {
             .set(if enabled { 1 } else { 0 });
 
         if let Err(e) = write_registry_to_file(&self.registry, &self.metrics_file_path) {
-            eprintln!("Failed to write metrics to file: {e}");
+            warn!("Failed to write metrics to file: {e}");
         }
     }
 }

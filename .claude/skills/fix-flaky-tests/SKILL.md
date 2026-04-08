@@ -58,7 +58,7 @@ This guide explains how to find flaky tests to fix and how to debug them. Flaky 
 
    Read `<LOG_DIR>/README.md` to understand how the logs are organized.
 
-3. Analyze the source code of `label` and the logs in `<LOG_DIR>` to determine the root cause of the flakiness.
+3. Analyze the source code of `label` and the logs in `<LOG_DIR>` to determine the root causes of the flakiness.
 
    Ignore failures containing the error:
    ```
@@ -66,8 +66,11 @@ This guide explains how to find flaky tests to fix and how to debug them. Flaky 
    ```
    as those are due to infrastructure issues unrelated to the test code.
 
-4. Once you have determined the root cause,
-   fix the test taking `.claude/CLAUDE.md` into account.
+4. Once the root causes have been determined, pick the most common or recent one
+   and fix the test by addressing that root cause taking `.claude/CLAUDE.md` into account.
+
+   Don't address multiple root causes in the same fix.
+   Prefer making separate PRs for each root cause to make it easier to review and revert if needed.
 
 5. Verify the test still passes by running:
    ```

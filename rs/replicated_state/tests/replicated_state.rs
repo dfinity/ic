@@ -19,7 +19,7 @@ use ic_replicated_state::{
     metadata_state::{
         subnet_call_context_manager::{
             BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, InstallCodeCallId,
-            SubnetCallContext,
+            StopCanisterCall, SubnetCallContext,
         },
         testing::NetworkTopologyTesting,
     },
@@ -31,6 +31,7 @@ use ic_replicated_state::{
 };
 use ic_test_utilities_state::{ExecutionStateBuilder, arb_replicated_state_with_output_queues};
 use ic_test_utilities_types::ids::{SUBNET_1, canister_test_id, message_test_id, user_test_id};
+use ic_test_utilities_types::messages::IngressBuilder;
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{
@@ -39,7 +40,8 @@ use ic_types::messages::{
 };
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::xnet::StreamIndex;
-use ic_types::{CountBytes, Cycles, MemoryAllocation, SnapshotId, Time};
+use ic_types::{CountBytes, MemoryAllocation, SnapshotId, Time};
+use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Cycles};
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::collections::{BTreeMap, VecDeque};
@@ -215,14 +217,20 @@ impl ReplicatedStateFixture {
     }
 
     fn stop_canister(&mut self) {
-        let canister = self.state.canister_state_make_mut(&CANISTER_ID).unwrap();
-        canister
-            .system_state
-            .begin_stopping(ic_types::messages::StopCanisterContext::Ingress {
-                sender: user_test_id(24),
-                message_id: [0; 32].into(),
-                call_id: None,
+        let mut msg = CanisterCall::Ingress(Arc::new(
+            IngressBuilder::new().method_name("stop_canister").build(),
+        ));
+        let call_id = self
+            .state
+            .metadata
+            .subnet_call_context_manager
+            .push_stop_canister_call(StopCanisterCall {
+                call: msg.clone(),
+                effective_canister_id: CANISTER_ID,
+                time: self.state.time(),
             });
+        let canister = self.state.canister_state_make_mut(&CANISTER_ID).unwrap();
+        canister.system_state.begin_stopping(&mut msg, call_id);
         assert!(canister.system_state.try_stop_canister(|_| false).0);
     }
 
@@ -1341,8 +1349,11 @@ fn online_split() {
             .task_queue
             .enqueue(ExecutionTask::AbortedInstallCode {
                 message: CanisterCall::Request(RequestBuilder::default().build().into()),
-                call_id: InstallCodeCallId::new(3u64),
-                prepaid_execution_cycles: Cycles::new(3),
+                call_id: InstallCodeCallId::new(3_u64),
+                prepaid_execution_cycles: CompoundCycles::new(
+                    Cycles::new(3),
+                    CanisterCyclesCostSchedule::Normal,
+                ),
             });
     };
     add_aborted_install_code_task(CANISTER_1);

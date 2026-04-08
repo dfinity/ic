@@ -1,7 +1,8 @@
 use ic_base_types::{NumBytes, PrincipalIdBlobParseError};
 use ic_error_types::UserError;
 use ic_heap_bytes::DeterministicHeapBytes;
-use ic_types::{CanisterId, Cycles, DiskBytes, NumInstructions, methods::WasmMethod};
+use ic_types::{CanisterId, DiskBytes, NumInstructions, methods::WasmMethod};
+use ic_types_cycles::Cycles;
 use ic_wasm_types::{
     AsErrorHelp, ErrorHelp, WasmEngineError, WasmInstrumentationError, WasmValidationError, doc_ref,
 };

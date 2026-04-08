@@ -38,7 +38,7 @@ pub fn new_random_labeled_tree<R: rand::Rng>(
     use arbitrary::arbitrary_well_formed_mixed_hash_tree_with_params;
     use proptest::strategy::{Strategy, ValueTree};
     loop {
-        let mut seed = [0u8; 32];
+        let mut seed = [0_u8; 32];
         rng.fill_bytes(&mut seed);
         let test_rng = proptest::test_runner::TestRng::from_seed(
             proptest::test_runner::RngAlgorithm::ChaCha,
@@ -201,7 +201,7 @@ pub fn replace_random_known_with_dummy_pruned<R: rand::Rng>(
             Witness::Known() => {
                 if target_path.is_empty() {
                     *witness = Witness::Pruned {
-                        digest: Digest([0u8; 32]),
+                        digest: Digest([0_u8; 32]),
                     };
                     true
                 } else {

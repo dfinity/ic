@@ -43,10 +43,10 @@ use ic_system_test_driver::{
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::{
-    batch::CanisterCyclesCostSchedule,
     canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_REQUEST_BYTES},
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use proxy_canister::{
     RemoteHttpRequest, RemoteHttpResponse, ResponseWithRefundedCycles,
     UnvalidatedCanisterHttpRequestArgs,
@@ -2658,5 +2658,5 @@ fn expected_cycle_cost(
         subnet_size,
         CanisterCyclesCostSchedule::Normal,
     );
-    cycle_fee.get().try_into().unwrap()
+    cycle_fee.real().get().try_into().unwrap()
 }

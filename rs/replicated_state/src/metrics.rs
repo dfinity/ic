@@ -9,12 +9,10 @@ use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{
     binary_buckets_with_zero, decimal_buckets, decimal_buckets_with_zero, linear_buckets,
 };
-use ic_types::cycles_use_case::CyclesUseCase;
-use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
-    Cycles, Height, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, NumBytes,
-    NumInstructions, Time,
+    Height, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, NumBytes, NumInstructions, Time,
 };
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use prometheus::{Gauge, GaugeVec, Histogram, HistogramVec, IntGauge, IntGaugeVec};
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -306,7 +304,7 @@ impl ReplicatedStateMetrics {
         let mut num_paused_install = 0;
         let mut num_aborted_install = 0;
 
-        let mut consumed_cycles_total = NominalCycles::new(0);
+        let mut consumed_cycles_total = NominalCycles::zero();
         let mut consumed_cycles_total_by_use_case = BTreeMap::new();
 
         let mut ingress_queue_message_count = 0;
@@ -344,22 +342,22 @@ impl ReplicatedStateMetrics {
                 }
                 CanisterStatus::Stopped => num_stopped_canisters += 1,
             }
-            match canister.next_task() {
-                Some(&ExecutionTask::PausedExecution { .. }) => {
+            match canister.system_state.task_queue.paused_or_aborted_task() {
+                Some(ExecutionTask::PausedExecution { .. }) => {
                     num_paused_exec += 1;
                 }
-                Some(&ExecutionTask::PausedInstallCode(_)) => {
+                Some(ExecutionTask::PausedInstallCode(_)) => {
                     num_paused_install += 1;
                 }
-                Some(&ExecutionTask::AbortedExecution { .. }) => {
+                Some(ExecutionTask::AbortedExecution { .. }) => {
                     num_aborted_exec += 1;
                 }
-                Some(&ExecutionTask::AbortedInstallCode { .. }) => {
+                Some(ExecutionTask::AbortedInstallCode { .. }) => {
                     num_aborted_install += 1;
                 }
-                Some(&ExecutionTask::Heartbeat)
-                | Some(&ExecutionTask::GlobalTimer)
-                | Some(&ExecutionTask::OnLowWasmMemory)
+                Some(ExecutionTask::Heartbeat)
+                | Some(ExecutionTask::GlobalTimer)
+                | Some(ExecutionTask::OnLowWasmMemory)
                 | None => {}
             }
             consumed_cycles_total += canister.system_state.canister_metrics().consumed_cycles();
@@ -569,7 +567,7 @@ fn join_consumed_cycles_by_use_case(
     for (use_case, cycles) in source_map.iter() {
         *destination_map
             .entry(*use_case)
-            .or_insert_with(|| NominalCycles::from(0)) += *cycles;
+            .or_insert_with(NominalCycles::zero) += *cycles;
     }
 }
 

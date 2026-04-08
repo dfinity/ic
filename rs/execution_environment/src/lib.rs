@@ -16,6 +16,7 @@ mod types;
 pub mod units;
 pub mod util;
 
+pub use crate::ic00_permissions::Ic00MethodPermissions;
 use crate::ingress_filter::IngressFilterServiceImpl;
 pub use canister_manager::types::WasmSource;
 pub use canister_manager::wasm_execution_mode;
@@ -49,8 +50,8 @@ use ic_types::{
 pub use metrics::IngressFilterMetrics;
 pub use query_handler::{DataCertificateWithDelegationMetadata, InternalHttpQueryHandler};
 use query_handler::{HttpQueryHandler, QueryScheduler};
-pub use scheduler::RoundSchedule;
 use scheduler::SchedulerImpl;
+pub use scheduler::{RoundSchedule, SchedulerMetrics, abort_all_paused_executions};
 use std::{path::Path, sync::Arc};
 use tokio::sync::mpsc::Sender;
 
@@ -370,7 +371,6 @@ fn setup_execution_helper(
         logger.clone(),
         canister_manager_config,
         Arc::clone(&cycles_account_manager),
-        Arc::clone(&ingress_history_writer) as Arc<_>,
         Arc::clone(&fd_factory),
         config.environment_variables,
     ));

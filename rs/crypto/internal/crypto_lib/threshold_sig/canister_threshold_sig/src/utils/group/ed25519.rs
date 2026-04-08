@@ -50,7 +50,7 @@ fn hash_to_curve_ed25519(input: &[u8], dst: &[u8]) -> Point {
         let u = ic_crypto_internal_seed::xmd::<XMD_BYTES, Sha512>(input, dst);
 
         fn extended_u(u: &[u8]) -> [u8; 2 * FieldElement::BYTES] {
-            let mut ext_u = [0u8; 2 * FieldElement::BYTES];
+            let mut ext_u = [0_u8; 2 * FieldElement::BYTES];
             ext_u[WIDE_BYTES_OFFSET..].copy_from_slice(u);
             ext_u
         }
@@ -107,7 +107,7 @@ fn hash_to_curve_ed25519(input: &[u8], dst: &[u8]) -> Point {
         let e3 = tv2.ct_eq(&gx1);
         let xn = FieldElement::cmov(&x2n, &x1n, e3);
         let y = FieldElement::cmov(&y2, &y1, e3);
-        let e4 = y.sign().ct_eq(&1u8);
+        let e4 = y.sign().ct_eq(&1_u8);
         let y = FieldElement::cmov(&y, &y.negate(), e3 ^ e4);
         (xn, xd, y, FieldElement::one())
     }

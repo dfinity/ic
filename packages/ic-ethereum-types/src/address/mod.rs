@@ -48,7 +48,7 @@ impl Address {
     /// assert_eq!(address.to_string(), "0x0000000000000000000000000000000000000000");
     /// assert_eq!(address.into_bytes(), [0u8; 20]);
     /// ```
-    pub const ZERO: Self = Self([0u8; 20]);
+    pub const ZERO: Self = Self([0_u8; 20]);
 
     /// Create a new Ethereum address from raw bytes.
     pub const fn new(bytes: [u8; 20]) -> Self {
@@ -108,7 +108,7 @@ impl FromStr for Address {
         if !s.starts_with("0x") {
             return Err("address doesn't start with '0x'".to_string());
         }
-        let mut bytes = [0u8; 20];
+        let mut bytes = [0_u8; 20];
         hex::decode_to_slice(&s[2..], &mut bytes)
             .map_err(|e| format!("address is not hex: {e}"))?;
         Ok(Self(bytes))
@@ -124,12 +124,12 @@ impl fmt::Debug for Address {
 /// Display address using [EIP-55](https://eips.ethereum.org/EIPS/eip-55).
 impl fmt::Display for Address {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut addr_chars = [0u8; 20 * 2];
+        let mut addr_chars = [0_u8; 20 * 2];
         hex::encode_to_slice(self.0, &mut addr_chars)
             .expect("bug: failed to encode an address as hex");
 
         let checksum = keccak(&addr_chars[..]);
-        let mut cs_nibbles = [0u8; 32 * 2];
+        let mut cs_nibbles = [0_u8; 32 * 2];
         for i in 0..32 {
             cs_nibbles[2 * i] = checksum[i] >> 4;
             cs_nibbles[2 * i + 1] = checksum[i] & 0x0f;

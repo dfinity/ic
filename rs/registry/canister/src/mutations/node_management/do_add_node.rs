@@ -604,7 +604,7 @@ mod tests {
             connection_endpoint_from_string("192.168.1.3:8080"),
             ConnectionEndpoint {
                 ip_addr: "192.168.1.3".to_string(),
-                port: 8080u32,
+                port: 8080_u32,
             }
         );
     }
@@ -621,7 +621,7 @@ mod tests {
             connection_endpoint_from_string("[fe80::1]:80"),
             ConnectionEndpoint {
                 ip_addr: "fe80::1".to_string(),
-                port: 80u32,
+                port: 80_u32,
             }
         );
     }
@@ -1504,7 +1504,7 @@ mod tests {
 
         let (mut payload, _) = prepare_add_node_payload(1, NodeRewardType::Type1);
         // Create attestation with a DIFFERENT node_signing_pk than what's in the payload
-        let wrong_node_signing_pk = vec![0u8; payload.node_signing_pk.len()];
+        let wrong_node_signing_pk = vec![0_u8; payload.node_signing_pk.len()];
         payload.node_registration_attestation = Some(create_mock_sev_attestation_package(
             &wrong_node_signing_pk,
             SEV_TEST_MEASUREMENT,

@@ -21,13 +21,13 @@ use ic_test_utilities_types::ids::{
     call_context_test_id, canister_test_id, subnet_test_id, user_test_id,
 };
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
-use ic_types::batch::CanisterCyclesCostSchedule;
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::messages::{CanisterMessage, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE};
 use ic_types::methods::{Callback, WasmClosure};
-use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::UNIX_EPOCH;
-use ic_types::{ComputeAllocation, Cycles, NumInstructions};
+use ic_types::{ComputeAllocation, NumInstructions};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, NominalCycles,
+};
 use prometheus::IntCounter;
 use std::collections::BTreeSet;
 use std::convert::From;
@@ -51,11 +51,13 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
         .with_max_num_instructions(MAX_NUM_INSTRUCTIONS)
         .build();
 
-    let request_payload_cost = cycles_account_manager.xnet_call_bytes_transmitted_fee(
-        request.payload_size_bytes(),
-        SMALL_APP_SUBNET_MAX_SIZE,
-        CanisterCyclesCostSchedule::Normal,
-    );
+    let request_payload_cost = cycles_account_manager
+        .xnet_call_bytes_transmitted_fee(
+            request.payload_size_bytes(),
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+        )
+        .real();
 
     // Set cycles balance low enough that not even the cost for transferring
     // the request is covered.
@@ -84,8 +86,8 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
             NumBytes::from(0),
             MessageMemoryUsage::ZERO,
             request.clone(),
-            Cycles::zero(),
-            Cycles::zero(),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
         ),
         Err(request)
     );
@@ -101,15 +103,19 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
         .with_max_num_instructions(MAX_NUM_INSTRUCTIONS)
         .build();
 
-    let xnet_cost = cycles_account_manager.xnet_call_performed_fee(
-        SMALL_APP_SUBNET_MAX_SIZE,
-        CanisterCyclesCostSchedule::Normal,
-    );
-    let request_payload_cost = cycles_account_manager.xnet_call_bytes_transmitted_fee(
-        request.payload_size_bytes(),
-        SMALL_APP_SUBNET_MAX_SIZE,
-        CanisterCyclesCostSchedule::Normal,
-    );
+    let xnet_cost = cycles_account_manager
+        .xnet_call_performed_fee(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+        )
+        .real();
+    let request_payload_cost = cycles_account_manager
+        .xnet_call_bytes_transmitted_fee(
+            request.payload_size_bytes(),
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+        )
+        .real();
     let prepayment_for_response_execution = cycles_account_manager
         .prepayment_for_response_execution(
             SMALL_APP_SUBNET_MAX_SIZE,
@@ -123,8 +129,8 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
         );
     let total_cost = xnet_cost
         + request_payload_cost
-        + prepayment_for_response_execution
-        + prepayment_for_response_transmission;
+        + prepayment_for_response_execution.real()
+        + prepayment_for_response_transmission.real();
 
     // Set cycles balance to a number that is enough to cover for the request
     // transfer but not to cover the cost of processing the expected response.
@@ -246,13 +252,16 @@ fn correct_charging_source_canister_for_a_request() {
         CanisterCyclesCostSchedule::Normal,
     );
 
-    let xnet_cost =
-        cycles_account_manager.xnet_call_performed_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule);
-    let request_payload_cost = cycles_account_manager.xnet_call_bytes_transmitted_fee(
-        request.payload_size_bytes(),
-        SMALL_APP_SUBNET_MAX_SIZE,
-        cost_schedule,
-    );
+    let xnet_cost = cycles_account_manager
+        .xnet_call_performed_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
+        .real();
+    let request_payload_cost = cycles_account_manager
+        .xnet_call_bytes_transmitted_fee(
+            request.payload_size_bytes(),
+            SMALL_APP_SUBNET_MAX_SIZE,
+            cost_schedule,
+        )
+        .real();
     let prepayment_for_response_execution = cycles_account_manager
         .prepayment_for_response_execution(
             SMALL_APP_SUBNET_MAX_SIZE,
@@ -263,8 +272,8 @@ fn correct_charging_source_canister_for_a_request() {
         .prepayment_for_response_transmission(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule);
     let total_cost = xnet_cost
         + request_payload_cost
-        + prepayment_for_response_execution
-        + prepayment_for_response_transmission;
+        + prepayment_for_response_execution.real()
+        + prepayment_for_response_transmission.real();
 
     // Enqueue the Request.
     sandbox_safe_system_state
@@ -308,17 +317,19 @@ fn correct_charging_source_canister_for_a_request() {
         cost_schedule,
     );
 
-    system_state.add_cycles(refund_cycles, CyclesUseCase::RequestAndResponseTransmission);
+    system_state.refund_cycles(prepayment_for_response_transmission, refund_cycles);
 
     // MAX_NUM_INSTRUCTIONS also gets partially refunded in the real
     // ExecutionEnvironmentImpl::execute_canister_response()
     assert_eq!(
         initial_cycles_balance - total_cost
-            + cycles_account_manager.xnet_call_bytes_transmitted_fee(
-                MAX_INTER_CANISTER_PAYLOAD_IN_BYTES - response.payload_size_bytes(),
-                SMALL_APP_SUBNET_MAX_SIZE,
-                cost_schedule,
-            ),
+            + cycles_account_manager
+                .xnet_call_bytes_transmitted_fee(
+                    MAX_INTER_CANISTER_PAYLOAD_IN_BYTES - response.payload_size_bytes(),
+                    SMALL_APP_SUBNET_MAX_SIZE,
+                    cost_schedule,
+                )
+                .real(),
         system_state.balance()
     );
 }
@@ -329,7 +340,7 @@ fn handle_heap_cycles<T>(
     slf: T,
     f: &dyn Fn(T, usize, &mut [u8]) -> HypervisorResult<()>,
 ) -> HypervisorResult<Cycles> {
-    let mut res = [0u8; 16];
+    let mut res = [0_u8; 16];
     f(slf, 0, &mut res)?;
     Ok(Cycles::new(u128::from_le_bytes(res)))
 }
@@ -342,7 +353,7 @@ fn handle_heap_cycles_1<T, A>(
     a: A,
     f: &dyn Fn(T, A, usize, &mut [u8]) -> HypervisorResult<()>,
 ) -> HypervisorResult<Cycles> {
-    let mut res = [0u8; 16];
+    let mut res = [0_u8; 16];
     f(slf, a, 0, &mut res)?;
     Ok(Cycles::new(u128::from_le_bytes(res)))
 }
@@ -384,10 +395,7 @@ fn mint_cycles_large_value() {
         .canister_id(CYCLES_MINTING_CANISTER_ID)
         .build();
 
-    system_state.add_cycles(
-        Cycles::from(1_000_000_000_000_000_u128),
-        CyclesUseCase::NonConsumed,
-    );
+    system_state.add_cycles(Cycles::from(1_000_000_000_000_000_u128));
 
     let api_type = ApiTypeBuilder::build_update_api();
     let mut api = get_system_api(api_type, &system_state, cycles_account_manager);
@@ -522,7 +530,7 @@ fn call_increases_cycles_consumed_metric() {
             .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::RequestAndResponseTransmission)
             .unwrap(),
-        NominalCycles::from(0)
+        NominalCycles::zero()
     );
 }
 

@@ -8,7 +8,8 @@ use ic_protobuf::{
 use ic_types::{
     NumBytes,
     batch::{
-        CanisterHttpPayload, FlexibleCanisterHttpResponses, iterator_to_bytes, slice_to_messages,
+        CanisterHttpPayload, FlexibleCanisterHttpError, FlexibleCanisterHttpResponses,
+        iterator_to_bytes, slice_to_messages,
     },
     messages::CallbackId,
 };
@@ -29,6 +30,9 @@ pub(crate) fn bytes_to_payload(data: &[u8]) -> Result<CanisterHttpPayload, Proxy
             Some(MessageType::FlexibleResponses(flex_responses)) => payload
                 .flexible_responses
                 .push(FlexibleCanisterHttpResponses::try_from(flex_responses)?),
+            Some(MessageType::FlexibleError(flex_error)) => payload
+                .flexible_errors
+                .push(FlexibleCanisterHttpError::try_from(flex_error)?),
             None => return Err(ProxyDecodeError::MissingField("message_type")),
         }
     }
@@ -42,6 +46,7 @@ pub(crate) fn payload_to_bytes(payload: CanisterHttpPayload, max_size: NumBytes)
         divergence_responses,
         responses,
         flexible_responses,
+        flexible_errors,
     } = payload;
 
     let message_iterator =
@@ -74,7 +79,16 @@ pub(crate) fn payload_to_bytes(payload: CanisterHttpPayload, max_size: NumBytes)
                         pb::FlexibleCanisterHttpResponses::from(flex_responses),
                     )),
                 }
-            }));
+            }))
+            .chain(
+                flexible_errors
+                    .into_iter()
+                    .map(|flex_error| CanisterHttpResponseMessage {
+                        message_type: Some(MessageType::FlexibleError(
+                            pb::FlexibleCanisterHttpError::from(flex_error),
+                        )),
+                    }),
+            );
 
     iterator_to_bytes(message_iterator, max_size)
 }
@@ -114,6 +128,7 @@ fn get_id_from_message(message: CanisterHttpResponseMessage) -> Option<u64> {
             .first()
             .and_then(|share| share.metadata.as_ref().map(|md| md.id)),
         Some(MessageType::FlexibleResponses(flex_responses)) => Some(flex_responses.callback_id),
+        Some(MessageType::FlexibleError(flex_error)) => Some(flex_error.callback_id),
         Some(MessageType::Timeout(id)) => Some(id),
         None => None,
     }

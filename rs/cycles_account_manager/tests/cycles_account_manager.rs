@@ -18,13 +18,14 @@ use ic_test_utilities_types::{
     ids::{canister_test_id, user_test_id},
     messages::{RequestBuilder, SignedIngressBuilder},
 };
-use ic_types::cycles_use_case::CyclesUseCase;
 use ic_types::{
-    ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-    batch::CanisterCyclesCostSchedule,
+    ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
     messages::{SignedIngress, extract_effective_canister_id},
-    nominal_cycles::NominalCycles,
     time::{CoarseTime, UNIX_EPOCH},
+};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, Instructions, Memory, NominalCycles,
+    NominalCyclesTesting, Uninstall,
 };
 use prometheus::IntCounter;
 use std::{convert::TryFrom, time::Duration};
@@ -43,7 +44,7 @@ fn xnet_call_total_fee_free() {
             NumBytes::new(9999),
             WasmExecutionMode::Wasm32,
             cost_schedule
-        )
+        ),
     );
 }
 
@@ -84,21 +85,19 @@ fn test_can_charge_application_subnets() {
                     );
 
                     let memory = memory_allocation.allocated_bytes(canister.memory_usage());
-                    let expected_fee = cycles_account_manager.compute_allocation_cost(
-                        compute_allocation,
-                        duration,
-                        subnet_size,
-                        cost_schedule,
-                    ) + cycles_account_manager.memory_cost(
-                        memory,
-                        duration,
-                        subnet_size,
-                        cost_schedule,
-                    );
+                    let expected_fee = cycles_account_manager
+                        .compute_allocation_cost(
+                            compute_allocation,
+                            duration,
+                            subnet_size,
+                            cost_schedule,
+                        )
+                        .real()
+                        + cycles_account_manager
+                            .memory_cost(memory, duration, subnet_size, cost_schedule)
+                            .real();
                     let initial_cycles = expected_fee;
-                    canister
-                        .system_state
-                        .add_cycles(initial_cycles, CyclesUseCase::NonConsumed);
+                    canister.system_state.add_cycles(initial_cycles);
                     assert_eq!(canister.system_state.balance(), initial_cycles);
                     cycles_account_manager
                         .charge_canister_for_resource_allocation_and_usage(
@@ -390,10 +389,12 @@ fn ingress_induction_cost_valid_subnet_message() {
         let num_bytes = msg.binary().len();
 
         let cost = cycles_account_manager
-            .ingress_message_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
-            + cycles_account_manager
-                .ingress_byte_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
-                * num_bytes;
+            .ingress_induction_cost_from_bytes(
+                NumBytes::from(num_bytes as u64),
+                SMALL_APP_SUBNET_MAX_SIZE,
+                cost_schedule,
+            )
+            .real();
         if let CanisterCyclesCostSchedule::Free = cost_schedule {
             assert_eq!(cost, Cycles::new(0));
         }
@@ -526,12 +527,9 @@ fn charge_canister_for_memory_usage() {
         let memory_usage = MEMORY_ALLOCATION + message_memory_usage.total();
         let cycles_burned = INITIAL_BALANCE - canister.system_state.balance();
         assert_eq!(
-            cycles_account_manager.memory_cost(
-                memory_usage,
-                HOUR,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                cost_schedule
-            ),
+            cycles_account_manager
+                .memory_cost(memory_usage, HOUR, SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
+                .real(),
             cycles_burned
         )
     })
@@ -589,12 +587,9 @@ fn do_not_charge_canister_for_memory_usage_free_schedule() {
         let cycles_burned = INITIAL_BALANCE - canister.system_state.balance();
         assert_eq!(cycles_burned, Cycles::new(0));
         assert_eq!(
-            cycles_account_manager.memory_cost(
-                memory_usage,
-                HOUR,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                cost_schedule
-            ),
+            cycles_account_manager
+                .memory_cost(memory_usage, HOUR, SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
+                .real(),
             cycles_burned
         )
     })
@@ -643,12 +638,14 @@ fn do_not_charge_canister_for_compute_allocation_free_schedule() {
             )
             .unwrap();
 
-        let expected_fee = cycles_account_manager.compute_allocation_cost(
-            compute_allocation,
-            HOUR,
-            SMALL_APP_SUBNET_MAX_SIZE,
-            cost_schedule,
-        );
+        let expected_fee = cycles_account_manager
+            .compute_allocation_cost(
+                compute_allocation,
+                HOUR,
+                SMALL_APP_SUBNET_MAX_SIZE,
+                cost_schedule,
+            )
+            .real();
         assert_eq!(expected_fee, Cycles::zero());
 
         let cycles_burned = canister.system_state.balance();
@@ -761,11 +758,9 @@ fn test_consume_with_threshold() {
         cycles_account_manager
             .consume_with_threshold(
                 &mut system_state,
-                Cycles::zero(),
+                CompoundCycles::<Memory>::new(Cycles::zero(), cost_schedule),
                 threshold,
-                CyclesUseCase::Memory,
                 false,
-                cost_schedule,
             )
             .is_ok()
     );
@@ -774,20 +769,13 @@ fn test_consume_with_threshold() {
 
     // u128::MAX == 2 * i128::MAX + 1
     // withdraw i128::MAX and verify correctness
-    let amount = Cycles::from(i128::MAX as u128);
+    let amount = CompoundCycles::<Memory>::new(Cycles::from(i128::MAX as u128), cost_schedule);
     assert!(
         cycles_account_manager
-            .consume_with_threshold(
-                &mut system_state,
-                amount,
-                threshold,
-                CyclesUseCase::Memory,
-                false,
-                cost_schedule,
-            )
+            .consume_with_threshold(&mut system_state, amount, threshold, false)
             .is_ok()
     );
-    cycles_balance_expected -= amount;
+    cycles_balance_expected -= amount.real();
     assert_eq!(
         system_state.balance(),
         Cycles::from(i128::MAX as u128) + Cycles::new(1)
@@ -795,48 +783,27 @@ fn test_consume_with_threshold() {
 
     assert!(
         cycles_account_manager
-            .consume_with_threshold(
-                &mut system_state,
-                amount,
-                threshold,
-                CyclesUseCase::Memory,
-                false,
-                cost_schedule,
-            )
+            .consume_with_threshold(&mut system_state, amount, threshold, false)
             .is_ok()
     );
-    cycles_balance_expected -= amount;
+    cycles_balance_expected -= amount.real();
     assert_eq!(system_state.balance(), Cycles::new(1));
 
-    let amount = Cycles::new(1);
+    let amount = CompoundCycles::<Memory>::new(Cycles::new(1), cost_schedule);
     assert!(
         cycles_account_manager
-            .consume_with_threshold(
-                &mut system_state,
-                amount,
-                threshold,
-                CyclesUseCase::Memory,
-                false,
-                cost_schedule,
-            )
+            .consume_with_threshold(&mut system_state, amount, threshold, false)
             .is_ok()
     );
-    cycles_balance_expected -= amount;
+    cycles_balance_expected -= amount.real();
     assert_eq!(system_state.balance(), Cycles::zero());
 
     assert!(
         cycles_account_manager
-            .consume_with_threshold(
-                &mut system_state,
-                amount,
-                threshold,
-                CyclesUseCase::Memory,
-                false,
-                cost_schedule,
-            )
+            .consume_with_threshold(&mut system_state, amount, threshold, false)
             .is_err()
     );
-    cycles_balance_expected -= amount;
+    cycles_balance_expected -= amount.real();
     assert_eq!(system_state.balance(), Cycles::zero());
 }
 
@@ -873,7 +840,8 @@ fn cycles_withdraw_for_execution() {
         system_state.reserved_balance(),
     );
 
-    let amount = Cycles::from(initial_amount / 2);
+    let amount =
+        CompoundCycles::<Instructions>::new(Cycles::from(initial_amount / 2), cost_schedule);
     assert!(
         cycles_account_manager
             .consume_cycles(
@@ -883,12 +851,11 @@ fn cycles_withdraw_for_execution() {
                 amount,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
-                CyclesUseCase::Instructions,
                 false,
             )
             .is_ok()
     );
-    assert_eq!(system_state.balance(), initial_cycles - amount);
+    assert_eq!(system_state.balance(), initial_cycles - amount.real());
     assert!(
         cycles_account_manager
             .consume_cycles(
@@ -898,13 +865,14 @@ fn cycles_withdraw_for_execution() {
                 amount,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
-                CyclesUseCase::Instructions,
                 false,
             )
             .is_err()
     );
 
     let exec_cycles_max = system_state.balance() - freeze_threshold_cycles;
+    let compound_exec_cycles_max =
+        CompoundCycles::<Instructions>::new(exec_cycles_max, cost_schedule);
 
     assert!(
         cycles_account_manager
@@ -926,10 +894,9 @@ fn cycles_withdraw_for_execution() {
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
-                exec_cycles_max,
+                compound_exec_cycles_max,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
-                CyclesUseCase::Instructions,
                 false,
             )
             .is_ok()
@@ -962,10 +929,9 @@ fn cycles_withdraw_for_execution() {
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
-                exec_cycles_max,
+                compound_exec_cycles_max,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
-                CyclesUseCase::Instructions,
                 false,
             )
             .is_err()
@@ -976,10 +942,9 @@ fn cycles_withdraw_for_execution() {
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
-                Cycles::new(10),
+                CompoundCycles::<Instructions>::new(Cycles::new(10), cost_schedule),
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
-                CyclesUseCase::Instructions,
                 false,
             )
             .is_err()
@@ -990,10 +955,9 @@ fn cycles_withdraw_for_execution() {
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
-                Cycles::new(1),
+                CompoundCycles::<Instructions>::new(Cycles::new(1), cost_schedule),
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
-                CyclesUseCase::Instructions,
                 false,
             )
             .is_err()
@@ -1004,10 +968,9 @@ fn cycles_withdraw_for_execution() {
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
-                Cycles::zero(),
+                CompoundCycles::<Instructions>::new(Cycles::zero(), cost_schedule),
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
-                CyclesUseCase::Instructions,
                 false,
             )
             .is_ok()
@@ -1048,7 +1011,8 @@ fn do_not_withdraw_cycles_for_execution_free_schedule() {
         system_state.reserved_balance(),
     );
 
-    let amount = Cycles::from(initial_amount / 2);
+    let amount =
+        CompoundCycles::<Instructions>::new(Cycles::from(initial_amount / 2), cost_schedule);
     assert!(
         cycles_account_manager
             .consume_cycles(
@@ -1058,7 +1022,6 @@ fn do_not_withdraw_cycles_for_execution_free_schedule() {
                 amount,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
-                CyclesUseCase::Instructions,
                 false,
             )
             .is_ok()
@@ -1154,10 +1117,9 @@ fn consume_cycles_updates_consumed_cycles() {
             &mut system_state,
             NumBytes::from(0),
             MessageMemoryUsage::ZERO,
-            Cycles::new(1_000_000),
+            CompoundCycles::<Memory>::new(Cycles::new(1_000_000), cost_schedule),
             SMALL_APP_SUBNET_MAX_SIZE,
             cost_schedule,
-            CyclesUseCase::Memory,
             false,
         )
         .unwrap();
@@ -1165,7 +1127,7 @@ fn consume_cycles_updates_consumed_cycles() {
 
     assert_eq!(
         consumed_cycles_after - consumed_cycles_before,
-        NominalCycles::from(1_000_000)
+        NominalCycles::new(1_000_000)
     );
 }
 
@@ -1178,15 +1140,13 @@ fn consume_cycles_for_memory_drains_reserved_balance() {
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(Cycles::zero())
         .build();
-    system_state.add_cycles(Cycles::new(4_000_000), CyclesUseCase::NonConsumed);
+    system_state.add_cycles(Cycles::new(4_000_000));
     system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
     cam.consume_with_threshold(
         &mut system_state,
-        Cycles::new(2_000_000),
+        CompoundCycles::<Memory>::new(Cycles::new(2_000_000), cost_schedule),
         Cycles::new(0),
-        CyclesUseCase::Memory,
         false,
-        cost_schedule,
     )
     .unwrap();
     assert_eq!(system_state.reserved_balance(), Cycles::new(0));
@@ -1202,15 +1162,16 @@ fn consume_cycles_for_compute_drains_reserved_balance() {
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(Cycles::zero())
         .build();
-    system_state.add_cycles(Cycles::new(4_000_000), CyclesUseCase::NonConsumed);
+    system_state.add_cycles(Cycles::new(4_000_000));
     system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
     cam.consume_with_threshold(
         &mut system_state,
-        Cycles::new(2_000_000),
+        CompoundCycles::<ic_types_cycles::ComputeAllocation>::new(
+            Cycles::new(2_000_000),
+            cost_schedule,
+        ),
         Cycles::new(0),
-        CyclesUseCase::ComputeAllocation,
         false,
-        cost_schedule,
     )
     .unwrap();
     assert_eq!(system_state.reserved_balance(), Cycles::new(0));
@@ -1226,15 +1187,13 @@ fn consume_cycles_for_uninstall_drains_reserved_balance() {
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(Cycles::zero())
         .build();
-    system_state.add_cycles(Cycles::new(4_000_000), CyclesUseCase::NonConsumed);
+    system_state.add_cycles(Cycles::new(4_000_000));
     system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
     cam.consume_with_threshold(
         &mut system_state,
-        Cycles::new(2_000_000),
+        CompoundCycles::<Uninstall>::new(Cycles::new(2_000_000), cost_schedule),
         Cycles::new(0),
-        CyclesUseCase::Uninstall,
         false,
-        cost_schedule,
     )
     .unwrap();
     assert_eq!(system_state.reserved_balance(), Cycles::new(0));
@@ -1250,15 +1209,13 @@ fn consume_cycles_for_execution_does_not_drain_reserved_balance() {
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(Cycles::zero())
         .build();
-    system_state.add_cycles(Cycles::new(4_000_000), CyclesUseCase::NonConsumed);
+    system_state.add_cycles(Cycles::new(4_000_000));
     system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
     cam.consume_with_threshold(
         &mut system_state,
-        Cycles::new(2_000_000),
+        CompoundCycles::<Instructions>::new(Cycles::new(2_000_000), cost_schedule),
         Cycles::new(0),
-        CyclesUseCase::Instructions,
         false,
-        cost_schedule,
     )
     .unwrap();
     assert_eq!(system_state.reserved_balance(), Cycles::new(1_000_000));
@@ -1394,6 +1351,7 @@ fn test_storage_reservation_cycles() {
             SMALL_APP_SUBNET_MAX_SIZE,
             cost_schedule,
         )
+        .real()
     );
 
     // Allocation of 101GB at (usage=0GB, threshold=100GB, capacity=200GB).
@@ -1415,6 +1373,7 @@ fn test_storage_reservation_cycles() {
             SMALL_APP_SUBNET_MAX_SIZE,
             cost_schedule,
         )
+        .real()
     );
 
     // Allocation of 40GB at (usage=90GB, threshold=100GB, capacity=200GB).
@@ -1438,6 +1397,7 @@ fn test_storage_reservation_cycles() {
             SMALL_APP_SUBNET_MAX_SIZE,
             cost_schedule,
         )
+        .real()
     );
 
     // Allocation of 40GB at (usage=100GB, threshold=100GB, capacity=200GB).
@@ -1461,6 +1421,7 @@ fn test_storage_reservation_cycles() {
             SMALL_APP_SUBNET_MAX_SIZE,
             cost_schedule,
         )
+        .real()
     );
 
     // Allocation of 40GB at (usage=160GB, threshold=100GB, capacity=200GB).
@@ -1482,6 +1443,7 @@ fn test_storage_reservation_cycles() {
             SMALL_APP_SUBNET_MAX_SIZE,
             cost_schedule,
         )
+        .real()
     );
 
     // The total reserved cycles of small allocations should match that of one
@@ -1490,12 +1452,15 @@ fn test_storage_reservation_cycles() {
     let mut total = Cycles::zero();
     let mut rs = rs0.clone();
     for _ in 0..1000 {
-        total += cam.storage_reservation_cycles(NumBytes::new(GB), &rs, 13, cost_schedule);
+        total += cam
+            .storage_reservation_cycles(NumBytes::new(GB), &rs, 13, cost_schedule)
+            .real();
         rs = rs.add(GB);
     }
     assert_eq!(
         total,
         cam.storage_reservation_cycles(NumBytes::new(1000 * GB), &rs0, 13, cost_schedule)
+            .real()
     )
 }
 
@@ -1515,6 +1480,7 @@ fn test_storage_reservation_cycles_free() {
             SMALL_APP_SUBNET_MAX_SIZE,
             cost_schedule,
         )
+        .real()
     );
 
     // Allocation of 101GB at (usage=0GB, threshold=100GB, capacity=200GB).
@@ -1526,6 +1492,7 @@ fn test_storage_reservation_cycles_free() {
             SMALL_APP_SUBNET_MAX_SIZE,
             cost_schedule,
         )
+        .real()
     );
 
     // Allocation of 40GB at (usage=90GB, threshold=100GB, capacity=200GB).
@@ -1537,6 +1504,7 @@ fn test_storage_reservation_cycles_free() {
             SMALL_APP_SUBNET_MAX_SIZE,
             cost_schedule,
         )
+        .real()
     );
 
     // Allocation of 40GB at (usage=100GB, threshold=100GB, capacity=200GB).
@@ -1548,6 +1516,7 @@ fn test_storage_reservation_cycles_free() {
             SMALL_APP_SUBNET_MAX_SIZE,
             cost_schedule,
         )
+        .real()
     );
 
     // Allocation of 40GB at (usage=160GB, threshold=100GB, capacity=200GB).
@@ -1559,5 +1528,6 @@ fn test_storage_reservation_cycles_free() {
             SMALL_APP_SUBNET_MAX_SIZE,
             cost_schedule,
         )
+        .real()
     );
 }

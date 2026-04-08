@@ -1,4 +1,5 @@
-use ic_types::{CanisterId, Cycles};
+use ic_types::CanisterId;
+use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
 
 /// Errors returned by the [`CyclesAccountManager`].

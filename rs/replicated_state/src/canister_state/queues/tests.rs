@@ -12,9 +12,10 @@ use ic_test_utilities_state::arb_num_receivers;
 use ic_test_utilities_types::arbitrary;
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
+use ic_types::UserId;
 use ic_types::messages::{CallbackId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, NO_DEADLINE};
 use ic_types::time::{CoarseTime, UNIX_EPOCH, expiry_time_from_now};
-use ic_types::{Cycles, UserId};
+use ic_types_cycles::Cycles;
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::cell::RefCell;
@@ -918,6 +919,7 @@ fn test_message_picking_ingress_only() {
             method_payload: vec![i as u8],
             message_id: message_test_id(555),
             expiry_time: expiry_time_from_now(),
+            sender_info: None,
         });
     }
 
@@ -1115,6 +1117,7 @@ fn test_message_picking_round_robin() {
         method_payload: Vec::new(),
         message_id: message_test_id(555),
         expiry_time: expiry_time_from_now(),
+        sender_info: None,
     });
 
     // POPPING
@@ -1296,6 +1299,7 @@ fn test_peek_input_round_robin() {
         effective_canister_id: None,
         message_id: message_test_id(555),
         expiry_time: expiry_time_from_now(),
+        sender_info: None,
     };
     queues.push_ingress(ingress.clone());
 
@@ -1368,6 +1372,7 @@ fn test_skip_input_round_robin() {
         effective_canister_id: None,
         message_id: message_test_id(555),
         expiry_time: expiry_time_from_now(),
+        sender_info: None,
     };
     queues.push_ingress(ingress.clone());
     let ingress_input = CanisterInput::Ingress(Arc::new(ingress));

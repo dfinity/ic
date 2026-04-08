@@ -147,7 +147,7 @@ pub struct Refund {
     pub amount: Cycles,
 }
 
-/// Canonical representation of `ic_types::funds::Cycles`.
+/// Canonical representation of `ic_types_cycles::Cycles`.
 #[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Cycles {
@@ -591,8 +591,10 @@ impl TryFrom<Refund> for ic_types::messages::Refund {
     }
 }
 
-impl From<(&ic_types::Cycles, CertificationVersion)> for Cycles {
-    fn from((cycles, _certification_version): (&ic_types::Cycles, CertificationVersion)) -> Self {
+impl From<(&ic_types_cycles::Cycles, CertificationVersion)> for Cycles {
+    fn from(
+        (cycles, _certification_version): (&ic_types_cycles::Cycles, CertificationVersion),
+    ) -> Self {
         let (high, low) = cycles.into_parts();
         Self {
             low,
@@ -605,7 +607,7 @@ impl From<(&ic_types::Cycles, CertificationVersion)> for Cycles {
     }
 }
 
-impl TryFrom<Cycles> for ic_types::Cycles {
+impl TryFrom<Cycles> for ic_types_cycles::Cycles {
     type Error = ProxyDecodeError;
 
     fn try_from(cycles: Cycles) -> Result<Self, Self::Error> {

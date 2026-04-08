@@ -3,6 +3,7 @@ use prometheus::{GaugeVec, Opts, Registry};
 use regex::Regex;
 use std::fmt;
 use std::fs;
+use tracing::{info, warn};
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum HardwareGen {
@@ -34,11 +35,11 @@ fn parse_hardware_gen(cpu_model_line: &str) -> Result<HardwareGen> {
         .with_context(|| format!("Could not parse AMD EPYC model number: {cpu_model_line}"))?;
     let epyc_model_number = epyc_model_number.as_str();
 
-    match epyc_model_number.chars().last() {
+    match epyc_model_number.chars().rfind(|c| c.is_ascii_digit()) {
         Some('2') => Ok(HardwareGen::Gen1),
-        Some('3') => Ok(HardwareGen::Gen2),
+        Some('3' | '4' | '5') => Ok(HardwareGen::Gen2),
         Some(_) => {
-            eprintln!("CPU model other than EPYC Rome or Milan: {cpu_model_line}");
+            warn!("CPU model other than EPYC Rome, Milan, Genoa or Turin: {cpu_model_line}");
             Ok(HardwareGen::Unknown)
         }
         None => Err(anyhow!(
@@ -59,7 +60,7 @@ fn get_cpu_model_string() -> Result<String> {
 
 fn get_node_gen() -> Result<HardwareGen> {
     let cpu_model_line = get_cpu_model_string()?;
-    println!("Found CPU model: {cpu_model_line}");
+    info!("Found CPU model: {cpu_model_line}");
     parse_hardware_gen(&cpu_model_line)
 }
 
@@ -78,13 +79,13 @@ pub fn get_node_gen_registry() -> Registry {
     let node_gen = match get_node_gen() {
         Ok(node_gen) => node_gen,
         Err(e) => {
-            eprintln!("Error getting node gen: {e}");
+            warn!("Error getting node gen: {e}");
             HardwareGen::Unknown
         }
     };
 
     let gen_string = node_gen.to_string();
-    println!("Determined node generation: {gen_string}");
+    info!("Determined node generation: {gen_string}");
 
     let metric_value = match node_gen {
         HardwareGen::Unknown => 0.0,
@@ -119,6 +120,10 @@ pub mod tests {
         );
         assert_eq!(
             parse_hardware_gen("model name      : AMD EPYC 7543 32-Core Processor").unwrap(),
+            HardwareGen::Gen2
+        );
+        assert_eq!(
+            parse_hardware_gen("model name      : AMD EPYC 9374F 32-Core Processor").unwrap(),
             HardwareGen::Gen2
         );
         assert!(

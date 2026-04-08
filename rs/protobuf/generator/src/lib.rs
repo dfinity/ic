@@ -198,6 +198,10 @@ fn build_registry_proto(def: &Path, out: &Path) {
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
     config.type_attribute(
+        ".registry.node.v1.NodeRewardType",
+        "#[derive(strum::EnumIter)]",
+    );
+    config.type_attribute(
         ".registry.firewall",
         "#[derive(candid::CandidType, serde::Serialize, serde::Deserialize)]",
     );
@@ -215,6 +219,10 @@ fn build_registry_proto(def: &Path, out: &Path) {
     );
     config.type_attribute(
         ".registry.subnet.v1.SubnetFeatures",
+        "#[derive(candid::CandidType, Eq)]",
+    );
+    config.type_attribute(
+        ".registry.subnet.v1.ResourceLimits",
         "#[derive(candid::CandidType, Eq)]",
     );
     config.type_attribute(

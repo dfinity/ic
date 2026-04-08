@@ -3713,6 +3713,7 @@ dependencies = [
  "hashlink 0.8.3",
  "hex",
  "hex-literal 0.4.1",
+ "hickory-resolver",
  "hkdf",
  "hmac",
  "hpke",
@@ -3809,7 +3810,6 @@ dependencies = [
  "nix 0.24.3",
  "num-bigint 0.4.6",
  "num-bigint-dig 0.9.1",
- "num-rational 0.2.4",
  "num-traits",
  "num_cpus",
  "object 0.37.3",
@@ -3961,6 +3961,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-flame",
+ "tracing-journald",
  "tracing-opentelemetry 0.28.0",
  "tracing-serde 0.1.3",
  "tracing-slog",
@@ -3983,6 +3984,7 @@ dependencies = [
  "wasmtime",
  "wast",
  "wat",
+ "webpki-roots 1.0.6",
  "which",
  "wirm",
  "wsl",
@@ -5870,7 +5872,7 @@ dependencies = [
  "tokio",
  "tokio-rustls 0.26.0",
  "tower-service",
- "webpki-roots 1.0.2",
+ "webpki-roots 1.0.6",
 ]
 
 [[package]]
@@ -6122,9 +6124,9 @@ dependencies = [
 
 [[package]]
 name = "ic-btc-interface"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4209c650d166815b01336cbbab6310f44895a0fa6571a952b6a84097e5fd87ae"
+checksum = "7b07cca9319498684a7477a77a66d87377ecd698b5465a3b8523484fcca16bff"
 dependencies = [
  "candid",
  "datasize",
@@ -6382,9 +6384,9 @@ dependencies = [
 
 [[package]]
 name = "ic-doge-interface"
-version = "0.1.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b36c851b8fc6ec45666e3a912c8b22878e4f12f6d1d9f7033a153c7684903829"
+checksum = "b6d9bf312c324521ce174560c002e90aef179bf16befb46c62bdffbccff8f14b"
 dependencies = [
  "candid",
  "datasize",
@@ -8762,7 +8764,7 @@ dependencies = [
  "num-complex",
  "num-integer",
  "num-iter",
- "num-rational 0.4.2",
+ "num-rational",
  "num-traits",
 ]
 
@@ -8867,18 +8869,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1429034a0490724d0075ebb2bc9e875d6503c3cf69e235a8941aa757d83ef5bf"
 dependencies = [
  "autocfg 1.5.0",
- "num-integer",
- "num-traits",
-]
-
-[[package]]
-name = "num-rational"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c000134b5dbf44adc5cb772486d335293351644b801551abe8f75c84cfa4aef"
-dependencies = [
- "autocfg 1.5.0",
- "num-bigint 0.2.6",
  "num-integer",
  "num-traits",
 ]
@@ -11276,7 +11266,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-streams",
  "web-sys",
- "webpki-roots 1.0.2",
+ "webpki-roots 1.0.6",
 ]
 
 [[package]]
@@ -11725,7 +11715,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
- "webpki-roots 1.0.2",
+ "webpki-roots 1.0.6",
  "x509-parser 0.16.0",
 ]
 
@@ -14280,6 +14270,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tracing-journald"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d3a81ed245bfb62592b1e2bc153e77656d94ee6a0497683a65a12ccaf2438d0"
+dependencies = [
+ "libc",
+ "tracing-core",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "tracing-log"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -15426,9 +15427,9 @@ dependencies = [
 
 [[package]]
 name = "webpki-roots"
-version = "1.0.2"
+version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e8983c3ab33d6fb807cfcdad2491c4ea8cbc8ed839181c7dfd9c67c83e261b2"
+checksum = "22cfaf3c063993ff62e73cb4311efde4db1efb31ab78a3e5c457939ad5cc0bed"
 dependencies = [
  "rustls-pki-types",
 ]
