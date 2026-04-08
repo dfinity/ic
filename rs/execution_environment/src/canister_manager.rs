@@ -57,9 +57,8 @@ use ic_types::messages::{
     StopCanisterCallId,
 };
 use ic_types::{
-    CanisterId, CanisterTimer, ComputeAllocation, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
-    MAX_AGGREGATE_LOG_MEMORY_LIMIT, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
-    SnapshotId, Time,
+    CanisterId, CanisterTimer, ComputeAllocation, MAX_AGGREGATE_LOG_MEMORY_LIMIT, MemoryAllocation,
+    NumBytes, NumInstructions, PrincipalId, SnapshotId, Time,
 };
 use ic_types_cycles::{
     CanisterCreation, CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase,
