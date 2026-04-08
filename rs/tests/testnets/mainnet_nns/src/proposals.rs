@@ -63,8 +63,8 @@ pub struct ProposalWithMainnetState {
 }
 
 impl ProposalWithMainnetState {
-    /// Initializes a ProposalWithMainnetState instance reading the neuron identty from the static
-    /// variable, which must have been initialized before via
+    /// Initializes a [`ProposalWithMainnetState`] instance reading the neuron identity from the
+    /// static variable, which must have been initialized before via
     /// `read_dictator_neuron_identity_from_env`.
     ///
     /// This function is not intended to be called externally (thus it is not `pub`), but only called
