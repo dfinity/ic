@@ -15,7 +15,10 @@ impl From<&CallContext> for pb::CallContext {
             time_nanos: item.time.as_nanos_since_unix_epoch(),
             metadata: Some((&item.metadata).into()),
             instructions_executed: item.instructions_executed.get(),
-            sender_info: item.sender_info.as_ref().map(pb_ingress::SenderInfo::from),
+            sender_info: item
+                .sender_info
+                .as_deref()
+                .map(pb_ingress::SenderInfo::from),
         }
     }
 }
@@ -43,9 +46,8 @@ impl TryFrom<pb::CallContext> for CallContext {
                 .sender_info
                 .map(SenderInfo::try_from)
                 .transpose()
-                .map_err(|err| {
-                    ProxyDecodeError::Other(format!("CallContext::sender_info: {err}"))
-                })?,
+                .map_err(|err| ProxyDecodeError::Other(format!("CallContext::sender_info: {err}")))?
+                .map(Arc::new),
         })
     }
 }

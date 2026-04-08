@@ -54,7 +54,7 @@ pub struct CallContext {
 
     /// Sender info from the ingress message that created this call context.
     /// `None` for call contexts created by inter-canister calls or system tasks.
-    sender_info: Option<SenderInfo>,
+    sender_info: Option<Arc<SenderInfo>>,
 }
 
 impl CallContext {
@@ -75,7 +75,7 @@ impl CallContext {
             time,
             metadata,
             instructions_executed: NumInstructions::default(),
-            sender_info,
+            sender_info: sender_info.map(Arc::new),
         }
     }
 
@@ -154,7 +154,7 @@ impl CallContext {
     /// Returns the sender info from the ingress message that created this call context.
     /// `None` for call contexts created by inter-canister calls or system tasks.
     pub fn sender_info(&self) -> Option<&SenderInfo> {
-        self.sender_info.as_ref()
+        self.sender_info.as_deref()
     }
 }
 
@@ -429,7 +429,7 @@ impl CallContextManager {
                 time,
                 metadata,
                 instructions_executed: NumInstructions::default(),
-                sender_info,
+                sender_info: sender_info.map(Arc::new),
             },
         );
         debug_assert!(self.stats_ok());
