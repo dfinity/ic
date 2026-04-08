@@ -1,6 +1,6 @@
 [package]
 name = "ic-ethereum-types"
-version = "1.0.0"
+version = "1.0.1"
 description = "Ethereum common types that by canisters on the Internet Computer"
 license = "Apache-2.0"
 readme = "README.md"
