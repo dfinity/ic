@@ -69,14 +69,12 @@ pub mod canister_http;
 pub mod canister_log;
 pub mod consensus;
 pub mod crypto;
-pub mod cycles;
 pub mod hostos_version;
 pub mod ingress;
 pub mod malicious_behavior;
 pub mod malicious_flags;
 pub mod messages;
 pub mod methods;
-pub mod nominal_cycles;
 pub mod registry;
 pub mod replica_config;
 pub mod replica_version;
@@ -93,7 +91,6 @@ pub use crate::canister_log::{
     CanisterLog, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, MAX_AGGREGATE_LOG_MEMORY_LIMIT,
     MAX_DELTA_LOG_MEMORY_LIMIT,
 };
-pub use crate::cycles::Cycles;
 pub use crate::replica_version::ReplicaVersion;
 pub use crate::time::Time;
 pub use ic_base_types::{

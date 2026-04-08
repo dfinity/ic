@@ -313,7 +313,6 @@ rust_canister(
     compile_data = [":test_did"],
     crate_features = TEST_WITH_TLA,
     crate_root = "canister/canister.rs",
-    did_check = False,  # we don't check in the did so can't meaningfully check
     proc_macro_deps = MACRO_DEPENDENCIES + [
         "//rs/tla_instrumentation:proc_macros",
     ],

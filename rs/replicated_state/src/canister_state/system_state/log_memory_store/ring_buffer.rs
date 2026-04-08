@@ -85,6 +85,7 @@ impl RingBuffer {
     }
 
     /// Returns the data capacity of the ring buffer.
+    #[cfg(test)]
     pub fn byte_capacity(&self) -> usize {
         self.io.load_header().data_capacity.get() as usize
     }
@@ -93,6 +94,12 @@ impl RingBuffer {
     #[cfg(test)]
     pub fn bytes_used(&self) -> usize {
         self.io.load_header().data_size.get() as usize
+    }
+
+    /// Returns next_idx of the ring buffer.
+    #[cfg(test)]
+    pub fn next_idx(&self) -> u64 {
+        self.io.load_header().next_idx
     }
 
     /// Clears the ring buffer.
@@ -108,12 +115,8 @@ impl RingBuffer {
         self.append_log(vec![record.clone()]);
     }
 
-    pub fn append_log(&mut self, records: Vec<CanisterLogRecord>) {
-        self.append_log_iter(records);
-    }
-
     /// Appends records from an iterator.
-    pub fn append_log_iter(&mut self, records: impl IntoIterator<Item = CanisterLogRecord>) {
+    pub fn append_log(&mut self, records: impl IntoIterator<Item = CanisterLogRecord>) {
         let mut iter = records.into_iter().peekable();
         if iter.peek().is_none() {
             return; // Exit early if no records.
@@ -124,19 +127,26 @@ impl RingBuffer {
         for record in iter.map(LogRecord::from) {
             // Check that records are added in order, otherwise it breaks the index.
             if record.idx < h.next_idx {
-                debug_assert!(false, "Log record idx must be >= than next idx");
+                debug_assert!(
+                    false,
+                    "Log record idx {} must be >= than next idx {}",
+                    record.idx, h.next_idx
+                );
                 continue;
             }
             if record.timestamp < h.max_timestamp {
-                debug_assert!(false, "Log record timestamp must be >= than max timestamp");
+                debug_assert!(
+                    false,
+                    "Log record timestamp {} must be >= than max timestamp {}",
+                    record.timestamp, h.max_timestamp
+                );
                 continue;
             }
 
             let added_size = MemorySize::new(record.bytes_len() as u64);
-            let capacity = MemorySize::new(self.byte_capacity() as u64);
-            if added_size > capacity {
+            if added_size > h.data_capacity {
                 debug_assert!(false, "Log record size exceeds ring buffer capacity");
-                return;
+                continue;
             }
             total_added_size += added_size.get();
             self.evict_for_size(&mut h, added_size);
@@ -201,7 +211,7 @@ impl RingBuffer {
     ///
     /// - No filter: return the most recent records (tail), trimming older ones
     ///   from the start so total data size ≤ result_max_size.
-    /// - With filter: return the most oldest records (head), trimming newer ones
+    /// - With filter: return the oldest records (head), trimming newer ones
     ///   from the end so total data size ≤ result_max_size.
     pub fn records(&self, maybe_filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
         let header = self.io.load_header();
@@ -225,6 +235,11 @@ impl RingBuffer {
                     }
                     pos = header.advance_position(pos, MemorySize::new(record.bytes_len() as u64));
                     records.push(CanisterLogRecord::from(record));
+                    // Stop at the tail — required when the buffer is exactly full
+                    // (data_head == data_tail), where is_alive() is true everywhere.
+                    if pos == header.data_tail {
+                        break;
+                    }
                 }
 
                 // Trim older records from the front so total data size ≤ limit.
@@ -268,7 +283,7 @@ impl RingBuffer {
                         break;
                     }
                     let new_pos = header.advance_position(pos, distance);
-                    // corrupted or zero-length record — avoid infinite loop
+                    // corrupted record — avoid infinite loop
                     if new_pos == pos {
                         break;
                     }
@@ -363,6 +378,7 @@ mod tests {
 
         assert_eq!(rb.byte_capacity(), data_capacity.get() as usize);
         assert_eq!(rb.bytes_used(), 0);
+        assert_eq!(rb.next_idx(), 0);
     }
 
     #[test]
@@ -380,20 +396,17 @@ mod tests {
         assert_eq!(rb.pop_front().unwrap(), r0);
         assert_eq!(rb.pop_front().unwrap(), r1);
         assert!(rb.pop_front().is_none());
+        assert_eq!(rb.next_idx(), 2);
     }
 
     #[test]
     fn test_exact_fit_no_eviction() {
-        let record_size: usize = 25;
-        let page_map = PageMap::new_for_testing();
-        let data_capacity = MemorySize::new(3 * record_size as u64);
-        let mut rb = RingBuffer::new(page_map, data_capacity);
-
         let r0 = log_record(0, 100, "12345");
-        assert_eq!(bytes_len(&r0), record_size);
         let r1 = log_record(1, 200, "12345");
         let r2 = log_record(2, 300, "12345");
         let r3 = log_record(3, 400, "12345");
+        let data_capacity = MemorySize::new(3 * bytes_len(&r0) as u64);
+        let mut rb = RingBuffer::new(PageMap::new_for_testing(), data_capacity);
 
         // Add and remove one record to test wrap-around.
         rb.append(&r0);
@@ -407,20 +420,17 @@ mod tests {
         assert_eq!(rb.pop_front().unwrap(), r1);
         assert_eq!(rb.pop_front().unwrap(), r2);
         assert_eq!(rb.pop_front().unwrap(), r3);
+        assert_eq!(rb.next_idx(), 4);
     }
 
     #[test]
     fn test_eviction_when_adding_exceeds_capacity() {
-        let record_size: usize = 25;
-        let page_map = PageMap::new_for_testing();
-        let data_capacity = MemorySize::new(3 * record_size as u64);
-        let mut rb = RingBuffer::new(page_map, data_capacity);
-
         let r0 = log_record(0, 100, "12345");
-        assert_eq!(bytes_len(&r0), record_size);
         let r1 = log_record(1, 200, "12345");
         let r2 = log_record(2, 300, "12345");
-        let r3 = log_record(3, 400, "123456"); // 26 bytes to force eviction.
+        let r3 = log_record(3, 400, "123456"); // one byte longer than r0..r2, forces eviction.
+        let data_capacity = MemorySize::new(3 * bytes_len(&r0) as u64);
+        let mut rb = RingBuffer::new(PageMap::new_for_testing(), data_capacity);
 
         // Add and remove one record to test wrap-around.
         rb.append(&r0);
@@ -434,6 +444,7 @@ mod tests {
         assert_eq!(rb.pop_front().unwrap(), r2);
         assert_eq!(rb.pop_front().unwrap(), r3);
         assert!(rb.pop_front().is_none());
+        assert_eq!(rb.next_idx(), 4);
     }
 
     #[test]
@@ -549,6 +560,32 @@ mod tests {
         let records: Vec<CanisterLogRecord> = rb.iter().collect();
 
         assert!(records.is_empty());
+    }
+
+    #[test]
+    fn test_records_no_filter_exactly_full_buffer() {
+        // Regression: records(None) would loop infinitely on an exactly-full buffer
+        // (data_head == data_tail, data_size == data_capacity) because is_alive()
+        // returns true for every position in that state.
+        let r0 = log_record(0, 100, "12345");
+        let r1 = log_record(1, 200, "12345");
+        let r2 = log_record(2, 300, "12345");
+        let data_capacity = MemorySize::new(3 * bytes_len(&r0) as u64);
+        let mut rb = RingBuffer::new(PageMap::new_for_testing(), data_capacity);
+
+        rb.append(&r0);
+        rb.append(&r1);
+        rb.append(&r2);
+
+        // Verify the buffer is exactly full (the condition that triggers the bug).
+        assert_eq!(rb.bytes_used(), data_capacity.get() as usize);
+
+        // This must return all 3 records and terminate — not loop infinitely.
+        let records = rb.records(None);
+        assert_eq!(records.len(), 3);
+        assert_eq!(records[0], r0);
+        assert_eq!(records[1], r1);
+        assert_eq!(records[2], r2);
     }
 
     #[test]

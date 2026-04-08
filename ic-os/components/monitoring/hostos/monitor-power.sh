@@ -3,7 +3,9 @@
 set -o errexit
 set -o nounset
 
-METRICS_DIR="/run/node_exporter/collector_textfile"
+source /opt/ic/bin/metrics.sh
+
+METRICS_FAMILY="power_metrics"
 
 # Check if we are root
 if [ "$EUID" -ne 0 ]; then
@@ -17,52 +19,32 @@ if ! command -v ipmitool >/dev/null 2>&1; then
     exit 1
 fi
 
-write_line() {
-    local name="power_$1"
-    local value=$2
-    local help=$3
-    local type=$4
+clear_metrics "$METRICS_FAMILY"
 
-    if [[ -n "${value}" ]]; then
-        echo -e "# HELP ${name} ${help}\n# TYPE ${name} ${type}\n${name} ${value}\n"
-    fi
-}
+# Example output:
+# # sudo ipmitool dcmi power reading
+#
+#    Instantaneous power reading:                   240 Watts
+#    Minimum during sampling period:                132 Watts
+#    Maximum during sampling period:                384 Watts
+#    Average power reading over sample period:      204 Watts
+#    IPMI timestamp:                           03/06/2025 07:40:35 UTC
+#    Sampling period:                          00000001 Seconds.
+#    Power reading state is:                   activated
 
-# Wrap in code block to reroute all output
-{
+ipmi_output="$(ipmitool dcmi power reading 2>/dev/null)"
 
-    # Example output:
-    # # sudo ipmitool dcmi power reading
+value=$(echo "${ipmi_output}" | grep "Instantaneous power reading:" | awk '{print $4}')
+value=${value:-"-1"}
+write_metric_header "$METRICS_FAMILY" "power_instantaneous_watts" "Instantaneous power reading, Watts" "gauge"
+append_metric "$METRICS_FAMILY" "power_instantaneous_watts" "" "${value}"
 
-    #    Instantaneous power reading:                   240 Watts
-    #    Minimum during sampling period:                132 Watts
-    #    Maximum during sampling period:                384 Watts
-    #    Average power reading over sample period:      204 Watts
-    #    IPMI timestamp:                           03/06/2025 07:40:35 UTC    Sampling period:                          00000001 Seconds.
-    #    Power reading state is:                   activated
+value=$(echo "${ipmi_output}" | grep "Average power reading over sample period:" | awk '{print $7}')
+value=${value:-"-1"}
+write_metric_header "$METRICS_FAMILY" "power_average_watts" "Average power reading, Watts" "gauge"
+append_metric "$METRICS_FAMILY" "power_average_watts" "" "${value}"
 
-    ipmi_output="$(ipmitool dcmi power reading 2>/dev/null)"
-
-    value=$(echo "${ipmi_output}" | grep "Instantaneous power reading:" | awk '{print $4}')
-    value=${value:-"-1"}
-    write_line "instantaneous_watts" \
-        "${value}" \
-        "Instantaneous power reading, Watts" \
-        "gauge"
-
-    value=$(echo "${ipmi_output}" | grep "Average power reading over sample period:" | awk '{print $7}')
-    value=${value:-"-1"}
-    write_line "average_watts" \
-        "${value}" \
-        "Average power reading, Watts" \
-        "gauge"
-
-    value=$(echo "${ipmi_output}" | grep "Sampling period:" | awk '{print $8}')
-    value=${value:-"-1"}
-    write_line "sampling_period_seconds" \
-        "${value}" \
-        "Power sampling period, seconds" \
-        "gauge"
-
-} | sponge "${METRICS_DIR}/power_metrics.prom"
-# sponge takes all of stdin and writes it to the file atomically
+value=$(echo "${ipmi_output}" | grep "Sampling period:" | awk '{print $8}')
+value=${value:-"-1"}
+write_metric_header "$METRICS_FAMILY" "power_sampling_period_seconds" "Power sampling period, seconds" "gauge"
+append_metric "$METRICS_FAMILY" "power_sampling_period_seconds" "" "${value}"

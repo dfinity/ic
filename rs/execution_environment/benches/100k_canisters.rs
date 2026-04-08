@@ -1,7 +1,7 @@
 use criterion::Criterion;
 use ic_base_types::PrincipalId;
 use ic_state_machine_tests::StateMachine;
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use std::sync::{Arc, Mutex};
 
 const NUM_CREATOR_CANISTERS: usize = 10;

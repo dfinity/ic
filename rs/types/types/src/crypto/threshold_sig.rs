@@ -161,11 +161,18 @@ impl From<IcRootOfTrust> for PublicKeyProto {
 /// Retrieves the Internet Computer's root of trust.
 ///
 /// # Security
-/// The root of trust is used to verify canister signatures o given subnet.
+/// The root of trust is used to verify canister signatures of a given subnet.
 /// Providing the wrong root of trust could lead to accepting signatures that
 /// should not have been accepted and would be a major security bug.
 pub trait RootOfTrustProvider {
     type Error;
+
+    /// Provided in test environments in addition to `Self::root_of_trust`
+    /// so that canister signatures produced by the ICP mainnet
+    /// are valid in the test environments.
+    fn additional_root_of_trust(&self) -> Option<IcRootOfTrust> {
+        None
+    }
 
     fn root_of_trust(&self) -> Result<IcRootOfTrust, Self::Error>;
 }

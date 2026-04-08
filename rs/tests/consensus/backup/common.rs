@@ -481,7 +481,7 @@ fn copy_file(binary_path: &Path, backup_binaries_dir: &Path, file_name: &str) {
 
 fn highest_dir_entry(dir: &PathBuf, radix: u32) -> u64 {
     if !dir.exists() {
-        return 0u64;
+        return 0_u64;
     }
     match std::fs::read_dir(dir) {
         Ok(file_list) => file_list
@@ -496,7 +496,7 @@ fn highest_dir_entry(dir: &PathBuf, radix: u32) -> u64 {
                     .unwrap_or_else(|_| "0".to_string())
             })
             .map(|s| u64::from_str_radix(&s, radix).unwrap_or(0))
-            .fold(0u64, |a: u64, b: u64| -> u64 { a.max(b) }),
+            .fold(0_u64, |a: u64, b: u64| -> u64 { a.max(b) }),
         Err(_) => 0,
     }
 }

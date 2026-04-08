@@ -103,6 +103,13 @@ pub struct NeuronInfo {
     pub deciding_voting_power: Option<u64>,
     /// See analogous field in Neuron.
     pub potential_voting_power: Option<u64>,
+
+    /// Base value (in e8s) used for the "8-year gang" dissolve delay bonus.
+    /// For neurons that had the maximum dissolve delay of 8 years before the
+    /// maximum dissolve delay was reduced, this is set to the total staked value
+    /// net of fees (including staked maturity) captured at the time of migration.
+    /// For all other neurons, this is 0.
+    pub eight_year_gang_bonus_base_e8s: Option<u64>,
 }
 
 impl NeuronInfo {
@@ -327,6 +334,13 @@ pub struct Neuron {
     ///
     /// Per NNS policy, this is opt. Nevertheless, it will never be null.
     pub potential_voting_power: Option<u64>,
+
+    /// Base value (in e8s) used for the "8-year gang" dissolve delay bonus.
+    /// For neurons that had the maximum dissolve delay of 8 years before the
+    /// maximum dissolve delay was reduced, this is set to the total staked value
+    /// net of fees (including staked maturity) captured at the time of migration.
+    /// For all other neurons, this is 0.
+    pub eight_year_gang_bonus_base_e8s: Option<u64>,
 
     /// The maturity disbursements in progress for this neuron.
     pub maturity_disbursements_in_progress: Option<Vec<MaturityDisbursement>>,
@@ -2649,6 +2663,7 @@ pub mod update_canister_settings {
         pub log_visibility: Option<i32>,
         pub wasm_memory_limit: Option<u64>,
         pub wasm_memory_threshold: Option<u64>,
+        pub snapshot_visibility: Option<i32>,
     }
     /// Log visibility of a canister.
     #[derive(
@@ -2690,6 +2705,50 @@ pub mod update_canister_settings {
                 "LOG_VISIBILITY_UNSPECIFIED" => Some(Self::Unspecified),
                 "LOG_VISIBILITY_CONTROLLERS" => Some(Self::Controllers),
                 "LOG_VISIBILITY_PUBLIC" => Some(Self::Public),
+                _ => None,
+            }
+        }
+    }
+    /// Snapshot visibility of a canister.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+    )]
+    #[repr(i32)]
+    pub enum SnapshotVisibility {
+        Unspecified = 0,
+        /// Snapshots are visible to the controllers of the dapp canister.
+        Controllers = 1,
+        /// Snapshots are visible to the public.
+        Public = 2,
+    }
+    impl SnapshotVisibility {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                SnapshotVisibility::Unspecified => "SNAPSHOT_VISIBILITY_UNSPECIFIED",
+                SnapshotVisibility::Controllers => "SNAPSHOT_VISIBILITY_CONTROLLERS",
+                SnapshotVisibility::Public => "SNAPSHOT_VISIBILITY_PUBLIC",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> Option<Self> {
+            match value {
+                "SNAPSHOT_VISIBILITY_UNSPECIFIED" => Some(Self::Unspecified),
+                "SNAPSHOT_VISIBILITY_CONTROLLERS" => Some(Self::Controllers),
+                "SNAPSHOT_VISIBILITY_PUBLIC" => Some(Self::Public),
                 _ => None,
             }
         }
@@ -3072,7 +3131,7 @@ pub struct ListProposalInfoResponse {
 /// Paging is available if the result set is larger than `MAX_LIST_NEURONS_RESULTS`,
 /// which is currently 500 neurons.  If you are unsure of the number of results in a set,
 /// you can use the `total_pages_available` field in the response to determine how many
-/// additional pages need to be queried.  It will be based on your `page_size` parameter.  
+/// additional pages need to be queried.  It will be based on your `page_size` parameter.
 /// When paging through results, it is good to keep in mind that newly inserted neurons
 /// could be missed if they are inserted between calls to pages, and this could result in missing
 /// a neuron in the combined responses.
@@ -4107,6 +4166,13 @@ pub enum NnsFunction {
     /// UpdateConfigOfSubnet can be used instead. But otherwise, this is the
     /// state of the art (as of Oct 2025) way of doing subnet recovery.
     SetSubnetOperationalLevel = 55,
+    /// The proposal requests to split a subnet.
+    SplitSubnet = 56,
+    /// Delete a subnet. The subnet record, catch-up package, threshold signing key
+    /// and routing table entries are removed from the registry, and the subnet's
+    /// nodes become unassigned.
+    /// Currently limited to CloudEngine subnets.
+    DeleteSubnet = 57,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4190,6 +4256,8 @@ impl NnsFunction {
             NnsFunction::PauseCanisterMigrations => "NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS",
             NnsFunction::UnpauseCanisterMigrations => "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS",
             NnsFunction::SetSubnetOperationalLevel => "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL",
+            NnsFunction::SplitSubnet => "NNS_FUNCTION_SPLIT_SUBNET",
+            NnsFunction::DeleteSubnet => "NNS_FUNCTION_DELETE_SUBNET",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4270,6 +4338,8 @@ impl NnsFunction {
             "NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS" => Some(Self::PauseCanisterMigrations),
             "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS" => Some(Self::UnpauseCanisterMigrations),
             "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL" => Some(Self::SetSubnetOperationalLevel),
+            "NNS_FUNCTION_SPLIT_SUBNET" => Some(Self::SplitSubnet),
+            "NNS_FUNCTION_DELETE_SUBNET" => Some(Self::DeleteSubnet),
             _ => None,
         }
     }

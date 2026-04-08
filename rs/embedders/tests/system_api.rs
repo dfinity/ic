@@ -24,15 +24,15 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
-    CanisterTimer, CountBytes, Cycles, MAX_STABLE_MEMORY_IN_BYTES, NumInstructions, PrincipalId,
-    SubnetId, Time,
-    batch::CanisterCyclesCostSchedule,
+    CanisterTimer, CountBytes, MAX_STABLE_MEMORY_IN_BYTES, NumInstructions, PrincipalId, SubnetId,
+    Time,
     messages::{
         CallbackId, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, RejectContext, RequestOrResponse,
     },
     methods::{Callback, WasmClosure},
     time::{self, UNIX_EPOCH},
 };
+use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Cycles};
 use maplit::btreemap;
 use more_asserts::assert_le;
 use std::{
@@ -734,7 +734,7 @@ fn api_availability_test(
         SystemApiCallId::MintCycles128 => {
             // ic0.mint_cycles128 is only supported for CMC which is tested separately
             let mut api = get_system_api(api_type, &system_state, cycles_account_manager);
-            assert_api_not_supported(api.ic0_mint_cycles128(Cycles::zero(), 0, &mut [0u8; 16]));
+            assert_api_not_supported(api.ic0_mint_cycles128(Cycles::zero(), 0, &mut [0_u8; 16]));
         }
         SystemApiCallId::IsController => {
             assert_api_availability(
@@ -817,7 +817,7 @@ fn api_availability_test(
             );
         }
         SystemApiCallId::EnvVarNameExists => {
-            let mut heap = vec![0u8; 64];
+            let mut heap = vec![0_u8; 64];
             let var_name = b"TEST_VAR_1";
             copy_to_heap(&mut heap, var_name);
             assert_api_availability(
@@ -830,7 +830,7 @@ fn api_availability_test(
             );
         }
         SystemApiCallId::EnvVarValueSize => {
-            let mut heap = vec![0u8; 64];
+            let mut heap = vec![0_u8; 64];
             let var_name = b"TEST_VAR_1";
             copy_to_heap(&mut heap, var_name);
             assert_api_availability(
@@ -843,7 +843,7 @@ fn api_availability_test(
             );
         }
         SystemApiCallId::EnvVarValueCopy => {
-            let mut heap = vec![0u8; 64];
+            let mut heap = vec![0_u8; 64];
             let var_name = b"TEST_VAR_1";
             copy_to_heap(&mut heap, var_name);
             assert_api_availability(
@@ -909,7 +909,7 @@ fn system_api_availability() {
             // check ic0.mint_cycles128 API availability for CMC
             let cmc_system_state = get_cmc_system_state();
             assert_api_availability(
-                |mut api| api.ic0_mint_cycles128(Cycles::zero(), 0, &mut [0u8; 16]),
+                |mut api| api.ic0_mint_cycles128(Cycles::zero(), 0, &mut [0_u8; 16]),
                 api_type.clone(),
                 &cmc_system_state,
                 cycles_account_manager,
@@ -932,7 +932,7 @@ fn system_api_availability() {
 
 #[test]
 fn test_discard_cycles_charge_by_new_call() {
-    let cycles_amount = Cycles::from(1_000_000_000_000u128);
+    let cycles_amount = Cycles::from(1_000_000_000_000_u128);
     let max_num_instructions = NumInstructions::from(1 << 30);
     let cycles_account_manager = CyclesAccountManagerBuilder::new()
         .with_max_num_instructions(max_num_instructions)
@@ -972,7 +972,7 @@ fn test_discard_cycles_charge_by_new_call() {
 
 #[test]
 fn test_fail_add_cycles_when_not_enough_balance() {
-    let cycles_amount = Cycles::from(1_000_000_000_000u128);
+    let cycles_amount = Cycles::from(1_000_000_000_000_u128);
     let max_num_instructions = NumInstructions::from(1 << 30);
     let cycles_account_manager = CyclesAccountManagerBuilder::new()
         .with_max_num_instructions(max_num_instructions)
@@ -1097,7 +1097,7 @@ fn test_canister_balance() {
 
 #[test]
 fn test_canister_cycle_balance() {
-    let cycles_amount = Cycles::from(123456789012345678901234567890u128);
+    let cycles_amount = Cycles::from(123456789012345678901234567890_u128);
     let max_num_instructions = NumInstructions::from(1 << 30);
     let cycles_account_manager = CyclesAccountManagerBuilder::new()
         .with_max_num_instructions(max_num_instructions)
@@ -1140,8 +1140,8 @@ fn test_canister_cycle_balance() {
 
 #[test]
 fn test_msg_cycles_available_traps() {
-    let cycles_amount = Cycles::from(123456789012345678901234567890u128);
-    let available_cycles = Cycles::from(789012345678901234567890u128);
+    let cycles_amount = Cycles::from(123456789012345678901234567890_u128);
+    let available_cycles = Cycles::from(789012345678901234567890_u128);
     let mut system_state = get_system_state_with_cycles(cycles_amount);
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     system_state
@@ -1179,8 +1179,8 @@ fn test_msg_cycles_available_traps() {
 
 #[test]
 fn test_msg_cycles_refunded_traps() {
-    let incoming_cycles = Cycles::from(789012345678901234567890u128);
-    let cycles_amount = Cycles::from(123456789012345678901234567890u128);
+    let incoming_cycles = Cycles::from(789012345678901234567890_u128);
+    let cycles_amount = Cycles::from(123456789012345678901234567890_u128);
     let system_state = get_system_state_with_cycles(cycles_amount);
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api = get_system_api(
@@ -1374,10 +1374,13 @@ fn call_perform_not_enough_cycles_does_not_trap() {
         .build();
     // Set initial cycles small enough so that it does not have enough
     // cycles to send xnet messages.
-    let initial_cycles = cycles_account_manager.xnet_call_performed_fee(
-        SMALL_APP_SUBNET_MAX_SIZE,
-        CanisterCyclesCostSchedule::Normal,
-    ) - Cycles::from(10u128);
+    let initial_cycles = cycles_account_manager
+        .xnet_call_performed_fee(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+        )
+        .real()
+        - Cycles::from(10_u128);
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(initial_cycles)
         .build();
@@ -1507,7 +1510,7 @@ fn helper_test_on_low_wasm_memory(
         .wasm_memory_threshold(wasm_memory_threshold)
         .wasm_memory_limit(wasm_memory_limit)
         .empty_task_queue_with_on_low_wasm_memory_hook_status(start_status)
-        .initial_cycles(Cycles::from(10_000_000_000_000_000u128));
+        .initial_cycles(Cycles::from(10_000_000_000_000_000_u128));
 
     if let Some(memory_allocation) = memory_allocation {
         state_builder = state_builder.memory_allocation(memory_allocation);
@@ -1717,8 +1720,8 @@ fn push_output_request_respects_memory_limits() {
             call_context_test_id(0),
             canister_test_id(0),
             Cycles::zero(),
-            Cycles::zero(),
-            Cycles::zero(),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
             WasmClosure::new(0, 0),
             WasmClosure::new(0, 0),
             None,
@@ -1748,8 +1751,12 @@ fn push_output_request_respects_memory_limits() {
     // initial subnet available memory is `MAX_RESPONSE_COUNT_BYTES + 13`.
     assert_eq!(
         0,
-        api.push_output_request(req.clone(), Cycles::zero(), Cycles::zero())
-            .unwrap()
+        api.push_output_request(
+            req.clone(),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal)
+        )
+        .unwrap()
     );
 
     // Nothing is consumed for execution memory.
@@ -1767,8 +1774,12 @@ fn push_output_request_respects_memory_limits() {
     // And the second push fails.
     assert_eq!(
         RejectCode::SysTransient as i32,
-        api.push_output_request(req, Cycles::zero(), Cycles::zero())
-            .unwrap()
+        api.push_output_request(
+            req,
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal)
+        )
+        .unwrap()
     );
     // Without altering memory usage.
     assert_eq!(api.get_allocated_bytes().get(), 0,);
@@ -1828,8 +1839,8 @@ fn push_output_request_oversized_request_memory_limits() {
             call_context_test_id(0),
             canister_test_id(0),
             Cycles::zero(),
-            Cycles::zero(),
-            Cycles::zero(),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
             WasmClosure::new(0, 0),
             WasmClosure::new(0, 0),
             None,
@@ -1860,8 +1871,12 @@ fn push_output_request_oversized_request_memory_limits() {
     // Not enough memory to push the request.
     assert_eq!(
         RejectCode::SysTransient as i32,
-        api.push_output_request(req, Cycles::zero(), Cycles::zero())
-            .unwrap()
+        api.push_output_request(
+            req,
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal)
+        )
+        .unwrap()
     );
 
     // Memory usage unchanged.
@@ -1882,8 +1897,12 @@ fn push_output_request_oversized_request_memory_limits() {
     // Pushing succeeds.
     assert_eq!(
         0,
-        api.push_output_request(req, Cycles::zero(), Cycles::zero())
-            .unwrap()
+        api.push_output_request(
+            req,
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal)
+        )
+        .unwrap()
     );
 
     // `req_size_bytes` are consumed.
@@ -1980,7 +1999,7 @@ fn ic0_is_controller_invalid_principal_id() {
         &SystemStateBuilder::default().build(),
         CyclesAccountManagerBuilder::new().build(),
     );
-    let controller = [0u8; 70];
+    let controller = [0_u8; 70];
     assert!(matches!(
         api.ic0_is_controller(0, controller.len(), &controller),
         Err(HypervisorError::InvalidPrincipalId(
@@ -2033,7 +2052,9 @@ fn test_save_log_message_adds_canister_log_records() {
     ];
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
-        &SystemStateBuilder::default().build(),
+        &SystemStateBuilder::default()
+            .log_memory_limit(TEST_DEFAULT_LOG_MEMORY_LIMIT)
+            .build(),
         CyclesAccountManagerBuilder::new().build(),
     );
     let initial_records_number = api.canister_log().records().len();
@@ -2056,7 +2077,9 @@ fn test_save_log_message_invalid_message_size() {
     let invalid_size = message.len() + 1;
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
-        &SystemStateBuilder::default().build(),
+        &SystemStateBuilder::default()
+            .log_memory_limit(TEST_DEFAULT_LOG_MEMORY_LIMIT)
+            .build(),
         CyclesAccountManagerBuilder::new().build(),
     );
     let initial_records_number = api.canister_log().records().len();
@@ -2077,7 +2100,9 @@ fn test_save_log_message_invalid_message_offset() {
     let invalid_src = 1;
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
-        &SystemStateBuilder::default().build(),
+        &SystemStateBuilder::default()
+            .log_memory_limit(TEST_DEFAULT_LOG_MEMORY_LIMIT)
+            .build(),
         CyclesAccountManagerBuilder::new().build(),
     );
     let initial_records_number = api.canister_log().records().len();
@@ -2097,7 +2122,9 @@ fn test_save_log_message_trims_long_message() {
     let long_message_size = 2 * TEST_DEFAULT_LOG_MEMORY_LIMIT;
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
-        &SystemStateBuilder::default().build(),
+        &SystemStateBuilder::default()
+            .log_memory_limit(TEST_DEFAULT_LOG_MEMORY_LIMIT)
+            .build(),
         CyclesAccountManagerBuilder::new().build(),
     );
     let initial_records_number = api.canister_log().records().len();
@@ -2116,7 +2143,9 @@ fn test_save_log_message_keeps_total_log_size_limited() {
     let long_message_size = 2 * TEST_DEFAULT_LOG_MEMORY_LIMIT;
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
-        &SystemStateBuilder::default().build(),
+        &SystemStateBuilder::default()
+            .log_memory_limit(TEST_DEFAULT_LOG_MEMORY_LIMIT)
+            .build(),
         CyclesAccountManagerBuilder::new().build(),
     );
     let initial_records_number = api.canister_log().records().len();
@@ -2261,7 +2290,7 @@ fn get_system_api_for_best_effort_response(
 }
 
 fn composite_context_does_not_return_state_changes_on_trap_helper(api_type: ApiType) {
-    let cycles_amount = Cycles::from(1_000_000_000_000u128);
+    let cycles_amount = Cycles::from(1_000_000_000_000_u128);
     let max_num_instructions = NumInstructions::from(1 << 30);
     let cycles_account_manager = CyclesAccountManagerBuilder::new()
         .with_max_num_instructions(max_num_instructions)
@@ -2358,7 +2387,7 @@ fn test_env_var_name_operations() {
     ));
 
     // Test ic0_env_var_name_copy
-    let mut heap = vec![0u8; 16];
+    let mut heap = vec![0_u8; 16];
 
     // Copy first variable name
     api.ic0_env_var_name_copy(0, 0, 0, var_name_1.len(), &mut heap)
@@ -2426,7 +2455,7 @@ fn test_env_var_value_operations() {
             .build(),
         cycles_account_manager,
     );
-    let mut heap = vec![0u8; 256];
+    let mut heap = vec![0_u8; 256];
 
     // Test ic0_env_var_count.
     assert_eq!(api.ic0_env_var_count().unwrap(), 3);
@@ -2525,7 +2554,7 @@ fn test_env_variables_empty() {
     ));
 
     // Test ic0_env_var_name_copy with invalid index on empty variables
-    let mut heap = vec![0u8; 16];
+    let mut heap = vec![0_u8; 16];
     assert!(matches!(
         api.ic0_env_var_name_copy(0, 0, 0, 0, &mut heap),
         Err(HypervisorError::EnvironmentVariableIndexOutOfBounds {

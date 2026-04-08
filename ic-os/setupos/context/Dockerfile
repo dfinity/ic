@@ -100,7 +100,7 @@ RUN passwd -d root
 # will be cached when only the scripts change.
 COPY opt /opt
 
-RUN mkdir /opt/ic/share
+RUN mkdir -p /opt/ic/share
 
 # Update POSIX permissions in /opt/ic/
 RUN find /opt -type d -exec chmod 0755 {} \+ && \

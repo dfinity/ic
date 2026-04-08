@@ -10,3 +10,4 @@ Type=notify
 ExecStart=/opt/ic/bin/guest_vm_runner run --type=upgrade
 Restart=no
 RestartSec=20
+TimeoutStopSec=130s

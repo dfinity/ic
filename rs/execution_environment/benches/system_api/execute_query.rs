@@ -17,8 +17,8 @@ use ic_execution_environment::{
 };
 use ic_interfaces::execution_environment::ExecutionMode;
 use ic_types::PrincipalId;
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::methods::WasmMethod;
+use ic_types_cycles::CanisterCyclesCostSchedule;
 
 use crate::common::Wasm64;
 

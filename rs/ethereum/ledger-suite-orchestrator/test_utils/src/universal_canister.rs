@@ -6,7 +6,7 @@ pub use ic_management_canister_types::{
     CanisterInfoResult, CanisterStatusType, ChangeDetails, CodeDeploymentMode, CodeDeploymentRecord,
 };
 use ic_state_machine_tests::StateMachine;
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use std::sync::Arc;
 

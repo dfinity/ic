@@ -4,8 +4,8 @@
 pub mod common;
 
 use crate::common::{
-    HttpEndpointBuilder, create_conn_and_send_request, default_get_latest_state,
-    default_latest_certified_height, default_read_certified_state, get_free_localhost_socket_addr,
+    HttpEndpointBuilder, basic_state_manager_mock, create_conn_and_send_request,
+    default_get_latest_state, default_read_certified_state, get_free_localhost_socket_addr,
 };
 use axum::body::{Body, to_bytes};
 use bytes::Bytes;
@@ -34,6 +34,7 @@ use ic_interfaces::execution_environment::QueryExecutionError;
 use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager::CertifiedStateSnapshot;
+use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_protobuf::registry::crypto::v1::{
     AlgorithmId as AlgorithmIdProto, PublicKey as PublicKeyProto,
@@ -44,7 +45,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::ids::{NODE_1, canister_test_id, subnet_test_id, user_test_id};
 use ic_types::{
-    CryptoHashOfPartialState, Height, PrincipalId, RegistryVersion,
+    CryptoHashOfPartialState, Height, NumBytes, PrincipalId, RegistryVersion,
     artifact::UnvalidatedArtifactMutation,
     consensus::certification::{Certification, CertificationContent},
     crypto::{
@@ -790,17 +791,23 @@ fn can_retrieve_subnet_metrics(
     };
 
     let mut mock_state_manager = MockStateManager::new();
+
+    let state = Arc::new(default_get_latest_state());
+
+    let state_clone = state.clone();
     mock_state_manager
         .expect_get_latest_state()
-        .returning(default_get_latest_state);
+        .returning(move || (*state_clone).clone());
 
     let cloned_certificate = certificate.clone();
     mock_state_manager
         .expect_read_certified_state()
         .returning(move |_| Some(mock_certified_state(cloned_certificate.clone())));
+
+    let state_clone = state.clone();
     mock_state_manager
         .expect_latest_certified_height()
-        .returning(default_latest_certified_height);
+        .returning(move || state_clone.height());
 
     let cloned_certificate = certificate.clone();
     mock_state_manager
@@ -1127,17 +1134,25 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
     };
 
     let mut mock_state_manager = MockStateManager::new();
+
+    let state = Arc::new(default_get_latest_state());
+
+    let state_clone = state.clone();
     mock_state_manager
         .expect_get_latest_state()
-        .returning(default_get_latest_state);
+        .returning(move || (*state_clone).clone());
 
+    let state_clone = state.clone();
     mock_state_manager
         .expect_read_certified_state()
-        .returning(default_read_certified_state);
+        .returning(move |labeled_tree| {
+            default_read_certified_state(labeled_tree, (*state_clone).clone())
+        });
 
+    let state_clone = state.clone();
     mock_state_manager
         .expect_latest_certified_height()
-        .returning(default_latest_certified_height);
+        .returning(move || state_clone.height());
 
     // Inject the mock certified state snapshot
     mock_state_manager
@@ -1290,7 +1305,11 @@ fn test_duplicate_concurrent_requests_return_early(#[values(Call::V3, Call::V4)]
         ..Default::default()
     };
 
-    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+    let (state_manager, latest_state) = basic_state_manager_mock();
+
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
+        .with_state_manager(state_manager)
+        .run();
     let message = IngressMessage::default();
 
     // Mock ingress filter to always accept the message.
@@ -1304,20 +1323,16 @@ fn test_duplicate_concurrent_requests_return_early(#[values(Call::V3, Call::V4)]
     let first_request_submitted_to_ingress = Arc::new(tokio::sync::Notify::new());
     let first_request_submitted_to_ingress_clone = first_request_submitted_to_ingress.clone();
 
+    let message_id = message.message_id();
     rt.spawn(async move {
         loop {
             let new_ingress = handlers.ingress_rx.recv().await.unwrap();
-            let UnvalidatedArtifactMutation::Insert((message, _)) = new_ingress else {
+            let UnvalidatedArtifactMutation::Insert((sent_message, _)) = new_ingress else {
                 panic!("Expected Insert");
             };
-
-            let message_id = message.id();
+            assert_eq!(sent_message.id(), message_id);
 
             first_request_submitted_to_ingress_clone.notify_one();
-            handlers
-                .terminal_state_ingress_messages
-                .try_send((message_id, Height::from(1)))
-                .unwrap();
         }
     });
 
@@ -1328,16 +1343,38 @@ fn test_duplicate_concurrent_requests_return_early(#[values(Call::V3, Call::V4)]
         first_request_submitted_to_ingress.notified().await;
 
         let second_request = endpoint.call(addr, message.clone()).await;
-        handlers
-            .certified_height_watcher
-            .send(Height::from(1))
-            .unwrap();
 
         assert_eq!(StatusCode::ACCEPTED, second_request.status());
         assert_eq!(
             second_request.text().await.unwrap(),
             "Duplicate request. Message is already being tracked and executed."
         );
+
+        let message_id = message.message_id();
+
+        // set the ingress to the terminal state in the certified state
+        // we can only do that now, otherwise the second call would get OK
+        // for a completed request
+        let (height, mut state) = {
+            let state_and_height = latest_state.lock().unwrap();
+            (
+                state_and_height.height(),
+                (**state_and_height.get_ref()).clone(),
+            )
+        };
+        state.set_ingress_status(
+            message_id.clone(),
+            message.known_ingress_status(),
+            NumBytes::new(4 << 30), // INGRESS_HISTORY_MEMORY_CAPACITY
+            |_| {},
+        );
+        let new_height = Height::new(height.get() + 1);
+        *latest_state.lock().unwrap() = Labeled::new(new_height, Arc::new(state));
+        handlers
+            .terminal_state_ingress_messages
+            .try_send((message_id, new_height))
+            .unwrap();
+        handlers.certified_height_watcher.send(new_height).unwrap();
 
         let first_request = first_request_join_handle.await.unwrap();
 
@@ -1384,8 +1421,11 @@ fn test_sync_call_endpoint_responds_with_certificate(
         ..Default::default()
     };
 
+    let (state_manager, latest_state) = basic_state_manager_mock();
+
     let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
         .with_certified_height(initial_certified_height)
+        .with_state_manager(state_manager)
         .run();
 
     let message = IngressMessage::default();
@@ -1398,13 +1438,32 @@ fn test_sync_call_endpoint_responds_with_certificate(
         }
     });
 
+    let message_id = message.message_id();
+    let message_clone = message.clone();
     rt.spawn(async move {
         let new_ingress = handlers.ingress_rx.recv().await.unwrap();
-        let UnvalidatedArtifactMutation::Insert((message, _)) = new_ingress else {
+        let UnvalidatedArtifactMutation::Insert((sent_message, _)) = new_ingress else {
             panic!("Expected Insert");
         };
+        assert_eq!(sent_message.id(), message_clone.message_id());
 
-        let message_id = message.id();
+        // set the ingress to the terminal state in the certified state
+        // this is needed since the HTTP handler would return 202 otherwise
+        let (_height, mut state) = {
+            let state_and_height = latest_state.lock().unwrap();
+            (
+                state_and_height.height(),
+                (**state_and_height.get_ref()).clone(),
+            )
+        };
+        state.set_ingress_status(
+            message_clone.message_id(),
+            message_clone.known_ingress_status(),
+            NumBytes::new(4 << 30), // INGRESS_HISTORY_MEMORY_CAPACITY
+            |_| {},
+        );
+        *latest_state.lock().unwrap() = Labeled::new(message_finalization_height, Arc::new(state));
+
         handlers
             .terminal_state_ingress_messages
             .try_send((message_id, message_finalization_height))
@@ -1553,17 +1612,25 @@ fn test_call_v3_response_when_state_reader_fails(
     };
 
     let mut mock_state_manager = MockStateManager::new();
+
+    let state = Arc::new(default_get_latest_state());
+
+    let state_clone = state.clone();
     mock_state_manager
         .expect_get_latest_state()
-        .returning(default_get_latest_state);
+        .returning(move || (*state_clone).clone());
 
+    let state_clone = state.clone();
     mock_state_manager
         .expect_read_certified_state()
-        .returning(default_read_certified_state);
+        .returning(move |labeled_tree| {
+            default_read_certified_state(labeled_tree, (*state_clone).clone())
+        });
 
+    let state_clone = state.clone();
     mock_state_manager
         .expect_latest_certified_height()
-        .returning(default_latest_certified_height);
+        .returning(move || state_clone.height());
 
     // Inject the mock certified state snapshot
     mock_state_manager

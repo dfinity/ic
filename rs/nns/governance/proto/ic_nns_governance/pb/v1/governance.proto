@@ -261,6 +261,7 @@ message AbridgedNeuron {
   optional Visibility visibility = 23;
   optional uint64 voting_power_refreshed_timestamp_seconds = 24;
   optional uint32 recent_ballots_next_entry_index = 25;
+  uint64 eight_year_gang_bonus_base_e8s = 26;
 
   reserved 1;
   reserved "id";
@@ -495,6 +496,15 @@ enum NnsFunction {
 
   // Take subnet offline or bring back online. Used as part of subnet recovery.
   NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL = 55;
+
+  // The proposal requests to split a subnet.
+  NNS_FUNCTION_SPLIT_SUBNET = 56;
+
+  // Delete a subnet. The subnet record, catch-up package, threshold signing key
+  // and routing table entries are removed from the registry, and the subnet's
+  // nodes become unassigned.
+  // Currently limited to CloudEngine subnets.
+  NNS_FUNCTION_DELETE_SUBNET = 57;
 }
 
 // Payload of a proposal that calls a function on another NNS
@@ -1916,6 +1926,15 @@ message UpdateCanisterSettings {
     LOG_VISIBILITY_PUBLIC = 2;
   }
 
+  // Snapshot visibility of a canister.
+  enum SnapshotVisibility {
+    SNAPSHOT_VISIBILITY_UNSPECIFIED = 0;
+    // Snapshots are visible to the controllers of the dapp canister.
+    SNAPSHOT_VISIBILITY_CONTROLLERS = 1;
+    // Snapshots are visible to the public.
+    SNAPSHOT_VISIBILITY_PUBLIC = 2;
+  }
+
   // The controllers of the canister. We use a message to wrap the repeated field because prost does
   // not generate `Option<Vec<T>>` for repeated fields.
   message Controllers {
@@ -1933,6 +1952,7 @@ message UpdateCanisterSettings {
     optional LogVisibility log_visibility = 5;
     optional uint64 wasm_memory_limit = 6;
     optional uint64 wasm_memory_threshold = 7;
+    optional SnapshotVisibility snapshot_visibility = 8;
   }
 
   // The settings to update. Required.
@@ -1957,6 +1977,16 @@ message LoadCanisterSnapshot {
 
   // The ID of the snapshot to load.
   bytes snapshot_id = 2;
+}
+
+// Snapshot of a neuron's dissolve state, recorded before clamping to the
+// Mission 70 maximum. Used to restore the original dissolve state if the
+// maximum dissolve delay is ever increased again.
+message NeuronDissolveStateSnapshot {
+  oneof dissolve_state {
+    uint64 dissolve_delay_seconds = 1;
+    uint64 when_dissolved_timestamp_seconds = 2;
+  }
 }
 
 // This represents the whole NNS governance system. It contains all
@@ -2194,6 +2224,14 @@ message Governance {
 
   // Map of proposal IDs to their topics for those garbage collected.
   map<uint64, Topic> topic_of_garbage_collected_proposals = 29;
+
+  // Whether the eight year gang bonus base migration has run for all neurons.
+  // This prevents the migration from running more than once.
+  bool eight_year_gang_bonus_migration_done = 31;
+
+  // Snapshot of each neuron's dissolve state taken while clamping to the Mission 70 maximum
+  // dissolve delay. Enables restoring original dissolve states if the maximum is reversed.
+  map<uint64, NeuronDissolveStateSnapshot> neuron_id_to_pre_clamp_dissolve_state = 32;
 
   reserved 30;
   reserved "first_proposal_id_to_record_voting_history";

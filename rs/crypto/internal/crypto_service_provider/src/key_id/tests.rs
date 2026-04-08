@@ -56,14 +56,14 @@ mod stability_tests {
 
     #[test]
     fn should_provide_stable_string_value_from_bytes() {
-        let key_id = KeyId::from([0u8; 32]);
+        let key_id = KeyId::from([0_u8; 32]);
         let string_value = key_id.to_string();
         assert_eq!(
             string_value,
             "KeyId(0x0000000000000000000000000000000000000000000000000000000000000000)"
         );
 
-        let key_id = KeyId::from([1u8; 32]);
+        let key_id = KeyId::from([1_u8; 32]);
         let string_value = key_id.to_string();
         assert_eq!(
             string_value,

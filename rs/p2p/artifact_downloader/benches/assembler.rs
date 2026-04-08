@@ -48,7 +48,7 @@ impl ValidatedPoolReader<SignedIngress> for FakeIngressPool {
         self.ingresses.get(id).cloned()
     }
 
-    fn get_all_for_broadcast(&self) -> Box<dyn Iterator<Item = SignedIngress> + '_> {
+    fn get_all_for_initial_broadcast(&self) -> Box<dyn Iterator<Item = SignedIngress> + '_> {
         unimplemented!()
     }
 }
@@ -62,7 +62,7 @@ impl ValidatedPoolReader<IDkgMessage> for FakeIDkgPool {
         self.dealings.get(id).cloned().map(IDkgMessage::Dealing)
     }
 
-    fn get_all_for_broadcast(&self) -> Box<dyn Iterator<Item = IDkgMessage> + '_> {
+    fn get_all_for_initial_broadcast(&self) -> Box<dyn Iterator<Item = IDkgMessage> + '_> {
         unimplemented!()
     }
 }
@@ -206,6 +206,7 @@ fn fake_ingress_message_with_arg_size(method_name: &str, arg_size: usize) -> Sig
             sender: Blob(vec![0x05]),
             nonce: Some(Blob(vec![1, 2, 3, 4])),
             ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
+            sender_info: None,
         },
     };
 

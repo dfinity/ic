@@ -24,6 +24,7 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 
+const SPOOL_RSYNC_RETRY_DELAY: Duration = Duration::from_mins(1);
 const RETRIES_RSYNC_HOST: u64 = 5;
 const RETRIES_BINARY_DOWNLOAD: u64 = 3;
 const BUCKET_SIZE: u64 = 10000;
@@ -230,11 +231,7 @@ impl BackupHelper {
     }
 
     fn rsync_spool(&self, node_ip: &IpAddr) -> bool {
-        let _guard = self
-            .artifacts_guard
-            .lock()
-            .expect("artifacts mutex lock failed");
-        info!(self.log, "Sync backup data from the node: {}", node_ip,);
+        info!(self.log, "Sync backup data from the node: {node_ip}");
         let remote_dir = format!(
             "{}@[{}]:/var/lib/ic/backup/{}/",
             self.username(),
@@ -242,20 +239,26 @@ impl BackupHelper {
             self.subnet_id
         );
         for _ in 0..RETRIES_RSYNC_HOST {
+            let artifacts_guard = self
+                .artifacts_guard
+                .lock()
+                .expect("artifacts mutex lock failed");
             match self.rsync_remote_cmd(
                 remote_dir.clone(),
                 &self.spool_dir().into_os_string(),
-                &["-qam", "--ignore-existing"],
+                &["-qam", "--ignore-existing", "--exclude='*.tmp'"],
             ) {
                 Ok(_) => return true,
                 Err(e) => warn!(
                     self.log,
-                    "Problem syncing backup directory with host: {} : {}", node_ip, e
+                    "Problem syncing backup directory with host: {node_ip} : {e}. \
+                    Retrying in {SPOOL_RSYNC_RETRY_DELAY:?}"
                 ),
             }
-            sleep_secs(60);
+            drop(artifacts_guard);
+            std::thread::sleep(SPOOL_RSYNC_RETRY_DELAY);
         }
-        warn!(self.log, "Didn't sync at all with host: {}", node_ip);
+        warn!(self.log, "Didn't sync at all with host: {node_ip}");
         false
     }
 
@@ -933,6 +936,7 @@ impl BackupHelper {
                 error!(
                     self.log,
                     "Failed to read the timestamp of the newest state in the cold storage. \
+                    This is expected if we haven't cold stored anything yet. \
                     Force cold storing the state: {:?}",
                     err
                 );
@@ -946,6 +950,7 @@ impl BackupHelper {
                 error!(
                     self.log,
                     "Failed to read the timestamp of the state in the hot storage. \
+                    This is expected if we haven't cold stored anything yet. \
                     Force cold storing the state: {:?}",
                     err
                 );
@@ -1032,13 +1037,13 @@ fn height_from_dir_entry(filename: &DirEntry) -> u64 {
 
 fn last_dir_height(dir: &PathBuf, radix: u32) -> u64 {
     if !dir.exists() {
-        return 0u64;
+        return 0_u64;
     }
     match read_dir(dir) {
         Ok(file_list) => file_list
             .flatten()
             .map(|filename| height_from_dir_entry_radix(&filename, radix))
-            .fold(0u64, |a, b| -> u64 { a.max(b) }),
+            .fold(0_u64, |a, b| -> u64 { a.max(b) }),
         Err(_) => 0,
     }
 }

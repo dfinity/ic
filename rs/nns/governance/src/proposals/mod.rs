@@ -268,10 +268,12 @@ impl ValidProposalAction {
             ValidProposalAction::LoadCanisterSnapshot(load_canister_snapshot) => Ok(
                 SelfDescribingProposalAction::from(load_canister_snapshot.clone()),
             ),
-            _ => Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "Self describing proposal actions are not supported for this proposal action yet.",
-            )),
+            ValidProposalAction::RewardNodeProvider(reward_node_provider) => Ok(
+                SelfDescribingProposalAction::from(reward_node_provider.clone()),
+            ),
+            ValidProposalAction::RewardNodeProviders(reward_node_providers) => Ok(
+                SelfDescribingProposalAction::from(reward_node_providers.clone()),
+            ),
         }
     }
 }

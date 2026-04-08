@@ -12,6 +12,7 @@ DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/test_utilities/types",
     "//rs/types/base_types",
+    "//rs/types/cycles",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/types/wasm_types",

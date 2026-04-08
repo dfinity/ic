@@ -78,7 +78,8 @@ use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_test_utilities::universal_canister::{
     UNIVERSAL_CANISTER_WASM, call_args, wasm as universal_canister_argument_builder,
 };
-use ic_types::{Cycles, ingress::WasmResult};
+use ic_types::ingress::WasmResult;
+use ic_types_cycles::Cycles;
 use icp_ledger::{
     AccountIdentifier, BinaryAccountBalanceArgs, BlockIndex, LedgerCanisterInitPayload, Memo,
     SendArgs, Tokens,

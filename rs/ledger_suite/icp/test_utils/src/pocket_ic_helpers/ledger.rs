@@ -35,7 +35,7 @@ pub fn query_encoded_blocks(
     also_retrieve_encoded_blocks_from_archives: bool,
 ) -> Vec<Block> {
     let get_blocks_args = GetBlocksArgs {
-        start: 0u64,
+        start: 0_u64,
         length: MAX_BLOCKS_PER_REQUEST as u64,
     };
     let query_encoded_blocks_response: QueryEncodedBlocksResponse = super::query_or_panic(

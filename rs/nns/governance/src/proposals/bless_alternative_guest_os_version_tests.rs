@@ -22,7 +22,7 @@ fn test_validate_chip_ids_empty() {
 fn test_validate_chip_ids_valid() {
     let _guard = temporarily_enable_bless_alternative_guest_os_version_proposals();
 
-    let chip_ids = vec![vec![0u8; 64], vec![1u8; 64]];
+    let chip_ids = vec![vec![0_u8; 64], vec![1_u8; 64]];
     let defects = validate_chip_ids(&chip_ids);
     assert!(defects.is_empty(), "{defects:#?}");
 }
@@ -32,9 +32,9 @@ fn test_validate_chip_ids_wrong_length() {
     let _guard = temporarily_enable_bless_alternative_guest_os_version_proposals();
 
     let chip_ids = vec![
-        vec![0u8; 64],  // Valid
-        vec![0u8; 32],  // Too short
-        vec![0u8; 128], // Too long
+        vec![0_u8; 64],  // Valid
+        vec![0_u8; 32],  // Too short
+        vec![0_u8; 128], // Too long
     ];
     let defects = validate_chip_ids(&chip_ids);
     assert_eq!(defects.len(), 2, "{defects:#?}");
@@ -96,7 +96,7 @@ fn test_validate_base_guest_launch_measurements_valid() {
 
     let guest_launch_measurements = GuestLaunchMeasurements {
         guest_launch_measurements: vec![GuestLaunchMeasurement {
-            measurement: vec![0u8; 48],
+            measurement: vec![0_u8; 48],
             metadata: Some(GuestLaunchMeasurementMetadata {
                 kernel_cmdline: Some("console=ttyS0".to_string()),
             }),
@@ -114,26 +114,26 @@ fn test_validate_base_guest_launch_measurements_multiple_defects() {
         guest_launch_measurements: vec![
             // Valid measurement
             GuestLaunchMeasurement {
-                measurement: vec![0u8; 48],
+                measurement: vec![0_u8; 48],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: Some("console=ttyS0".to_string()),
                 }),
             },
             // Wrong measurement size
             GuestLaunchMeasurement {
-                measurement: vec![0u8; 32],
+                measurement: vec![0_u8; 32],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: Some("console=ttyS0".to_string()),
                 }),
             },
             // Missing metadata. This is ok.
             GuestLaunchMeasurement {
-                measurement: vec![0u8; 48],
+                measurement: vec![0_u8; 48],
                 metadata: None,
             },
             // Empty kernel_cmdline. This IS ok.
             GuestLaunchMeasurement {
-                measurement: vec![0u8; 48],
+                measurement: vec![0_u8; 48],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: Some("".to_string()),
                 }),
@@ -153,11 +153,11 @@ fn test_bless_alternative_guest_os_version_validate_valid() {
     let _guard = temporarily_enable_bless_alternative_guest_os_version_proposals();
 
     let proposal = BlessAlternativeGuestOsVersion {
-        chip_ids: vec![vec![0u8; 64]],
+        chip_ids: vec![vec![0_u8; 64]],
         rootfs_hash: "abc123".to_string(),
         base_guest_launch_measurements: Some(GuestLaunchMeasurements {
             guest_launch_measurements: vec![GuestLaunchMeasurement {
-                measurement: vec![0u8; 48],
+                measurement: vec![0_u8; 48],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: Some("console=ttyS0".to_string()),
                 }),
@@ -203,11 +203,11 @@ fn test_bless_alternative_guest_os_version_disabled() {
     let _guard = temporarily_disable_bless_alternative_guest_os_version_proposals();
 
     let proposal = BlessAlternativeGuestOsVersion {
-        chip_ids: vec![vec![0u8; 64]],
+        chip_ids: vec![vec![0_u8; 64]],
         rootfs_hash: "abc123".to_string(),
         base_guest_launch_measurements: Some(GuestLaunchMeasurements {
             guest_launch_measurements: vec![GuestLaunchMeasurement {
-                measurement: vec![0u8; 48],
+                measurement: vec![0_u8; 48],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: Some("console=ttyS0".to_string()),
                 }),

@@ -26,6 +26,7 @@ DEPENDENCIES = [
     "//rs/sns/init",
     "//rs/sns/root",
     "//rs/types/base_types",
+    "//rs/types/cycles",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/utils",

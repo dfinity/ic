@@ -322,7 +322,9 @@ fn test_get_node_providers_rewards() {
         algorithm_version: None,
     };
     let result_endpoint =
-        NodeRewardsCanister::get_node_providers_rewards(&CANISTER_TEST, request.clone());
+        NodeRewardsCanister::get_node_providers_rewards(&CANISTER_TEST, request.clone())
+            .now_or_never()
+            .expect("Future should resolve immediately in test");
 
     let expected = NodeProvidersRewards {
         algorithm_version: RewardsCalculationAlgorithmVersion { version: 2 },

@@ -13,7 +13,8 @@ use ic_system_test_driver::driver::{
     test_env::TestEnv,
     test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot},
 };
-use ic_types::{Cycles, Height, epoch_from_height};
+use ic_types::{Height, epoch_from_height};
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{call_args, wasm};
 use itertools::Itertools;
 use slog::{Logger, info};

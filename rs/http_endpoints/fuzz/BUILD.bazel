@@ -48,6 +48,8 @@ CALLSERVICE_FUZZER_DEPENDENCIES = [
 # required to compile tests/common
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/canonical_state",
+    "//rs/canonical_state/tree_hash",
     "//rs/certification/test-utils",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/tls_interfaces/mocks",

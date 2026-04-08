@@ -16,7 +16,8 @@ use ic_system_test_driver::driver::{
     test_env_api::*,
 };
 use ic_system_test_driver::util::{self, create_and_install, create_and_install_with_cycles};
-pub use ic_types::{CanisterId, Cycles, PrincipalId};
+pub use ic_types::{CanisterId, PrincipalId};
+use ic_types_cycles::Cycles;
 use slog::info;
 use std::env;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};

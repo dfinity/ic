@@ -34,7 +34,7 @@ fn wasm_encoding_and_size(
         // Get the uncompressed size from the footer.
         // The size is in the last 4 bytes in little-endian encoding.
         // https://datatracker.ietf.org/doc/html/rfc1952.html#page-5
-        let mut isize_bytes = [0u8; 4];
+        let mut isize_bytes = [0_u8; 4];
         // We checked the size in advance so it's safe to access the last 4 bytes.
         isize_bytes.copy_from_slice(&module_bytes[module_bytes.len() - 4..module_bytes.len()]);
         let uncompressed_size = u32::from_le_bytes(isize_bytes) as usize;

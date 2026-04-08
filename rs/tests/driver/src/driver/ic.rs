@@ -1,23 +1,30 @@
 use crate::driver::resource::BootImage;
 use crate::driver::{
     bootstrap::{init_ic, setup_and_start_vms},
-    farm::{Farm, HostFeature},
+    farm::{DnsRecord, DnsRecordType, Farm, HostFeature},
+    ic_gateway_vm::Playnet,
     nested::UnassignedRecordConfig,
     node_software_version::NodeSoftwareVersion,
     resource::{AllocatedVm, ResourceGroup, allocate_resources, get_resource_request},
     test_env::{TestEnv, TestEnvAttribute},
-    test_env_api::{HasRegistryLocalStore, HasTopologySnapshot},
+    test_env_api::{
+        AcquirePlaynetCertificate, CreatePlaynetDnsRecords, HasRegistryLocalStore,
+        HasTopologySnapshot,
+    },
     test_setup::GroupSetup,
 };
 use anyhow::Result;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
+use ic_protobuf::registry::{dc::v1::DataCenterRecord, node::v1::NodeRewardType};
 use ic_regedit;
 use ic_registry_canister_api::IPv4Config;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behavior::MaliciousBehavior;
 use ic_types::{Height, NodeId, PrincipalId};
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
 use slog::info;
@@ -33,7 +40,7 @@ use std::time::Duration;
 #[derive(Clone, Debug, Default)]
 pub struct InternetComputer {
     pub initial_version: Option<NodeSoftwareVersion>,
-    pub default_vm_resources: VmResources,
+    pub vm_resource_overrides: VmResourceOverrides,
     pub vm_allocation: Option<VmAllocationStrategy>,
     pub required_host_features: Vec<HostFeature>,
     pub subnets: Vec<Subnet>,
@@ -49,6 +56,20 @@ pub struct InternetComputer {
     use_specified_ids_allocation_range: bool,
     pub unassigned_record_config: Option<UnassignedRecordConfig>,
     pub api_boundary_nodes: Vec<Node>,
+    pub api_bn_use_playnet: bool,
+    pub data_centers: Vec<DataCenterRecord>,
+    pub node_operators: Vec<NodeOperatorConfig>,
+}
+
+/// Configuration for a node operator to be added to the initial registry.
+#[derive(Clone, Debug, Default)]
+pub struct NodeOperatorConfig {
+    pub name: String,
+    pub principal_id: PrincipalId,
+    pub node_provider_principal_id: Option<PrincipalId>,
+    pub node_allowance: u64,
+    pub dc_id: String,
+    pub rewardable_nodes: BTreeMap<String, u32>,
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
@@ -66,14 +87,11 @@ impl InternetComputer {
         Self::default()
     }
 
-    /// Set the VM resources (like number of virtual CPUs and memory) of all
-    /// implicitly constructed subnets and nodes (like unassigned nodes
-    /// added via `with_unassigned_nodes`).
-    ///
-    /// Setting the VM resources for explicitly constructed subnets
-    /// has to be done on the subnet itself.
-    pub fn with_default_vm_resources(mut self, default_vm_resources: VmResources) -> Self {
-        self.default_vm_resources = default_vm_resources;
+    /// Set the VM resource overrides (like number of virtual CPUs and memory)
+    /// at the IC level. More specific overrides have more priority.
+    /// Node > Subnet > IC > Group > Default
+    pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
+        self.vm_resource_overrides = vm_resource_overrides;
         self
     }
 
@@ -96,11 +114,8 @@ impl InternetComputer {
     ///
     /// The subnet is able to execute calls faster because the block time
     /// on the node is reduced.
-    ///
-    /// The subnet inherits the VM resources of the IC.
     pub fn add_fast_single_node_subnet(mut self, subnet_type: SubnetType) -> Self {
         let mut subnet = Subnet::fast_single_node(subnet_type);
-        subnet.default_vm_resources = self.default_vm_resources;
         subnet.vm_allocation.clone_from(&self.vm_allocation);
         subnet
             .required_host_features
@@ -124,17 +139,35 @@ impl InternetComputer {
         self
     }
 
+    pub fn add_data_center(mut self, dc_record: DataCenterRecord) -> Self {
+        if self
+            .data_centers
+            .iter()
+            .any(|existing| existing.id.eq_ignore_ascii_case(&dc_record.id))
+        {
+            panic!(
+                "Duplicate data center id (case-insensitive) in IC config: {}",
+                dc_record.id
+            );
+        }
+        self.data_centers.push(dc_record);
+        self
+    }
+
+    pub fn add_node_operator(mut self, node_operator: NodeOperatorConfig) -> Self {
+        self.node_operators.push(node_operator);
+        self
+    }
+
     /// Add the given number of unassigned nodes to the IC.
-    ///
-    /// The nodes inherit the VM resources of the IC.
     pub fn with_unassigned_nodes(mut self, no_of_nodes: usize) -> Self {
         for _ in 0..no_of_nodes {
-            self.unassigned_nodes.push(Node::new_with_settings(
-                self.default_vm_resources,
-                self.vm_allocation.clone(),
-                BootImage::GroupDefault,
-                self.required_host_features.clone(),
-            ));
+            self.unassigned_nodes.push(
+                Node::new()
+                    .with_vm_allocation(self.vm_allocation.clone())
+                    .with_boot_image(BootImage::GroupDefault)
+                    .with_required_host_features(self.required_host_features.clone()),
+            );
         }
         self
     }
@@ -150,13 +183,28 @@ impl InternetComputer {
     pub fn with_api_boundary_nodes(mut self, no_of_nodes: usize) -> Self {
         for idx in 0..no_of_nodes {
             self.api_boundary_nodes.push(
-                Node::new_with_settings(
-                    self.default_vm_resources,
-                    self.vm_allocation.clone(),
-                    BootImage::GroupDefault,
-                    self.required_host_features.clone(),
-                )
-                .with_domain(format!("apibn-{idx}.ic.net")),
+                Node::new()
+                    .with_vm_allocation(self.vm_allocation.clone())
+                    .with_boot_image(BootImage::GroupDefault)
+                    .with_required_host_features(self.required_host_features.clone())
+                    .with_domain(format!("apibn-{idx}.ic.net")),
+            );
+        }
+        self
+    }
+
+    /// Add the given number of API boundary nodes with playnet support.
+    /// Unlike `with_api_boundary_nodes`, nodes are created without domains here —
+    /// real domains (e.g. `apibn-0.ic50.farm.dfinity.systems`) are assigned during
+    /// `setup_and_start` after a playnet certificate is acquired from Farm.
+    pub fn with_api_boundary_nodes_playnet(mut self, no_of_nodes: usize) -> Self {
+        self.api_bn_use_playnet = true;
+        for _ in 0..no_of_nodes {
+            self.api_boundary_nodes.push(
+                Node::new()
+                    .with_vm_allocation(self.vm_allocation.clone())
+                    .with_boot_image(BootImage::GroupDefault)
+                    .with_required_host_features(self.required_host_features.clone()),
             );
         }
         self
@@ -171,13 +219,11 @@ impl InternetComputer {
     /// Add a single unassigned node with the given IPv4 configuration
     pub fn with_ipv4_enabled_unassigned_node(mut self, ipv4_config: IPv4Config) -> Self {
         self.unassigned_nodes.push(
-            Node::new_with_settings(
-                self.default_vm_resources,
-                self.vm_allocation.clone(),
-                BootImage::GroupDefault,
-                self.required_host_features.clone(),
-            )
-            .with_ipv4_config(ipv4_config),
+            Node::new()
+                .with_vm_allocation(self.vm_allocation.clone())
+                .with_boot_image(BootImage::GroupDefault)
+                .with_required_host_features(self.required_host_features.clone())
+                .with_ipv4_config(ipv4_config),
         );
         self
     }
@@ -236,6 +282,21 @@ impl InternetComputer {
         &mut self,
         env: &TestEnv,
     ) -> Result<BTreeMap<String, AllocatedVm>> {
+        if self
+            .subnets
+            .iter()
+            .any(|s| s.subnet_type == SubnetType::CloudEngine)
+        {
+            // Cloud engines use API boundary nodes to replicate their registry and to fetch
+            // delegations since the firewall on the NNS blocks them.
+            assert!(
+                !self.api_boundary_nodes.is_empty() && self.api_bn_use_playnet,
+                "At least one API boundary node with valid certificates is required when using \
+                a cloud engine subnet. Add `.with_api_boundary_nodes_playnet(1)` when creating \
+                the `InternetComputer` instance."
+            );
+        }
+
         // propagate required host features and resource settings to all vms
         let farm = Farm::from_test_env(env, "Internet Computer");
         for node in self
@@ -251,7 +312,6 @@ impl InternetComputer {
                 .chain(self.required_host_features.iter())
                 .cloned()
                 .collect();
-            node.vm_resources = node.vm_resources.or(&self.default_vm_resources);
         }
 
         let tempdir = tempfile::tempdir()?;
@@ -266,6 +326,11 @@ impl InternetComputer {
 
         let res_group = allocate_resources(&farm, &res_request, env)?;
         self.propagate_ip_addrs(&res_group);
+
+        if self.api_bn_use_playnet {
+            self.setup_api_bn_playnet(env);
+        }
+
         let init_ic = init_ic(
             self,
             env,
@@ -330,6 +395,42 @@ impl InternetComputer {
                     .ipv6,
             );
         }
+    }
+
+    /// Acquires a playnet certificate from Farm, assigns real domains to API BN
+    /// nodes, creates DNS records, and writes the Playnet attribute for reuse
+    /// by the IC gateway.
+    fn setup_api_bn_playnet(&mut self, env: &TestEnv) {
+        let playnet_cert = env.acquire_playnet_certificate();
+        let fqdn = &playnet_cert.playnet;
+        info!(env.logger(), "Acquired playnet for API BNs: {}", fqdn);
+
+        for (idx, node) in self.api_boundary_nodes.iter_mut().enumerate() {
+            node.domain = Some(format!("apibn-{idx}.{fqdn}"));
+        }
+
+        let dns_records: Vec<DnsRecord> = self
+            .api_boundary_nodes
+            .iter()
+            .enumerate()
+            .map(|(idx, node)| DnsRecord {
+                name: format!("apibn-{idx}"),
+                record_type: DnsRecordType::AAAA,
+                records: vec![node.ipv6.expect("API BN missing IPv6").to_string()],
+            })
+            .collect();
+        let suffix = env.create_playnet_dns_records(dns_records);
+        info!(
+            env.logger(),
+            "Created playnet DNS records for API BNs under {}", suffix
+        );
+
+        let playnet = Playnet {
+            playnet_cert,
+            aaaa_records: vec![],
+            a_records: vec![],
+        };
+        playnet.write_attribute(env);
     }
 
     pub fn has_malicious_behaviors(&self) -> bool {
@@ -469,10 +570,11 @@ impl InternetComputer {
 /// A builder for the initial configuration of a subnetwork.
 #[derive(Clone, PartialEq, Debug, Deserialize)]
 pub struct Subnet {
-    pub default_vm_resources: VmResources,
+    pub vm_resource_overrides: VmResourceOverrides,
     pub vm_allocation: Option<VmAllocationStrategy>,
     pub boot_image: BootImage,
     pub required_host_features: Vec<HostFeature>,
+    pub default_node_reward_type: Option<NodeRewardType>,
     pub nodes: Vec<Node>,
     pub max_ingress_bytes_per_message: Option<u64>,
     pub max_ingress_messages_per_block: Option<u64>,
@@ -487,10 +589,12 @@ pub struct Subnet {
     // NOTE: Some values in this config, like the http port,
     // are overwritten in `update_and_write_node_config`.
     pub subnet_type: SubnetType,
+    pub canister_cycles_cost_schedule: CanisterCyclesCostSchedule,
     pub max_instructions_per_message: Option<u64>,
     pub max_instructions_per_round: Option<u64>,
     pub max_instructions_per_install_code: Option<u64>,
     pub features: Option<SubnetFeatures>,
+    pub resource_limits: Option<ResourceLimits>,
     pub max_number_of_canisters: Option<u64>,
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
@@ -502,11 +606,24 @@ pub struct Subnet {
 
 impl Subnet {
     pub fn new(subnet_type: SubnetType) -> Self {
+        // Invariants in the registry ensure that
+        //   - Cloud engines have a free cost schedule
+        //   - Cloud engines only have nodes with reward type 4
+        let (canister_cycles_cost_schedule, default_node_reward_type) = match subnet_type {
+            SubnetType::Application | SubnetType::System | SubnetType::VerifiedApplication => {
+                (CanisterCyclesCostSchedule::Normal, None)
+            }
+            SubnetType::CloudEngine => (
+                CanisterCyclesCostSchedule::Free,
+                Some(NodeRewardType::Type4),
+            ),
+        };
         Self {
-            default_vm_resources: Default::default(),
+            vm_resource_overrides: Default::default(),
             vm_allocation: Default::default(),
             boot_image: Default::default(),
             required_host_features: vec![],
+            default_node_reward_type,
             nodes: vec![],
             max_ingress_bytes_per_message: None,
             max_ingress_bytes_per_block: None,
@@ -520,8 +637,10 @@ impl Subnet {
             max_instructions_per_round: None,
             max_instructions_per_install_code: None,
             features: None,
+            resource_limits: None,
             max_number_of_canisters: None,
             subnet_type,
+            canister_cycles_cost_schedule,
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             chain_key_config: None,
@@ -531,13 +650,11 @@ impl Subnet {
         }
     }
 
-    /// Set the VM resources (like number of virtual CPUs and memory) of all
-    /// implicitly constructed nodes.
-    ///
-    /// Setting the VM resources for explicitly constructed nodes
-    /// has to be via `Node::new_with_vm_resources`.
-    pub fn with_default_vm_resources(mut self, default_vm_resources: VmResources) -> Self {
-        self.default_vm_resources = default_vm_resources;
+    /// Set the VM resource overrides (like number of virtual CPUs and memory)
+    /// at the subnet level. More specific overrides have more priority.
+    /// Node > Subnet > IC > Group > Default
+    pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
+        self.vm_resource_overrides = vm_resource_overrides;
         self
     }
 
@@ -615,46 +732,48 @@ impl Subnet {
     }
 
     /// Add the given number of nodes to the subnet.
-    ///
-    /// The nodes will inherit the VM resources of the subnet.
     pub fn add_nodes(self, no_of_nodes: usize) -> Self {
         (0..no_of_nodes).fold(self, |subnet, _| {
-            let default_vm_resources = subnet.default_vm_resources;
             let vm_allocation = subnet.vm_allocation.clone();
             let boot_image = subnet.boot_image.clone();
             let required_host_features = subnet.required_host_features.clone();
-            subnet.add_node(Node::new_with_settings(
-                default_vm_resources,
-                vm_allocation,
-                boot_image,
-                required_host_features,
-            ))
+            subnet.add_node(
+                Node::new()
+                    .with_vm_allocation(vm_allocation)
+                    .with_boot_image(boot_image)
+                    .with_required_host_features(required_host_features),
+            )
         })
     }
 
-    pub fn add_node(mut self, node: Node) -> Self {
+    pub fn add_node(mut self, mut node: Node) -> Self {
+        if node.node_reward_type.is_none()
+            && let Some(reward_type) = self.default_node_reward_type
+        {
+            node = node.with_node_reward_type(reward_type);
+        }
+
         self.nodes.push(node);
         self
     }
 
     /// Add the given number of nodes to the subnet.
     ///
-    /// The nodes will inherit the VM resources of the subnet and extend required host features with the given ones.
+    /// The nodes will extend required host features with the given ones.
     pub fn add_node_with_required_host_features(
         self,
         mut required_host_features: Vec<HostFeature>,
     ) -> Self {
-        let default_vm_resources = self.default_vm_resources;
         let vm_allocation = self.vm_allocation.clone();
         let boot_image = self.boot_image.clone();
         required_host_features.extend_from_slice(&self.required_host_features);
 
-        self.add_node(Node::new_with_settings(
-            default_vm_resources,
-            vm_allocation,
-            boot_image,
-            required_host_features,
-        ))
+        self.add_node(
+            Node::new()
+                .with_vm_allocation(vm_allocation)
+                .with_boot_image(boot_image)
+                .with_required_host_features(required_host_features),
+        )
     }
 
     pub fn with_max_ingress_bytes_per_block(mut self, limit: u64) -> Self {
@@ -692,6 +811,11 @@ impl Subnet {
         self
     }
 
+    pub fn with_resource_limits(mut self, resource_limits: ResourceLimits) -> Self {
+        self.resource_limits = Some(resource_limits);
+        self
+    }
+
     pub fn with_max_number_of_canisters(mut self, max_number_of_canisters: u64) -> Self {
         self.max_number_of_canisters = Some(max_number_of_canisters);
         self
@@ -704,6 +828,11 @@ impl Subnet {
 
     pub fn with_query_stats_epoch_length(mut self, length: u64) -> Self {
         self.query_stats_epoch_length = Some(length);
+        self
+    }
+
+    pub fn with_cost_schedule(mut self, cost_schedule: CanisterCyclesCostSchedule) -> Self {
+        self.canister_cycles_cost_schedule = cost_schedule;
         self
     }
 
@@ -729,35 +858,29 @@ impl Subnet {
         malicious_behavior: MaliciousBehavior,
     ) -> Self {
         (0..no_of_nodes).fold(self, |subnet, _| {
-            let default_vm_resources = subnet.default_vm_resources;
             let vm_allocation = subnet.vm_allocation.clone();
             let boot_image = subnet.boot_image.clone();
             let required_host_features = subnet.required_host_features.clone();
             subnet.add_node(
-                Node::new_with_settings(
-                    default_vm_resources,
-                    vm_allocation,
-                    boot_image,
-                    required_host_features,
-                )
-                .with_malicious_behavior(malicious_behavior.clone()),
+                Node::new()
+                    .with_vm_allocation(vm_allocation)
+                    .with_boot_image(boot_image)
+                    .with_required_host_features(required_host_features)
+                    .with_malicious_behavior(malicious_behavior.clone()),
             )
         })
     }
 
     pub fn add_node_with_ipv4(self, ipv4_config: IPv4Config) -> Self {
-        let default_vm_resources = self.default_vm_resources;
         let vm_allocation = self.vm_allocation.clone();
         let boot_image = self.boot_image.clone();
         let required_host_features = self.required_host_features.clone();
         self.add_node(
-            Node::new_with_settings(
-                default_vm_resources,
-                vm_allocation,
-                boot_image,
-                required_host_features,
-            )
-            .with_ipv4_config(ipv4_config),
+            Node::new()
+                .with_vm_allocation(vm_allocation)
+                .with_boot_image(boot_image)
+                .with_required_host_features(required_host_features)
+                .with_ipv4_config(ipv4_config),
         )
     }
 
@@ -775,10 +898,11 @@ impl Subnet {
 impl Default for Subnet {
     fn default() -> Self {
         Self {
-            default_vm_resources: Default::default(),
+            vm_resource_overrides: Default::default(),
             vm_allocation: Default::default(),
             boot_image: BootImage::GroupDefault,
             required_host_features: vec![],
+            default_node_reward_type: None,
             nodes: vec![],
             max_ingress_bytes_per_message: None,
             max_ingress_bytes_per_block: None,
@@ -789,10 +913,12 @@ impl Default for Subnet {
             dkg_interval_length: None,
             dkg_dealings_per_block: None,
             subnet_type: SubnetType::System,
+            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal,
             max_instructions_per_message: None,
             max_instructions_per_round: None,
             max_instructions_per_install_code: None,
             features: None,
+            resource_limits: None,
             max_number_of_canisters: None,
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
@@ -812,23 +938,55 @@ pub enum VCPUs {}
 pub enum MemoryKiB {}
 pub enum SizeGiB {}
 
-/// Resources that the VM will use like number of virtual CPUs and memory.
+/// Resource overrides that will be layered to create VmResources.
+///
+/// NOTE: Values should not be used from here directly (it is still possible to
+/// allow for easy construction), they should be first assembled into a
+/// VmResources and pulled from there.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Deserialize, Serialize)]
-pub struct VmResources {
+pub struct VmResourceOverrides {
     pub vcpus: Option<NrOfVCPUs>,
     pub memory_kibibytes: Option<AmountOfMemoryKiB>,
     pub boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
 }
 
-impl VmResources {
-    /// Applies Option::or to all individual fields `self` and `other`.
-    pub fn or(&self, other: &VmResources) -> Self {
-        Self {
-            vcpus: self.vcpus.or(other.vcpus),
-            memory_kibibytes: self.memory_kibibytes.or(other.memory_kibibytes),
+/// Resources that the VM will use like number of virtual CPUs and memory.
+///
+/// NOTE: This should not be constructed directly (it is still possible to
+/// allow for easy deconstruction), it should be assembled from a set of
+/// VmResourceOverrides.
+pub struct VmResources {
+    pub vcpus: NrOfVCPUs,
+    pub memory_kibibytes: AmountOfMemoryKiB,
+    pub boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
+}
+
+impl VmResourceOverrides {
+    pub const fn const_default() -> Self {
+        VmResourceOverrides {
+            vcpus: None,
+            memory_kibibytes: None,
+            boot_image_minimal_size_gibibytes: None,
+        }
+    }
+
+    pub fn layer(mut self, layer: &VmResourceOverrides) -> Self {
+        self.vcpus = self.vcpus.or(layer.vcpus);
+        self.memory_kibibytes = self.memory_kibibytes.or(layer.memory_kibibytes);
+        self.boot_image_minimal_size_gibibytes = self
+            .boot_image_minimal_size_gibibytes
+            .or(layer.boot_image_minimal_size_gibibytes);
+
+        self
+    }
+
+    pub fn base(self, base: &VmResources) -> VmResources {
+        VmResources {
+            vcpus: self.vcpus.unwrap_or(base.vcpus),
+            memory_kibibytes: self.memory_kibibytes.unwrap_or(base.memory_kibibytes),
             boot_image_minimal_size_gibibytes: self
                 .boot_image_minimal_size_gibibytes
-                .or(other.boot_image_minimal_size_gibibytes),
+                .or(base.boot_image_minimal_size_gibibytes),
         }
     }
 }
@@ -836,7 +994,7 @@ impl VmResources {
 /// A builder for the initial configuration of a node.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Deserialize)]
 pub struct Node {
-    pub vm_resources: VmResources,
+    pub vm_resource_overrides: VmResourceOverrides,
     pub vm_allocation: Option<VmAllocationStrategy>,
     pub required_host_features: Vec<HostFeature>,
     pub secret_key_store: Option<NodeSecretKeyStore>,
@@ -844,8 +1002,10 @@ pub struct Node {
     pub malicious_behavior: Option<MaliciousBehavior>,
     pub ipv4: Option<IPv4Config>,
     pub domain: Option<String>,
+    pub node_reward_type: Option<NodeRewardType>,
     pub recovery_hash: Option<String>,
     pub boot_image: BootImage,
+    pub node_operator_principal_id: Option<PrincipalId>,
 }
 
 impl Node {
@@ -853,25 +1013,39 @@ impl Node {
         Default::default()
     }
 
-    pub fn new_with_settings(
-        vm_resources: VmResources,
-        vm_allocation: Option<VmAllocationStrategy>,
-        boot_image: BootImage,
-        required_host_features: Vec<HostFeature>,
-    ) -> Self {
-        let mut node = Node::new();
-        node.vm_resources = vm_resources;
-        node.vm_allocation = vm_allocation;
-        node.boot_image = boot_image;
-        node.required_host_features = required_host_features;
-        node
-    }
-
     pub fn id(&self) -> NodeId {
         self.secret_key_store
             .clone()
             .expect("no secret key store")
             .node_id
+    }
+
+    /// Set the VM resource overrides (like number of virtual CPUs and memory)
+    /// at the node level. More specific overrides have more priority.
+    /// Node > Subnet > IC > Group > Default
+    pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
+        self.vm_resource_overrides = vm_resource_overrides;
+        self
+    }
+
+    pub fn with_vm_allocation(mut self, vm_allocation: Option<VmAllocationStrategy>) -> Self {
+        self.vm_allocation = vm_allocation;
+        self
+    }
+
+    pub fn with_boot_image(mut self, boot_image: BootImage) -> Self {
+        self.boot_image = boot_image;
+        self
+    }
+
+    pub fn with_required_host_features(mut self, required_host_features: Vec<HostFeature>) -> Self {
+        self.required_host_features = required_host_features;
+        self
+    }
+
+    pub fn with_node_operator_principal_id(mut self, principal_id: PrincipalId) -> Self {
+        self.node_operator_principal_id = Some(principal_id);
+        self
     }
 
     pub fn with_malicious_behavior(mut self, malicious_behavior: MaliciousBehavior) -> Self {
@@ -886,6 +1060,11 @@ impl Node {
 
     pub fn with_domain(mut self, domain: String) -> Self {
         self.domain = Some(domain);
+        self
+    }
+
+    pub fn with_node_reward_type(mut self, node_reward_type: NodeRewardType) -> Self {
+        self.node_reward_type = Some(node_reward_type);
         self
     }
 

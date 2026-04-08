@@ -1,7 +1,8 @@
 use crate::embedders::Config as EmbeddersConfig;
 use crate::flag_status::FlagStatus;
 use ic_base_types::{CanisterId, NumSeconds};
-use ic_types::{Cycles, NumBytes, NumInstructions};
+use ic_types::{NumBytes, NumInstructions};
+use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
 use std::{str::FromStr, time::Duration};
 

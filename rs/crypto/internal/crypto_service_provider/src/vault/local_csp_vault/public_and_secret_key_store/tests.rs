@@ -1537,7 +1537,7 @@ mod validate_pks_and_sks {
     fn invalid_committee_signing_public_key() -> PublicKey {
         PublicKey {
             key_value: vec![
-                0u8;
+                0_u8;
                 ic_crypto_internal_multi_sig_bls12381::types::PublicKeyBytes::SIZE
             ],
             ..valid_committee_signing_public_key()

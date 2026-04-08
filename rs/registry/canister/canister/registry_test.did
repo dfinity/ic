@@ -81,6 +81,11 @@ type CompleteCanisterMigrationPayload = record {
   migration_trace : vec principal;
 };
 
+type ResourceLimits = record {
+  maximum_state_size : opt nat64;
+  maximum_state_delta : opt nat64;
+};
+
 type CreateSubnetPayload = record {
   unit_delay_millis : nat64;
   features : SubnetFeatures;
@@ -106,6 +111,8 @@ type CreateSubnetPayload = record {
 
   subnet_admins: opt vec principal;
 
+  resource_limits : opt ResourceLimits;
+
   // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
   ingress_bytes_per_block_soft_cap : nat64;
   gossip_max_artifact_streams_per_peer : nat32;
@@ -123,6 +130,15 @@ type CreateSubnetResponse = variant {
     new_subnet_id : opt principal;
   };
 
+  Err: text;
+};
+
+type DeleteSubnetPayload = record {
+  subnet_id : principal;
+};
+
+type DeleteSubnetResponse = variant {
+  Ok;
   Err: text;
 };
 
@@ -444,6 +460,7 @@ type UpdateSubnetPayload = record {
   unit_delay_millis : opt nat64;
   max_duplicity : opt nat32;
   features : opt SubnetFeatures;
+  resource_limits : opt ResourceLimits;
   set_gossip_config_to_default : bool;
   halt_at_cup_height : opt bool;
   pfn_evaluation_period_ms : opt nat32;
@@ -484,6 +501,11 @@ type UpdateUnassignedNodesConfigPayload = record {
   ssh_readonly_access : opt vec text;
 };
 
+type MigrateNodeOperatorPayload = record {
+  new_node_operator_id : opt principal;
+  old_node_operator_id : opt principal;
+};
+
 type SwapNodeInSubnetDirectlyPayload = record {
     new_node_id : opt principal;
     old_node_id : opt principal;
@@ -520,6 +542,24 @@ type NodeSshAccess = record {
   public_keys : opt vec text;
 };
 
+type SplitSubnetPayload = record {
+  source_subnet_id: principal;
+  destination_canister_ranges: vec CanisterIdRange;
+  destination_node_ids: vec principal;
+};
+
+type OperationType = variant {
+  Add: vec principal;
+  Remove: vec principal;
+  Clear: record {};
+};
+
+type UpdateSubnetAdminsPayload = record {
+  subnet_id: principal;
+  // opt for future compatibility when removing operation types.
+  operation_type: opt OperationType;
+};
+
 service : {
   add_api_boundary_nodes : (AddApiBoundaryNodesPayload) -> ();
   add_firewall_rules : (AddFirewallRulesPayload) -> ();
@@ -531,6 +571,7 @@ service : {
   clear_provisional_whitelist : () -> ();
   complete_canister_migration : (CompleteCanisterMigrationPayload) -> ();
   create_subnet : (CreateSubnetPayload) -> (CreateSubnetResponse);
+  delete_subnet : (DeleteSubnetPayload) -> (DeleteSubnetResponse);
   deploy_guestos_to_all_subnet_nodes : (
     DeployGuestosToAllSubnetNodesPayload
   ) -> ();
@@ -546,6 +587,7 @@ service : {
   get_node_providers_monthly_xdr_rewards : (opt GetNodeProvidersMonthlyXdrRewardsRequest) -> (GetNodeProvidersMonthlyXdrRewardsResponse) query;
   get_subnet_for_canister : (GetSubnetForCanisterRequest) -> (GetSubnetForCanisterResponse) query;
   migrate_canisters: (MigrateCanistersPayload) -> (MigrateCanistersResponse);
+  migrate_node_operator_directly : (MigrateNodeOperatorPayload) -> ();
   prepare_canister_migration : (PrepareCanisterMigrationPayload) -> ();
   recover_subnet : (RecoverSubnetPayload) -> ();
   remove_api_boundary_nodes : (RemoveApiBoundaryNodesPayload) -> ();
@@ -578,6 +620,8 @@ service : {
     UpdateSshReadOnlyAccessForAllUnassignedNodesPayload
   ) -> ();
   update_subnet : (UpdateSubnetPayload) -> ();
+  update_subnet_admins : (UpdateSubnetAdminsPayload) -> ();
   update_unassigned_nodes_config : (UpdateUnassignedNodesConfigPayload) -> ();
   swap_node_in_subnet_directly : (SwapNodeInSubnetDirectlyPayload) -> ();
+  split_subnet : (SplitSubnetPayload) -> ();
 };
