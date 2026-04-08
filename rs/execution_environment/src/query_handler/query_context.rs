@@ -853,6 +853,7 @@ impl<'a> QueryContext<'a> {
             request.method_payload.as_slice(),
             NonReplicatedQueryKind::Stateful {
                 call_origin: call_origin.clone(),
+                // this is a nested composite query call => no sender info available
                 sender_info: None,
             },
             measurement_scope,
