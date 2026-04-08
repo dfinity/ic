@@ -1986,7 +1986,7 @@ mod tests {
     }
 
     fn remote_dkg_id(tag: NiDkgTag) -> NiDkgId {
-        remote_dkg_id_with_target(tag, [0u8; 32])
+        remote_dkg_id_with_target(tag, [0_u8; 32])
     }
 
     fn remote_dkg_id_with_target(tag: NiDkgTag, target_id: [u8; 32]) -> NiDkgId {
@@ -2129,8 +2129,8 @@ mod tests {
 
     #[test]
     fn test_select_dealings_prioritizes_remote_target_with_lower_remaining_capacity() {
-        let remote_low_remaining_id = remote_dkg_id_with_target(NiDkgTag::LowThreshold, [0u8; 32]);
-        let remote_high_remaining_id = remote_dkg_id_with_target(NiDkgTag::LowThreshold, [1u8; 32]);
+        let remote_low_remaining_id = remote_dkg_id_with_target(NiDkgTag::LowThreshold, [0_u8; 32]);
+        let remote_high_remaining_id = remote_dkg_id_with_target(NiDkgTag::LowThreshold, [1_u8; 32]);
 
         // collection_threshold = 3 for both
         let configs: BTreeMap<_, _> = [
@@ -2171,8 +2171,8 @@ mod tests {
     #[test]
     fn test_select_dealings_remote_priority_requires_completed_remote_below_interval_limit() {
         let local_id = local_dkg_id(NiDkgTag::LowThreshold);
-        let remote_completed_id = remote_dkg_id_with_target(NiDkgTag::LowThreshold, [0u8; 32]);
-        let remote_active_id = remote_dkg_id_with_target(NiDkgTag::LowThreshold, [1u8; 32]);
+        let remote_completed_id = remote_dkg_id_with_target(NiDkgTag::LowThreshold, [0_u8; 32]);
+        let remote_active_id = remote_dkg_id_with_target(NiDkgTag::LowThreshold, [1_u8; 32]);
 
         // collection_threshold = 2 for all configs
         let configs: BTreeMap<_, _> = [
@@ -2222,8 +2222,8 @@ mod tests {
 
     #[test]
     fn test_select_dealings_uses_target_subnet_as_tie_breaker() {
-        let remote_target_0 = remote_dkg_id_with_target(NiDkgTag::LowThreshold, [0u8; 32]);
-        let remote_target_1 = remote_dkg_id_with_target(NiDkgTag::LowThreshold, [1u8; 32]);
+        let remote_target_0 = remote_dkg_id_with_target(NiDkgTag::LowThreshold, [0_u8; 32]);
+        let remote_target_1 = remote_dkg_id_with_target(NiDkgTag::LowThreshold, [1_u8; 32]);
 
         // collection_threshold = 2 for both, so remaining capacities tie.
         let configs: BTreeMap<_, _> = [
