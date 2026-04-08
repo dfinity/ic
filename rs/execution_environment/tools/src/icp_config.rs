@@ -57,7 +57,7 @@ fn icp_config_as_json(version: &str) -> serde_json::Value {
     );
 
     let verified_application = json_config(
-        &CyclesAccountManagerConfig::verified_application_subnet(),
+        &CyclesAccountManagerConfig::verified_application_subnet(false),
         &SchedulerConfig::verified_application_subnet(),
         &embedder,
         &execution,
