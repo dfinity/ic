@@ -862,7 +862,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                     // v3/v4 sync calls may return 202 under load
                     let response =
                         if api_ver >= 3 && response.status() == 202 && include_mgmt_canister_id {
-                            await_ingress_via_read_state(&test_info, sender, request_id.clone())
+                            await_ingress_via_read_state(&test_info, sender, &request_id)
                                 .await
                         } else {
                             response
@@ -925,7 +925,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                         // v3 sync call may return 202 under load; use read_state
                         // to wait for the ingress to be processed
                         let response = if response.status() == 202 {
-                            await_ingress_via_read_state(&test_info, sender, request_id.clone())
+                            await_ingress_via_read_state(&test_info, sender, &request_id)
                                 .await
                         } else {
                             assert_eq!(response.status(), 200);
@@ -1651,7 +1651,7 @@ enum IngressStatus {
         /// Raw CBOR-encoded certificate bytes (the `certificate` field from
         /// the read_state response). This is the same blob that the v3/v4
         /// sync call endpoint would have embedded in its response.
-        certificate_cbor: Vec<u8>,
+        reply: Vec<u8>,
     },
     /// The request was rejected.
     Rejected {
@@ -1670,7 +1670,7 @@ enum IngressStatus {
 async fn await_ingress_via_read_state(
     test: &TestInformation,
     sender: &GenericIdentity<'_>,
-    request_id: MessageId,
+    request_id: &MessageId,
 ) -> ReplicaResponse {
     for attempt in 0..30 {
         println!("await_ingress_via_read_state attempt {attempt}");
@@ -1714,7 +1714,7 @@ async fn await_ingress_via_read_state(
             // A 200 means the read_state HTTP request succeeded, but we must
             // inspect the certificate to determine the actual request status.
             match ingress_status_from_read_state_response(&response, &request_id) {
-                Some(IngressStatus::Replied { certificate_cbor }) => {
+                Some(IngressStatus::Replied { reply }) => {
                     // Reconstruct a ReplicaResponse matching the v3/v4 sync
                     // call response format:
                     //   { "status": "replied", "certificate": <cert_bytes> }
@@ -1729,7 +1729,7 @@ async fn await_ingress_via_read_state(
                             ),
                             (
                                 serde_cbor::Value::Text("certificate".to_string()),
-                                serde_cbor::Value::Bytes(certificate_cbor),
+                                serde_cbor::Value::Bytes(reply),
                             ),
                         ]
                         .into_iter()
@@ -1795,7 +1795,9 @@ fn ingress_status_from_read_state_response(
         LookupStatus::Found(other) => {
             panic!("Request status is not a leaf node: {other:?}");
         }
-        LookupStatus::Absent | LookupStatus::Unknown => return None,
+        LookupStatus::Absent | LookupStatus::Unknown => {
+            panic!("The status field is missing from the resonse");
+        }
     };
 
     match status_str.as_str() {
@@ -1815,7 +1817,7 @@ fn ingress_status_from_read_state_response(
             // The v3/v4 sync call endpoint embeds these same bytes in its
             // response; we will reconstruct that format in the caller.
             Some(IngressStatus::Replied {
-                certificate_cbor: read_state_response.certificate.0,
+                reply: read_state_response.certificate.0,
             })
         }
         "rejected" => {
@@ -1833,8 +1835,8 @@ fn ingress_status_from_read_state_response(
                 LookupStatus::Found(MixedHashTree::Leaf(bytes)) => {
                     String::from_utf8(bytes.clone()).expect("Invalid UTF-8 in reject_message")
                 }
-                // reject_message is optional per the spec
-                _ => String::new(),
+                // The reject_message is always supposed to be there for a rejected message
+                _ => panic!("The request_status was rejected but the required reject_message field was missing"),
             };
             Some(IngressStatus::Rejected {
                 reject_code,
@@ -1920,7 +1922,7 @@ async fn perform_update_call_with_delegations(
 
     // v3/v4 sync calls may return 202 under load; fall back to read_state polling
     let response = if api_ver >= 3 && response.status() == 202 {
-        await_ingress_via_read_state(test, sender, request_id.clone()).await
+        await_ingress_via_read_state(test, sender, &request_id).await
     } else {
         response
     };
@@ -1984,7 +1986,7 @@ async fn perform_read_state_call_with_delegations(
         // v3 sync call may return 202 under load; use read_state
         // to wait for the ingress to be processed
         let response = if response.status() == 202 {
-            await_ingress_via_read_state(test, sender, request_id.clone()).await
+            await_ingress_via_read_state(test, sender, &request_id).await
         } else {
             response
         };
@@ -2094,7 +2096,7 @@ async fn perform_update_with_expiry(
 
     // v3/v4 sync calls may return 202 under load; fall back to read_state polling
     let response = if api_ver >= 3 && response.status() == 202 {
-        await_ingress_via_read_state(test, sender, request_id.clone()).await
+        await_ingress_via_read_state(test, sender, &request_id).await
     } else {
         response
     };
@@ -2141,18 +2143,18 @@ fn random_n_bytes<R: Rng + CryptoRng>(n: u32, rng: &mut R) -> Vec<u8> {
 }
 
 fn resign_certificate_with_random_signature<R: Rng + CryptoRng>(
-    certificate_cbor: &[u8],
+    reply: &[u8],
     rng: &mut R,
 ) -> Vec<u8> {
     use ic_crypto_internal_bls12_381_type::G1Affine;
     // sanity check for self-describing CBOR tag
     // 0xd9d9f7 (cf. https://tools.ietf.org/html/rfc7049#section-2.4.5) is the
     // self-describing CBOR tag required to be present by the interface spec.
-    if certificate_cbor.len() < 3 || certificate_cbor[0..3] != [0xd9, 0xd9, 0xf7] {
+    if reply.len() < 3 || reply[0..3] != [0xd9, 0xd9, 0xf7] {
         panic!("certificate CBOR doesn't have a self-describing tag");
     }
     let mut certificate: ic_certification::Certificate =
-        serde_cbor::from_slice(certificate_cbor).expect("failed to parse certificate CBOR");
+        serde_cbor::from_slice(reply).expect("failed to parse certificate CBOR");
 
     let previous_signature = certificate.signature.clone();
     assert_eq!(previous_signature.len(), 48);
