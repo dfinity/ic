@@ -69,6 +69,7 @@ rust_binary(
         ":nested",
         "//rs/registry/nns_data_provider",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:reqwest",
         "@crate_index//:slog",

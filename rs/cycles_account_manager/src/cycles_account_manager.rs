@@ -348,7 +348,7 @@ impl CyclesAccountManager {
             cost_schedule,
             canister.system_state.reserved_balance(),
         );
-        if canister.has_paused_execution() || canister.has_paused_install_code() {
+        if canister.has_paused_execution_or_install_code() {
             if canister.system_state.debited_balance() < cycles + threshold {
                 return Err(CanisterOutOfCyclesError {
                     canister_id: canister.canister_id(),
@@ -498,6 +498,37 @@ impl CyclesAccountManager {
         .map(|_| cost)
     }
 
+    /// Checks whether the canister has enough cycles to prepay the execution of a
+    /// message with the given maximum number of instructions while respecting the
+    /// freezing threshold.
+    ///
+    /// Returns a `CanisterOutOfCyclesError` if the balance is insufficient.
+    pub fn can_prepay_execution_cycles(
+        &self,
+        canister: &CanisterState,
+        max_instructions: NumInstructions,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Result<(), CanisterOutOfCyclesError> {
+        let execution_mode = canister
+            .execution_state
+            .as_ref()
+            .map_or(WasmExecutionMode::Wasm32, |es| es.wasm_execution_mode);
+        let execution_cost =
+            self.execution_cost(max_instructions, subnet_size, cost_schedule, execution_mode);
+
+        self.can_withdraw_cycles_with_threshold(
+            &canister.system_state,
+            execution_cost.real(),
+            canister.memory_usage(),
+            canister.message_memory_usage(),
+            canister.system_state.reserved_balance(),
+            subnet_size,
+            cost_schedule,
+            false,
+        )
+    }
+
     /// Refunds some part of the prepaid execution cost based on the number of
     /// actually executed instructions.
     pub fn refund_unused_execution_cycles(
@@ -532,7 +563,7 @@ impl CyclesAccountManager {
                 cost_schedule,
             )
             .min(prepaid_execution_cycles);
-        system_state.add_cycles(cycles_to_refund);
+        system_state.refund_cycles(prepaid_execution_cycles, cycles_to_refund);
     }
 
     /// Returns the cost of compute allocation for the given duration.
@@ -987,7 +1018,7 @@ impl CyclesAccountManager {
         )?;
 
         debug_assert_ne!(use_case, CyclesUseCase::NonConsumed);
-        system_state.remove_cycles(cycles);
+        system_state.consume_cycles(cycles);
         Ok(())
     }
 

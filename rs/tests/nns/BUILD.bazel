@@ -75,7 +75,6 @@ system_test(
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/base_types",
-        "//rs/types/cycles",
         "//rs/types/types",
         "//rs/universal_canister/lib",
         "@crate_index//:anyhow",

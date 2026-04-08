@@ -7,7 +7,6 @@ use ic_interfaces::execution_environment::{CanisterOutOfCyclesError, HypervisorE
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterInstallModeV2, InstallChunkedCodeArgs, InstallCodeArgsV2,
-    UploadChunkReply,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -21,9 +20,9 @@ use ic_types::{
     CanisterId, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
     SnapshotId, SubnetId,
     ingress::IngressStatus,
-    messages::{CanisterCall, MessageId, RejectContext, StopCanisterContext},
+    messages::{CanisterCall, MessageId, RejectContext, StopCanisterCallId, StopCanisterContext},
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CompoundCycles, Cycles, Instructions};
 use ic_wasm_types::{AsErrorHelp, CanisterModule, ErrorHelp, WasmHash, doc_ref};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -59,21 +58,6 @@ pub(crate) enum DtsInstallCodeResult {
         paused_execution: Box<dyn PausedInstallCodeExecution>,
         ingress_status: Option<(MessageId, IngressStatus)>,
     },
-}
-
-/// The different return types from `stop_canister()` function below.
-#[derive(Eq, PartialEq, Debug)]
-pub(crate) enum StopCanisterResult {
-    /// The call failed.  The error and the unconsumed cycles are returned.
-    Failure {
-        error: CanisterManagerError,
-        cycles_to_return: Cycles,
-    },
-    /// The canister is already stopped.  The unconsumed cycles are returned.
-    AlreadyStopped { cycles_to_return: Cycles },
-    /// The request was successfully accepted.  A response will follow
-    /// eventually when the canister does stop.
-    RequestAccepted,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -316,22 +300,19 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
     }
 }
 
-pub(crate) struct UploadChunkResult {
-    pub(crate) reply: UploadChunkReply,
-    pub(crate) heap_delta_increase: NumBytes,
-}
-
 /// Bundles the reply (success) to a management canister request (referred to as "current request")
 /// with changes to `ReplicatedState` that must be applied separately.
 /// This is because `CanisterManager` only mutates a single `CanisterState` (but no other parts of `ReplicatedState`)
 /// in cases when it returns `CanisterManagerResponse`.
+#[derive(Eq, PartialEq, Debug)]
 pub(crate) struct CanisterManagerResponse {
     /// The target canister of the current request.
     /// Only `CanisterState` of that canister could have been mutated
     /// by `CanisterManager` while processing the current request.
     pub canister_id: CanisterId,
     /// The reply (success) to the current request.
-    pub reply: Vec<u8>,
+    /// If set to `None`, then processing the current request has not completed yet.
+    pub reply: Option<Vec<u8>>,
     /// The heap delta increase produced by processing
     /// the current request.
     pub heap_delta_increase: NumBytes,
@@ -341,6 +322,9 @@ pub(crate) struct CanisterManagerResponse {
     /// (Reject) responses from call contexts that were marked as "deleted" while processing the current request.
     /// Note. A call context is marked as "deleted" when a canister is uninstalled.
     pub deleted_call_context_responses: Vec<Response>,
+    /// Stop canister call ID that must be removed
+    /// because no corresponding stop canister context was inserted in `CanisterState`.
+    pub stop_call_id_to_remove: Option<StopCanisterCallId>,
     /// Stop canister request contexts (for requests other than the current request)
     /// that must be rejected (because the canister was restarted by the current request).
     pub stop_contexts_to_reject: Vec<StopCanisterContext>,
@@ -1234,5 +1218,12 @@ pub(crate) trait PausedInstallCodeExecution: Send + std::fmt::Debug {
     /// Aborts the paused execution.
     /// Returns the original message, the cycles prepaid for execution,
     /// and a call id that exist only for inter-canister messages.
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, InstallCodeCallId, Cycles);
+    fn abort(
+        self: Box<Self>,
+        log: &ReplicaLogger,
+    ) -> (
+        CanisterCall,
+        InstallCodeCallId,
+        CompoundCycles<Instructions>,
+    );
 }

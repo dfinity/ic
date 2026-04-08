@@ -1,5 +1,5 @@
 use crate::external_canister_types::{
-    CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig,
+    CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig, DummyAuthConfig,
     InternetIdentityFrontendInit, InternetIdentityInit, NnsDappCanisterArguments, OpenIdConfig,
     OpenIdEmailVerification, RateLimitConfig, SnsAggregatorConfig, StaticCaptchaTrigger,
 };
@@ -2128,6 +2128,9 @@ impl PocketIcSubnets {
             } else {
                 None
             };
+            let dummy_auth_config = DummyAuthConfig {
+                prompt_for_index: true,
+            };
             let internet_identity_backend_args = Some(InternetIdentityInit {
                 assigned_user_number_range: None, // DIFFERENT FROM ICP MAINNET
                 archive_config: None,             // DIFFERENT FROM ICP MAINNET
@@ -2146,7 +2149,7 @@ impl PocketIcSubnets {
                 analytics_config: None,        // DIFFERENT FROM ICP MAINNET
                 enable_dapps_explorer: Some(false),
                 is_production: Some(false), // DIFFERENT FROM ICP MAINNET
-                dummy_auth: Some(None),
+                dummy_auth: Some(Some(dummy_auth_config)), // DIFFERENT FROM ICP MAINNET
                 backend_canister_id: Some(IDENTITY_CANISTER_ID.get().0),
                 backend_origin: None,
             });
@@ -2231,13 +2234,16 @@ impl PocketIcSubnets {
             format!("http://{INTERNET_IDENTITY_FRONTEND_CANISTER_ID}.localhost:{gateway_port}"),
             format!("http://id.ai.localhost:{gateway_port}"),
         ];
+        let dummy_auth_config = DummyAuthConfig {
+            prompt_for_index: true,
+        };
         let ii_frontend_init_payload = InternetIdentityFrontendInit {
             backend_canister_id: IDENTITY_CANISTER_ID.get().0,
             backend_origin,
             related_origins: Some(frontend_origins),
             fetch_root_key: Some(true),
             analytics_config: None,
-            dummy_auth: Some(None),
+            dummy_auth: Some(Some(dummy_auth_config)),
             dev_csp: Some(true),
         };
         ii_subnet
@@ -3541,7 +3547,6 @@ impl Operation for ProcessCanisterHttpInternal {
             let mut client = client.lock().unwrap();
             for (id, context) in new_requests {
                 if let Ok(()) = client.send(AdapterCanisterHttpRequest {
-                    timeout: context.time + Duration::from_secs(5 * 60),
                     id,
                     context,
                     socks_proxy_addrs: vec![],
@@ -3560,7 +3565,6 @@ impl Operation for ProcessCanisterHttpInternal {
                         {
                             sm.mock_canister_http_response(
                                 response.id.get(),
-                                response.timeout,
                                 context.request.sender,
                                 vec![response.content; sm.nodes.len()],
                             );
@@ -3672,7 +3676,6 @@ fn process_mock_canister_https_response(
             canister_http_request_id,
         )));
     };
-    let timeout = context.time + Duration::from_secs(5 * 60);
     let canister_id = context.request.sender;
 
     let response_to_content = |response: &CanisterHttpResponse| match response {
@@ -3718,7 +3721,6 @@ fn process_mock_canister_https_response(
             );
             client
                 .send(AdapterCanisterHttpRequest {
-                    timeout,
                     id: canister_http_request_id,
                     context: context.clone(),
                     socks_proxy_addrs: vec![],
@@ -3760,7 +3762,6 @@ fn process_mock_canister_https_response(
     }
     subnet.mock_canister_http_response(
         mock_canister_http_response.request_id,
-        timeout,
         canister_id,
         contents,
     );

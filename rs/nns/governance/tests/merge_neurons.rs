@@ -9,7 +9,7 @@ use ic_base_types::PrincipalId;
 use ic_nervous_system_common::ONE_YEAR_SECONDS;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::{
-    governance::MAX_DISSOLVE_DELAY_SECONDS,
+    governance::max_dissolve_delay_seconds,
     pb::v1::{
         ManageNeuron,
         manage_neuron::{Command, Merge},
@@ -166,12 +166,12 @@ fn test_merge_neurons_small(
     n1_stake in 0_u64..50_000,
     n1_maturity in 0_u64..500_000_000,
     n1_fees in 0_u64..20_000,
-    n1_dissolve in 1_u64..MAX_DISSOLVE_DELAY_SECONDS,
+    n1_dissolve in 1_u64..max_dissolve_delay_seconds(),
     n1_age in 0_u64..315_360_000,
     n2_stake in 0_u64..50_000,
     n2_maturity in 0_u64..500_000_000,
     n2_fees in 0_u64..20_000,
-    n2_dissolve in 1_u64..MAX_DISSOLVE_DELAY_SECONDS,
+    n2_dissolve in 1_u64..max_dissolve_delay_seconds(),
     n2_age in 0_u64..315_360_000
 ) {
     do_test_merge_neurons(
@@ -194,12 +194,12 @@ fn test_merge_neurons_normal(
 
     n1_maturity in 0_u64..500_000_000,
     n1_fees in 0_u64..20_000,
-    n1_dissolve in 1_u64..MAX_DISSOLVE_DELAY_SECONDS,
+    n1_dissolve in 1_u64..max_dissolve_delay_seconds(),
     n1_age in 0_u64..315_360_000,
     n2_stake in 0_u64..500_000_000,
     n2_maturity in 0_u64..500_000_000,
     n2_fees in 0_u64..20_000,
-    n2_dissolve in 1_u64..MAX_DISSOLVE_DELAY_SECONDS,
+    n2_dissolve in 1_u64..max_dissolve_delay_seconds(),
     n2_age in 0_u64..315_360_000
 ) {
     do_test_merge_neurons(

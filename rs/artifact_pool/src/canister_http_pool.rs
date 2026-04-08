@@ -261,8 +261,8 @@ mod tests {
         Signed {
             content: CanisterHttpResponseMetadata {
                 id: CallbackId::from(id),
-                timeout: UNIX_EPOCH,
                 content_hash: CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
+                content_size: 42,
                 registry_version: RegistryVersion::from(id),
                 replica_version: ReplicaVersion::default(),
             },
@@ -273,7 +273,6 @@ mod tests {
     fn fake_response(id: u64) -> CanisterHttpResponse {
         CanisterHttpResponse {
             id: CallbackId::from(id),
-            timeout: UNIX_EPOCH,
             canister_id: CanisterId::from_u64(id),
             content: CanisterHttpResponseContent::Success(Vec::new()),
         }
