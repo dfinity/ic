@@ -1221,7 +1221,7 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
 
         let removed_cycles = CompoundCycles::<Instructions>::new(
             Cycles::from(1000_u128),
-            CanisterCyclesCostSchedule::Normal,
+            cost_schedule,
         );
         test.canister_state_mut(canister_id)
             .system_state

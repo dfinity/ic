@@ -1257,7 +1257,7 @@ fn garbage_collect_local_state_with_reject_signals_for_request_from_absent_canis
             }],
             |stream_handler, state, slices, metrics| {
                 let mut expected_state = state.clone();
-                // The expected outgoing stream is empty with `begin` avanced.
+                // The expected outgoing stream is empty with `begin` advanced.
                 let expected_stream = stream_from_config(StreamConfig {
                     begin: 22,
                     ..StreamConfig::default()
