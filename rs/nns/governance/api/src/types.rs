@@ -2674,6 +2674,7 @@ pub struct CanisterSettings {
     pub memory_allocation: Option<u64>,
     pub freezing_threshold: Option<u64>,
     pub log_visibility: Option<i32>,
+    pub snapshot_visibility: Option<i32>,
     pub wasm_memory_limit: Option<u64>,
     pub wasm_memory_threshold: Option<u64>,
 }

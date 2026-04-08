@@ -2,7 +2,9 @@ use crate::{
     are_create_canister_and_install_code_proposals_enabled,
     pb::v1::{
         CreateCanisterAndInstallCode, GovernanceError, SelfDescribingValue, Topic,
-        canister_settings::LogVisibility, governance_error::ErrorType, wasm_module,
+        canister_settings::{LogVisibility, SnapshotVisibility},
+        governance_error::ErrorType,
+        wasm_module,
     },
     proposals::{
         call_canister::CallCanister,
@@ -14,6 +16,7 @@ use candid::{Encode, Nat};
 use ic_base_types::CanisterId;
 use ic_nervous_system_clients::update_settings::{
     CanisterSettings as RootCanisterSettings, LogVisibility as RootLogVisibility,
+    SnapshotVisibility as RootSnapshotVisibility,
 };
 use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_handler_root_interface as root;
@@ -156,6 +159,20 @@ impl TryFrom<LogVisibility> for RootLogVisibility {
     }
 }
 
+impl TryFrom<SnapshotVisibility> for RootSnapshotVisibility {
+    type Error = GovernanceError;
+
+    fn try_from(value: SnapshotVisibility) -> Result<Self, GovernanceError> {
+        match value {
+            SnapshotVisibility::Controllers => Ok(RootSnapshotVisibility::Controllers),
+            SnapshotVisibility::Public => Ok(RootSnapshotVisibility::Public),
+            SnapshotVisibility::Unspecified => {
+                Err(invalid_proposal_error("Invalid snapshot visibility"))
+            }
+        }
+    }
+}
+
 impl TryFrom<&crate::pb::v1::CanisterSettings> for RootCanisterSettings {
     type Error = GovernanceError;
 
@@ -166,6 +183,7 @@ impl TryFrom<&crate::pb::v1::CanisterSettings> for RootCanisterSettings {
             memory_allocation,
             freezing_threshold,
             log_visibility,
+            snapshot_visibility,
             wasm_memory_limit,
             wasm_memory_threshold,
         } = original;
@@ -181,6 +199,15 @@ impl TryFrom<&crate::pb::v1::CanisterSettings> for RootCanisterSettings {
             None => None,
         };
 
+        let snapshot_visibility = match snapshot_visibility {
+            Some(snapshot_visibility) => {
+                let snapshot_visibility = SnapshotVisibility::try_from(*snapshot_visibility)
+                    .map_err(|_| invalid_proposal_error("Invalid snapshot visibility"))?;
+                Some(RootSnapshotVisibility::try_from(snapshot_visibility)?)
+            }
+            None => None,
+        };
+
         Ok(RootCanisterSettings {
             controllers,
             compute_allocation: compute_allocation.map(Nat::from),
@@ -188,6 +215,7 @@ impl TryFrom<&crate::pb::v1::CanisterSettings> for RootCanisterSettings {
             freezing_threshold: freezing_threshold.map(Nat::from),
             reserved_cycles_limit: None,
             log_visibility,
+            snapshot_visibility,
             wasm_memory_limit: wasm_memory_limit.map(Nat::from),
             wasm_memory_threshold: wasm_memory_threshold.map(Nat::from),
         })

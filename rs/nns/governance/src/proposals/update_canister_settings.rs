@@ -1,9 +1,7 @@
 use crate::{
     pb::v1::{
-        GovernanceError, SelfDescribingValue, Topic, UpdateCanisterSettings,
-        update_canister_settings::{CanisterSettings, LogVisibility, SnapshotVisibility},
         CanisterSettings, GovernanceError, SelfDescribingValue, Topic, UpdateCanisterSettings,
-        canister_settings::LogVisibility,
+        canister_settings::{LogVisibility, SnapshotVisibility},
     },
     proposals::{
         call_canister::CallCanister,
