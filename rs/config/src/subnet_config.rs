@@ -641,7 +641,7 @@ mod tests {
         B, DEFAULT_REFERENCE_SUBNET_SIZE, MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE,
         MAX_INSTRUCTIONS_PER_ROUND, MAX_INSTRUCTIONS_PER_SLICE, SEV_REFERENCE_SUBNET_SIZE,
     };
-    use crate::subnet_config::{CyclesAccountManagerConfig, SubnetConfig};
+    use crate::subnet_config::SubnetConfig;
     use ic_registry_subnet_type::SubnetType;
     use ic_types::NumInstructions;
 
@@ -652,18 +652,6 @@ mod tests {
             MAX_INSTRUCTIONS_PER_SLICE.max(MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE)
                 + NumInstructions::from(2 * B)
         );
-    }
-
-    #[test]
-    fn application_subnet_sev_disabled_uses_default_reference_subnet_size() {
-        let config = CyclesAccountManagerConfig::application_subnet(false);
-        assert_eq!(config.reference_subnet_size, DEFAULT_REFERENCE_SUBNET_SIZE);
-    }
-
-    #[test]
-    fn application_subnet_sev_enabled_uses_sev_reference_subnet_size() {
-        let config = CyclesAccountManagerConfig::application_subnet(true);
-        assert_eq!(config.reference_subnet_size, SEV_REFERENCE_SUBNET_SIZE);
     }
 
     #[test]

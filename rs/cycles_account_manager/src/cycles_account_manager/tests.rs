@@ -105,6 +105,20 @@ fn test_reference_subnet_size_is_not_zero() {
 }
 
 #[test]
+fn application_subnet_sev_disabled_uses_default_reference_subnet_size() {
+    use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
+    let config = CyclesAccountManagerConfig::application_subnet(false);
+    assert_eq!(config.reference_subnet_size, DEFAULT_REFERENCE_SUBNET_SIZE);
+}
+
+#[test]
+fn application_subnet_sev_enabled_uses_sev_reference_subnet_size() {
+    use ic_config::subnet_config::SEV_REFERENCE_SUBNET_SIZE;
+    let config = CyclesAccountManagerConfig::application_subnet(true);
+    assert_eq!(config.reference_subnet_size, SEV_REFERENCE_SUBNET_SIZE);
+}
+
+#[test]
 fn http_requests_fee_scale() {
     let subnet_size: u64 = 34;
     let reference_subnet_size: u64 = 13;
