@@ -106,7 +106,8 @@ pub enum InvalidCanisterHttpPayloadReason {
     },
     /// A TooManyRequestErrors entry contains a non-Reject response.
     FlexibleRejectExpectedInErrorResponse(CallbackId),
-    /// A ResponsesTooLarge error is invalid: the smallest responses actually fit.
+    /// A ResponsesTooLarge error is invalid: the smallest responses actually fit,
+    /// or the number of responses is less than the minimum required.
     FlexibleResponsesNotTooLarge(CallbackId),
     /// The payload could not be deserialized
     DecodeError(ProxyDecodeError),
