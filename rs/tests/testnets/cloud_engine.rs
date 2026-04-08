@@ -51,7 +51,7 @@ use ic_system_test_driver::driver::{
     test_env::TestEnv,
     test_env_api::HasTopologySnapshot,
 };
-use ic_types::PrincipalId;
+use ic_types::{Height, PrincipalId};
 use nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental_with_dummy_auth, nns_dapp_customizations,
     set_authorized_subnets,
@@ -116,7 +116,12 @@ pub fn setup(env: TestEnv) {
 
     let mut ic = InternetComputer::new()
         .with_required_host_features(dm1_dmz_features.clone())
-        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1));
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .add_nodes(1)
+                // To speed up subnet creation
+                .with_dkg_interval_length(Height::from(10)),
+        );
 
     // Build CloudEngine subnet and unassigned nodes distributed across 4 datacenters.
     // Each datacenter gets its own node operator with 1 CloudEngine node + 1 unassigned node.
