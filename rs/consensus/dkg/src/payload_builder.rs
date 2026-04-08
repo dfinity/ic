@@ -663,11 +663,10 @@ fn process_subnet_call_context(
         process_reshare_chain_key_contexts(
             this_subnet_id,
             start_block_height,
-            registry_client,
             state,
             validation_context,
             reshared_transcripts,
-        )?;
+        );
 
     let dkg_configs = init_dkg_configs
         .into_iter()
@@ -689,18 +688,14 @@ fn process_subnet_call_context(
 fn process_reshare_chain_key_contexts(
     this_subnet_id: SubnetId,
     start_block_height: Height,
-    registry_client: &dyn RegistryClient,
     state: &ReplicatedState,
     validation_context: &ValidationContext,
     reshared_transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
-) -> Result<
-    (
-        Vec<Vec<NiDkgConfig>>,
-        Vec<(NiDkgId, String)>,
-        Vec<NiDkgTargetId>,
-    ),
-    DkgPayloadCreationError,
-> {
+) -> (
+    Vec<Vec<NiDkgConfig>>,
+    Vec<(NiDkgId, String)>,
+    Vec<NiDkgTargetId>,
+) {
     let mut new_configs = Vec::new();
     let mut errors = Vec::new();
     let mut valid_target_ids = Vec::new();
@@ -720,15 +715,11 @@ fn process_reshare_chain_key_contexts(
             continue;
         };
 
-        // Dealers must be in the same registry_version.
-        let dealers = get_node_list(this_subnet_id, registry_client, context.registry_version)?;
-
         match create_remote_dkg_config_for_key_id(
             key_id,
             start_block_height,
             this_subnet_id,
             context.target_id,
-            &dealers,
             &context.nodes,
             reshared_transcripts,
             &context.registry_version,
@@ -740,7 +731,7 @@ fn process_reshare_chain_key_contexts(
             Err(err) => errors.push(*err),
         }
     }
-    Ok((new_configs, errors, valid_target_ids))
+    (new_configs, errors, valid_target_ids)
 }
 
 #[allow(clippy::type_complexity)]
@@ -933,7 +924,6 @@ fn create_remote_dkg_config_for_key_id(
     start_block_height: Height,
     dealer_subnet: SubnetId,
     target_id: NiDkgTargetId,
-    dealers: &BTreeSet<NodeId>,
     receivers: &BTreeSet<NodeId>,
     reshared_transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
     registry_version: &RegistryVersion,
@@ -956,7 +946,7 @@ fn create_remote_dkg_config_for_key_id(
 
     create_remote_dkg_config(
         dkg_id.clone(),
-        dealers,
+        resharing_transcript.committee.get(),
         receivers,
         registry_version,
         Some(resharing_transcript.clone()),
@@ -1003,7 +993,7 @@ mod tests {
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         RegistryVersion,
-        crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet},
         time::UNIX_EPOCH,
     };
     use std::collections::BTreeSet;
@@ -1126,6 +1116,49 @@ mod tests {
                 }
             );
         }
+    }
+
+    #[test]
+    fn test_create_remote_dkg_config_for_key_id_dealers_match_reshared_transcript_committee() {
+        let transcript_committee: Vec<_> = (0..4).map(node_test_id).collect();
+        let receivers: BTreeSet<_> = (4..8).map(node_test_id).collect();
+        let start_block_height = Height::from(500);
+        let dealer_subnet = subnet_test_id(1);
+        let target_id = NiDkgTargetId::new([7_u8; 32]);
+        let registry_version = RegistryVersion::from(777);
+
+        let key_id = NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
+            curve: VetKdCurve::Bls12_381_G2,
+            name: String::from("test_key"),
+        });
+        let tag = NiDkgTag::HighThresholdForKey(key_id.clone());
+
+        let resharing_transcript = dummy_transcript_for_tests_with_params(
+            transcript_committee.clone(),
+            tag.clone(),
+            tag.threshold_for_subnet_of_size(transcript_committee.len()) as u32,
+            777,
+        );
+
+        let mut reshared_transcripts = BTreeMap::new();
+        reshared_transcripts.insert(tag, resharing_transcript.clone());
+
+        let config = super::create_remote_dkg_config_for_key_id(
+            key_id,
+            start_block_height,
+            dealer_subnet,
+            target_id,
+            &receivers,
+            &reshared_transcripts,
+            &registry_version,
+        )
+        .expect("expected remote DKG config for resharing");
+
+        assert_eq!(
+            config.dealers().get(),
+            resharing_transcript.committee.get(),
+            "dealers must be the committee of the transcript being reshared"
+        );
     }
 
     #[test]
