@@ -95,11 +95,23 @@ fn test_reference_subnet_size_is_not_zero() {
         0
     );
     assert_ne!(
+        CyclesAccountManagerConfig::application_subnet(true).reference_subnet_size,
+        0
+    );
+    assert_ne!(
         CyclesAccountManagerConfig::verified_application_subnet(false).reference_subnet_size,
         0
     );
     assert_ne!(
+        CyclesAccountManagerConfig::verified_application_subnet(true).reference_subnet_size,
+        0
+    );
+    assert_ne!(
         CyclesAccountManagerConfig::system_subnet().reference_subnet_size,
+        0
+    );
+    assert_ne!(
+        CyclesAccountManagerConfig::cloud_engine().reference_subnet_size,
         0
     );
 }
