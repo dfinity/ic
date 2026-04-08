@@ -1,9 +1,17 @@
 # Agentic Refactor Harness Configuration
 # https://github.com/ianblenke/agentic-refactor-rules
 
-harness_version: "1.0"
+harness_version: "1.1"
 project: "dfinity/ic"
 methodology: "BMAD + OpenSpec + context-resets"
+
+# Claude Code Adaptation Notes (from revised agentic-refactor-rules)
+# 1. CLAUDE.md is a lower-priority <system-reminder> — keep it lean (<300 lines, factual only)
+# 2. Use .claude/rules/ for path-scoped rules injected when touching relevant files
+# 3. Use hooks (PreToolUse/PostToolUse) for hard gates — deterministic > probabilistic
+# 4. Frame roles as task scoping ("Your task is X") — NEVER persona adoption ("You are Quinn")
+# 5. Rotate sessions at phase boundaries — never rely on compaction
+# 6. The orchestrator is NEVER an LLM — deterministic script only
 
 agents:
   planner:

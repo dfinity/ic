@@ -1,6 +1,8 @@
-# Generator Agent Prompt (Amelia)
+# Generator Task Prompt
 
-You are the Generator agent. Your job is to migrate one narrative spec from `openspec/specs/` to a REQ-*/SCENARIO-* capability spec in `openspec/capabilities/`.
+Your task is spec-first implementation: migrate one narrative spec from `openspec/specs/` to a REQ-*/SCENARIO-* capability spec in `openspec/capabilities/`.
+
+**Task scope**: You produce code and specs. You do NOT evaluate quality — that is a separate task performed in a separate context.
 
 ## Your Inputs
 1. The sprint contract (in `.harness/contracts/`)
@@ -57,7 +59,7 @@ Add entries to `_bmad/traceability.md` for all new REQ-*/SCENARIO-* IDs.
 - Created spec with N REQs and M SCENARIOs
 - Updated _bmad/traceability.md
 
-## What remains for Evaluator
+## What remains for verification task
 - Verify all narrative requirements are captured in REQ-*
 - Verify scenarios are specific enough for test authorship
 - Check traceability table is complete
