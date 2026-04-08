@@ -494,6 +494,10 @@ pub(crate) enum CanisterManagerError {
         bytes: NumBytes,
         limit: NumBytes,
     },
+    CanisterSnapshotAccessDenied {
+        caller: PrincipalId,
+        method_name: String,
+    },
 }
 
 impl AsErrorHelp for CanisterManagerError {
@@ -741,6 +745,11 @@ impl AsErrorHelp for CanisterManagerError {
             CanisterManagerError::CallerNotAuthorized => ErrorHelp::UserError {
                 suggestion: "The caller is not authorized to call this method.".to_string(),
                 doc_link: "".to_string(),
+            },
+            CanisterManagerError::CanisterSnapshotAccessDenied { .. } => ErrorHelp::UserError {
+                suggestion: "Execute this call from a principal with snapshot read access."
+                    .to_string(),
+                doc_link: doc_ref("invalid-controller"),
             },
             CanisterManagerError::CanisterLogMemoryLimitIsTooHigh { .. } => ErrorHelp::UserError {
                 suggestion: "Set a lower canister log memory limit.".to_string(),
@@ -1164,6 +1173,13 @@ impl From<CanisterManagerError> for UserError {
             CallerNotAuthorized => Self::new(
                 ErrorCode::CanisterRejectedMessage,
                 "The caller is not authorized to call this method.".to_string(),
+            ),
+            CanisterSnapshotAccessDenied {
+                caller,
+                method_name,
+            } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!("Caller {caller} is not allowed to call {method_name}"),
             ),
             CanisterLogMemoryLimitIsTooHigh { bytes, limit } => Self::new(
                 ErrorCode::CanisterRejectedMessage,
