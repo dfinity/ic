@@ -2474,8 +2474,11 @@ mod tests {
 
         // Set big enough limit and trigger the eviction.
         controller.max_sandbox_count = usize::MAX;
-        controller.default_subnet_heap_delta_capacity =
-            NumBytes::from(active as u64 * DEFAULT_SANDBOX_PROCESS_RSS.get() * MAX_SANDBOXES_RSS_TO_HEAP_DELTA_RATIO);
+        controller.default_subnet_heap_delta_capacity = NumBytes::from(
+            active as u64
+                * DEFAULT_SANDBOX_PROCESS_RSS.get()
+                * MAX_SANDBOXES_RSS_TO_HEAP_DELTA_RATIO,
+        );
         {
             let mut guard = controller.backends.lock().unwrap();
             controller.trigger_sandbox_eviction(
@@ -2492,8 +2495,11 @@ mod tests {
         assert_eq!(empty, partitioned_backends.2.len());
 
         // Trigger one active sandbox eviction.
-        controller.default_subnet_heap_delta_capacity =
-            NumBytes::from((active as u64 - 1) * DEFAULT_SANDBOX_PROCESS_RSS.get() * MAX_SANDBOXES_RSS_TO_HEAP_DELTA_RATIO);
+        controller.default_subnet_heap_delta_capacity = NumBytes::from(
+            (active as u64 - 1)
+                * DEFAULT_SANDBOX_PROCESS_RSS.get()
+                * MAX_SANDBOXES_RSS_TO_HEAP_DELTA_RATIO,
+        );
         {
             let mut guard = controller.backends.lock().unwrap();
             controller.trigger_sandbox_eviction(
@@ -2534,8 +2540,11 @@ mod tests {
 
         controller.max_sandbox_count = usize::MAX;
         // The limit should trigger the eviction by RSS...
-        controller.default_subnet_heap_delta_capacity =
-            NumBytes::from((active as u64 - 1) * DEFAULT_SANDBOX_PROCESS_RSS.get() * MAX_SANDBOXES_RSS_TO_HEAP_DELTA_RATIO);
+        controller.default_subnet_heap_delta_capacity = NumBytes::from(
+            (active as u64 - 1)
+                * DEFAULT_SANDBOX_PROCESS_RSS.get()
+                * MAX_SANDBOXES_RSS_TO_HEAP_DELTA_RATIO,
+        );
         // ... but the available memory is big enough to skip the eviction.
         let available_memory = || Some(DEFAULT_MIN_MEM_AVAILABLE_TO_EVICT_SANDBOXES);
         {
