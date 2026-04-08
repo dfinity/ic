@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use crate::common::helpers::get_key_family;
+use crate::common::key_family::get_key_family;
 use crate::{common::LOG_PREFIX, registry::Registry};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;

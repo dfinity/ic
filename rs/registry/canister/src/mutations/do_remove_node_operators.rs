@@ -1,5 +1,5 @@
 use crate::{
-    common::{LOG_PREFIX, helpers::get_key_family_iter},
+    common::{LOG_PREFIX, key_family::get_key_family_iter},
     registry::Registry,
 };
 
