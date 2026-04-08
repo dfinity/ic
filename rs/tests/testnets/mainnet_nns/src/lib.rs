@@ -736,7 +736,7 @@ fn write_sh_lib(env: &TestEnv, NeuronId(neuron_id): NeuronId, http_gateway: &Url
         .write_all(
             RECOVERED_NNS_DICTATOR_NEURON_IDENTITY
                 .get()
-                .unwrap()
+                .expect("'write_dictator_neuron_identity_to_env' should have been called before 'write_sh_lib'")
                 .1
                 .as_bytes(),
         )
