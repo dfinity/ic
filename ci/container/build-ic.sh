@@ -8,7 +8,8 @@ if [ "${BUILD_IC_NESTED:-}" == 1 ]; then
     echo "$0 nested, aborting"
     exit 1
 fi
-export BUILD_IC_NESTED=1
+export 
+BUILD_IC_NESTED=1
 
 export ROOT_DIR="$(git rev-parse --show-toplevel)"
 
