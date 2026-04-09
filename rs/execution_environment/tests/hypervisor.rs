@@ -2079,7 +2079,7 @@ fn ic0_msg_caller_info_works_in_ingress() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
 
-    let info = vec![1u8, 2, 3, 4];
+    let info = vec![1_u8, 2, 3, 4];
     let signer = canister_test_id(42);
     test.set_sender_info(SenderInfo {
         info: info.clone(),
@@ -2141,7 +2141,7 @@ fn ic0_msg_caller_info_empty_for_inter_canister_calls() {
     // Set sender_info so the caller (user → caller_id) sees it.
     // The callee (caller_id → callee_id) must see empty values.
     test.set_sender_info(SenderInfo {
-        info: vec![1u8, 2, 3, 4],
+        info: vec![1_u8, 2, 3, 4],
         signer: canister_test_id(42),
     });
 
@@ -2181,7 +2181,7 @@ fn ic0_msg_caller_info_works_in_reply_callback() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
 
-    let info = vec![1u8, 2, 3, 4];
+    let info = vec![1_u8, 2, 3, 4];
     let signer = canister_test_id(42);
     test.set_sender_info(SenderInfo {
         info: info.clone(),
@@ -2220,7 +2220,7 @@ fn ic0_msg_caller_info_works_in_composite_query() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
 
-    let info = vec![1u8, 2, 3, 4];
+    let info = vec![1_u8, 2, 3, 4];
     let signer = canister_test_id(42);
     test.set_sender_info(SenderInfo {
         info: info.clone(),
@@ -2254,7 +2254,7 @@ fn ic0_msg_caller_info_works_in_composite_query_reply_callback() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
 
-    let info = vec![1u8, 2, 3, 4];
+    let info = vec![1_u8, 2, 3, 4];
     let signer = canister_test_id(42);
     test.set_sender_info(SenderInfo {
         info: info.clone(),
@@ -2301,7 +2301,7 @@ fn ic0_msg_caller_info_empty_for_nested_composite_query_calls() {
     // Set sender_info so the top-level caller sees it; the callee (nested call)
     // must see empty values because it is called by a canister, not a user.
     test.set_sender_info(SenderInfo {
-        info: vec![1u8, 2, 3, 4],
+        info: vec![1_u8, 2, 3, 4],
         signer: canister_test_id(42),
     });
 
@@ -2341,7 +2341,7 @@ fn ic0_msg_caller_info_works_in_replicated_query() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
 
-    let info = vec![1u8, 2, 3, 4];
+    let info = vec![1_u8, 2, 3, 4];
     let signer = canister_test_id(42);
     test.set_sender_info(SenderInfo {
         info: info.clone(),
@@ -2375,7 +2375,7 @@ fn ic0_msg_caller_info_works_in_non_replicated_query() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
 
-    let info = vec![1u8, 2, 3, 4];
+    let info = vec![1_u8, 2, 3, 4];
     let signer = canister_test_id(42);
     test.set_sender_info(SenderInfo {
         info: info.clone(),
@@ -2409,7 +2409,7 @@ fn ic0_msg_caller_info_works_in_inspect_message() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
 
-    let info = vec![1u8, 2, 3, 4];
+    let info = vec![1_u8, 2, 3, 4];
     let signer = canister_test_id(42);
     test.set_sender_info(SenderInfo {
         info: info.clone(),
