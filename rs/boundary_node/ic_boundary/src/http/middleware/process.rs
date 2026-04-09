@@ -65,6 +65,7 @@ where
     Ok(s)
 }
 
+/// Checks if given paths are cacheable
 pub(crate) fn should_cache_paths(paths: &[Vec<Blob>]) -> bool {
     // Check that we have correct lengths
     if paths.len() != 2 || paths.iter().any(|x| x.len() != 2) {
@@ -125,16 +126,12 @@ pub async fn preprocess_request(
         (_, arg) => (arg, None),
     };
 
-    // Check if it's a subnet read state request & it's eligible for caching,
-    // then compute the hash
+    // Check if it's a subnet read state request & it's eligible for caching
     let read_state_paths = if request_type.is_read_state_subnet()
         && let Some(x) = content.paths
+        && should_cache_paths(&x)
     {
-        if !should_cache_paths(&x) {
-            None
-        } else {
-            Some(x.into())
-        }
+        Some(x.into())
     } else {
         None
     };
