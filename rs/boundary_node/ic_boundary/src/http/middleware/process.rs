@@ -72,15 +72,24 @@ pub(crate) fn should_cache_paths(paths: &[Vec<Blob>]) -> bool {
         return false;
     }
 
-    // Check that we have a correct combination of first labels and the second label
-    // is a valid principal in both paths
-    ((paths[0][0].0 == b"canister_ranges" && paths[1][0].0 == b"subnet")
-        || (paths[0][0].0 == b"subnet" && paths[1][0].0 == b"canister_ranges"))
-        && Principal::try_from_slice(&paths[0][1].0).is_ok()
-        && Principal::try_from_slice(&paths[1][1].0).is_ok()
+    // Check that 2nd labels are short enough to be Principals
+    if !paths
+        .iter()
+        .all(|x| x[1].0.len() <= Principal::MAX_LENGTH_IN_BYTES)
+    {
+        return false;
+    }
+
+    // Check that we have a correct combination of 1st labels.
+    // This looks a bit ugly, but efficient.
+    [
+        (&b"canister_ranges"[..], &b"subnet"[..]),
+        (&b"subnet"[..], &b"canister_ranges"[..]),
+    ]
+    .contains(&(&paths[0][0].0[..], &paths[1][0].0[..]))
 }
 
-// Middleware: preprocess the request before handing it over to handlers
+/// Middleware: preprocess the request before handing it over to handlers
 pub async fn preprocess_request(
     Extension(request_type): Extension<RequestType>,
     request: Request,
@@ -389,6 +398,7 @@ mod tests {
         };
 
         // non-cacheable
+        assert!(!should_cache_paths_wrapper(&[vec![]]));
         assert!(!should_cache_paths_wrapper(&[vec![
             b"canister_ranges".to_vec()
         ]]));
