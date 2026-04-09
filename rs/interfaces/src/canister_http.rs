@@ -106,8 +106,13 @@ pub enum InvalidCanisterHttpPayloadReason {
     },
     /// A TooManyRequestErrors entry contains a non-Reject response.
     FlexibleRejectExpectedInErrorResponse(CallbackId),
-    /// A ResponsesTooLarge error is invalid: the smallest responses actually fit,
-    /// or the number of responses is less than the minimum required.
+    /// A ResponsesTooLarge error does not carry enough metadata shares.
+    FlexibleInsufficientMetadataShareCount {
+        callback_id: CallbackId,
+        share_count: usize,
+        min_needed: usize,
+    },
+    /// A ResponsesTooLarge error is invalid: the smallest responses actually fit.
     FlexibleResponsesNotTooLarge(CallbackId),
     /// The payload could not be deserialized
     DecodeError(ProxyDecodeError),

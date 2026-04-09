@@ -786,9 +786,11 @@ impl CanisterHttpPayloadBuilderImpl {
 
                     if metadata_shares.len() < *min_responses as usize {
                         return invalid_artifact(
-                            InvalidCanisterHttpPayloadReason::FlexibleResponsesNotTooLarge(
+                            InvalidCanisterHttpPayloadReason::FlexibleInsufficientMetadataShareCount {
                                 callback_id,
-                            ),
+                                share_count: metadata_shares.len(),
+                                min_needed: *min_responses as usize,
+                            },
                         );
                     }
                     // Verify the smallest `min_responses` response-with-proof sizes

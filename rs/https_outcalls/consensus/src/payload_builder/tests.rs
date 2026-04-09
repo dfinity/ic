@@ -3251,7 +3251,11 @@ fn flexible_error_responses_too_large_too_few_shares() {
             result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::FlexibleResponsesNotTooLarge(id)
+                    InvalidCanisterHttpPayloadReason::FlexibleInsufficientMetadataShareCount {
+                        callback_id: id,
+                        share_count: 2,
+                        min_needed: 3,
+                    }
                 )
             )) if id == callback_id
         );
