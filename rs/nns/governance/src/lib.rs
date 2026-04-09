@@ -217,6 +217,9 @@ thread_local! {
     static ENABLE_CANISTER_SNAPSHOT_PROPOSALS: Cell<bool>
         = const { Cell::new(true) };
 
+    static ENABLE_CREATE_CANISTER_AND_INSTALL_CODE_PROPOSALS: Cell<bool>
+        = const { Cell::new(cfg!(feature = "test")) };
+
     static ENABLE_SUBNET_SPLITTING_PROPOSALS: Cell<bool>
         = const { Cell::new(false) };
 
@@ -315,6 +318,20 @@ pub fn temporarily_enable_canister_snapshot_proposals() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_canister_snapshot_proposals() -> Temporary {
     Temporary::new(&ENABLE_CANISTER_SNAPSHOT_PROPOSALS, false)
+}
+
+pub fn are_create_canister_and_install_code_proposals_enabled() -> bool {
+    ENABLE_CREATE_CANISTER_AND_INSTALL_CODE_PROPOSALS.get()
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_create_canister_and_install_code_proposals() -> Temporary {
+    Temporary::new(&ENABLE_CREATE_CANISTER_AND_INSTALL_CODE_PROPOSALS, true)
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_create_canister_and_install_code_proposals() -> Temporary {
+    Temporary::new(&ENABLE_CREATE_CANISTER_AND_INSTALL_CODE_PROPOSALS, false)
 }
 
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
