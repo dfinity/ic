@@ -19964,6 +19964,7 @@ dependencies = [
  "ic-types",
  "ic-types-cycles",
  "ic-utils 0.45.0",
+ "ic-validator-http-request-test-utils",
  "ic-validator-ingress-message",
  "icp-ledger",
  "icrc-ledger-types",
