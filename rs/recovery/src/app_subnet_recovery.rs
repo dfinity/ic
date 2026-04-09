@@ -405,7 +405,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                     self.recovery.take_subnet_offline_for_repairs(
                         self.params.subnet_id,
                         &subnet_readonly_keys,
-                        &self.params
+                        &self
+                            .params
                             .write_node_id_and_pub_key
                             .clone()
                             .map(|(node_id, pub_key)| BTreeMap::from([(node_id, vec![pub_key])]))
