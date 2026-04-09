@@ -219,6 +219,14 @@ pub enum SystemApiCallId {
     MsgArgDataSize,
     /// Tracker for `ic0.msg_caller_copy()`
     MsgCallerCopy,
+    /// Tracker for `ic0.msg_caller_info_data_copy()`
+    MsgCallerInfoDataCopy,
+    /// Tracker for `ic0.msg_caller_info_data_size()`
+    MsgCallerInfoDataSize,
+    /// Tracker for `ic0.msg_caller_info_signer_copy()`
+    MsgCallerInfoSignerCopy,
+    /// Tracker for `ic0.msg_caller_info_signer_size()`
+    MsgCallerInfoSignerSize,
     /// Tracker for `ic0.msg_caller_size()`
     MsgCallerSize,
     /// Tracker for `ic0.msg_cycles_accept()`
