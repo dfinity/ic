@@ -67,7 +67,7 @@ use ic_types::batch::ChainKeyData;
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
 };
-use ic_types::messages::{SignedIngressContent, SignedSenderInfo};
+use ic_types::messages::{Blob, RawSignedSenderInfo, SignedIngressContent, SignedSenderInfo};
 use ic_types::{
     CanisterId, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
     batch::QueryStats,
@@ -2099,12 +2099,19 @@ impl ExecutionTest {
         method_name: S,
         method_payload: Vec<u8>,
     ) -> Result<(), UserError> {
-        let ingress = SignedIngressBuilder::new()
+        let mut builder = SignedIngressBuilder::new()
             .sender(self.user_id())
             .canister_id(canister_id)
             .method_name(method_name)
-            .method_payload(method_payload)
-            .build();
+            .method_payload(method_payload);
+        if let Some(si) = &self.sender_info {
+            builder = builder.sender_info(RawSignedSenderInfo {
+                info: Blob(si.info.clone()),
+                signer: Blob(si.signer.get().into_vec()),
+                sig: Blob(vec![]),
+            });
+        }
+        let ingress = builder.build();
         self.exec_env.should_accept_ingress_message(
             Arc::new(self.state().clone()),
             &ProvisionalWhitelist::new_empty(),

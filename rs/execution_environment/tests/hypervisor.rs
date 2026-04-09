@@ -2293,6 +2293,64 @@ fn ic0_msg_caller_info_works_in_non_replicated_query() {
 }
 
 #[test]
+fn ic0_msg_caller_info_works_in_inspect_message() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let info = vec![1u8, 2, 3, 4];
+    let signer = canister_test_id(42);
+    test.set_sender_info(SenderInfo {
+        info: info.clone(),
+        signer,
+    });
+
+    // Set inspect_message to trap iff msg_caller_info_data equals `info`.
+    // Since the correct value IS `info`, the handler will trap.
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .set_inspect_message(
+                wasm()
+                    .msg_caller_info_data()
+                    .trap_if_eq(&info, "info")
+                    .accept_message()
+                    .build(),
+            )
+            .reply()
+            .build(),
+    )
+    .unwrap();
+    let err = test
+        .should_accept_ingress_message(canister_id, "update", vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
+
+    // Set inspect_message to trap iff msg_caller_info_signer equals signer bytes.
+    // Since the correct value IS the signer, the handler will trap.
+    let signer_bytes = signer.get_ref().as_slice().to_vec();
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .set_inspect_message(
+                wasm()
+                    .msg_caller_info_signer()
+                    .trap_if_eq(&signer_bytes, "signer")
+                    .accept_message()
+                    .build(),
+            )
+            .reply()
+            .build(),
+    )
+    .unwrap();
+    let err = test
+        .should_accept_ingress_message(canister_id, "update", vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
+}
+
+#[test]
 fn ic0_msg_arg_data_copy_is_not_available_in_reject_callback() {
     let mut test = ExecutionTestBuilder::new().build();
     let caller_id = test.universal_canister().unwrap();
