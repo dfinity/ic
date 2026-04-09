@@ -869,7 +869,7 @@ fn test_icrc2_feature_flag_doesnt_disable_icrc2_endpoints() {
             max_transactions_per_response: None,
         },
         max_memo_length: None,
-        feature_flags: Some(FeatureFlags { icrc2: false }),
+        feature_flags: Some(FeatureFlags { icrc2: false, icrc152: false }),
         index_principal: None,
     }))
     .unwrap();
@@ -1904,7 +1904,7 @@ mod verify_written_blocks {
                     max_transactions_per_response: None,
                 },
                 max_memo_length: None,
-                feature_flags: Some(FeatureFlags { icrc2: true }),
+                feature_flags: Some(FeatureFlags { icrc2: true, icrc152: false }),
                 index_principal: None,
             });
 
