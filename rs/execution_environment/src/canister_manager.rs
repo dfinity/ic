@@ -988,17 +988,12 @@ impl CanisterManager {
     pub(crate) fn uninstall_code(
         &self,
         origin: CanisterChangeOrigin,
-        canister_id: CanisterId,
-        state: &mut ReplicatedState,
+        canister: &mut CanisterState,
         round_limits: &mut RoundLimits,
         subnet_admins: Option<BTreeSet<PrincipalId>>,
         time: Time,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         let sender = origin.origin();
-        let canister = match state.canister_state(&canister_id) {
-            Some(canister) => canister,
-            None => return Err(CanisterManagerError::CanisterNotFound(canister_id)),
-        };
 
         // Skip the controller or subnet admins validation if the sender is the
         // governance canister. The governance canister can forcefully
@@ -1007,7 +1002,6 @@ impl CanisterManager {
             validate_controller_or_subnet_admin(canister, subnet_admins, &sender)?;
         }
 
-        let canister = state.canister_state_make_mut(&canister_id).unwrap();
         let rejects = uninstall_canister(
             &self.log,
             canister,
@@ -1026,7 +1020,7 @@ impl CanisterManager {
             .update_execution_memory_unchecked(available_execution_memory_change);
 
         Ok(CanisterManagerResponse {
-            canister_id,
+            canister_id: canister.canister_id(),
             reply: Some(EmptyBlob.encode()),
             heap_delta_increase: NumBytes::new(0),
             unflushed_checkpoint_op: None,
@@ -1052,22 +1046,12 @@ impl CanisterManager {
     /// If the canister is already stopped, then this function is a no-op.
     pub(crate) fn stop_canister(
         &self,
-        canister_id: CanisterId,
         msg: &mut CanisterCall,
         call_id: StopCanisterCallId,
-        state: &mut ReplicatedState,
+        canister: &mut CanisterState,
         subnet_admins: Option<BTreeSet<PrincipalId>>,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
-        let canister = match state.canister_state(&canister_id) {
-            None => {
-                return Err(CanisterManagerError::CanisterNotFound(canister_id));
-            }
-            Some(canister) => canister,
-        };
-
         validate_controller_or_subnet_admin(canister, subnet_admins, msg.sender())?;
-
-        let canister = state.canister_state_make_mut(&canister_id).unwrap();
 
         // If the canister did not begin stopping, i.e., if the canister is already stopped,
         // then we produce a reply immediately and return the `call_id` to be closed.
@@ -1080,7 +1064,7 @@ impl CanisterManager {
         canister.system_state.bump_canister_version();
 
         Ok(CanisterManagerResponse {
-            canister_id,
+            canister_id: canister.canister_id(),
             reply,
             heap_delta_increase: NumBytes::new(0),
             unflushed_checkpoint_op: None,

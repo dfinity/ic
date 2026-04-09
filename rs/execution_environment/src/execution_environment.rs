@@ -820,15 +820,15 @@ impl ExecutionEnvironment {
                 Ok(args) => {
                     let subnet_admins = state.get_own_subnet_admins();
                     let time = state.time();
-                    let result = self.canister_manager.uninstall_code(
+                    self.uninstall_code(
                         msg.canister_change_origin(args.get_sender_canister_version()),
                         args.get_canister_id(),
                         &mut state,
+                        &mut msg,
                         round_limits,
                         subnet_admins,
                         time,
-                    );
-                    self.process_canister_manager_result(result, &mut state, &mut msg)
+                    )
                 }
             },
 
@@ -2334,6 +2334,37 @@ impl ExecutionEnvironment {
         self.process_canister_manager_result(result, state, msg)
     }
 
+    fn uninstall_code(
+        &self,
+        origin: CanisterChangeOrigin,
+        canister_id: CanisterId,
+        state: &mut ReplicatedState,
+        msg: &mut CanisterCall,
+        round_limits: &mut RoundLimits,
+        subnet_admins: Option<BTreeSet<PrincipalId>>,
+        time: Time,
+    ) -> ExecuteSubnetMessageResult {
+        let canister = match canister_make_mut(canister_id, state) {
+            Ok(canister) => canister,
+            Err(err) => {
+                return ExecuteSubnetMessageResult::Finished {
+                    response: Err(err),
+                    refund: msg.take_cycles(),
+                };
+            }
+        };
+
+        let result = self.canister_manager.uninstall_code(
+            origin,
+            canister,
+            round_limits,
+            subnet_admins,
+            time,
+        );
+
+        self.process_canister_manager_result(result, state, msg)
+    }
+
     fn start_canister(
         &self,
         canister_id: CanisterId,
@@ -2467,9 +2498,19 @@ impl ExecutionEnvironment {
                 effective_canister_id: canister_id,
                 time: state.time(),
             });
-        let result =
-            self.canister_manager
-                .stop_canister(canister_id, msg, call_id, state, subnet_admins);
+        let canister = match canister_make_mut(canister_id, state) {
+            Ok(canister) => canister,
+            Err(err) => {
+                self.remove_stop_canister_call(state, canister_id, Some(call_id));
+                return ExecuteSubnetMessageResult::Finished {
+                    response: Err(err),
+                    refund: msg.take_cycles(),
+                };
+            }
+        };
+        let result = self
+            .canister_manager
+            .stop_canister(msg, call_id, canister, subnet_admins);
         if result.is_err() {
             self.remove_stop_canister_call(state, canister_id, Some(call_id));
         }
