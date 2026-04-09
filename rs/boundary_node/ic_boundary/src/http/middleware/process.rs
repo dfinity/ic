@@ -1,5 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
+use axum::body::HttpBody;
 use axum::{Extension, body::Body, extract::Request, middleware::Next, response::IntoResponse};
 use bytes::Bytes;
 use candid::{Decode, Principal};
@@ -23,7 +24,11 @@ const METHOD_HTTP: &str = "http_request";
 const HEADERS_HIDE_HTTP_REQUEST: [&str; 4] =
     ["x-real-ip", "x-forwarded-for", "x-request-id", "user-agent"];
 
-// This is the subset of the request fields
+/// This is the subset of the request fields.
+///
+/// TODO: add sanity checks for Blob fields so that
+/// we don't process too big forged requests.
+/// E.g. the nonce is probably fixed-length etc.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct ICRequestContent {
     sender: Principal,
@@ -60,6 +65,16 @@ where
     Ok(s)
 }
 
+fn is_cacheable_path(path: &[Blob]) -> bool {
+    path.len() == 2
+        && (path[0].0 == b"canister_ranges" || path[0].0 == b"subnet")
+        && Principal::try_from_slice(&path[1].0).is_ok()
+}
+
+pub(crate) fn should_cache_paths(paths: &[Vec<Blob>]) -> bool {
+    paths.len() == 2 && paths.iter().all(|x| is_cacheable_path(&x))
+}
+
 // Middleware: preprocess the request before handing it over to handlers
 pub async fn preprocess_request(
     Extension(request_type): Extension<RequestType>,
@@ -68,6 +83,12 @@ pub async fn preprocess_request(
 ) -> Result<impl IntoResponse, ApiError> {
     // Consume body
     let (parts, body) = request.into_parts();
+
+    // Early check for the body size to avoid streaming too big requests
+    if body.size_hint().exact() > Some(MAX_REQUEST_BODY_SIZE as u64) {
+        return Err(ErrorCause::PayloadTooLarge(MAX_REQUEST_BODY_SIZE).into());
+    }
+
     let body = buffer_body_to_bytes(body, MAX_REQUEST_BODY_SIZE, Duration::from_secs(60)).await?;
 
     // Parse the request body
@@ -100,6 +121,20 @@ pub async fn preprocess_request(
         (_, arg) => (arg, None),
     };
 
+    // Check if it's a subnet read state request & it's eligible for caching,
+    // then compute the hash
+    let read_state_paths = if request_type.is_read_state_subnet()
+        && let Some(x) = content.paths
+    {
+        if !should_cache_paths(&x) {
+            None
+        } else {
+            Some(x.into())
+        }
+    } else {
+        None
+    };
+
     // Construct the context
     let ctx = RequestContext {
         request_type,
@@ -111,11 +146,7 @@ pub async fn preprocess_request(
         arg: arg.map(|x| x.0),
         nonce: content.nonce.map(|x| x.0),
         http_request,
-        read_state_paths: content.paths.map(|p| {
-            p.into_iter()
-                .map(|v| v.into_iter().map(|b| b.0).collect())
-                .collect()
-        }),
+        read_state_paths,
     };
 
     let ctx = Arc::new(ctx);
@@ -244,6 +275,7 @@ pub async fn postprocess_response(request: Request, next: Next) -> impl IntoResp
 mod tests {
     use super::*;
     use candid::Principal;
+    use ic_bn_lib_common::principal;
     use serde_cbor::Value;
     use std::collections::BTreeMap;
 
@@ -341,5 +373,67 @@ mod tests {
 
         let content: ICRequestContent = serde_cbor::from_slice(&data).unwrap();
         assert!(content.method_name.is_none());
+    }
+
+    #[test]
+    fn test_should_cache_paths() {
+        let subnet_id = Blob(principal!("aaaaa-aa").as_slice().to_vec());
+
+        // non-cacheable
+        assert!(!should_cache_paths(&vec![vec![Blob(
+            b"canister_ranges".to_vec()
+        )]]));
+        assert!(!should_cache_paths(&vec![vec![Blob(b"subnet".to_vec())]]));
+        assert!(!should_cache_paths(&vec![
+            vec![Blob(b"subnet".to_vec())],
+            vec![Blob(b"canister_ranges".to_vec())]
+        ]));
+
+        assert!(!should_cache_paths(&vec![
+            vec![Blob(b"subnet".to_vec()), subnet_id.clone()],
+            vec![Blob(b"canister_ranges".to_vec()), subnet_id.clone()],
+            vec![Blob(b"some_other".to_vec()), Blob(b"label".to_vec())]
+        ]));
+
+        assert!(!should_cache_paths(&vec![
+            vec![
+                Blob(b"subnet".to_vec()),
+                subnet_id.clone(),
+                subnet_id.clone()
+            ],
+            vec![
+                Blob(b"canister_ranges".to_vec()),
+                subnet_id.clone(),
+                subnet_id.clone()
+            ]
+        ]));
+
+        // too long slices for a principal
+        assert!(!should_cache_paths(&vec![
+            vec![
+                Blob(b"subnet".to_vec()),
+                Blob(b"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_vec()),
+            ],
+            vec![Blob(b"canister_ranges".to_vec()), subnet_id.clone()]
+        ]));
+
+        assert!(!should_cache_paths(&vec![
+            vec![Blob(b"subnet".to_vec()), subnet_id.clone()],
+            vec![
+                Blob(b"canister_ranges".to_vec()),
+                Blob(b"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_vec())
+            ]
+        ]));
+
+        // cacheable
+        assert!(should_cache_paths(&vec![
+            vec![Blob(b"subnet".to_vec()), subnet_id.clone()],
+            vec![Blob(b"canister_ranges".to_vec()), subnet_id.clone()]
+        ]));
+
+        assert!(should_cache_paths(&vec![
+            vec![Blob(b"canister_ranges".to_vec()), subnet_id.clone()],
+            vec![Blob(b"subnet".to_vec()), subnet_id]
+        ]));
     }
 }
