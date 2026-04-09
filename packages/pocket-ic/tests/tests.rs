@@ -3531,7 +3531,7 @@ fn test_sender_info_in_update_call() {
     let pic = PocketIc::new();
     let canister_id = deploy_universal_canister(&pic);
 
-    let info = vec![1u8, 2, 3, 4];
+    let info = vec![1_u8, 2, 3, 4];
     // Use the canister itself as the signer: its principal bytes are a valid CanisterId.
     let signer = canister_id.as_slice().to_vec();
     let sender_info = RawSenderInfo {
@@ -3569,7 +3569,7 @@ fn test_sender_info_in_query_call() {
     let pic = PocketIc::new();
     let canister_id = deploy_universal_canister(&pic);
 
-    let info = vec![5u8, 6, 7, 8];
+    let info = vec![5_u8, 6, 7, 8];
     let signer = canister_id.as_slice().to_vec();
     let sender_info = RawSenderInfo {
         info: info.clone(),
