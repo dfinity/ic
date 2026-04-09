@@ -1823,6 +1823,8 @@ impl From<ic_nns_handler_root_interface::CreateCanisterAndInstallCodeOk>
     }
 }
 
+/// This is an "upgrade" conversion.
+/// I.e. if you have enum E { A(A) }, then, you can upgrade A to E.
 impl From<pb::CreateCanisterAndInstallCodeOk> for pb::SuccessfulProposalExecutionValue {
     fn from(ok: pb::CreateCanisterAndInstallCodeOk) -> Self {
         Self {
