@@ -13,7 +13,7 @@ use ic_sys::PAGE_SIZE;
 use ic_types::ingress::IngressState;
 use ic_types::messages::{CallbackId, RequestMetadata};
 use ic_types::{NumBytes, NumInstructions, NumOsPages};
-use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Cycles, NonConsumed};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_universal_canister::{call_args, wasm};
 use more_asserts::assert_gt;
 use std::time::Duration;
@@ -180,7 +180,7 @@ fn dts_update_concurrent_cycles_change_succeeds() {
     // The memory usage of the canister increases during the message execution.
     // `ic0.call_perform()` used the current freezing threshold. This value is
     // an upper bound on the additional freezing threshold.
-    let additional_freezing_threshold = Cycles::new(980);
+    let additional_freezing_threshold = Cycles::new(1_250);
 
     let max_execution_cost = test
         .cycles_account_manager()
@@ -760,10 +760,7 @@ fn dts_replicated_execution_resume_fails_due_to_cycles_change() {
         let balance = test.canister_state(a_id).system_state.balance();
         test.canister_state_mut(a_id)
             .system_state
-            .add_cycles(CompoundCycles::<NonConsumed>::new(
-                balance + Cycles::new(1),
-                CanisterCyclesCostSchedule::Normal,
-            ));
+            .add_cycles(balance + Cycles::new(1));
 
         test.execute_slice(a_id);
 
@@ -829,6 +826,7 @@ fn dts_replicated_execution_resume_fails_due_to_call_context_change() {
                 Cycles::new(0),
                 time,
                 RequestMetadata::for_new_call_tree(time),
+                None,
             )
             .unwrap();
 

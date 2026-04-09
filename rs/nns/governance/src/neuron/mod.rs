@@ -1,7 +1,11 @@
-pub mod dissolve_state_and_age;
-pub use dissolve_state_and_age::*;
-pub mod types;
-pub use types::*;
+mod dissolve_state_and_age;
+mod types;
+mod voting_power;
+
+pub(crate) use dissolve_state_and_age::*;
+pub(crate) use types::*;
+
+pub use voting_power::*;
 
 fn neuron_stake_e8s(
     cached_neuron_stake_e8s: u64,

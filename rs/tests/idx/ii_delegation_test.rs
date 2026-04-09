@@ -134,8 +134,8 @@ pub fn test(env: TestEnv) {
         &counter_canister_id,
         vec![],
         1,
-        10,
-        Duration::from_secs(1),
+        30,
+        Duration::from_secs(2),
     ));
     let expected_principal = Principal::self_authenticating(&ii_derived_public_key);
     info!(

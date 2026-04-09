@@ -9,9 +9,6 @@ on the process that this file is part of, see
 
 ## Added
 
-* New invariant ensuring that cloud engines contain only nodes with `type4` reward type and that
-  non-cloud engines do not contain any nodes with `type4` reward type.
-
 ## Changed
 
 ## Deprecated

@@ -2,7 +2,7 @@ name: Schedule Daily
 
 on:
   schedule:
-    - cron: "0 2 * * *"
+    - cron: "47 1 * * *" # 1:47 UTC - slightly offset to avoid high-load times of other scheduled workflows
   workflow_dispatch:
 
 env:
@@ -50,6 +50,21 @@ jobs:
               //rs/ledger_suite/... \
               --test_env=SSH_AUTH_SOCK \
               --keep_going --test_timeout=43200
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+  bazel-build-all-no-cache:
+    name: Bazel Build All No Cache
+    needs: [config]
+    runs-on: *dind-large-setup
+    container: *container-setup
+    timeout-minutes: 90
+    steps:
+      - *checkout
+      - uses: ./.github/actions/netrc
+      - name: Run Bazel Build All No Cache
+        uses: ./.github/actions/bazel
+        with:
+          run: bazel build --config=stamped --config=local //...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   bazel-test-bare-metal:

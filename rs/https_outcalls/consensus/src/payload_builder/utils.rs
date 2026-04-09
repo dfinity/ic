@@ -1,9 +1,7 @@
 use ic_interfaces::canister_http::{CanisterHttpPool, InvalidCanisterHttpPayloadReason};
 use ic_types::{
-    CountBytes, NodeId, NumBytes, RegistryVersion,
-    batch::{
-        FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses, ValidationContext,
-    },
+    CountBytes, NodeId, NumBytes,
+    batch::{FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses},
     canister_http::{
         CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseMetadata,
         CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
@@ -32,19 +30,11 @@ pub(crate) fn check_response_consistency(
     let metadata = &response.proof.content;
 
     // Check metadata field consistency
-    match (
-        metadata.id == content.id,
-        metadata.timeout == content.timeout,
-    ) {
-        (true, true) => (),
-        _ => {
-            return Err(InvalidCanisterHttpPayloadReason::InvalidMetadata {
-                metadata_id: metadata.id,
-                content_id: content.id,
-                metadata_timeout: metadata.timeout,
-                content_timeout: content.timeout,
-            });
-        }
+    if metadata.id != content.id {
+        return Err(InvalidCanisterHttpPayloadReason::InvalidMetadata {
+            metadata_id: metadata.id,
+            content_id: content.id,
+        });
     }
 
     // Check the calculated hash matches the metadata hash
@@ -66,40 +56,6 @@ pub(crate) fn check_response_consistency(
     }
 
     Ok(())
-}
-
-/// Checks whether the response is valid against the provided [`ValidationContext`]
-pub(crate) fn check_response_against_context(
-    registry_version: RegistryVersion,
-    response: &CanisterHttpResponseWithConsensus,
-    context: &ValidationContext,
-) -> Result<(), InvalidCanisterHttpPayloadReason> {
-    // Check that response has not timed out
-    if response.content.timeout < context.time {
-        return Err(InvalidCanisterHttpPayloadReason::Timeout {
-            timed_out_at: response.content.timeout,
-            validation_time: context.time,
-        });
-    }
-
-    // Check that registry version matched
-    if response.proof.content.registry_version != registry_version {
-        return Err(InvalidCanisterHttpPayloadReason::RegistryVersionMismatch {
-            expected: registry_version,
-            received: response.proof.content.registry_version,
-        });
-    }
-
-    Ok(())
-}
-
-/// Returns true if the [`CanisterHttpResponseShare`] is valid against the [`ValidationContext`]
-pub(crate) fn check_share_against_context(
-    registry_version: RegistryVersion,
-    share: &CanisterHttpResponseShare,
-    context: &ValidationContext,
-) -> bool {
-    share.content.timeout > context.time && share.content.registry_version == registry_version
 }
 
 /// This function takes a mapping of response metadata to supporting shares

@@ -1,5 +1,5 @@
 use crate::{
-    CountBytes, ReplicaVersion, Time,
+    CountBytes, ReplicaVersion,
     canister_http::{
         CanisterHttpReject, CanisterHttpRequestId, CanisterHttpResponse,
         CanisterHttpResponseArtifact, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
@@ -133,7 +133,6 @@ impl From<CanisterHttpResponseWithConsensus> for pb::CanisterHttpResponseWithCon
         pb::CanisterHttpResponseWithConsensus {
             response: Some(pb::CanisterHttpResponse {
                 id: payload.content.id.get(),
-                timeout: payload.content.timeout.as_nanos_since_unix_epoch(),
                 content: Some(pb::CanisterHttpResponseContent::from(
                     payload.content.content,
                 )),
@@ -173,7 +172,6 @@ impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWith
             .response
             .ok_or(ProxyDecodeError::MissingField("response"))?;
         let id = CanisterHttpRequestId::new(response.id);
-        let timeout = Time::from_nanos_since_unix_epoch(response.timeout);
         let canister_id = try_from_option_field(
             response.canister_id,
             "CanisterHttpResponseWithConsensus::canister_id",
@@ -182,7 +180,6 @@ impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWith
         Ok(CanisterHttpResponseWithConsensus {
             content: CanisterHttpResponse {
                 id,
-                timeout,
                 canister_id,
                 content: try_from_option_field(
                     response.content,
@@ -192,7 +189,6 @@ impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWith
             proof: Signed {
                 content: CanisterHttpResponseMetadata {
                     id,
-                    timeout,
                     content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash(
                         payload.hash,
                     )),
@@ -288,7 +284,6 @@ impl From<CanisterHttpResponseShare> for pb::CanisterHttpShare {
         pb::CanisterHttpShare {
             metadata: Some(pb::CanisterHttpResponseMetadata {
                 id: share.content.id.get(),
-                timeout: share.content.timeout.as_nanos_since_unix_epoch(),
                 content_hash: share.content.content_hash.clone().get().0,
                 registry_version: share.content.registry_version.get(),
                 replica_version: share.content.replica_version.into(),
@@ -309,7 +304,6 @@ impl TryFrom<pb::CanisterHttpShare> for CanisterHttpResponseShare {
             .metadata
             .ok_or(ProxyDecodeError::MissingField("share.metadata"))?;
         let id = CanisterHttpRequestId::new(metadata.id);
-        let timeout = Time::from_nanos_since_unix_epoch(metadata.timeout);
         let content_hash = CryptoHashOf::new(CryptoHash(metadata.content_hash.clone()));
         let registry_version = RegistryVersion::new(metadata.registry_version);
         let replica_version = ReplicaVersion::try_from(metadata.replica_version)
@@ -320,7 +314,6 @@ impl TryFrom<pb::CanisterHttpShare> for CanisterHttpResponseShare {
         Ok(Signed {
             content: CanisterHttpResponseMetadata {
                 id,
-                timeout,
                 content_hash,
                 content_size: metadata.content_size,
                 registry_version,
@@ -460,13 +453,11 @@ impl TryFrom<pb::CanisterHttpResponse> for CanisterHttpResponse {
 
     fn try_from(response: pb::CanisterHttpResponse) -> Result<Self, Self::Error> {
         let id = CanisterHttpRequestId::new(response.id);
-        let timeout = Time::from_nanos_since_unix_epoch(response.timeout);
         let canister_id =
             try_from_option_field(response.canister_id, "CanisterHttpResponse::canister_id")?;
         let content = try_from_option_field(response.content, "CanisterHttpResponse::content")?;
         Ok(CanisterHttpResponse {
             id,
-            timeout,
             canister_id,
             content,
         })
@@ -477,7 +468,6 @@ impl From<CanisterHttpResponse> for pb::CanisterHttpResponse {
     fn from(response: CanisterHttpResponse) -> Self {
         pb::CanisterHttpResponse {
             id: response.id.get(),
-            timeout: response.timeout.as_nanos_since_unix_epoch(),
             content: Some(pb::CanisterHttpResponseContent::from(response.content)),
             canister_id: Some(pb::CanisterId::from(response.canister_id)),
         }
@@ -523,7 +513,6 @@ mod tests {
     fn canister_http_response_conversion() {
         let response = CanisterHttpResponse {
             id: CanisterHttpRequestId::new(1),
-            timeout: Time::from_nanos_since_unix_epoch(5678),
             canister_id: crate::CanisterId::from(42),
             content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
                 reject_code: RejectCode::SysTransient,
@@ -543,7 +532,6 @@ mod tests {
         let share = Signed {
             content: CanisterHttpResponseMetadata {
                 id: CanisterHttpRequestId::new(2),
-                timeout: Time::from_nanos_since_unix_epoch(91011),
                 content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash(vec![
                     4, 5, 6, 7,
                 ])),
@@ -559,7 +547,6 @@ mod tests {
 
         let response = CanisterHttpResponse {
             id: CanisterHttpRequestId::new(2),
-            timeout: Time::from_nanos_since_unix_epoch(91011),
             canister_id: crate::CanisterId::from(100),
             content: CanisterHttpResponseContent::Success(vec![1, 2, 3]),
         };
@@ -604,11 +591,10 @@ mod tests {
 
             for mut response in responses {
                 // The protobuf format for CanisterHttpResponseWithConsensus doesn't
-                // store id/timeout separately in the metadata — it reuses the
-                // response's values on deserialization. Normalize here so the
-                // roundtrip comparison holds.
+                // store the id separately in the metadata — it reuses the response's
+                // value on deserialization. Normalize here so the roundtrip
+                // comparison holds.
                 response.proof.content.id = response.content.id;
-                response.proof.content.timeout = response.content.timeout;
 
                 let pb = pb::CanisterHttpResponseWithConsensus::from(response.clone());
                 let roundtripped = CanisterHttpResponseWithConsensus::try_from(pb).unwrap();

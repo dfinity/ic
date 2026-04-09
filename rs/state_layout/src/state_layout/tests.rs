@@ -66,7 +66,6 @@ fn default_canister_state_bits() -> CanisterStateBits {
         next_canister_log_record_idx: 0,
         wasm_memory_limit: None,
         next_snapshot_id: 0,
-        snapshots_memory_usage: NumBytes::from(0),
         environment_variables: BTreeMap::new(),
         instructions_executed: NumInstructions::new(0),
         ingress_messages_executed: 0,

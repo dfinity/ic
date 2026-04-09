@@ -49,10 +49,8 @@ pub(super) struct CanisterRoundState {
     compute_allocation: AccumulatedPriority,
     /// Copy of the canister's `CanisterPriority::long_execution_mode`.
     long_execution_mode: LongExecutionMode,
-    /// The canister's next execution. We're interested in whether that's
-    /// `StartNew`, `ContinueLong`, or something else (both `None` and
-    /// `ContinueInstallCode` count as idle).
-    next_execution: NextExecution,
+    /// Whether the canister has a long execution.
+    has_long_execution: bool,
 }
 
 impl CanisterRoundState {
@@ -63,16 +61,12 @@ impl CanisterRoundState {
             accumulated_priority: canister_priority.accumulated_priority + compute_allocation,
             compute_allocation,
             long_execution_mode: canister_priority.long_execution_mode,
-            next_execution: canister.next_execution(),
+            has_long_execution: canister.has_long_execution(),
         }
     }
 
     pub(super) fn canister_id(&self) -> CanisterId {
         self.canister_id
-    }
-
-    fn has_long_execution(&self) -> bool {
-        self.next_execution == NextExecution::ContinueLong
     }
 }
 
@@ -84,7 +78,7 @@ impl Ord for CanisterRoundState {
             .long_execution_mode
             .cmp(&self.long_execution_mode)
             //  2. Long execution (long execution -> new execution)
-            .then(other.has_long_execution().cmp(&self.has_long_execution()))
+            .then(other.has_long_execution.cmp(&self.has_long_execution))
             //  3. Accumulated priority, descending.
             .then(other.accumulated_priority.cmp(&self.accumulated_priority))
             //  4. Canister ID, ascending.
@@ -447,7 +441,7 @@ impl RoundSchedule {
             // Apply the priority credit if not in the same long execution as at the
             // beginning of the round.
             if canister_priority.priority_credit != ZERO
-                && (canister.next_execution() != NextExecution::ContinueLong
+                && (!canister.has_long_execution()
                     || self
                         .canisters_with_completed_messages
                         .contains(&canister.canister_id()))
@@ -678,7 +672,7 @@ impl RoundSchedule {
             // De-facto compute allocation includes bonus allocation
             let factual = rs.compute_allocation + free_capacity_per_canister;
             // Count long executions and sum up their compute allocation.
-            if rs.has_long_execution() {
+            if rs.has_long_execution {
                 long_executions_compute_allocation += factual;
                 number_of_long_executions += 1;
             }
