@@ -101,6 +101,7 @@ fn setup(env: TestEnv) {
         vec![bare_metal_node_id],
         version,
         Some(CanisterCyclesCostSchedule::Normal),
+        Some(0),
     ));
     block_on(vote_and_execute_proposal(&governance, proposal_id));
 

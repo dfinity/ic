@@ -56,19 +56,14 @@ pub(super) struct CanisterRoundState {
 }
 
 impl CanisterRoundState {
-    pub fn new(
-        canister: &CanisterState,
-        canister_priority: &CanisterPriority,
-        next_execution: NextExecution,
-    ) -> Self {
-        debug_assert_eq!(next_execution, canister.next_execution());
+    pub fn new(canister: &CanisterState, canister_priority: &CanisterPriority) -> Self {
         let compute_allocation = from_ca(canister.compute_allocation());
         Self {
             canister_id: canister.canister_id(),
             accumulated_priority: canister_priority.accumulated_priority + compute_allocation,
             compute_allocation,
             long_execution_mode: canister_priority.long_execution_mode,
-            has_long_execution: next_execution == NextExecution::ContinueLong,
+            has_long_execution: canister.has_long_execution(),
         }
     }
 
@@ -261,8 +256,7 @@ impl RoundSchedule {
                     return None;
                 }
 
-                let next_execution = canister.next_execution();
-                let canister_round_state = match next_execution {
+                let canister_round_state = match canister.next_execution() {
                     NextExecution::StartNew => {
                         // Don't schedule canisters that started the round with a long execution and
                         // completed it. We need canisters to move between the long execution and new
@@ -270,22 +264,15 @@ impl RoundSchedule {
                         if self.long_execution_canisters.contains(canister_id) {
                             return None;
                         }
-                        CanisterRoundState::new(
-                            canister,
-                            subnet_schedule.get(canister_id),
-                            next_execution,
-                        )
+                        CanisterRoundState::new(canister, subnet_schedule.get(canister_id))
                     }
                     NextExecution::ContinueLong => {
                         // XXX: Does this filter make sense?
                         if is_first_iteration {
                             self.long_execution_canisters.insert(*canister_id);
                         }
-                        let rs = CanisterRoundState::new(
-                            canister,
-                            subnet_schedule.get(canister_id),
-                            next_execution,
-                        );
+                        let rs =
+                            CanisterRoundState::new(canister, subnet_schedule.get(canister_id));
                         long_executions_count += 1;
                         long_executions_compute_allocation += rs.compute_allocation;
                         rs

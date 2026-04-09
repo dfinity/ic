@@ -32,7 +32,7 @@ use ic_types::{
     methods::{Callback, WasmClosure},
     time::{self, UNIX_EPOCH},
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Cycles};
 use maplit::btreemap;
 use more_asserts::assert_le;
 use std::{
@@ -115,6 +115,7 @@ fn replicated_query_api() -> ApiType {
         vec![],
         user_test_id(1).get(),
         call_context_test_id(1),
+        None,
     )
 }
 
@@ -159,6 +160,7 @@ fn cleanup_api() -> ApiType {
         time: UNIX_EPOCH,
         reject_code: 0,
         call_context_instructions_executed: 0.into(),
+        sender_info: None,
     }
 }
 
@@ -167,11 +169,18 @@ fn composite_cleanup_api() -> ApiType {
         caller: PrincipalId::new_anonymous(),
         time: UNIX_EPOCH,
         call_context_instructions_executed: 0.into(),
+        sender_info: None,
     }
 }
 
 fn inspect_message_api() -> ApiType {
-    ApiType::inspect_message(user_test_id(1).get(), "".to_string(), vec![], UNIX_EPOCH)
+    ApiType::inspect_message(
+        user_test_id(1).get(),
+        "".to_string(),
+        vec![],
+        UNIX_EPOCH,
+        None,
+    )
 }
 
 fn system_task_api() -> ApiType {
@@ -1082,6 +1091,7 @@ fn test_canister_balance() {
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
 
@@ -1115,6 +1125,7 @@ fn test_canister_cycle_balance() {
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
 
@@ -1155,6 +1166,7 @@ fn test_msg_cycles_available_traps() {
             available_cycles,
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
 
@@ -1247,6 +1259,7 @@ fn data_certificate_copy() {
             subnet_test_id(1),
             vec![],
             Some(vec![1, 2, 3, 4, 5, 6]),
+            None,
         ),
         &system_state,
         cycles_account_manager,
@@ -1325,6 +1338,7 @@ fn msg_cycles_accept_all_cycles_in_call_context() {
             Cycles::from(amount),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
     let mut api = get_system_api(
@@ -1353,6 +1367,7 @@ fn msg_cycles_accept_all_cycles_in_call_context_when_more_asked() {
             Cycles::new(40),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
     let mut api = get_system_api(
@@ -1395,6 +1410,7 @@ fn call_perform_not_enough_cycles_does_not_trap() {
             Cycles::new(40),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
     let mut api = get_system_api(
@@ -1720,8 +1736,8 @@ fn push_output_request_respects_memory_limits() {
             call_context_test_id(0),
             canister_test_id(0),
             Cycles::zero(),
-            Cycles::zero(),
-            Cycles::zero(),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
             WasmClosure::new(0, 0),
             WasmClosure::new(0, 0),
             None,
@@ -1751,8 +1767,12 @@ fn push_output_request_respects_memory_limits() {
     // initial subnet available memory is `MAX_RESPONSE_COUNT_BYTES + 13`.
     assert_eq!(
         0,
-        api.push_output_request(req.clone(), Cycles::zero(), Cycles::zero())
-            .unwrap()
+        api.push_output_request(
+            req.clone(),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal)
+        )
+        .unwrap()
     );
 
     // Nothing is consumed for execution memory.
@@ -1770,8 +1790,12 @@ fn push_output_request_respects_memory_limits() {
     // And the second push fails.
     assert_eq!(
         RejectCode::SysTransient as i32,
-        api.push_output_request(req, Cycles::zero(), Cycles::zero())
-            .unwrap()
+        api.push_output_request(
+            req,
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal)
+        )
+        .unwrap()
     );
     // Without altering memory usage.
     assert_eq!(api.get_allocated_bytes().get(), 0,);
@@ -1831,8 +1855,8 @@ fn push_output_request_oversized_request_memory_limits() {
             call_context_test_id(0),
             canister_test_id(0),
             Cycles::zero(),
-            Cycles::zero(),
-            Cycles::zero(),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
             WasmClosure::new(0, 0),
             WasmClosure::new(0, 0),
             None,
@@ -1863,8 +1887,12 @@ fn push_output_request_oversized_request_memory_limits() {
     // Not enough memory to push the request.
     assert_eq!(
         RejectCode::SysTransient as i32,
-        api.push_output_request(req, Cycles::zero(), Cycles::zero())
-            .unwrap()
+        api.push_output_request(
+            req,
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal)
+        )
+        .unwrap()
     );
 
     // Memory usage unchanged.
@@ -1885,8 +1913,12 @@ fn push_output_request_oversized_request_memory_limits() {
     // Pushing succeeds.
     assert_eq!(
         0,
-        api.push_output_request(req, Cycles::zero(), Cycles::zero())
-            .unwrap()
+        api.push_output_request(
+            req,
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal)
+        )
+        .unwrap()
     );
 
     // `req_size_bytes` are consumed.

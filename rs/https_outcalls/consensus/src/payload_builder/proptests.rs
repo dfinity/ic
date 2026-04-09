@@ -18,7 +18,7 @@ use ic_types::{
 };
 use proptest::{arbitrary::any, prelude::*};
 use std::collections::HashSet;
-use std::{ops::DerefMut, time::Duration};
+use std::ops::DerefMut;
 
 const SUBNET_SIZE: usize = 13;
 const MAX_PAYLOAD_SIZE_BYTES: usize = 4 * 1024 * 1024;
@@ -36,7 +36,6 @@ proptest! {
             100,
             4_000,
             4_000,
-            10_000,
             MAX_PAYLOAD_SIZE_BYTES,
             SUBNET_SIZE
         )) {
@@ -128,7 +127,6 @@ fn prop_artifacts(
     max_responses: usize,
     max_random_shares: usize,
     max_divergences: usize,
-    max_timeout: u64,
     max_size: usize,
     subnet_size: usize,
 ) -> impl Strategy<
@@ -139,17 +137,11 @@ fn prop_artifacts(
 > {
     (
         prop::collection::vec(
-            prop_response_with_shares(max_timeout, max_size, subnet_size),
+            prop_response_with_shares(max_size, subnet_size),
             1..=max_responses,
         ),
-        prop::collection::vec(
-            prop_random_shares(max_timeout, subnet_size),
-            0..=max_random_shares,
-        ),
-        prop::collection::vec(
-            prop_divergence(max_timeout, subnet_size),
-            0..=max_divergences,
-        ),
+        prop::collection::vec(prop_random_shares(subnet_size), 0..=max_random_shares),
+        prop::collection::vec(prop_divergence(subnet_size), 0..=max_divergences),
     )
         .prop_map(|(prop_responses, random_shares, divergence_shares)| {
             let mut collected_responses = vec![];
@@ -172,69 +164,54 @@ fn prop_artifacts(
 
 /// Generate a response and metadata supporting that response too
 fn prop_response_with_shares(
-    max_timeout: u64,
     max_size: usize,
     subnet_size: usize,
 ) -> impl Strategy<Value = (CanisterHttpResponse, Vec<CanisterHttpResponseShare>)> {
-    (1..subnet_size, prop_response(max_timeout, max_size)).prop_map(
-        move |(num_shares, response)| {
-            let metadata = CanisterHttpResponseMetadata {
-                id: response.id,
-                timeout: response.timeout,
-                content_hash: crypto_hash(&response),
-                content_size: response.content.count_bytes() as u32,
-                registry_version: RegistryVersion::new(1),
-                replica_version: ReplicaVersion::default(),
-            };
-            let shares = metadata_to_shares(num_shares, &metadata);
-            (response, shares)
-        },
-    )
+    (1..subnet_size, prop_response(max_size)).prop_map(move |(num_shares, response)| {
+        let metadata = CanisterHttpResponseMetadata {
+            id: response.id,
+            content_hash: crypto_hash(&response),
+            content_size: response.content.count_bytes() as u32,
+            registry_version: RegistryVersion::new(1),
+            replica_version: ReplicaVersion::default(),
+        };
+        let shares = metadata_to_shares(num_shares, &metadata);
+        (response, shares)
+    })
 }
 
 /// Generate a number of shares for a random metadata.
 ///
-/// This means that the node will not have the content of the response ans should not
+/// This means that the node will not have the content of the response and should not
 /// be able to include it in a block, no matter how many other nodes have sent their response
-fn prop_random_shares(
-    max_timeout: u64,
-    subnet_size: usize,
-) -> impl Strategy<Value = Vec<CanisterHttpResponseShare>> {
-    (1..=subnet_size, prop_random_metadata(max_timeout))
+fn prop_random_shares(subnet_size: usize) -> impl Strategy<Value = Vec<CanisterHttpResponseShare>> {
+    (1..=subnet_size, prop_random_metadata())
         .prop_map(|(num_shares, metadata)| metadata_to_shares(num_shares, &metadata))
 }
 
 /// Generate a response with random `callback_id` and `canister_id` and a
-/// `timeout` and length between 0 and the specified maximum value
-fn prop_response(max_timeout: u64, max_size: usize) -> impl Strategy<Value = CanisterHttpResponse> {
-    (
-        any::<(u64, u64)>(),
-        100..max_timeout,
-        prop_content(max_size),
-    )
-        .prop_map(
-            |((id, canister_id), timeout, content)| CanisterHttpResponse {
-                id: CallbackId::new(id),
-                timeout: UNIX_EPOCH + Duration::from_millis(timeout),
-                canister_id: canister_test_id(canister_id),
-                content,
-            },
-        )
+/// length between 0 and the specified maximum value
+fn prop_response(max_size: usize) -> impl Strategy<Value = CanisterHttpResponse> {
+    (any::<(u64, u64)>(), prop_content(max_size)).prop_map(|((id, canister_id), content)| {
+        CanisterHttpResponse {
+            id: CallbackId::new(id),
+            canister_id: canister_test_id(canister_id),
+            content,
+        }
+    })
 }
 
-/// Generate a random metadata with a timeout and registry version value between 0 and
-/// the specified value
-fn prop_random_metadata(max_timeout: u64) -> impl Strategy<Value = CanisterHttpResponseMetadata> {
-    (any::<(u64, [u8; 32], u32)>(), 100..max_timeout).prop_map(
-        |((id, hash, content_size), timeout)| CanisterHttpResponseMetadata {
+/// Generate a random metadata with a random registry version value
+fn prop_random_metadata() -> impl Strategy<Value = CanisterHttpResponseMetadata> {
+    any::<(u64, [u8; 32], u32)>().prop_map(|(id, hash, content_size)| {
+        CanisterHttpResponseMetadata {
             id: CallbackId::new(id),
-            timeout: UNIX_EPOCH + Duration::from_millis(timeout),
             content_hash: CryptoHashOf::new(CryptoHash(hash.to_vec())),
             content_size,
             registry_version: RegistryVersion::new(1),
             replica_version: ReplicaVersion::default(),
-        },
-    )
+        }
+    })
 }
 
 /// Generate random content that is either a success message of `max_size` length
@@ -256,16 +233,9 @@ fn prop_content(max_size: usize) -> impl Strategy<Value = CanisterHttpResponseCo
 ///
 /// If there are enough of such responses, a properly working payload builder will
 /// turn these into a divergence response
-fn prop_divergence(
-    max_timeout: u64,
-    subnet_size: usize,
-) -> impl Strategy<Value = Vec<CanisterHttpResponseShare>> {
-    (
-        1..subnet_size,
-        prop_random_metadata(max_timeout),
-        any::<[u8; 32]>(),
-    )
-        .prop_map(|(num_nodes, metadata, new_hash)| {
+fn prop_divergence(subnet_size: usize) -> impl Strategy<Value = Vec<CanisterHttpResponseShare>> {
+    (1..subnet_size, prop_random_metadata(), any::<[u8; 32]>()).prop_map(
+        |(num_nodes, metadata, new_hash)| {
             (1..=num_nodes)
                 .map(|node_id| {
                     let mut metadata = metadata.clone();
@@ -274,7 +244,8 @@ fn prop_divergence(
                     metadata_to_share(node_id as u64, &metadata)
                 })
                 .collect::<Vec<CanisterHttpResponseShare>>()
-        })
+        },
+    )
 }
 
 // TODO: Prop timeouts

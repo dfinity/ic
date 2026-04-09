@@ -25,7 +25,7 @@ use ic_types::{
 };
 use ic_types_cycles::{
     CanisterCyclesCostSchedule, CompoundCycles, Cycles, Instructions, Memory, NominalCycles,
-    NominalCyclesTesting, NonConsumed, Uninstall,
+    NominalCyclesTesting, Uninstall,
 };
 use prometheus::IntCounter;
 use std::{convert::TryFrom, time::Duration};
@@ -97,12 +97,7 @@ fn test_can_charge_application_subnets() {
                             .memory_cost(memory, duration, subnet_size, cost_schedule)
                             .real();
                     let initial_cycles = expected_fee;
-                    canister
-                        .system_state
-                        .add_cycles(CompoundCycles::<NonConsumed>::new(
-                            initial_cycles,
-                            cost_schedule,
-                        ));
+                    canister.system_state.add_cycles(initial_cycles);
                     assert_eq!(canister.system_state.balance(), initial_cycles);
                     cycles_account_manager
                         .charge_canister_for_resource_allocation_and_usage(
@@ -1145,10 +1140,7 @@ fn consume_cycles_for_memory_drains_reserved_balance() {
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(Cycles::zero())
         .build();
-    system_state.add_cycles(CompoundCycles::<NonConsumed>::new(
-        Cycles::new(4_000_000),
-        cost_schedule,
-    ));
+    system_state.add_cycles(Cycles::new(4_000_000));
     system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
     cam.consume_with_threshold(
         &mut system_state,
@@ -1170,10 +1162,7 @@ fn consume_cycles_for_compute_drains_reserved_balance() {
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(Cycles::zero())
         .build();
-    system_state.add_cycles(CompoundCycles::<NonConsumed>::new(
-        Cycles::new(4_000_000),
-        cost_schedule,
-    ));
+    system_state.add_cycles(Cycles::new(4_000_000));
     system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
     cam.consume_with_threshold(
         &mut system_state,
@@ -1198,10 +1187,7 @@ fn consume_cycles_for_uninstall_drains_reserved_balance() {
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(Cycles::zero())
         .build();
-    system_state.add_cycles(CompoundCycles::<NonConsumed>::new(
-        Cycles::new(4_000_000),
-        cost_schedule,
-    ));
+    system_state.add_cycles(Cycles::new(4_000_000));
     system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
     cam.consume_with_threshold(
         &mut system_state,
@@ -1223,10 +1209,7 @@ fn consume_cycles_for_execution_does_not_drain_reserved_balance() {
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(Cycles::zero())
         .build();
-    system_state.add_cycles(CompoundCycles::<NonConsumed>::new(
-        Cycles::new(4_000_000),
-        cost_schedule,
-    ));
+    system_state.add_cycles(Cycles::new(4_000_000));
     system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
     cam.consume_with_threshold(
         &mut system_state,

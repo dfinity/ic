@@ -231,7 +231,6 @@ system_test_nns(
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nns/nns_dapp",
-        "//rs/types/cycles",
         "//rs/types/types",
         "@crate_index//:anyhow",
     ],

@@ -841,7 +841,7 @@ mod tests {
         SubnetRecordBuilder, add_single_subnet_record, add_subnet_list_record,
     };
     use ic_test_utilities_types::ids::{SUBNET_1, node_test_id, subnet_test_id};
-    use rstest::rstest;
+    use strum::IntoEnumIterator;
 
     use super::*;
 
@@ -983,28 +983,22 @@ mod tests {
         );
     }
 
-    #[rstest]
-    fn nftables_golden_assigned_replica_test(
+    #[test]
+    fn nftables_golden_assigned_replica_test() {
         // For assigned replicas, only Type4 (cloud engine) nodes have a different firewall
-        #[values(
-            None,
-            Some(NodeRewardType::Unspecified),
-            Some(NodeRewardType::Type0),
-            Some(NodeRewardType::Type1),
-            Some(NodeRewardType::Type2),
-            Some(NodeRewardType::Type3),
-            Some(NodeRewardType::Type3dot1),
-            Some(NodeRewardType::Type1dot1)
-        )]
-        reward_type: Option<NodeRewardType>,
-    ) {
-        golden_test(
-            Role::AssignedReplica(SUBNET_ID),
-            node_test_id(0),
-            reward_type,
-            NFTABLES_ASSIGNED_REPLICA_GOLDEN_BYTES,
-            "assigned_replica",
-        );
+        for reward_type in NodeRewardType::iter()
+            .filter(|reward_type| *reward_type != NodeRewardType::Type4)
+            .map(Some)
+            .chain(std::iter::once(None))
+        {
+            golden_test(
+                Role::AssignedReplica(SUBNET_ID),
+                node_test_id(0),
+                reward_type,
+                NFTABLES_ASSIGNED_REPLICA_GOLDEN_BYTES,
+                "assigned_replica",
+            );
+        }
     }
 
     #[test]
@@ -1018,28 +1012,22 @@ mod tests {
         );
     }
 
-    #[rstest]
-    fn nftables_unassigned_replica_golden_test(
+    #[test]
+    fn nftables_unassigned_replica_golden_test() {
         // For unassigned replicas, only Type4 (cloud engine) nodes have a different firewall
-        #[values(
-            None,
-            Some(NodeRewardType::Unspecified),
-            Some(NodeRewardType::Type0),
-            Some(NodeRewardType::Type1),
-            Some(NodeRewardType::Type2),
-            Some(NodeRewardType::Type3),
-            Some(NodeRewardType::Type3dot1),
-            Some(NodeRewardType::Type1dot1)
-        )]
-        reward_type: Option<NodeRewardType>,
-    ) {
-        golden_test(
-            Role::UnassignedReplica,
-            node_test_id(0),
-            reward_type,
-            NFTABLES_UNASSIGNED_REPLICA_GOLDEN_BYTES,
-            "unassigned_replica",
-        );
+        for reward_type in NodeRewardType::iter()
+            .filter(|reward_type| *reward_type != NodeRewardType::Type4)
+            .map(Some)
+            .chain(std::iter::once(None))
+        {
+            golden_test(
+                Role::UnassignedReplica,
+                node_test_id(0),
+                reward_type,
+                NFTABLES_UNASSIGNED_REPLICA_GOLDEN_BYTES,
+                "unassigned_replica",
+            );
+        }
     }
 
     #[test]
@@ -1053,64 +1041,48 @@ mod tests {
         );
     }
 
-    #[rstest]
-    fn nftables_golden_boundary_node_system_subnet_test(
-        // For boundary nodes, the node reward type has no effect on the firewall
-        #[values(
-            None,
-            Some(NodeRewardType::Unspecified),
-            Some(NodeRewardType::Type0),
-            Some(NodeRewardType::Type1),
-            Some(NodeRewardType::Type2),
-            Some(NodeRewardType::Type3),
-            Some(NodeRewardType::Type3dot1),
-            Some(NodeRewardType::Type1dot1),
-            Some(NodeRewardType::Type4)
-        )]
-        reward_type: Option<NodeRewardType>,
-    ) {
+    #[test]
+    fn nftables_golden_boundary_node_system_subnet_test() {
         // pick the node id such that the API BN's SOCKS proxy serves system subnet nodes
         // the assert checks that
         let api_bn_id_for_system_subnet = node_test_id(0);
         assert!(api_bn_id_for_system_subnet < node_test_id(API_BOUNDARY_NODE_ID));
 
-        golden_test(
-            Role::BoundaryNode,
-            api_bn_id_for_system_subnet,
-            reward_type,
-            NFTABLES_BOUNDARY_NODE_SYSTEM_SUBNET_GOLDEN_BYTES,
-            "boundary_node_system_subnet",
-        );
+        // For boundary nodes, the node reward type has no effect on the firewall
+        for reward_type in NodeRewardType::iter()
+            .map(Some)
+            .chain(std::iter::once(None))
+        {
+            golden_test(
+                Role::BoundaryNode,
+                api_bn_id_for_system_subnet,
+                reward_type,
+                NFTABLES_BOUNDARY_NODE_SYSTEM_SUBNET_GOLDEN_BYTES,
+                "boundary_node_system_subnet",
+            );
+        }
     }
 
-    #[rstest]
-    fn nftables_golden_boundary_node_app_subnet_test(
-        // For boundary nodes, the node reward type has no effect on the firewall
-        #[values(
-            None,
-            Some(NodeRewardType::Unspecified),
-            Some(NodeRewardType::Type0),
-            Some(NodeRewardType::Type1),
-            Some(NodeRewardType::Type2),
-            Some(NodeRewardType::Type3),
-            Some(NodeRewardType::Type3dot1),
-            Some(NodeRewardType::Type1dot1),
-            Some(NodeRewardType::Type4)
-        )]
-        reward_type: Option<NodeRewardType>,
-    ) {
+    #[test]
+    fn nftables_golden_boundary_node_app_subnet_test() {
         // pick the node id such that the API BN's SOCKS proxy serves app subnet nodes
         // the assert checks that
         let api_bn_id_for_app_subnet = node_test_id(1234);
         assert!(api_bn_id_for_app_subnet > node_test_id(API_BOUNDARY_NODE_ID));
 
-        golden_test(
-            Role::BoundaryNode,
-            api_bn_id_for_app_subnet,
-            reward_type,
-            NFTABLES_BOUNDARY_NODE_APP_SUBNET_GOLDEN_BYTES,
-            "boundary_node_app_subnet",
-        );
+        // For boundary nodes, the node reward type has no effect on the firewall
+        for reward_type in NodeRewardType::iter()
+            .map(Some)
+            .chain(std::iter::once(None))
+        {
+            golden_test(
+                Role::BoundaryNode,
+                api_bn_id_for_app_subnet,
+                reward_type,
+                NFTABLES_BOUNDARY_NODE_APP_SUBNET_GOLDEN_BYTES,
+                "boundary_node_app_subnet",
+            );
+        }
     }
 
     /// Runs [`Firewall::check_for_firewall_config`] and compares the output against the specified

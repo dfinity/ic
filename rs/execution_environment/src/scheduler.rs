@@ -955,14 +955,12 @@ impl SchedulerImpl {
                 .system_state
                 .output_queues_for_each(|canister_id, msg| {
                     let own_subnet_type = state.metadata.own_subnet_type;
-                    let own_cost_schedule = state.get_own_cost_schedule();
                     match state.canister_state_make_mut(canister_id) {
                         Some(dest_canister) => dest_canister
                             .push_input(
                                 (*msg).clone(),
                                 &mut subnet_available_guaranteed_response_memory,
                                 own_subnet_type,
-                                own_cost_schedule,
                                 InputQueueType::LocalSubnet,
                             )
                             .map(|_| ())
@@ -1039,11 +1037,7 @@ impl SchedulerImpl {
             .filter_map(|canister| {
                 if canister.has_paused_execution() {
                     let canister_priority = state.canister_priority(&canister.canister_id());
-                    Some(CanisterRoundState::new(
-                        canister,
-                        canister_priority,
-                        NextExecution::ContinueLong,
-                    ))
+                    Some(CanisterRoundState::new(canister, canister_priority))
                 } else {
                     None
                 }
@@ -1893,23 +1887,25 @@ fn can_execute_subnet_msg(
     };
 
     // Adding a full match here to catch any further task queue changes.
-    let (effective_canister_is_paused, effective_canister_is_aborted) =
+    let effective_canister_is_aborted =
         match effective_canister_state.system_state.task_queue.front() {
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
-            | Some(ExecutionTask::OnLowWasmMemory) => (false, false),
+            | Some(ExecutionTask::OnLowWasmMemory) => false,
+            Some(ExecutionTask::AbortedExecution { .. }) => true,
             Some(ExecutionTask::PausedExecution { .. })
-            | Some(ExecutionTask::PausedInstallCode(_)) => (true, false),
-            Some(ExecutionTask::AbortedExecution { .. })
-            | Some(ExecutionTask::AbortedInstallCode { .. }) => (false, true),
+            | Some(ExecutionTask::PausedInstallCode(_)) => {
+                // If there is a DTS execution in progress, we can't execute the subnet message.
+                // Note, this does NOT include aborted executions.
+                return false;
+            }
+            Some(ExecutionTask::AbortedInstallCode { .. }) => {
+                // If there is an aborted install code in progress, we can't execute the subnet message.
+                // This is to prevent out-of-order subnet message execution.
+                return false;
+            }
         };
-
-    if effective_canister_is_paused {
-        // If there is a DTS execution in progress, we can't execute the subnet message.
-        // Note, this does NOT include aborted executions.
-        return false;
-    }
 
     // Some heavy methods use round instructions.
     let instructions_reached = round_limits.instructions_reached();

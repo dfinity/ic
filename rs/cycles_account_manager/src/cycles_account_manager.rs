@@ -563,7 +563,7 @@ impl CyclesAccountManager {
                 cost_schedule,
             )
             .min(prepaid_execution_cycles);
-        system_state.add_cycles(cycles_to_refund);
+        system_state.refund_cycles(prepaid_execution_cycles, cycles_to_refund);
     }
 
     /// Returns the cost of compute allocation for the given duration.
@@ -1018,7 +1018,7 @@ impl CyclesAccountManager {
         )?;
 
         debug_assert_ne!(use_case, CyclesUseCase::NonConsumed);
-        system_state.remove_cycles(cycles);
+        system_state.consume_cycles(cycles);
         Ok(())
     }
 

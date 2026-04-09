@@ -14,7 +14,7 @@
 //! * Floating point makes code easier since the reward pool is specified as a
 //!   fraction of the total ICP supply.
 
-use crate::pb::v1::RewardEvent;
+use crate::{is_mission_70_voting_rewards_enabled, pb::v1::RewardEvent};
 use std::ops::{Add, Div, Mul, Sub};
 
 // ---- NON-BOILERPLATE CODE STARTS HERE ----------------------------------
@@ -56,20 +56,23 @@ pub const ONE_DAY: Duration = Duration { days: 1.0 };
 /// distribution does not directly increase ICP supply. (It does indirectly,
 /// when neuron owners spawn neurons). Therefore there is no automatic
 /// compounding.
-pub const INITIAL_VOTING_REWARD_RELATIVE_RATE: InverseDuration = InverseDuration {
+const INITIAL_VOTING_REWARD_RELATIVE_RATE: InverseDuration = InverseDuration {
     per_day: 0.1 / AVERAGE_DAYS_PER_YEAR, // 10% per year
 };
 /// The voting reward relative rate, at the end of times.
 ///
 /// See comment above for what "relative rate" precisely means.
-pub const FINAL_VOTING_REWARD_RELATIVE_RATE: InverseDuration = InverseDuration {
+const FINAL_VOTING_REWARD_RELATIVE_RATE: InverseDuration = InverseDuration {
     per_day: 0.05 / AVERAGE_DAYS_PER_YEAR, // 5% per year
 };
 /// The date at which the reward rate reaches, and thereafter remains at, its
 /// final value.
-pub const REWARD_FLATTENING_DATE: IcTimestamp = IcTimestamp {
+const REWARD_FLATTENING_DATE: IcTimestamp = IcTimestamp {
     days_since_ic_genesis: 8.0 * AVERAGE_DAYS_PER_YEAR,
 };
+
+// See https://x.com/dominic_w/status/2011156143796781481 .
+const MISSION_70_VOTING_REWARDS_ADJUSTMENT_FACTOR: f64 = 0.635;
 
 /// Computes the reward to distribute, as a fraction of the ICP supply, for one
 /// day.
@@ -94,7 +97,15 @@ pub fn rewards_pool_to_distribute_in_supply_fraction_for_one_day(
 
     let rate = FINAL_VOTING_REWARD_RELATIVE_RATE + variable_rate;
 
-    rate * ONE_DAY
+    voting_rewards_adjustment_factor() * rate * ONE_DAY
+}
+
+fn voting_rewards_adjustment_factor() -> f64 {
+    if is_mission_70_voting_rewards_enabled() {
+        MISSION_70_VOTING_REWARDS_ADJUSTMENT_FACTOR
+    } else {
+        1.0
+    }
 }
 
 impl RewardEvent {
@@ -231,6 +242,7 @@ impl Div<Duration> for Duration {
 // assert_approx_eq! macro are unused. This is very strange, so
 // just tell clippy to keep quiet.
 #[allow(unused_imports, unused_macros)]
+#[cfg(test)]
 mod test {
     use super::*;
 
@@ -256,52 +268,146 @@ mod test {
         }};
     }
 
-    #[test]
-    fn days_fully_after_flattening_produce_linear_reward() {
-        assert_approx_eq!(
-            rewards_pool_to_distribute_in_supply_fraction_for_one_day(8 * 366),
-            0.05 / 365.25
-        );
-        assert_approx_eq!(
-            rewards_pool_to_distribute_in_supply_fraction_for_one_day(8 * 366 + 5),
-            0.05 / 365.25
-        );
-        assert_approx_eq!(
-            rewards_pool_to_distribute_in_supply_fraction_for_one_day(123456),
-            0.05 / 365.25
-        );
-    }
+    mod mission_70_disabled {
+        use super::*;
+        use crate::temporarily_disable_mission_70_voting_rewards;
 
-    #[test]
-    fn reward_for_first_day() {
-        assert_approx_eq!(
-            rewards_pool_to_distribute_in_supply_fraction_for_one_day(0),
-            0.10 / 365.25
-        );
-    }
+        #[test]
+        fn days_fully_after_flattening_produce_linear_reward() {
+            let _restore_on_drop = temporarily_disable_mission_70_voting_rewards();
 
-    #[test]
-    fn reward_for_entire_pre_flattening_interval_can_be_lower_and_upper_bounded() {
-        let lower_bound = (REWARD_FLATTENING_DATE - GENESIS) * FINAL_VOTING_REWARD_RELATIVE_RATE;
-        let upper_bound = (REWARD_FLATTENING_DATE - GENESIS) * INITIAL_VOTING_REWARD_RELATIVE_RATE;
-        let actual = (0..(REWARD_FLATTENING_DATE.days_since_ic_genesis as u64))
-            .map(rewards_pool_to_distribute_in_supply_fraction_for_one_day)
-            .sum();
-        assert!(lower_bound < actual);
-        assert!(actual < upper_bound);
-    }
-
-    #[test]
-    fn reward_is_convex_and_decreasing() {
-        // Here we verify the convex inequality for all 3 consecutive days during the
-        // parabolic rate period.
-        for day in 0..(REWARD_FLATTENING_DATE.days_since_ic_genesis as u64) - 2 {
-            let a = rewards_pool_to_distribute_in_supply_fraction_for_one_day(day);
-            let b = rewards_pool_to_distribute_in_supply_fraction_for_one_day(day + 1);
-            let c = rewards_pool_to_distribute_in_supply_fraction_for_one_day(day + 2);
-            assert!(a > b);
-            assert!(b > c);
-            assert!(a + c > 2.0 * b);
+            assert_approx_eq!(
+                rewards_pool_to_distribute_in_supply_fraction_for_one_day(8 * 366),
+                0.05 / 365.25
+            );
+            assert_approx_eq!(
+                rewards_pool_to_distribute_in_supply_fraction_for_one_day(8 * 366 + 5),
+                0.05 / 365.25
+            );
+            assert_approx_eq!(
+                rewards_pool_to_distribute_in_supply_fraction_for_one_day(123456),
+                0.05 / 365.25
+            );
         }
-    }
+
+        #[test]
+        fn reward_for_first_day() {
+            let _restore_on_drop = temporarily_disable_mission_70_voting_rewards();
+
+            assert_approx_eq!(
+                rewards_pool_to_distribute_in_supply_fraction_for_one_day(0),
+                0.10 / 365.25
+            );
+        }
+
+        #[test]
+        fn reward_for_entire_pre_flattening_interval_can_be_lower_and_upper_bounded() {
+            let _restore_on_drop = temporarily_disable_mission_70_voting_rewards();
+
+            let lower_bound =
+                (REWARD_FLATTENING_DATE - GENESIS) * FINAL_VOTING_REWARD_RELATIVE_RATE;
+            let upper_bound =
+                (REWARD_FLATTENING_DATE - GENESIS) * INITIAL_VOTING_REWARD_RELATIVE_RATE;
+            let actual = (0..(REWARD_FLATTENING_DATE.days_since_ic_genesis as u64))
+                .map(rewards_pool_to_distribute_in_supply_fraction_for_one_day)
+                .sum();
+            assert!(lower_bound < actual);
+            assert!(actual < upper_bound);
+        }
+
+        #[test]
+        fn reward_is_convex_and_decreasing() {
+            let _restore_on_drop = temporarily_disable_mission_70_voting_rewards();
+
+            // Here we verify the convex inequality for all 3 consecutive days during the
+            // parabolic rate period.
+            for day in 0..(REWARD_FLATTENING_DATE.days_since_ic_genesis as u64) - 2 {
+                let a = rewards_pool_to_distribute_in_supply_fraction_for_one_day(day);
+                let b = rewards_pool_to_distribute_in_supply_fraction_for_one_day(day + 1);
+                let c = rewards_pool_to_distribute_in_supply_fraction_for_one_day(day + 2);
+
+                let d1 = b - a;
+                let d2 = c - b;
+
+                // Decreasing.
+                assert!(d1 < 0.0, "{day}: {a}, {b}, {c} ({d1} vs. {d2}");
+                assert!(d2 < 0.0, "{day}: {a}, {b}, {c} ({d1} vs. {d2}");
+
+                // Convex. That is, the second decrease is not as large as the first.
+                assert!(d1.abs() > d2.abs(), "{day}: {a}, {b}, {c} ({d1} vs. {d2}");
+            }
+        }
+    } // mod mission_70_disabled
+
+    mod mission_70_enabled {
+        use super::*;
+        use crate::temporarily_enable_mission_70_voting_rewards;
+
+        #[test]
+        fn days_fully_after_flattening_produce_linear_reward() {
+            let _restore_on_drop = temporarily_enable_mission_70_voting_rewards();
+
+            assert_approx_eq!(
+                rewards_pool_to_distribute_in_supply_fraction_for_one_day(8 * 366),
+                MISSION_70_VOTING_REWARDS_ADJUSTMENT_FACTOR * 0.05 / 365.25
+            );
+            assert_approx_eq!(
+                rewards_pool_to_distribute_in_supply_fraction_for_one_day(8 * 366 + 5),
+                MISSION_70_VOTING_REWARDS_ADJUSTMENT_FACTOR * 0.05 / 365.25
+            );
+            assert_approx_eq!(
+                rewards_pool_to_distribute_in_supply_fraction_for_one_day(123456),
+                MISSION_70_VOTING_REWARDS_ADJUSTMENT_FACTOR * 0.05 / 365.25
+            );
+        }
+
+        #[test]
+        fn reward_for_first_day() {
+            let _restore_on_drop = temporarily_enable_mission_70_voting_rewards();
+
+            assert_approx_eq!(
+                rewards_pool_to_distribute_in_supply_fraction_for_one_day(0),
+                MISSION_70_VOTING_REWARDS_ADJUSTMENT_FACTOR * 0.10 / 365.25
+            );
+        }
+
+        #[test]
+        fn reward_for_entire_pre_flattening_interval_can_be_lower_and_upper_bounded() {
+            let _restore_on_drop = temporarily_enable_mission_70_voting_rewards();
+
+            let lower_bound = MISSION_70_VOTING_REWARDS_ADJUSTMENT_FACTOR
+                * ((REWARD_FLATTENING_DATE - GENESIS) * FINAL_VOTING_REWARD_RELATIVE_RATE);
+            let upper_bound = MISSION_70_VOTING_REWARDS_ADJUSTMENT_FACTOR
+                * ((REWARD_FLATTENING_DATE - GENESIS) * INITIAL_VOTING_REWARD_RELATIVE_RATE);
+            let actual = (0..(REWARD_FLATTENING_DATE.days_since_ic_genesis as u64))
+                .map(rewards_pool_to_distribute_in_supply_fraction_for_one_day)
+                .sum();
+            assert!(lower_bound < actual);
+            assert!(actual < upper_bound);
+        }
+
+        /// This is a copy & paste of the test in the sibling mission_70_disabled module.
+        #[test]
+        fn reward_is_convex_and_decreasing() {
+            let _restore_on_drop = temporarily_enable_mission_70_voting_rewards();
+
+            // Here we verify the convex inequality for all 3 consecutive days during the
+            // parabolic rate period.
+            for day in 0..(REWARD_FLATTENING_DATE.days_since_ic_genesis as u64) - 2 {
+                let a = rewards_pool_to_distribute_in_supply_fraction_for_one_day(day);
+                let b = rewards_pool_to_distribute_in_supply_fraction_for_one_day(day + 1);
+                let c = rewards_pool_to_distribute_in_supply_fraction_for_one_day(day + 2);
+
+                let d1 = b - a;
+                let d2 = c - b;
+
+                // Decreasing.
+                assert!(d1 < 0.0, "{day}: {a}, {b}, {c} ({d1} vs. {d2}");
+                assert!(d2 < 0.0, "{day}: {a}, {b}, {c} ({d1} vs. {d2}");
+
+                // Convex. That is, the second decrease is not as large as the first.
+                assert!(d1.abs() > d2.abs(), "{day}: {a}, {b}, {c} ({d1} vs. {d2}");
+            }
+        }
+    } // mod mission_70_enabled
 }

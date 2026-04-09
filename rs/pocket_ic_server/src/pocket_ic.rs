@@ -1,5 +1,5 @@
 use crate::external_canister_types::{
-    CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig,
+    CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig, DummyAuthConfig,
     InternetIdentityFrontendInit, InternetIdentityInit, NnsDappCanisterArguments, OpenIdConfig,
     OpenIdEmailVerification, RateLimitConfig, SnsAggregatorConfig, StaticCaptchaTrigger,
 };
@@ -121,7 +121,7 @@ use ic_types::{
         CanisterHttpRequestId, CanisterHttpResponse as AdapterCanisterHttpResponse,
         CanisterHttpResponseContent,
     },
-    crypto::{BasicSig, BasicSigOf, CryptoResult, Signable},
+    crypto::{BasicSig, BasicSigOf, CryptoResult, Signable, threshold_sig::IcRootOfTrust},
     malicious_flags::MaliciousFlags,
     messages::{
         CertificateDelegation, HttpCallContent, HttpRequestEnvelope, MessageId as OtherMessageId,
@@ -131,6 +131,7 @@ use ic_types::{
 };
 use ic_types::{NumBytes, Time};
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_validator_http_request_test_utils::icp_mainnet_root_public_key_for_testing;
 use ic_validator_ingress_message::StandaloneIngressSigVerifier;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayloadBuilder, Subaccount, Tokens};
 use icrc_ledger_types::icrc1::account::Account;
@@ -2128,6 +2129,9 @@ impl PocketIcSubnets {
             } else {
                 None
             };
+            let dummy_auth_config = DummyAuthConfig {
+                prompt_for_index: true,
+            };
             let internet_identity_backend_args = Some(InternetIdentityInit {
                 assigned_user_number_range: None, // DIFFERENT FROM ICP MAINNET
                 archive_config: None,             // DIFFERENT FROM ICP MAINNET
@@ -2146,7 +2150,7 @@ impl PocketIcSubnets {
                 analytics_config: None,        // DIFFERENT FROM ICP MAINNET
                 enable_dapps_explorer: Some(false),
                 is_production: Some(false), // DIFFERENT FROM ICP MAINNET
-                dummy_auth: Some(None),
+                dummy_auth: Some(Some(dummy_auth_config)), // DIFFERENT FROM ICP MAINNET
                 backend_canister_id: Some(IDENTITY_CANISTER_ID.get().0),
                 backend_origin: None,
             });
@@ -2231,13 +2235,16 @@ impl PocketIcSubnets {
             format!("http://{INTERNET_IDENTITY_FRONTEND_CANISTER_ID}.localhost:{gateway_port}"),
             format!("http://id.ai.localhost:{gateway_port}"),
         ];
+        let dummy_auth_config = DummyAuthConfig {
+            prompt_for_index: true,
+        };
         let ii_frontend_init_payload = InternetIdentityFrontendInit {
             backend_canister_id: IDENTITY_CANISTER_ID.get().0,
             backend_origin,
             related_origins: Some(frontend_origins),
             fetch_root_key: Some(true),
             analytics_config: None,
-            dummy_auth: Some(None),
+            dummy_auth: Some(Some(dummy_auth_config)),
             dev_csp: Some(true),
         };
         ii_subnet
@@ -3541,7 +3548,6 @@ impl Operation for ProcessCanisterHttpInternal {
             let mut client = client.lock().unwrap();
             for (id, context) in new_requests {
                 if let Ok(()) = client.send(AdapterCanisterHttpRequest {
-                    timeout: context.time + Duration::from_secs(5 * 60),
                     id,
                     context,
                     socks_proxy_addrs: vec![],
@@ -3560,7 +3566,6 @@ impl Operation for ProcessCanisterHttpInternal {
                         {
                             sm.mock_canister_http_response(
                                 response.id.get(),
-                                response.timeout,
                                 context.request.sender,
                                 vec![response.content; sm.nodes.len()],
                             );
@@ -3672,7 +3677,6 @@ fn process_mock_canister_https_response(
             canister_http_request_id,
         )));
     };
-    let timeout = context.time + Duration::from_secs(5 * 60);
     let canister_id = context.request.sender;
 
     let response_to_content = |response: &CanisterHttpResponse| match response {
@@ -3718,7 +3722,6 @@ fn process_mock_canister_https_response(
             );
             client
                 .send(AdapterCanisterHttpRequest {
-                    timeout,
                     id: canister_http_request_id,
                     context: context.clone(),
                     socks_proxy_addrs: vec![],
@@ -3760,7 +3763,6 @@ fn process_mock_canister_https_response(
     }
     subnet.mock_canister_http_response(
         mock_canister_http_response.request_id,
-        timeout,
         canister_id,
         contents,
     );
@@ -4640,7 +4642,8 @@ impl Operation for CallRequest {
                 let node = &subnet.nodes[0];
                 let (s, mut r) = mpsc::channel(MAX_P2P_IO_CHANNEL_SIZE);
                 let ingress_filter = subnet.ingress_filter.clone();
-
+                let mainnet_root_of_trust =
+                    IcRootOfTrust::from(icp_mainnet_root_public_key_for_testing());
                 let ingress_validator = IngressValidatorBuilder::builder(
                     subnet.replica_logger.clone(),
                     node.node_id,
@@ -4653,6 +4656,7 @@ impl Operation for CallRequest {
                 )
                 .with_malicious_flags(pic.malicious_flags.clone())
                 .with_time_source(subnet.time_source.clone())
+                .with_additional_root_of_trust(mainnet_root_of_trust)
                 .build();
 
                 // Task that waits for call service to submit the ingress message, and
@@ -4793,6 +4797,8 @@ impl Operation for QueryRequest {
                 let node = &subnet.nodes[0];
                 subnet.certify_latest_state();
                 let query_handler = subnet.query_handler.lock().unwrap().clone();
+                let mainnet_root_of_trust =
+                    IcRootOfTrust::from(icp_mainnet_root_public_key_for_testing());
                 let svc = QueryServiceBuilder::builder(
                     subnet.replica_logger.clone(),
                     node.node_id,
@@ -4805,6 +4811,7 @@ impl Operation for QueryRequest {
                 )
                 .with_malicious_flags(pic.malicious_flags.clone())
                 .with_time_source(subnet.time_source.clone())
+                .with_additional_root_of_trust(mainnet_root_of_trust)
                 .build_service();
 
                 let version_str = match self.version {
@@ -4876,6 +4883,8 @@ impl Operation for CanisterReadStateRequest {
                 let (_, delegation_rx) = watch::channel(builder);
                 subnet.certify_latest_state();
                 let metrics = HttpHandlerMetrics::new(&MetricsRegistry::new());
+                let mainnet_root_of_trust =
+                    IcRootOfTrust::from(icp_mainnet_root_public_key_for_testing());
                 let svc = CanisterReadStateServiceBuilder::builder(
                     subnet.replica_logger.clone(),
                     metrics,
@@ -4888,6 +4897,7 @@ impl Operation for CanisterReadStateRequest {
                 )
                 .with_malicious_flags(pic.malicious_flags.clone())
                 .with_time_source(subnet.time_source.clone())
+                .with_additional_root_of_trust(mainnet_root_of_trust)
                 .build_service();
 
                 let version_str = match self.version {

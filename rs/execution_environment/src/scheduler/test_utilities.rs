@@ -1468,12 +1468,10 @@ impl TestWasmExecutorCore {
                 self.subnet_size,
                 system_state.cost_schedule(),
                 WasmExecutionMode::from_is_wasm64(system_state.is_wasm64_execution),
-            )
-            .real();
+            );
         let prepayment_for_response_transmission = self
             .cycles_account_manager
-            .prepayment_for_response_transmission(self.subnet_size, system_state.cost_schedule())
-            .real();
+            .prepayment_for_response_transmission(self.subnet_size, system_state.cost_schedule());
         let deadline = NO_DEADLINE;
         let callback = system_state
             .register_callback(Callback {
