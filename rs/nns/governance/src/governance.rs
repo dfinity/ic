@@ -36,16 +36,15 @@ use crate::{
             ArchivedMonthlyNodeProviderRewards, Ballot, BlessAlternativeGuestOsVersion,
             CreateServiceNervousSystem, Followees, GetNeuronsFundAuditInfoRequest,
             GetNeuronsFundAuditInfoResponse, Governance as GovernanceProto, GovernanceError,
-            InstallCode, KnownNeuron, ListKnownNeuronsResponse, ManageNeuron,
+            KnownNeuron, ListKnownNeuronsResponse, ManageNeuron,
             MonthlyNodeProviderRewards, Motion, NetworkEconomics, NeuronState,
             NeuronsFundAuditInfo, NeuronsFundData,
             NeuronsFundParticipation as NeuronsFundParticipationPb,
             NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
             ProposalData, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary, RewardEvent,
             RewardNodeProvider, RewardNodeProviders, SettleNeuronsFundParticipationRequest,
-            SettleNeuronsFundParticipationResponse, StopOrStartCanister,
-            SuccessfulProposalExecutionValue, TakeCanisterSnapshot, Tally, Topic,
-            UpdateCanisterSettings, UpdateNodeProvider, Vote, VotingPowerEconomics,
+            SettleNeuronsFundParticipationResponse, SuccessfulProposalExecutionValue, Tally, Topic,
+            UpdateNodeProvider, Vote, VotingPowerEconomics,
             WaitForQuietState, archived_monthly_node_provider_rewards,
             create_service_nervous_system::LedgerParameters,
             get_neurons_fund_audit_info_response,
@@ -4259,15 +4258,13 @@ impl Governance {
                     .await;
             }
             ValidProposalAction::InstallCode(install_code) => {
-                self.perform_install_code(pid, install_code).await;
+                self.perform_call_canister(pid, install_code).await;
             }
             ValidProposalAction::StopOrStartCanister(stop_or_start) => {
-                self.perform_stop_or_start_canister(pid, stop_or_start)
-                    .await;
+                self.perform_call_canister(pid, stop_or_start).await;
             }
             ValidProposalAction::UpdateCanisterSettings(update_settings) => {
-                self.perform_update_canister_settings(pid, update_settings)
-                    .await;
+                self.perform_call_canister(pid, update_settings).await;
             }
             ValidProposalAction::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => {
                 self.perform_fulfill_subnet_rental_request(pid, fulfill_subnet_rental_request)
@@ -4280,19 +4277,16 @@ impl Governance {
                 bless_alternative_guest_os_version,
             ),
             ValidProposalAction::TakeCanisterSnapshot(take_canister_snapshot) => {
-                self.perform_take_canister_snapshot(pid, take_canister_snapshot)
+                self.perform_call_canister(pid, take_canister_snapshot)
                     .await;
             }
             ValidProposalAction::LoadCanisterSnapshot(load_canister_snapshot) => {
-                self.perform_load_canister_snapshot(pid, load_canister_snapshot)
+                self.perform_call_canister(pid, load_canister_snapshot)
                     .await;
             }
             ValidProposalAction::CreateCanisterAndInstallCode(create_canister_and_install_code) => {
-                self.perform_create_canister_and_install_code(
-                    pid,
-                    create_canister_and_install_code,
-                )
-                .await;
+                self.perform_call_canister(pid, create_canister_and_install_code)
+                    .await;
             }
         }
     }
@@ -4329,27 +4323,6 @@ impl Governance {
         Ok(())
     }
 
-    async fn perform_install_code(&mut self, proposal_id: u64, install_code: InstallCode) {
-        self.perform_call_canister(proposal_id, install_code).await;
-    }
-
-    async fn perform_stop_or_start_canister(
-        &mut self,
-        proposal_id: u64,
-        stop_or_start: StopOrStartCanister,
-    ) {
-        self.perform_call_canister(proposal_id, stop_or_start).await;
-    }
-
-    async fn perform_update_canister_settings(
-        &mut self,
-        proposal_id: u64,
-        update_settings: UpdateCanisterSettings,
-    ) {
-        self.perform_call_canister(proposal_id, update_settings)
-            .await;
-    }
-
     async fn perform_fulfill_subnet_rental_request(
         &mut self,
         proposal_id: u64,
@@ -4361,24 +4334,6 @@ impl Governance {
         self.set_proposal_execution_status::<()>(proposal_id, result.map(|()| vec![]));
     }
 
-    async fn perform_load_canister_snapshot(
-        &mut self,
-        proposal_id: u64,
-        load_canister_snapshot: pb::v1::LoadCanisterSnapshot,
-    ) {
-        self.perform_call_canister(proposal_id, load_canister_snapshot)
-            .await;
-    }
-
-    async fn perform_create_canister_and_install_code(
-        &mut self,
-        proposal_id: u64,
-        create_canister_and_install_code: pb::v1::CreateCanisterAndInstallCode,
-    ) {
-        self.perform_call_canister(proposal_id, create_canister_and_install_code)
-            .await;
-    }
-
     fn perform_bless_alternative_guest_os_version(
         &mut self,
         proposal_id: u64,
@@ -4386,15 +4341,6 @@ impl Governance {
     ) {
         let result = bless_alternative_guest_os_version.execute();
         self.set_proposal_execution_status::<()>(proposal_id, result.map(|()| vec![]));
-    }
-
-    async fn perform_take_canister_snapshot(
-        &mut self,
-        proposal_id: u64,
-        take_canister_snapshot: TakeCanisterSnapshot,
-    ) {
-        self.perform_call_canister(proposal_id, take_canister_snapshot)
-            .await;
     }
 
     /// Sends request, decodes reply, and sets proposal execution status (this last part was
