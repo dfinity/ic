@@ -37,7 +37,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId, Time,
+    CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
     batch::{
         CanisterHttpPayload, ConsensusResponse, FlexibleCanisterHttpError,
         FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
@@ -797,7 +797,6 @@ impl CanisterHttpPayloadBuilderImpl {
                     // (FlexibleCanisterHttpResponseWithProof::count_bytes), but from
                     // share metadata + context since we don't have the response body.
                     let response_header_overhead = size_of::<CallbackId>()
-                        + size_of::<Time>()
                         + context.request.sender.get_ref().data_size();
                     let mut entry_sizes: Vec<usize> = metadata_shares
                         .iter()
