@@ -2358,7 +2358,7 @@ impl Default for ExecutionTestBuilder {
                 composite_queries: FlagStatus::Enabled,
                 // Use a large time limit for composite queries in tests to
                 // avoid flakiness due to slow CI machines.
-                max_query_call_walltime: Duration::from_secs(300),
+                max_query_call_walltime: Duration::from_secs(60),
                 ..Config::default()
             },
             subnet_config,
