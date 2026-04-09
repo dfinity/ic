@@ -298,7 +298,7 @@ pub fn allocate_resources(
             vm_config
                 .alternate_template
                 .clone()
-                .unwrap_or(VmType::Production),
+                .unwrap_or(VmType::ProductionNoCache),
             vm_config.vcpus,
             vm_config.memory_kibibytes,
             vec![],
