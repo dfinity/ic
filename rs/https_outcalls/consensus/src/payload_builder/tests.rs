@@ -1752,6 +1752,36 @@ fn flexible_build_respects_payload_size_limit() {
 }
 
 #[test]
+fn flexible_build_delivers_ok_with_fewer_than_max_when_size_limited() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+    let min = 2_u32;
+    let max = 4_u32;
+
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, min, max, |pb, pool| {
+        // For responses just under half of MAX_CANISTER_HTTP_PAYLOAD_SIZE, only exactly 2 fit.
+        let content_size = MAX_CANISTER_HTTP_PAYLOAD_SIZE / 2 - 1000;
+        {
+            let mut pool_access = pool.write().unwrap();
+            for node_idx in 0..num_nodes as u64 {
+                let (response, metadata) = test_response_and_metadata_with_content(
+                    callback_id.get(),
+                    CanisterHttpResponseContent::Success(vec![0xAB; content_size]),
+                );
+                let share = metadata_to_share(node_idx, &metadata);
+                add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
+            }
+        }
+
+        let parsed = build_and_validate_and_parse_payload(&pb);
+
+        assert_eq!(parsed.flexible_responses.len(), 1);
+        assert_eq!(parsed.flexible_responses[0].responses.len(), 2);
+    });
+}
+
+#[test]
 fn flexible_build_respects_max_responses_per_block() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
