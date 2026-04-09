@@ -57,3 +57,21 @@ fn test_clamp_debug_len() {
 
     assert_eq!(&clamp_debug_len(&S { i: 42 }, 100), "S {\n    i: 42,\n}");
 }
+
+#[test]
+fn test_humanize_blob() {
+    // Short blob: fully hex-encoded.
+    assert_eq!(humanize_blob(&[0x00, 0x61, 0x73, 0x6d], 10), "0061736d");
+
+    // Exact boundary.
+    assert_eq!(humanize_blob(&[0xab, 0xcd], 2), "abcd");
+
+    // Truncated.
+    assert_eq!(
+        humanize_blob(&[0xab, 0xcd, 0xef], 2),
+        "abcd... (3 bytes total)",
+    );
+
+    // Empty.
+    assert_eq!(humanize_blob(&[], 10), "");
+}
