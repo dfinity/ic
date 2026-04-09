@@ -993,11 +993,18 @@ pub struct CanisterHttpResponseMetadata {
 
 impl CountBytes for CanisterHttpResponseMetadata {
     fn count_bytes(&self) -> usize {
-        size_of_val(&self.id)
-            + self.content_hash.get_ref().0.len()
-            + size_of_val(&self.content_size)
-            + size_of_val(&self.registry_version)
-            + self.replica_version.as_ref().len()
+        let Self {
+            id,
+            content_hash,
+            content_size,
+            registry_version,
+            replica_version,
+        } = self;
+        size_of_val(id)
+            + content_hash.get_ref().0.len()
+            + size_of_val(content_size)
+            + size_of_val(registry_version)
+            + replica_version.as_ref().len()
     }
 }
 
