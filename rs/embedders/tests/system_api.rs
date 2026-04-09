@@ -196,6 +196,10 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::MsgArgDataCopy => vec!["I", "U", "RQ", "NRQ", "CQ", "Ry", "CRy", "F"],
         SystemApiCallId::MsgCallerSize => vec!["*"],
         SystemApiCallId::MsgCallerCopy => vec!["*"],
+        SystemApiCallId::MsgCallerInfoDataSize => vec!["U", "RQ", "NRQ", "CQ", "Ry", "Rt", "CRy", "CRt", "C", "CC", "F"],
+        SystemApiCallId::MsgCallerInfoDataCopy => vec!["U", "RQ", "NRQ", "CQ", "Ry", "Rt", "CRy", "CRt", "C", "CC", "F"],
+        SystemApiCallId::MsgCallerInfoSignerSize => vec!["U", "RQ", "NRQ", "CQ", "Ry", "Rt", "CRy", "CRt", "C", "CC", "F"],
+        SystemApiCallId::MsgCallerInfoSignerCopy => vec!["U", "RQ", "NRQ", "CQ", "Ry", "Rt", "CRy", "CRt", "C", "CC", "F"],
         SystemApiCallId::MsgRejectCode => vec!["Ry", "Rt", "CRy", "CRt", "C"],
         SystemApiCallId::MsgRejectMsgSize => vec!["Rt", "CRt"],
         SystemApiCallId::MsgRejectMsgCopy => vec!["Rt", "CRt"],
@@ -291,6 +295,46 @@ fn api_availability_test(
         SystemApiCallId::MsgCallerCopy => {
             assert_api_availability(
                 |api| api.ic0_msg_caller_copy(0, 0, 0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::MsgCallerInfoDataSize => {
+            assert_api_availability(
+                |api| api.ic0_msg_caller_info_data_size(),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::MsgCallerInfoDataCopy => {
+            assert_api_availability(
+                |api| api.ic0_msg_caller_info_data_copy(0, 0, 0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::MsgCallerInfoSignerSize => {
+            assert_api_availability(
+                |api| api.ic0_msg_caller_info_signer_size(),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::MsgCallerInfoSignerCopy => {
+            assert_api_availability(
+                |api| api.ic0_msg_caller_info_signer_copy(0, 0, 0, &mut [42; 128]),
                 api_type,
                 &system_state,
                 cycles_account_manager,
