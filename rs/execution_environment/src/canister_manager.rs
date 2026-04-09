@@ -1776,10 +1776,6 @@ impl CanisterManager {
             validated_cycles_and_memory_usage,
         );
 
-        if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
-            canister.scheduler_state.heap_delta_debit += chunk_bytes;
-        }
-
         let hash = validated_chunk.hash().to_vec();
         canister
             .system_state
@@ -2158,12 +2154,6 @@ impl CanisterManager {
         round_limits.instructions -= as_round_instructions(instructions);
 
         let heap_delta = new_snapshot.heap_delta();
-        if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
-            canister.scheduler_state.heap_delta_debit = canister
-                .scheduler_state
-                .heap_delta_debit
-                .saturating_add(&heap_delta);
-        }
 
         let canister_id = canister.canister_id();
         let snapshot_id = SnapshotId::from((canister_id, canister.new_local_snapshot_id()));
@@ -2538,12 +2528,6 @@ impl CanisterManager {
             .update_execution_memory_unchecked(available_execution_memory_change);
 
         let heap_delta = new_canister.heap_delta();
-        if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
-            new_canister.scheduler_state.heap_delta_debit = new_canister
-                .scheduler_state
-                .heap_delta_debit
-                .saturating_add(&heap_delta);
-        }
 
         *canister = new_canister;
         Ok(CanisterManagerResponse {
@@ -2882,12 +2866,6 @@ impl CanisterManager {
         round_limits.instructions -= as_round_instructions(instructions);
 
         let heap_delta = new_snapshot.heap_delta();
-        if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
-            canister.scheduler_state.heap_delta_debit = canister
-                .scheduler_state
-                .heap_delta_debit
-                .saturating_add(&heap_delta);
-        }
 
         let canister_id = canister.canister_id();
         let snapshot_id = SnapshotId::from((canister_id, canister.new_local_snapshot_id()));
@@ -3061,14 +3039,11 @@ impl CanisterManager {
                 }
             }
         };
-        if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
-            canister.scheduler_state.heap_delta_debit += NumBytes::new(bytes_written);
-        }
 
         Ok(CanisterManagerResponse {
             canister_id: canister.canister_id(),
             reply: Some(EmptyBlob.encode()),
-            heap_delta_increase: NumBytes::new(0),
+            heap_delta_increase: NumBytes::new(bytes_written),
             unflushed_checkpoint_op: None,
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,

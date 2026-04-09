@@ -83,6 +83,7 @@ use ic_types_cycles::{
 };
 use ic_utils_thread::deallocator_thread::{DeallocationSender, DeallocatorThread};
 use ic_wasm_types::WasmHash;
+use num_traits::SaturatingAdd;
 use phantom_newtype::AmountOf;
 use prometheus::IntCounter;
 use rand::RngCore;
@@ -1884,6 +1885,14 @@ impl ExecutionEnvironment {
         match result {
             Ok(response) => {
                 state.metadata.heap_delta_estimate += response.heap_delta_increase;
+                if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
+                    && let Some(canister) = state.canister_state_make_mut(&response.canister_id)
+                {
+                    canister.scheduler_state.heap_delta_debit = canister
+                        .scheduler_state
+                        .heap_delta_debit
+                        .saturating_add(&response.heap_delta_increase);
+                }
                 if let Some(unflushed_checkpoint_op) = response.unflushed_checkpoint_op {
                     state
                         .metadata
