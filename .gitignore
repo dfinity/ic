@@ -148,3 +148,5 @@ test_tmpdir/**
 
 # Directories of downloaded test logs by //ci/githubstats:query
 logs/**
+
+.claude/scheduled_tasks.lock
