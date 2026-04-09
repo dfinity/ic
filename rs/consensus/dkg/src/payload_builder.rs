@@ -117,16 +117,17 @@ fn create_data_payload(
 
 /// Selects dealings from the validated pool to include in a block payload.
 ///
-/// Filters dealings to only include those for ongoing DKGs from unique dealers.
-/// Never includes more dealings than the collection_threshold for any config.
-/// Prioritizes remote DKG dealings only while fewer than
-/// `MAX_REMOTE_DKGS_PER_INTERVAL` remote targets have exhausted their remaining
-/// capacity (collection threshold minus dealings already on chain).
+/// When selecting dealings, the following constraints apply:
+/// - A dealing must correspond to an existing config passed to this function.
+/// - There are less than `collection_threshold` many dealings for the same config already on chain.
+/// - There isn't already a dealing on chain for the same config from the same dealer.
 ///
-/// Candidate ordering is:
-/// 1. Remote before local if remote is prioritized, otherwise local before remote.
-/// 2. Among remote targets, lower remaining target capacity first.
-/// 3. `target_subnet` as a deterministic tie-breaker.
+/// Since the number of dealings to be included into a single block is limited, the pre-selected
+/// dealings are prioritized according to the following (in order of precedence):
+/// 1. While there are less than `MAX_REMOTE_DKGS_PER_INTERVAL` completed remote targets, prioritize
+///    remote dealings. Otherwise, prioritize local dealings.
+/// 2. Among remote targets, prioritize dealings for targets that are closer to their threshold.
+/// 3. Use `target_subnet` as a tie-breaker between dealings for targets with the same remaining capacity.
 fn select_dealings_for_payload(
     configs: &BTreeMap<NiDkgId, NiDkgConfig>,
     dealers_from_chain: &HashSet<(NiDkgId, NodeId)>,
@@ -155,8 +156,8 @@ fn select_dealings_for_payload(
         }
     }
 
-    // Only select dealings whose dealer has no dealing on chain yet and for configs
-    // that still have capacity left, while accounting for newly selected dealings.
+    // Only select dealings for configs that still have capacity left,
+    // and whose dealer has no dealing on chain yet.
     let mut prioritized_candidates: Vec<_> = dkg_pool
         .get_validated()
         .filter(|msg| {
@@ -175,7 +176,7 @@ fn select_dealings_for_payload(
         })
         .collect();
 
-    // Count the number of remote target IDs with no remaining capacity.
+    // Count the number of (completed) remote target IDs with no remaining capacity.
     let remote_target_ids_with_no_capacity = remaining_remote_target_capacity
         .values()
         .filter(|cap| **cap == 0)
@@ -2213,7 +2214,7 @@ mod tests {
         assert_eq!(selected[0].content.dkg_id, local_id);
 
         // With max_dealings_per_block = 10, we should prioritize local (although it has higher remaining capacity).
-        // We should aslo include remote, once local is capped at collection_threshold.
+        // We should also include remote, once local is capped at collection_threshold.
         let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 10);
         assert_eq!(selected.len(), 3);
         assert_eq!(selected[0].content.dkg_id, local_id);
