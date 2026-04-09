@@ -437,7 +437,7 @@ mod tests {
     }
 
     #[test]
-    fn get_propose_to_take_subnet_offline_for_repairs_with_readonly_and_write_key_command_test() {
+    fn get_propose_to_take_subnet_offline_for_repairs_with_readonly_and_write_keys_command_test() {
         let result = fake_admin_helper()
             .get_propose_to_take_subnet_offline_for_repairs_command(
                 subnet_id_from_str(FAKE_SUBNET_ID_1),
