@@ -505,20 +505,45 @@ fn queries_to_frozen_canisters_are_rejected() {
     // Canister A will not have enough to process queries in contrast
     // to Canister B which will have more than enough.
     //
-    // The amount of cycles is calculated based on previous runs of
-    // the test. It needs to be _just_ enough to allow for the canister
-    // to be installed (the canister is created with the provisional
-    // create canister api that doesn't require additional cycles).
+    // The amount of cycles must be just enough for `install_code` to
+    // succeed (the prepay check in `prepay_execution_cycles` requires
+    // balance >= execution_cost + freeze_threshold_cycles), but low
+    // enough that the canister becomes frozen after `update_freezing_threshold`.
     //
-    // 300_000_002_460 cycles are needed as prepayment for max install_code instructions
-    //       5_000_000 cycles are needed for update call execution
-    //       3_201_730 cycles are needed for log memory store
-    //          41_070 cycles are needed to cover freeze_threshold_cycles
-    //                 of the canister history memory usage (134 bytes)
+    // low_cycles = execution_cost + freeze_threshold_cycles
+    //
+    // execution_cost
+    //   = update_message_execution_fee
+    //     + MAX_INSTRUCTIONS_PER_INSTALL_CODE
+    //       * ten_update_instructions_execution_fee / 10
+    //   = 5_000_000 + 300_000_000_000 * 10 / 10
+    //   = 300_005_000_000
+    //
+    // freeze_threshold_cycles
+    //   = idle_cycles_burned_rate * default_freeze_threshold / SECONDS_PER_DAY
+    //   where idle_cycles_burned_rate
+    //     = floor(memory_bytes * gib_storage_per_second_fee * SECONDS_PER_DAY / GiB)
+    //   and default_freeze_threshold = 2_592_000 s (30 days)
+    //   and gib_storage_per_second_fee = 317_500 (10 SDR/GiB/year)
+    //
+    // Memory at install time (~12_510 bytes with log, ~222 bytes without):
+    //   134 bytes canister history
+    //   + 12_288 bytes log memory store (4 KiB header + 4 KiB index + 4 KiB data)
+    //   + 88 bytes other system state overhead
+    //
+    // With log (12_510 bytes):
+    //   idle = floor(12_510 * 317_500 * 86_400 / 1_073_741_824) = 319_605
+    //   freeze = 319_605 * 2_592_000 / 86_400 = 9_588_150
+    //   low_cycles = 300_005_000_000 + 9_588_150 = 300_014_588_150
+    //
+    // Without log (222 bytes):
+    //   idle = floor(222 * 317_500 * 86_400 / 1_073_741_824) = 5_671
+    //   freeze = 5_671 * 2_592_000 / 86_400 = 170_130
+    //   low_cycles = 300_005_000_000 + 170_130 = 300_005_170_130
     let low_cycles = if LOG_MEMORY_STORE_FEATURE_ENABLED {
         Cycles::new(300_014_588_150)
     } else {
-        Cycles::new(300_005_633_530)
+        Cycles::new(300_005_170_130)
     };
     let canister_a = test.universal_canister_with_cycles(low_cycles).unwrap();
     test.update_freezing_threshold(canister_a, freezing_threshold)
