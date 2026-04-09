@@ -15230,6 +15230,7 @@ dependencies = [
  "ic_consensus_system_test_utils",
  "nix 0.24.3",
  "once_cell",
+ "rand 0.8.5",
  "registry-canister",
  "serde",
  "slog",
