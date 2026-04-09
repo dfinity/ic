@@ -67,7 +67,7 @@ use ic_types::batch::ChainKeyData;
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
 };
-use ic_types::messages::SignedIngressContent;
+use ic_types::messages::{SignedIngressContent, SignedSenderInfo};
 use ic_types::{
     CanisterId, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
     batch::QueryStats,
@@ -1360,7 +1360,11 @@ impl ExecutionTest {
                 user_id: self.user_id,
                 ingress_expiry: 0,
                 nonce: None,
-                sender_info: None,
+                sender_info: self.sender_info.as_ref().map(|si| SignedSenderInfo {
+                    info: si.info.clone(),
+                    signer: si.signer,
+                    sig: vec![],
+                }),
             },
             receiver: canister_id,
             method_name: method_name.to_string(),
