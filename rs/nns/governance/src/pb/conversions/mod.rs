@@ -1787,26 +1787,8 @@ impl From<pb::SuccessfulProposalExecutionValue> for api::SuccessfulProposalExecu
     }
 }
 
-impl From<api::SuccessfulProposalExecutionValue> for pb::SuccessfulProposalExecutionValue {
-    fn from(item: api::SuccessfulProposalExecutionValue) -> Self {
-        match item {
-            api::SuccessfulProposalExecutionValue::CreateCanisterAndInstallCode(ok) => Self {
-                proposal_type: Some(ProposalType::CreateCanisterAndInstallCode(ok.into())),
-            },
-        }
-    }
-}
-
 impl From<pb::CreateCanisterAndInstallCodeOk> for api::CreateCanisterAndInstallCodeOk {
     fn from(item: pb::CreateCanisterAndInstallCodeOk) -> Self {
-        Self {
-            canister_id: item.canister_id,
-        }
-    }
-}
-
-impl From<api::CreateCanisterAndInstallCodeOk> for pb::CreateCanisterAndInstallCodeOk {
-    fn from(item: api::CreateCanisterAndInstallCodeOk) -> Self {
         Self {
             canister_id: item.canister_id,
         }
