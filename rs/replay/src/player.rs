@@ -277,16 +277,22 @@ impl Player {
             println!("Failed to set default replica version");
         }
 
-        let subnet_type = match registry.get_subnet_record(subnet_id, registry.get_latest_version())
-        {
+        let registry_version = registry.get_latest_version();
+        let subnet_type = match registry.get_subnet_record(subnet_id, registry_version) {
             Ok(Some(record)) => {
                 SubnetType::try_from(record.subnet_type).expect("Failed to decode subnet type")
             }
             err => panic!("Failed to extract subnet type of {subnet_id:?} from registry: {err:?}"),
         };
+        let is_sev_enabled = registry
+            .get_features(subnet_id, registry_version)
+            .ok()
+            .flatten()
+            .map(|f| f.sev_enabled)
+            .unwrap_or(false);
 
         let metrics_registry = MetricsRegistry::new();
-        let subnet_config = SubnetConfig::new(subnet_type, false);
+        let subnet_config = SubnetConfig::new(subnet_type, is_sev_enabled);
 
         let crypto = ic_crypto_for_verification_only::new(registry.clone());
         let crypto = Arc::new(crypto);
