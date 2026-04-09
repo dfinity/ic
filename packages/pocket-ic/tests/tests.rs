@@ -9,6 +9,7 @@ use ic_management_canister_types::{
 };
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use ic_utils::interfaces::ManagementCanister;
 use pocket_ic::{
     DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult, PocketIc, PocketIcBuilder,
@@ -18,7 +19,7 @@ use pocket_ic::{
         CanisterHttpResponse, CanisterIdRange, CreateInstanceResponse, ExtendedSubnetConfigSet,
         HttpGatewayDetails, HttpsConfig, IcpFeatures, IcpFeaturesConfig, InitialTime,
         InstanceConfig, InstanceHttpGatewayConfig, MockCanisterHttpResponse, RawEffectivePrincipal,
-        RawMessageId, SubnetConfigSet, SubnetKind, SubnetSpec,
+        RawMessageId, RawSenderInfo, SubnetConfigSet, SubnetKind, SubnetSpec,
     },
     nonblocking::PocketIc as PocketIcAsync,
     query_candid, start_server, update_candid,
@@ -3516,4 +3517,88 @@ fn cloud_engine_default_effective_canister_id() {
     let default_effective_canister_id: Principal =
         topology.default_effective_canister_id.clone().into();
     assert_eq!(effective_canister_id, default_effective_canister_id);
+}
+
+fn deploy_universal_canister(pic: &PocketIc) -> Principal {
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None);
+    canister_id
+}
+
+#[test]
+fn test_sender_info_in_update_call() {
+    let pic = PocketIc::new();
+    let canister_id = deploy_universal_canister(&pic);
+
+    let info = vec![1u8, 2, 3, 4];
+    // Use the canister itself as the signer: its principal bytes are a valid CanisterId.
+    let signer = canister_id.as_slice().to_vec();
+    let sender_info = RawSenderInfo {
+        info: info.clone(),
+        signer: signer.clone(),
+        sig: vec![],
+    };
+
+    // msg_caller_info_data returns the info blob.
+    let result = pic
+        .update_call_with_sender_info(
+            canister_id,
+            Principal::anonymous(),
+            "update",
+            wasm().msg_caller_info_data().append_and_reply().build(),
+            sender_info.clone(),
+        )
+        .expect("update call failed");
+    assert_eq!(result, info);
+
+    // msg_caller_info_signer returns the signer principal bytes.
+    let result = pic
+        .update_call_with_sender_info(
+            canister_id,
+            Principal::anonymous(),
+            "update",
+            wasm().msg_caller_info_signer().append_and_reply().build(),
+            sender_info,
+        )
+        .expect("update call failed");
+    assert_eq!(result, signer);
+}
+
+#[test]
+fn test_sender_info_in_query_call() {
+    let pic = PocketIc::new();
+    let canister_id = deploy_universal_canister(&pic);
+
+    let info = vec![5u8, 6, 7, 8];
+    let signer = canister_id.as_slice().to_vec();
+    let sender_info = RawSenderInfo {
+        info: info.clone(),
+        signer: signer.clone(),
+        sig: vec![],
+    };
+
+    // msg_caller_info_data returns the info blob.
+    let result = pic
+        .query_call_with_sender_info(
+            canister_id,
+            Principal::anonymous(),
+            "query",
+            wasm().msg_caller_info_data().append_and_reply().build(),
+            sender_info.clone(),
+        )
+        .expect("query call failed");
+    assert_eq!(result, info);
+
+    // msg_caller_info_signer returns the signer principal bytes.
+    let result = pic
+        .query_call_with_sender_info(
+            canister_id,
+            Principal::anonymous(),
+            "query",
+            wasm().msg_caller_info_signer().append_and_reply().build(),
+            sender_info,
+        )
+        .expect("query call failed");
+    assert_eq!(result, signer);
 }
