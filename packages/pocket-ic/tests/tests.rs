@@ -3537,7 +3537,6 @@ fn test_sender_info_in_update_call() {
     let sender_info = RawSenderInfo {
         info: info.clone(),
         signer: signer.clone(),
-        sig: vec![],
     };
 
     // msg_caller_info_data returns the info blob.
@@ -3575,7 +3574,6 @@ fn test_sender_info_in_query_call() {
     let sender_info = RawSenderInfo {
         info: info.clone(),
         signer: signer.clone(),
-        sig: vec![],
     };
 
     // msg_caller_info_data returns the info blob.

@@ -148,9 +148,6 @@ pub struct RawSenderInfo {
     #[serde(deserialize_with = "base64::deserialize")]
     #[serde(serialize_with = "base64::serialize")]
     pub signer: Vec<u8>,
-    #[serde(deserialize_with = "base64::deserialize")]
-    #[serde(serialize_with = "base64::serialize")]
-    pub sig: Vec<u8>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]

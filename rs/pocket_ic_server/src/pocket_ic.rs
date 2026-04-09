@@ -5102,7 +5102,7 @@ impl TryFrom<RawCanisterCall> for CanisterCall {
                 });
             }
         };
-        let sender_info = if let Some(RawSenderInfo { info, signer, sig }) = sender_info {
+        let sender_info = if let Some(RawSenderInfo { info, signer }) = sender_info {
             let signer = match CanisterId::try_from(signer) {
                 Ok(signer) => signer,
                 Err(_) => {
@@ -5111,7 +5111,11 @@ impl TryFrom<RawCanisterCall> for CanisterCall {
                     });
                 }
             };
-            Some(SignedSenderInfo { info, signer, sig })
+            Some(SignedSenderInfo {
+                info,
+                signer,
+                sig: vec![],
+            })
         } else {
             None
         };
@@ -5134,7 +5138,6 @@ impl CanisterCall {
         if let Some(sender_info) = &self.sender_info {
             hasher.write(&sender_info.info);
             hasher.write(sender_info.signer.as_ref());
-            hasher.write(&sender_info.sig);
         }
         let hash = Digest(hasher.finish());
         OpId(format!(
