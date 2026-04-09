@@ -2949,6 +2949,52 @@ fn flexible_build_ok_takes_precedence_over_rejects() {
 }
 
 #[test]
+fn flexible_build_prioritizes_smaller_responses() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    // max_responses = 2 so only 2 of the 3 responses can be included.
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 2, |pb, pool| {
+        let small = b"s";
+        let medium = b"medium_content";
+        let large = b"large_content_that_is_significantly_bigger";
+
+        {
+            let mut pool_access = pool.write().unwrap();
+            // Insert shares from 3 different nodes with different content sizes.
+            // Deliberately insert large before small to ensure it's the sort,
+            // not insertion order, that determines the result.
+            for (node, content) in [(0_u64, large.as_slice()), (1, small), (2, medium)] {
+                let (response, metadata) = test_response_and_metadata_with_content(
+                    callback_id.get(),
+                    CanisterHttpResponseContent::Success(content.to_vec()),
+                );
+                let share = metadata_to_share(node, &metadata);
+                add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
+            }
+        }
+
+        let parsed = build_and_validate_and_parse_payload(&pb);
+        assert_eq!(parsed.flexible_responses.len(), 1);
+        let group = &parsed.flexible_responses[0];
+        assert_eq!(group.responses.len(), 2);
+
+        let included_bodies: Vec<_> = group
+            .responses
+            .iter()
+            .filter_map(|e| match &e.response.content {
+                CanisterHttpResponseContent::Success(bytes) => Some(bytes.clone()),
+                _ => None,
+            })
+            .collect();
+
+        assert_eq!(included_bodies[0], small);
+        assert_eq!(included_bodies[1], medium);
+    });
+}
+
+#[test]
 fn flexible_error_timeout_valid() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
