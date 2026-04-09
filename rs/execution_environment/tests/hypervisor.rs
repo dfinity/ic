@@ -2109,6 +2109,74 @@ fn ic0_msg_caller_info_works_in_ingress() {
 }
 
 #[test]
+fn ic0_msg_caller_info_empty_without_sender_info_in_ingress() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let result = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm().msg_caller_info_data().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
+
+    let result = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm().msg_caller_info_signer().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
+}
+
+#[test]
+fn ic0_msg_caller_info_empty_for_inter_canister_calls() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+
+    // Set sender_info so the caller (user → caller_id) sees it.
+    // The callee (caller_id → callee_id) must see empty values.
+    test.set_sender_info(SenderInfo {
+        info: vec![1u8, 2, 3, 4],
+        signer: canister_test_id(42),
+    });
+
+    let result = test
+        .ingress(
+            caller_id,
+            "update",
+            wasm()
+                .inter_update(
+                    callee_id,
+                    call_args()
+                        .other_side(wasm().msg_caller_info_data().append_and_reply().build()),
+                )
+                .build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
+
+    let result = test
+        .ingress(
+            caller_id,
+            "update",
+            wasm()
+                .inter_update(
+                    callee_id,
+                    call_args()
+                        .other_side(wasm().msg_caller_info_signer().append_and_reply().build()),
+                )
+                .build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
+}
+
+#[test]
 fn ic0_msg_caller_info_works_in_reply_callback() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
