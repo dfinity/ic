@@ -37,15 +37,9 @@ pub fn clamp_string_len(s: &str, max_len: usize) -> String {
     )
 }
 
-/// Like `clamp_debug_len`, but avoids formatting the entire object when it
-/// exceeds `max_len`. Instead, writes into a length-limited buffer and stops
-/// early once the limit is reached. This makes the cost proportional to
-/// `max_len`, not to the size of the object.
+/// Formats object, but limits the output size.
 ///
-/// Unlike `clamp_string_len`, the truncated output does not include a tail
-/// (showing the end of the string), because the Debug output is generated
-/// lazily and the end is not available without formatting the whole thing.
-/// Instead, "..." is appended to indicate truncation.
+/// Unlike clamp_string_len, does not include the tail (when truncating).
 pub fn clamp_debug_len(object: &impl Debug, max_len: usize) -> String {
     let mut buf = LimitedWriter::new(max_len);
     // write! returns Err if the writer returns Err, which LimitedWriter does
