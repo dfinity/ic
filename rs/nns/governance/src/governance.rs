@@ -1355,11 +1355,10 @@ impl Governance {
             governance.heap_data.neuron_id_to_pre_clamp_dissolve_state = governance
                 .neuron_store
                 .clamp_dissolve_delay_for_all_neurons_or_panic(now);
-        }
 
-        if is_mission_70_voting_rewards_enabled() {
             VOTING_POWER_SNAPSHOTS.with_borrow_mut(VotingPowerSnapshots::clear);
         }
+
         governance
     }
 
