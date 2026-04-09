@@ -115,6 +115,7 @@ fn replicated_query_api() -> ApiType {
         vec![],
         user_test_id(1).get(),
         call_context_test_id(1),
+        None,
     )
 }
 
@@ -159,6 +160,7 @@ fn cleanup_api() -> ApiType {
         time: UNIX_EPOCH,
         reject_code: 0,
         call_context_instructions_executed: 0.into(),
+        sender_info: None,
     }
 }
 
@@ -167,11 +169,18 @@ fn composite_cleanup_api() -> ApiType {
         caller: PrincipalId::new_anonymous(),
         time: UNIX_EPOCH,
         call_context_instructions_executed: 0.into(),
+        sender_info: None,
     }
 }
 
 fn inspect_message_api() -> ApiType {
-    ApiType::inspect_message(user_test_id(1).get(), "".to_string(), vec![], UNIX_EPOCH)
+    ApiType::inspect_message(
+        user_test_id(1).get(),
+        "".to_string(),
+        vec![],
+        UNIX_EPOCH,
+        None,
+    )
 }
 
 fn system_task_api() -> ApiType {
@@ -1082,6 +1091,7 @@ fn test_canister_balance() {
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
 
@@ -1115,6 +1125,7 @@ fn test_canister_cycle_balance() {
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
 
@@ -1155,6 +1166,7 @@ fn test_msg_cycles_available_traps() {
             available_cycles,
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
 
@@ -1247,6 +1259,7 @@ fn data_certificate_copy() {
             subnet_test_id(1),
             vec![],
             Some(vec![1, 2, 3, 4, 5, 6]),
+            None,
         ),
         &system_state,
         cycles_account_manager,
@@ -1325,6 +1338,7 @@ fn msg_cycles_accept_all_cycles_in_call_context() {
             Cycles::from(amount),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
     let mut api = get_system_api(
@@ -1353,6 +1367,7 @@ fn msg_cycles_accept_all_cycles_in_call_context_when_more_asked() {
             Cycles::new(40),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
     let mut api = get_system_api(
@@ -1395,6 +1410,7 @@ fn call_perform_not_enough_cycles_does_not_trap() {
             Cycles::new(40),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
     let mut api = get_system_api(

@@ -124,6 +124,7 @@ impl CanisterStateFixture {
                 Cycles::zero(),
                 Time::from_nanos_since_unix_epoch(0),
                 Default::default(),
+                None,
             )
             .unwrap();
         self.canister_state
@@ -1271,6 +1272,7 @@ fn reverts_stopping_status_after_split() {
         Cycles::from(0_u128),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
+        None,
     ));
     canister_state
         .system_state

@@ -24,7 +24,9 @@ use ic_types::{
     CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, MemoryAllocation, NumBytes,
     NumInstructions, NumOsPages, PrincipalId, SubnetId, Time,
     ingress::WasmResult,
-    messages::{CallContextId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, RejectContext, Request},
+    messages::{
+        CallContextId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, RejectContext, Request, SenderInfo,
+    },
     methods::{SystemMethod, WasmClosure},
 };
 use ic_types_cycles::{
@@ -249,6 +251,9 @@ pub enum ApiType {
         /// request is currently under construction.
         outgoing_request: Option<RequestInPrep>,
         max_reply_size: NumBytes,
+        /// Sender info from the ingress message that invoked this method.
+        /// `None` for inter-canister update calls.
+        sender_info: Option<SenderInfo>,
     },
 
     // For executing canister methods marked as `query` in replicated mode.
@@ -262,6 +267,9 @@ pub enum ApiType {
         response_data: Vec<u8>,
         response_status: ResponseStatus,
         max_reply_size: NumBytes,
+        /// Sender info from the ingress message that invoked this method.
+        /// `None` for inter-canister query calls.
+        sender_info: Option<SenderInfo>,
     },
 
     // For executing canister methods marked as `query` in non-replicated mode.
@@ -277,6 +285,8 @@ pub enum ApiType {
         response_data: Vec<u8>,
         response_status: ResponseStatus,
         max_reply_size: NumBytes,
+        /// Sender info from the ingress message that invoked this method.
+        sender_info: Option<SenderInfo>,
     },
 
     // For executing canister methods marked as `composite_query`.
@@ -294,6 +304,8 @@ pub enum ApiType {
         max_reply_size: NumBytes,
         call_context_id: CallContextId,
         outgoing_request: Option<RequestInPrep>,
+        /// Sender info from the ingress message that invoked this method.
+        sender_info: Option<SenderInfo>,
     },
 
     // For executing closures when a `Reply` is received in replicated mode.
@@ -314,6 +326,9 @@ pub enum ApiType {
         max_reply_size: NumBytes,
         /// The total number of instructions executed in the call context
         call_context_instructions_executed: NumInstructions,
+        /// Sender info from the ingress message that created the call context.
+        /// `None` for call contexts created by inter-canister calls.
+        sender_info: Option<SenderInfo>,
     },
 
     // For executing closures when a `Reply` is received in a composite query context.
@@ -334,6 +349,8 @@ pub enum ApiType {
         max_reply_size: NumBytes,
         /// The total number of instructions executed in the call context
         call_context_instructions_executed: NumInstructions,
+        /// Sender info from the ingress message that created the call context.
+        sender_info: Option<SenderInfo>,
     },
 
     // For executing closures when a `Reject` is received in replicated mode.
@@ -353,6 +370,9 @@ pub enum ApiType {
         max_reply_size: NumBytes,
         /// The total number of instructions executed in the call context
         call_context_instructions_executed: NumInstructions,
+        /// Sender info from the ingress message that created the call context.
+        /// `None` for call contexts created by inter-canister calls.
+        sender_info: Option<SenderInfo>,
     },
 
     // For executing closures when a `Reject` is received in a composite query context.
@@ -372,6 +392,8 @@ pub enum ApiType {
         max_reply_size: NumBytes,
         /// The total number of instructions executed in the call context
         call_context_instructions_executed: NumInstructions,
+        /// Sender info from the ingress message that created the call context.
+        sender_info: Option<SenderInfo>,
     },
 
     // For executing the `canister_pre_upgrade` method.
@@ -390,6 +412,8 @@ pub enum ApiType {
         incoming_payload: Vec<u8>,
         time: Time,
         message_accepted: bool,
+        /// Sender info from the ingress message being inspected.
+        sender_info: Option<SenderInfo>,
     },
 
     // For executing the `canister_heartbeat` or `canister_global_timer` or `canister_on_low_wasm_memory` methods
@@ -417,6 +441,9 @@ pub enum ApiType {
         reject_code: i32,
         /// The total number of instructions executed in the call context
         call_context_instructions_executed: NumInstructions,
+        /// Sender info from the ingress message that created the call context.
+        /// `None` for call contexts created by inter-canister calls.
+        sender_info: Option<SenderInfo>,
     },
 
     /// Like `Cleanup`, but used in a composite query context.
@@ -425,6 +452,8 @@ pub enum ApiType {
         time: Time,
         /// The total number of instructions executed in the call context
         call_context_instructions_executed: NumInstructions,
+        /// Sender info from the ingress message that created the call context.
+        sender_info: Option<SenderInfo>,
     },
 }
 
@@ -461,6 +490,7 @@ impl ApiType {
         incoming_cycles: Cycles,
         caller: PrincipalId,
         call_context_id: CallContextId,
+        sender_info: Option<SenderInfo>,
     ) -> Self {
         Self::Update {
             time,
@@ -472,6 +502,7 @@ impl ApiType {
             response_status: ResponseStatus::NotRepliedYet,
             outgoing_request: None,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+            sender_info,
         }
     }
 
@@ -480,6 +511,7 @@ impl ApiType {
         incoming_payload: Vec<u8>,
         caller: PrincipalId,
         call_context_id: CallContextId,
+        sender_info: Option<SenderInfo>,
     ) -> Self {
         Self::ReplicatedQuery {
             time,
@@ -489,6 +521,7 @@ impl ApiType {
             response_data: vec![],
             response_status: ResponseStatus::NotRepliedYet,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+            sender_info,
         }
     }
 
@@ -498,6 +531,7 @@ impl ApiType {
         own_subnet_id: SubnetId,
         incoming_payload: Vec<u8>,
         data_certificate: Option<Vec<u8>>,
+        sender_info: Option<SenderInfo>,
     ) -> Self {
         Self::NonReplicatedQuery {
             time,
@@ -508,6 +542,7 @@ impl ApiType {
             response_data: vec![],
             response_status: ResponseStatus::NotRepliedYet,
             max_reply_size: MAX_NON_REPLICATED_QUERY_REPLY_SIZE,
+            sender_info,
         }
     }
 
@@ -518,6 +553,7 @@ impl ApiType {
         incoming_payload: Vec<u8>,
         data_certificate: Option<Vec<u8>>,
         call_context_id: CallContextId,
+        sender_info: Option<SenderInfo>,
     ) -> Self {
         Self::CompositeQuery {
             time,
@@ -530,6 +566,7 @@ impl ApiType {
             max_reply_size: MAX_NON_REPLICATED_QUERY_REPLY_SIZE,
             call_context_id,
             outgoing_request: None,
+            sender_info,
         }
     }
 
@@ -541,6 +578,7 @@ impl ApiType {
         call_context_id: CallContextId,
         replied: bool,
         call_context_instructions_executed: NumInstructions,
+        sender_info: Option<SenderInfo>,
     ) -> Self {
         Self::ReplyCallback {
             time,
@@ -557,6 +595,7 @@ impl ApiType {
             outgoing_request: None,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
             call_context_instructions_executed,
+            sender_info,
         }
     }
 
@@ -568,6 +607,7 @@ impl ApiType {
         call_context_id: CallContextId,
         replied: bool,
         call_context_instructions_executed: NumInstructions,
+        sender_info: Option<SenderInfo>,
     ) -> Self {
         Self::CompositeReplyCallback {
             time,
@@ -584,6 +624,7 @@ impl ApiType {
             outgoing_request: None,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
             call_context_instructions_executed,
+            sender_info,
         }
     }
 
@@ -595,6 +636,7 @@ impl ApiType {
         call_context_id: CallContextId,
         replied: bool,
         call_context_instructions_executed: NumInstructions,
+        sender_info: Option<SenderInfo>,
     ) -> Self {
         Self::RejectCallback {
             time,
@@ -611,6 +653,7 @@ impl ApiType {
             outgoing_request: None,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
             call_context_instructions_executed,
+            sender_info,
         }
     }
 
@@ -622,6 +665,7 @@ impl ApiType {
         call_context_id: CallContextId,
         replied: bool,
         call_context_instructions_executed: NumInstructions,
+        sender_info: Option<SenderInfo>,
     ) -> Self {
         Self::CompositeRejectCallback {
             time,
@@ -638,6 +682,7 @@ impl ApiType {
             outgoing_request: None,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
             call_context_instructions_executed,
+            sender_info,
         }
     }
 
@@ -650,6 +695,7 @@ impl ApiType {
         method_name: String,
         incoming_payload: Vec<u8>,
         time: Time,
+        sender_info: Option<SenderInfo>,
     ) -> Self {
         Self::InspectMessage {
             caller,
@@ -657,6 +703,7 @@ impl ApiType {
             incoming_payload,
             time,
             message_accepted: false,
+            sender_info,
         }
     }
 

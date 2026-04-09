@@ -77,6 +77,7 @@ fn test_api_for_update(
         Cycles::zero(),
         caller,
         call_context_test_id(13),
+        None,
     );
 
     let static_system_state = SandboxSafeSystemState::new_for_testing(
