@@ -2522,7 +2522,8 @@ impl StateMachine {
         self.submit_signed_ingress(msg)
     }
 
-    /// Submit an ingress message into the ingress pool with sender info.
+    /// Submit an ingress message with sender info into the ingress pool used by `PayloadBuilderImpl`
+    /// in `Self::execute_round`.
     pub fn submit_ingress_as_with_sender_info(
         &self,
         sender: PrincipalId,
@@ -4363,11 +4364,19 @@ impl StateMachine {
         method: impl ToString,
         method_payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
-        self.query_as_with_delegation(sender, receiver, method, method_payload, None, None)
+        self.query_as_with_delegation_and_sender_info(
+            sender,
+            receiver,
+            method,
+            method_payload,
+            None,
+            None,
+        )
     }
 
-    /// Queries the canister with the specified ID and with an optional subnet delegation from the NNS.
-    pub fn query_as_with_delegation(
+    /// Queries the canister with the specified ID and with an optional subnet delegation from the NNS
+    /// and sender info.
+    pub fn query_as_with_delegation_and_sender_info(
         &self,
         sender: PrincipalId,
         receiver: CanisterId,

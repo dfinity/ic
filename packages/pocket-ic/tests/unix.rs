@@ -773,7 +773,8 @@ fn test_sender_info_in_update_call() {
     let canister_id = deploy_universal_canister(&pic);
 
     let info = vec![1_u8, 2, 3, 4];
-    // Use the canister itself as the signer: its principal bytes are a valid CanisterId.
+    // Use the canister itself as the signer: sender info signature is not required by PocketIC
+    // when using PocketIC JSON API.
     let signer = canister_id.as_slice().to_vec();
     let sender_info = RawSenderInfo {
         info: info.clone(),
@@ -811,6 +812,8 @@ fn test_sender_info_in_query_call() {
     let canister_id = deploy_universal_canister(&pic);
 
     let info = vec![5_u8, 6, 7, 8];
+    // Use the canister itself as the signer: sender info signature is not required by PocketIC
+    // when using PocketIC JSON API.
     let signer = canister_id.as_slice().to_vec();
     let sender_info = RawSenderInfo {
         info: info.clone(),

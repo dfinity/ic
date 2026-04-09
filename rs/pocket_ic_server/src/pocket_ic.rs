@@ -4465,7 +4465,7 @@ impl Operation for Query {
                             },
                         )
                     });
-                match subnet.query_as_with_delegation(
+                match subnet.query_as_with_delegation_and_sender_info(
                     self.0.sender,
                     self.0.canister_id,
                     self.0.method.clone(),
@@ -5107,7 +5107,7 @@ impl TryFrom<RawCanisterCall> for CanisterCall {
                 Ok(signer) => signer,
                 Err(_) => {
                     return Err(ConversionError {
-                        message: "Bad sender info signer".to_string(),
+                        message: "Invalid sender info signer".to_string(),
                     });
                 }
             };
@@ -5135,14 +5135,25 @@ impl CanisterCall {
     fn id(&self) -> OpId {
         let mut hasher = Sha256::new();
         hasher.write(&self.payload);
+        let payload_hash = Digest(hasher.finish());
+        let mut hasher = Sha256::new();
         if let Some(sender_info) = &self.sender_info {
+            let signer_bytes: &[u8] = sender_info.signer.as_ref();
+            // We prepend the length of the canister principal encoding
+            // so that the sender info serialization is unique.
+            hasher.write(&signer_bytes.len().to_le_bytes());
+            hasher.write(signer_bytes);
             hasher.write(&sender_info.info);
-            hasher.write(sender_info.signer.as_ref());
         }
-        let hash = Digest(hasher.finish());
+        let sender_info_hash = Digest(hasher.finish());
         OpId(format!(
-            "call({:?},{},{},{},{})",
-            self.effective_principal, self.sender, self.canister_id, self.method, hash
+            "call({:?},{},{},{},{},{})",
+            self.effective_principal,
+            self.sender,
+            self.canister_id,
+            self.method,
+            payload_hash,
+            sender_info_hash
         ))
     }
 }
