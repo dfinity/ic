@@ -2293,6 +2293,50 @@ fn ic0_msg_caller_info_works_in_composite_query_reply_callback() {
 }
 
 #[test]
+fn ic0_msg_caller_info_empty_for_nested_composite_query_calls() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+
+    // Set sender_info so the top-level caller sees it; the callee (nested call)
+    // must see empty values because it is called by a canister, not a user.
+    test.set_sender_info(SenderInfo {
+        info: vec![1u8, 2, 3, 4],
+        signer: canister_test_id(42),
+    });
+
+    let result = test
+        .non_replicated_query(
+            caller_id,
+            "composite_query",
+            wasm()
+                .composite_query(
+                    callee_id,
+                    call_args()
+                        .other_side(wasm().msg_caller_info_data().append_and_reply().build()),
+                )
+                .build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
+
+    let result = test
+        .non_replicated_query(
+            caller_id,
+            "composite_query",
+            wasm()
+                .composite_query(
+                    callee_id,
+                    call_args()
+                        .other_side(wasm().msg_caller_info_signer().append_and_reply().build()),
+                )
+                .build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
+}
+
+#[test]
 fn ic0_msg_caller_info_works_in_replicated_query() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
