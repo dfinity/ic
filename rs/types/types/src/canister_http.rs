@@ -804,7 +804,7 @@ pub struct CanisterHttpResponse {
 }
 
 impl CanisterHttpResponse {
-    /// Size estimate as `Self::count_bytes` from decomposed parts.
+    /// Same calculation as `Self::count_bytes` but from decomposed parts.
     pub fn count_bytes_from_parts(canister_id: &CanisterId, content_size: usize) -> usize {
         size_of::<CanisterHttpRequestId>() + canister_id.get_ref().data_size() + content_size
     }
