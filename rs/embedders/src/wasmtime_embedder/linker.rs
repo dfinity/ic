@@ -350,6 +350,66 @@ pub fn syscalls<
         .unwrap();
 
     linker
+        .func_wrap("ic0", "msg_caller_info_data_copy", {
+            move |mut caller: Caller<'_, StoreData>, dst: I, offset: I, size: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
+                charge_for_cpu_and_mem(&mut caller, overhead::MSG_CALLER_INFO_DATA_COPY, size)?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_msg_caller_info_data_copy(dst, offset, size, memory)
+                })?;
+                Ok(())
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "msg_caller_info_data_size", {
+            move |mut caller: Caller<'_, StoreData>| {
+                charge_for_cpu(&mut caller, overhead::MSG_CALLER_INFO_DATA_SIZE)?;
+                with_system_api(&mut caller, |s| s.ic0_msg_caller_info_data_size()).and_then(|s| {
+                    I::try_from(s).map_err(|e| {
+                        wasmtime::Error::msg(format!("ic0::msg_caller_info_data_size failed: {e}"))
+                    })
+                })
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "msg_caller_info_signer_copy", {
+            move |mut caller: Caller<'_, StoreData>, dst: I, offset: I, size: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
+                charge_for_cpu_and_mem(&mut caller, overhead::MSG_CALLER_INFO_SIGNER_COPY, size)?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_msg_caller_info_signer_copy(dst, offset, size, memory)
+                })?;
+                Ok(())
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "msg_caller_info_signer_size", {
+            move |mut caller: Caller<'_, StoreData>| {
+                charge_for_cpu(&mut caller, overhead::MSG_CALLER_INFO_SIGNER_SIZE)?;
+                with_system_api(&mut caller, |s| s.ic0_msg_caller_info_signer_size()).and_then(
+                    |s| {
+                        I::try_from(s).map_err(|e| {
+                            wasmtime::Error::msg(format!(
+                                "ic0::msg_caller_info_signer_size failed: {e}"
+                            ))
+                        })
+                    },
+                )
+            }
+        })
+        .unwrap();
+
+    linker
         .func_wrap("ic0", "msg_arg_data_size", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::MSG_ARG_DATA_SIZE)?;

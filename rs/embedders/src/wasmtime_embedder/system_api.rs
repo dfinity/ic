@@ -840,6 +840,26 @@ impl ApiType {
         }
     }
 
+    pub fn sender_info(&self) -> Option<&SenderInfo> {
+        match self {
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::SystemTask { .. } => None,
+            ApiType::Update { sender_info, .. }
+            | ApiType::ReplicatedQuery { sender_info, .. }
+            | ApiType::NonReplicatedQuery { sender_info, .. }
+            | ApiType::CompositeQuery { sender_info, .. }
+            | ApiType::ReplyCallback { sender_info, .. }
+            | ApiType::CompositeReplyCallback { sender_info, .. }
+            | ApiType::RejectCallback { sender_info, .. }
+            | ApiType::CompositeRejectCallback { sender_info, .. }
+            | ApiType::InspectMessage { sender_info, .. }
+            | ApiType::Cleanup { sender_info, .. }
+            | ApiType::CompositeCleanup { sender_info, .. } => sender_info.as_ref(),
+        }
+    }
+
     pub fn time(&self) -> &Time {
         match self {
             ApiType::Start { time }
@@ -2458,6 +2478,104 @@ impl SystemApi for SystemApiImpl {
         trace_syscall!(
             self,
             MsgCallerCopy,
+            result,
+            dst,
+            offset,
+            size,
+            summarize(heap, dst, size)
+        );
+        result
+    }
+
+    fn ic0_msg_caller_info_data_size(&self) -> HypervisorResult<usize> {
+        let result = self
+            .api_type
+            .sender_info()
+            .map(|sender_info| sender_info.info.len())
+            .ok_or_else(|| self.error_for("ic0_msg_caller_info_data_size"));
+        trace_syscall!(self, MsgCallerInfoDataSize, result);
+        result
+    }
+
+    fn ic0_msg_caller_info_data_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let result = match self.api_type.sender_info() {
+            Some(sender_info) => {
+                let info_bytes = sender_info.info.as_slice();
+                valid_subslice(
+                    "ic0.msg_caller_info_data_copy heap",
+                    InternalAddress::new(dst),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
+                let slice = valid_subslice(
+                    "ic0.msg_caller_info_data_copy info",
+                    InternalAddress::new(offset),
+                    InternalAddress::new(size),
+                    info_bytes,
+                )?;
+                deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
+                Ok(())
+            }
+            None => Err(self.error_for("ic0_msg_caller_info_data_copy")),
+        };
+        trace_syscall!(
+            self,
+            MsgCallerInfoDataCopy,
+            result,
+            dst,
+            offset,
+            size,
+            summarize(heap, dst, size)
+        );
+        result
+    }
+
+    fn ic0_msg_caller_info_signer_size(&self) -> HypervisorResult<usize> {
+        let result = self
+            .api_type
+            .sender_info()
+            .map(|sender_info| sender_info.signer.get_ref().as_slice().len())
+            .ok_or_else(|| self.error_for("ic0_msg_caller_info_signer_size"));
+        trace_syscall!(self, MsgCallerInfoSignerSize, result);
+        result
+    }
+
+    fn ic0_msg_caller_info_signer_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let result = match self.api_type.sender_info() {
+            Some(sender_info) => {
+                let id_bytes = sender_info.signer.get_ref().as_slice();
+                valid_subslice(
+                    "ic0.msg_caller_info_signer_copy heap",
+                    InternalAddress::new(dst),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
+                let slice = valid_subslice(
+                    "ic0.msg_caller_info_signer_copy signer",
+                    InternalAddress::new(offset),
+                    InternalAddress::new(size),
+                    id_bytes,
+                )?;
+                deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
+                Ok(())
+            }
+            None => Err(self.error_for("ic0_msg_caller_info_signer_copy")),
+        };
+        trace_syscall!(
+            self,
+            MsgCallerInfoSignerCopy,
             result,
             dst,
             offset,

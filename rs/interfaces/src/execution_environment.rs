@@ -821,6 +821,32 @@ pub trait SystemApi {
     /// Returns the size of the opaque caller blob.
     fn ic0_msg_caller_size(&self) -> HypervisorResult<usize>;
 
+    /// Returns the size of the caller info data blob.
+    fn ic0_msg_caller_info_data_size(&self) -> HypervisorResult<usize>;
+
+    /// Copies `size` bytes starting from `offset` inside the caller info data blob
+    /// to heap[dst..dst+size].
+    fn ic0_msg_caller_info_data_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// Returns the size of the caller info signer blob.
+    fn ic0_msg_caller_info_signer_size(&self) -> HypervisorResult<usize>;
+
+    /// Copies `size` bytes starting from `offset` inside the caller info signer blob
+    /// to heap[dst..dst+size].
+    fn ic0_msg_caller_info_signer_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
     /// Returns the size of msg.payload.
     fn ic0_msg_arg_data_size(&self) -> HypervisorResult<usize>;
 
