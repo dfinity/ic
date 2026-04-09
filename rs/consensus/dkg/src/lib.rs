@@ -436,22 +436,22 @@ mod tests {
             let bouncer_factory = DkgBouncer::new(&MetricsRegistry::new());
             let bouncer = bouncer_factory.new_bouncer(&dkg_pool);
 
-            let height_0_id = DkgMessageId {
+            let height_500_id = DkgMessageId {
                 hash: CryptoHash(vec![0]).into(),
                 height: Height::from(500),
             };
-            let height_500_id = DkgMessageId {
+            let height_1000_id = DkgMessageId {
                 hash: CryptoHash(vec![1]).into(),
                 height: Height::from(1000),
             };
-            assert_eq!(bouncer(&height_0_id), BouncerValue::Wants);
-            assert_eq!(bouncer(&height_500_id), BouncerValue::MaybeWantsLater);
+            assert_eq!(bouncer(&height_500_id), BouncerValue::Wants);
+            assert_eq!(bouncer(&height_1000_id), BouncerValue::MaybeWantsLater);
 
             dkg_pool.apply(vec![ChangeAction::Purge(Height::from(1000))]);
             let bouncer = bouncer_factory.new_bouncer(&dkg_pool);
 
-            assert_eq!(bouncer(&height_500_id), BouncerValue::Wants);
-            assert_eq!(bouncer(&height_0_id), BouncerValue::Unwanted);
+            assert_eq!(bouncer(&height_1000_id), BouncerValue::Wants);
+            assert_eq!(bouncer(&height_500_id), BouncerValue::Unwanted);
         });
     }
 

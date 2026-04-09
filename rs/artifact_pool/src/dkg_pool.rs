@@ -27,7 +27,7 @@ pub struct DkgPoolImpl {
 const POOL_DKG: &str = "dkg";
 
 impl DkgPoolImpl {
-    /// Instantiates a new DKG pool from the time source.
+    /// Instantiates a new DKG pool from the with the given start height.
     pub fn new(
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
@@ -247,7 +247,11 @@ mod test {
         // create 2 DKGs for the same subnet
         let current_dkg_id_start_height = Height::from(30);
         let last_dkg_id_start_height = Height::from(10);
-        let mut pool = DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger(), Height::from(0));
+        let mut pool = DkgPoolImpl::new(
+            MetricsRegistry::new(),
+            no_op_logger(),
+            current_dkg_id_start_height,
+        );
         // add two validated messages, one for every DKG instance
         let result = pool.apply(
             [
