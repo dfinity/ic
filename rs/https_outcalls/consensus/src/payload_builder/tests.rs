@@ -3122,6 +3122,43 @@ fn flexible_error_duplicate_callback_id() {
 }
 
 #[test]
+fn flexible_error_duplicate_callback_id_cross_type() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 1, 4, |pb, _pool| {
+        let timed_out_context = ValidationContext {
+            registry_version: RegistryVersion::new(1),
+            certified_height: Height::new(0),
+            time: UNIX_EPOCH + CANISTER_HTTP_TIMEOUT_INTERVAL + Duration::from_secs(1),
+        };
+        let payload = CanisterHttpPayload {
+            flexible_responses: vec![FlexibleCanisterHttpResponses {
+                callback_id,
+                responses: vec![flexible_response(42, 0, b"a")],
+            }],
+            flexible_errors: vec![FlexibleCanisterHttpError::Timeout { callback_id }],
+            ..Default::default()
+        };
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&timed_out_context),
+            &payload_to_bytes_max_4mb(payload),
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::DuplicateResponse(id)
+                )
+            )) if id == callback_id
+        );
+    });
+}
+
+#[test]
 fn flexible_error_responses_too_large_valid() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
