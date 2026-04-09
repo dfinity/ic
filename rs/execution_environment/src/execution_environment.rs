@@ -2490,15 +2490,6 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         subnet_admins: Option<BTreeSet<PrincipalId>>,
     ) -> ExecuteSubnetMessageResult {
-        let canister = match canister_make_mut(canister_id, state) {
-            Ok(canister) => canister,
-            Err(err) => {
-                return ExecuteSubnetMessageResult::Finished {
-                    response: Err(err),
-                    refund: msg.take_cycles(),
-                };
-            }
-        };
         let call_id = state
             .metadata
             .subnet_call_context_manager
@@ -2507,6 +2498,16 @@ impl ExecutionEnvironment {
                 effective_canister_id: canister_id,
                 time: state.time(),
             });
+        let canister = match canister_make_mut(canister_id, state) {
+            Ok(canister) => canister,
+            Err(err) => {
+                self.remove_stop_canister_call(state, canister_id, Some(call_id));
+                return ExecuteSubnetMessageResult::Finished {
+                    response: Err(err),
+                    refund: msg.take_cycles(),
+                };
+            }
+        };
         let result = self
             .canister_manager
             .stop_canister(msg, call_id, canister, subnet_admins);
