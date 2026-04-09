@@ -44,7 +44,7 @@ pub fn clamp_debug_len(object: &impl Debug, max_len: usize) -> String {
     let mut buf = LimitedWriter::new(max_len);
     // write! returns Err if the writer returns Err, which LimitedWriter does
     // once the limit is hit. We intentionally ignore this "error".
-    let _ = write!(buf, "{object:#?}");
+    let _ignore_err = write!(buf, "{object:#?}");
 
     if buf.truncated {
         // Replace the last 3 chars with "..." to indicate truncation,
