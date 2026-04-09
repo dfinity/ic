@@ -940,22 +940,24 @@ mod tests {
         })
     }
 
+    // In this test the subnet initially has 4 nodes, and after the split `NODE_1, NODE_2` will stay
+    // in the original subnet, and `NODE_3, NODE_4` will be moved to a new one.
     #[rstest]
     #[case::source_subnet_node(
         NODE_1,
-        "8aa92d736af3d4b815de5f16f257e75f9a3977633db48dbc6f904406ea506650"
+        "d5a517cd0906e1d36b43edf4103ef9b0dfb0e6892a87712ce5ed6602bfa5c97e"
     )]
     #[case::source_subnet_node(
         NODE_2,
-        "8aa92d736af3d4b815de5f16f257e75f9a3977633db48dbc6f904406ea506650"
+        "d5a517cd0906e1d36b43edf4103ef9b0dfb0e6892a87712ce5ed6602bfa5c97e"
     )]
     #[case::destination_subnet_node(
         NODE_3,
-        "6ffa0e9003fa9585fa6d2fcb1081d6980cbc64c26a3d2e0177dc4740a41c099e"
+        "e8614bf48bba176a546186f90e7cfc02ec573e4b87296e9d73a70547ca168416"
     )]
     #[case::destination_subnet_node(
         NODE_4,
-        "6ffa0e9003fa9585fa6d2fcb1081d6980cbc64c26a3d2e0177dc4740a41c099e"
+        "e8614bf48bba176a546186f90e7cfc02ec573e4b87296e9d73a70547ca168416"
     )]
     #[trace]
     fn create_post_split_cup_share_test(
