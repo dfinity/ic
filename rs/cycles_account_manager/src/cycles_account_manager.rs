@@ -846,10 +846,10 @@ impl CyclesAccountManager {
     pub fn xnet_call_total_fee(
         &self,
         payload_size: NumBytes,
+        subnet_size: usize,
         execution_mode: WasmExecutionMode,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Cycles {
-        let subnet_size = self.config.reference_subnet_size;
         let prepayment_for_response_transmission =
             self.prepayment_for_response_transmission(subnet_size, cost_schedule);
         // response execution might be free depending on cost_schedule

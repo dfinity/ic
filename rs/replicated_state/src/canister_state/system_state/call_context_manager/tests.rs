@@ -18,6 +18,7 @@ fn call_context_origin() {
         Cycles::new(10),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
+        None,
     );
     assert_eq!(
         ccm.call_contexts().get(&cc_id).unwrap().call_origin,
@@ -42,6 +43,7 @@ fn call_context_handling() {
         Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
+        None,
     );
     let call_context_id2 = call_context_manager.new_call_context(
         CallOrigin::CanisterUpdate(
@@ -53,6 +55,7 @@ fn call_context_handling() {
         Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
+        None,
     );
 
     let call_context_id3 = call_context_manager.new_call_context(
@@ -65,6 +68,7 @@ fn call_context_handling() {
         Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
+        None,
     );
 
     // Call context 3 was not responded and does not have outstanding calls,
@@ -259,6 +263,7 @@ fn withdraw_cycles_fails_when_not_enough_available_cycles() {
         Cycles::new(30),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
+        None,
     );
 
     assert_eq!(
@@ -277,6 +282,7 @@ fn withdraw_cycles_succeeds_when_enough_available_cycles() {
         Cycles::new(30),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
+        None,
     );
 
     let cc = ccm.withdraw_cycles(cc_id, Cycles::new(25)).unwrap().clone();
@@ -297,6 +303,7 @@ fn test_call_context_instructions_executed_is_updated() {
         Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
+        None,
     );
     // Register a callback, so the call context is not deleted in `on_canister_result()` later.
     let _callback_id = call_context_manager.register_callback(Callback::new(
@@ -350,6 +357,10 @@ fn test_call_context_instructions_executed_is_updated() {
 fn call_context_roundtrip_encoding() {
     use ic_protobuf::state::canister_state_bits::v1 as pb;
 
+    let sender_info = SenderInfo {
+        info: vec![42, 43, 44],
+        signer: CanisterId::from_u64(8),
+    };
     let minimal_call_context = CallContext::new(
         CallOrigin::Ingress(user_test_id(1), message_test_id(2), String::from("")),
         false,
@@ -357,6 +368,7 @@ fn call_context_roundtrip_encoding() {
         Cycles::zero(),
         UNIX_EPOCH,
         Default::default(),
+        Some(sender_info.clone()),
     );
     let maximal_call_context = CallContext::new(
         CallOrigin::Ingress(user_test_id(1), message_test_id(2), String::from("")),
@@ -365,6 +377,7 @@ fn call_context_roundtrip_encoding() {
         Cycles::new(3),
         Time::from_nanos_since_unix_epoch(4),
         RequestMetadata::new(5, Time::from_nanos_since_unix_epoch(6)),
+        Some(sender_info.clone()),
     );
 
     for call_context in [minimal_call_context, maximal_call_context] {
@@ -516,6 +529,7 @@ fn call_context_stats() {
             Cycles::zero(),
             Time::from_nanos_since_unix_epoch(1),
             RequestMetadata::new(2, UNIX_EPOCH),
+            None,
         )
     }
 
@@ -690,11 +704,16 @@ fn roundtrip_encode() {
     let deadline_2 = CoarseTime::from_secs_since_unix_epoch(2);
 
     // Create a new call context.
+    let sender_info = SenderInfo {
+        info: vec![42, 43, 44],
+        signer: CanisterId::from_u64(8),
+    };
     let call_context_id = ccm.new_call_context(
         CallOrigin::CanisterUpdate(other, CallbackId::new(13), NO_DEADLINE, String::from("")),
         Cycles::new(30),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
+        Some(sender_info),
     );
 
     // Register two best-effort and one guaranteed response callbacks.

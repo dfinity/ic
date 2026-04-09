@@ -78,6 +78,7 @@ ic-state-manager = { path = "../state_manager" }
 ic-types-cycles = { path = "../types/cycles" }
 ic-types = { path = "../types/types" }
 ic-utils = { workspace = true }
+ic-validator-http-request-test-utils = { path = "../validator/http_request_test_utils" }
 ic-validator-ingress-message = { path = "../validator/ingress_message" }
 icrc-ledger-types = { path = "../../packages/icrc-ledger-types" }
 itertools = { workspace = true }

@@ -67,7 +67,7 @@ use ic_types::batch::ChainKeyData;
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
 };
-use ic_types::messages::SignedIngressContent;
+use ic_types::messages::{Blob, RawSignedSenderInfo, SignedIngressContent, SignedSenderInfo};
 use ic_types::{
     CanisterId, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
     batch::QueryStats,
@@ -76,7 +76,8 @@ use ic_types::{
     messages::{
         CallbackId, CanisterCall, CanisterMessage, CanisterTask, CertificateDelegationMetadata,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MessageId, Payload as ResponsePayload, Query,
-        QuerySource, RequestOrResponse, Response, SubnetMessage, extract_effective_canister_id,
+        QuerySource, RequestOrResponse, Response, SenderInfo, SubnetMessage,
+        extract_effective_canister_id,
     },
     time::UNIX_EPOCH,
 };
@@ -301,6 +302,7 @@ pub struct ExecutionTest {
     // Mutable parameters of execution.
     time: Time,
     user_id: UserId,
+    sender_info: Option<SenderInfo>,
     current_round: ExecutionRound,
 
     // Read-only fields.
@@ -351,6 +353,14 @@ impl ExecutionTest {
 
     pub fn set_user_id(&mut self, user_id: UserId) {
         self.user_id = user_id
+    }
+
+    pub fn set_sender_info(&mut self, sender_info: SenderInfo) {
+        self.sender_info = Some(sender_info);
+    }
+
+    pub fn clear_sender_info(&mut self) {
+        self.sender_info = None;
     }
 
     pub fn state(&self) -> &ReplicatedState {
@@ -1194,13 +1204,16 @@ impl ExecutionTest {
     ) -> (MessageId, IngressStatus) {
         let mut state = self.state.take().unwrap();
         let ingress_id = self.next_message_id();
-        let ingress = IngressBuilder::new()
+        let mut ingress_builder = IngressBuilder::new()
             .message_id(ingress_id.clone())
             .source(self.user_id)
             .receiver(canister_id)
             .method_name(method_name)
-            .method_payload(method_payload)
-            .build();
+            .method_payload(method_payload);
+        if let Some(sender_info) = self.sender_info.clone() {
+            ingress_builder = ingress_builder.sender_info(sender_info);
+        }
+        let ingress = ingress_builder.build();
         state
             .canister_state_make_mut(&canister_id)
             .unwrap()
@@ -1347,7 +1360,11 @@ impl ExecutionTest {
                 user_id: self.user_id,
                 ingress_expiry: 0,
                 nonce: None,
-                sender_info: None,
+                sender_info: self.sender_info.as_ref().map(|si| SignedSenderInfo {
+                    info: si.info.clone(),
+                    signer: si.signer,
+                    sig: vec![],
+                }),
             },
             receiver: canister_id,
             method_name: method_name.to_string(),
@@ -2082,12 +2099,19 @@ impl ExecutionTest {
         method_name: S,
         method_payload: Vec<u8>,
     ) -> Result<(), UserError> {
-        let ingress = SignedIngressBuilder::new()
+        let mut builder = SignedIngressBuilder::new()
             .sender(self.user_id())
             .canister_id(canister_id)
             .method_name(method_name)
-            .method_payload(method_payload)
-            .build();
+            .method_payload(method_payload);
+        if let Some(si) = &self.sender_info {
+            builder = builder.sender_info(RawSignedSenderInfo {
+                info: Blob(si.info.clone()),
+                signer: Blob(si.signer.get().into_vec()),
+                sig: Blob(vec![]),
+            });
+        }
+        let ingress = builder.build();
         self.exec_env.should_accept_ingress_message(
             Arc::new(self.state().clone()),
             &ProvisionalWhitelist::new_empty(),
@@ -3081,6 +3105,7 @@ impl ExecutionTestBuilder {
             initial_canister_cycles: self.initial_canister_cycles,
             registry_settings: self.registry_settings,
             user_id: user_test_id(1),
+            sender_info: None,
             caller_canister_id: self.caller_canister_id,
             exec_env: execution_services.execution_environment,
             query_handler: execution_services.query_execution_service,
