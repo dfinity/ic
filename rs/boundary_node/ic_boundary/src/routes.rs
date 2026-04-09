@@ -45,11 +45,7 @@ pub struct ReadStatePaths(Vec<Vec<Vec<u8>>>);
 impl ReadStatePaths {
     /// Returns the combined length of all labels
     pub fn len(&self) -> usize {
-        self.0
-            .iter()
-            .map(|x| x.iter().map(|x| x.len()))
-            .flatten()
-            .sum()
+        self.0.iter().flat_map(|x| x.iter().map(|x| x.len())).sum()
     }
 }
 

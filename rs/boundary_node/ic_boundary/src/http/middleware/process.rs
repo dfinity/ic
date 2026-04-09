@@ -378,73 +378,77 @@ mod tests {
 
     #[test]
     fn test_should_cache_paths() {
-        let subnet_id = Blob(principal!("aaaaa-aa").as_slice().to_vec());
+        let subnet_id = principal!("aaaaa-aa").as_slice().to_vec();
+
+        let should_cache_paths_wrapper = |paths: &[Vec<Vec<u8>>]| -> bool {
+            let paths = paths
+                .into_iter()
+                .map(|x| x.into_iter().map(|x| Blob(x.clone())).collect())
+                .collect::<Vec<_>>();
+            should_cache_paths(&paths)
+        };
 
         // non-cacheable
-        assert!(!should_cache_paths(&vec![vec![Blob(
+        assert!(!should_cache_paths_wrapper(&[vec![
             b"canister_ranges".to_vec()
-        )]]));
-        assert!(!should_cache_paths(&vec![vec![Blob(b"subnet".to_vec())]]));
-        assert!(!should_cache_paths(&vec![
-            vec![Blob(b"subnet".to_vec())],
-            vec![Blob(b"canister_ranges".to_vec())]
+        ]]));
+        assert!(!should_cache_paths_wrapper(&[vec![b"subnet".to_vec()]]));
+        assert!(!should_cache_paths_wrapper(&[
+            vec![b"subnet".to_vec()],
+            vec![b"canister_ranges".to_vec()]
         ]));
 
-        assert!(!should_cache_paths(&vec![
-            vec![Blob(b"subnet".to_vec()), subnet_id.clone()],
-            vec![Blob(b"canister_ranges".to_vec()), subnet_id.clone()],
-            vec![Blob(b"some_other".to_vec()), Blob(b"label".to_vec())]
+        assert!(!should_cache_paths_wrapper(&[
+            vec![b"subnet".to_vec(), subnet_id.clone()],
+            vec![b"canister_ranges".to_vec(), subnet_id.clone()],
+            vec![b"some_other".to_vec(), b"label".to_vec()]
         ]));
 
-        assert!(!should_cache_paths(&vec![
+        assert!(!should_cache_paths_wrapper(&[
+            vec![b"subnet".to_vec(), subnet_id.clone(), subnet_id.clone()],
             vec![
-                Blob(b"subnet".to_vec()),
-                subnet_id.clone(),
-                subnet_id.clone()
-            ],
-            vec![
-                Blob(b"canister_ranges".to_vec()),
+                b"canister_ranges".to_vec(),
                 subnet_id.clone(),
                 subnet_id.clone()
             ]
         ]));
 
-        assert!(!should_cache_paths(&vec![
-            vec![Blob(b"subnet".to_vec()), subnet_id.clone(),],
-            vec![Blob(b"subnet".to_vec()), subnet_id.clone(),]
+        assert!(!should_cache_paths_wrapper(&[
+            vec![b"subnet".to_vec(), subnet_id.clone(),],
+            vec![b"subnet".to_vec(), subnet_id.clone(),]
         ]));
 
-        assert!(!should_cache_paths(&vec![
-            vec![Blob(b"canister_ranges".to_vec()), subnet_id.clone(),],
-            vec![Blob(b"canister_ranges".to_vec()), subnet_id.clone(),]
+        assert!(!should_cache_paths_wrapper(&[
+            vec![b"canister_ranges".to_vec(), subnet_id.clone(),],
+            vec![b"canister_ranges".to_vec(), subnet_id.clone(),]
         ]));
 
         // too long slices for a principal
-        assert!(!should_cache_paths(&vec![
+        assert!(!should_cache_paths_wrapper(&[
             vec![
-                Blob(b"subnet".to_vec()),
-                Blob(b"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_vec()),
+                b"subnet".to_vec(),
+                b"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_vec(),
             ],
-            vec![Blob(b"canister_ranges".to_vec()), subnet_id.clone()]
+            vec![b"canister_ranges".to_vec(), subnet_id.clone()]
         ]));
 
-        assert!(!should_cache_paths(&vec![
-            vec![Blob(b"subnet".to_vec()), subnet_id.clone()],
+        assert!(!should_cache_paths_wrapper(&[
+            vec![b"subnet".to_vec(), subnet_id.clone()],
             vec![
-                Blob(b"canister_ranges".to_vec()),
-                Blob(b"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_vec())
+                b"canister_ranges".to_vec(),
+                b"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_vec()
             ]
         ]));
 
         // cacheable
-        assert!(should_cache_paths(&vec![
-            vec![Blob(b"subnet".to_vec()), subnet_id.clone()],
-            vec![Blob(b"canister_ranges".to_vec()), subnet_id.clone()]
+        assert!(should_cache_paths_wrapper(&[
+            vec![b"subnet".to_vec(), subnet_id.clone()],
+            vec![b"canister_ranges".to_vec(), subnet_id.clone()]
         ]));
 
-        assert!(should_cache_paths(&vec![
-            vec![Blob(b"canister_ranges".to_vec()), subnet_id.clone()],
-            vec![Blob(b"subnet".to_vec()), subnet_id]
+        assert!(should_cache_paths_wrapper(&[
+            vec![b"canister_ranges".to_vec(), subnet_id.clone()],
+            vec![b"subnet".to_vec(), subnet_id]
         ]));
     }
 }
