@@ -40,7 +40,8 @@ use ic_types::{
     CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
     batch::{
         CanisterHttpPayload, ConsensusResponse, FlexibleCanisterHttpError,
-        FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
+        FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
+        MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
     },
     canister_http::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
@@ -55,7 +56,6 @@ use ic_types::{
 };
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
-    mem::size_of,
     sync::{Arc, RwLock},
 };
 
@@ -792,18 +792,16 @@ impl CanisterHttpPayloadBuilderImpl {
                         );
                     }
                     // Verify the smallest `min_responses` response-with-proof sizes
-                    // actually exceed MAX_CANISTER_HTTP_PAYLOAD_SIZE. We reconstruct
-                    // the same per-entry size that find_flexible_result uses
-                    // (FlexibleCanisterHttpResponseWithProof::count_bytes), but from
-                    // share metadata + context since we don't have the response body.
-                    let response_header_overhead = size_of::<CallbackId>()
-                        + context.request.sender.get_ref().data_size();
+                    // actually exceed MAX_CANISTER_HTTP_PAYLOAD_SIZE.
+                    let canister_id = &context.request.sender;
                     let mut entry_sizes: Vec<usize> = metadata_shares
                         .iter()
                         .map(|share| {
-                            response_header_overhead
-                                + share.content.content_size as usize
-                                + share.count_bytes()
+                            FlexibleCanisterHttpResponseWithProof::count_bytes_from_parts(
+                                canister_id,
+                                share.content.content_size as usize,
+                                share,
+                            )
                         })
                         .collect();
                     entry_sizes.sort_unstable();

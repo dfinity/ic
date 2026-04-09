@@ -69,6 +69,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeSet,
     convert::{TryFrom, TryInto},
+    mem::size_of,
     time::Duration,
 };
 use strum::FromRepr;
@@ -802,14 +803,21 @@ pub struct CanisterHttpResponse {
     pub content: CanisterHttpResponseContent,
 }
 
+impl CanisterHttpResponse {
+    /// Size estimate as `Self::count_bytes` from decomposed parts.
+    pub fn count_bytes_from_parts(canister_id: &CanisterId, content_size: usize) -> usize {
+        size_of::<CanisterHttpRequestId>() + canister_id.get_ref().data_size() + content_size
+    }
+}
+
 impl CountBytes for CanisterHttpResponse {
     fn count_bytes(&self) -> usize {
         let CanisterHttpResponse {
-            id,
+            id: _,
             canister_id,
             content,
         } = &self;
-        size_of_val(id) + canister_id.get_ref().data_size() + content.count_bytes()
+        Self::count_bytes_from_parts(canister_id, content.count_bytes())
     }
 }
 

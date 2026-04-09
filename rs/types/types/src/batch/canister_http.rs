@@ -1,5 +1,5 @@
 use crate::{
-    CountBytes, ReplicaVersion,
+    CanisterId, CountBytes, ReplicaVersion,
     canister_http::{
         CanisterHttpReject, CanisterHttpRequestId, CanisterHttpResponse,
         CanisterHttpResponseArtifact, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
@@ -88,7 +88,17 @@ impl FlexibleCanisterHttpResponseWithProof {
         response: &CanisterHttpResponse,
         proof: &CanisterHttpResponseShare,
     ) -> usize {
-        response.count_bytes() + proof.count_bytes()
+        Self::count_bytes_from_parts(&response.canister_id, response.content.count_bytes(), proof)
+    }
+
+    /// Same calculation as [`Self::count_bytes`] but from decomposed parts.
+    pub fn count_bytes_from_parts(
+        canister_id: &CanisterId,
+        content_size: usize,
+        proof: &CanisterHttpResponseShare,
+    ) -> usize {
+        let response_size = CanisterHttpResponse::count_bytes_from_parts(canister_id, content_size);
+        response_size + proof.count_bytes()
     }
 }
 
