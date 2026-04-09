@@ -4225,6 +4225,7 @@ impl SystemApi for SystemApiImpl {
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
+        let subnet_size = self.sandbox_safe_system_state.subnet_size;
         let execution_mode =
             WasmExecutionMode::from_is_wasm64(self.sandbox_safe_system_state.is_wasm64_execution);
         let cost = self
@@ -4232,6 +4233,7 @@ impl SystemApi for SystemApiImpl {
             .get_cycles_account_manager()
             .xnet_call_total_fee(
                 (method_name_size.saturating_add(payload_size)).into(),
+                subnet_size,
                 execution_mode,
                 self.get_cost_schedule(),
             );

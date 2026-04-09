@@ -8911,6 +8911,7 @@ fn invoke_cost_call() {
     let res = test.ingress(canister_id, "update", payload);
     let expected_cost = test.cycles_account_manager().xnet_call_total_fee(
         (method_name.len() as u64 + argument.len() as u64).into(),
+        test.subnet_size(),
         WasmExecutionMode::Wasm32,
         CanisterCyclesCostSchedule::Normal,
     );

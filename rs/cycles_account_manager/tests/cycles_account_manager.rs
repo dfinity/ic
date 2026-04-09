@@ -1,5 +1,5 @@
 use ic_base_types::NumSeconds;
-use ic_config::subnet_config::CyclesAccountManagerConfig;
+use ic_config::subnet_config::{CyclesAccountManagerConfig, DEFAULT_REFERENCE_SUBNET_SIZE};
 use ic_cycles_account_manager::{IngressInductionCost, ResourceSaturation};
 use ic_interfaces::execution_environment::{CanisterOutOfCyclesError, MessageMemoryUsage};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
@@ -42,6 +42,7 @@ fn xnet_call_total_fee_free() {
         Cycles::new(0),
         cam.xnet_call_total_fee(
             NumBytes::new(9999),
+            DEFAULT_REFERENCE_SUBNET_SIZE,
             WasmExecutionMode::Wasm32,
             cost_schedule
         ),
