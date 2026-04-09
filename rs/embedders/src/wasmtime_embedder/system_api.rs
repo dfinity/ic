@@ -840,26 +840,6 @@ impl ApiType {
         }
     }
 
-    pub fn sender_info(&self) -> Option<&SenderInfo> {
-        match self {
-            ApiType::Start { .. }
-            | ApiType::Init { .. }
-            | ApiType::PreUpgrade { .. }
-            | ApiType::SystemTask { .. } => None,
-            ApiType::Update { sender_info, .. }
-            | ApiType::ReplicatedQuery { sender_info, .. }
-            | ApiType::NonReplicatedQuery { sender_info, .. }
-            | ApiType::CompositeQuery { sender_info, .. }
-            | ApiType::ReplyCallback { sender_info, .. }
-            | ApiType::CompositeReplyCallback { sender_info, .. }
-            | ApiType::RejectCallback { sender_info, .. }
-            | ApiType::CompositeRejectCallback { sender_info, .. }
-            | ApiType::InspectMessage { sender_info, .. }
-            | ApiType::Cleanup { sender_info, .. }
-            | ApiType::CompositeCleanup { sender_info, .. } => sender_info.as_ref(),
-        }
-    }
-
     pub fn time(&self) -> &Time {
         match self {
             ApiType::Start { time }
@@ -2010,6 +1990,26 @@ impl SystemApiImpl {
             | ApiType::Cleanup { .. } => page_limit.message,
         }
     }
+
+    fn sender_info(&self, method_name: &str) -> Result<Option<&SenderInfo>, HypervisorError> {
+        match &self.api_type {
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::SystemTask { .. } => Err(self.error_for(method_name)),
+            ApiType::Update { sender_info, .. }
+            | ApiType::ReplicatedQuery { sender_info, .. }
+            | ApiType::NonReplicatedQuery { sender_info, .. }
+            | ApiType::CompositeQuery { sender_info, .. }
+            | ApiType::ReplyCallback { sender_info, .. }
+            | ApiType::CompositeReplyCallback { sender_info, .. }
+            | ApiType::RejectCallback { sender_info, .. }
+            | ApiType::CompositeRejectCallback { sender_info, .. }
+            | ApiType::InspectMessage { sender_info, .. }
+            | ApiType::Cleanup { sender_info, .. }
+            | ApiType::CompositeCleanup { sender_info, .. } => Ok(sender_info.as_ref()),
+        }
+    }
 }
 
 impl SystemApi for SystemApiImpl {
@@ -2489,10 +2489,8 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_msg_caller_info_data_size(&self) -> HypervisorResult<usize> {
         let result = self
-            .api_type
-            .sender_info()
-            .map(|sender_info| sender_info.info.len())
-            .ok_or_else(|| self.error_for("ic0_msg_caller_info_data_size"));
+            .sender_info("ic0_msg_caller_info_data_size")
+            .map(|sender_info| sender_info.map_or(0, |si| si.info.len()));
         trace_syscall!(self, MsgCallerInfoDataSize, result);
         result
     }
@@ -2504,9 +2502,10 @@ impl SystemApi for SystemApiImpl {
         size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-        let result = match self.api_type.sender_info() {
-            Some(sender_info) => {
-                let info_bytes = sender_info.info.as_slice();
+        let result = self
+            .sender_info("ic0_msg_caller_info_data_copy")
+            .and_then(|sender_info| {
+                let info_bytes: &[u8] = sender_info.map_or(&[], |si| si.info.as_slice());
                 valid_subslice(
                     "ic0.msg_caller_info_data_copy heap",
                     InternalAddress::new(dst),
@@ -2521,9 +2520,7 @@ impl SystemApi for SystemApiImpl {
                 )?;
                 deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
                 Ok(())
-            }
-            None => Err(self.error_for("ic0_msg_caller_info_data_copy")),
-        };
+            });
         trace_syscall!(
             self,
             MsgCallerInfoDataCopy,
@@ -2538,10 +2535,8 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_msg_caller_info_signer_size(&self) -> HypervisorResult<usize> {
         let result = self
-            .api_type
-            .sender_info()
-            .map(|sender_info| sender_info.signer.get_ref().as_slice().len())
-            .ok_or_else(|| self.error_for("ic0_msg_caller_info_signer_size"));
+            .sender_info("ic0_msg_caller_info_signer_size")
+            .map(|sender_info| sender_info.map_or(0, |si| si.signer.get_ref().as_slice().len()));
         trace_syscall!(self, MsgCallerInfoSignerSize, result);
         result
     }
@@ -2553,9 +2548,10 @@ impl SystemApi for SystemApiImpl {
         size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-        let result = match self.api_type.sender_info() {
-            Some(sender_info) => {
-                let id_bytes = sender_info.signer.get_ref().as_slice();
+        let result = self
+            .sender_info("ic0_msg_caller_info_signer_copy")
+            .and_then(|sender_info| {
+                let id_bytes: &[u8] = sender_info.map_or(&[], |si| si.signer.get_ref().as_slice());
                 valid_subslice(
                     "ic0.msg_caller_info_signer_copy heap",
                     InternalAddress::new(dst),
@@ -2570,9 +2566,7 @@ impl SystemApi for SystemApiImpl {
                 )?;
                 deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
                 Ok(())
-            }
-            None => Err(self.error_for("ic0_msg_caller_info_signer_copy")),
-        };
+            });
         trace_syscall!(
             self,
             MsgCallerInfoSignerCopy,
