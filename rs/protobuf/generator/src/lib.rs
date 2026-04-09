@@ -198,6 +198,10 @@ fn build_registry_proto(def: &Path, out: &Path) {
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
     config.type_attribute(
+        ".registry.node.v1.NodeRewardType",
+        "#[derive(strum::EnumIter)]",
+    );
+    config.type_attribute(
         ".registry.firewall",
         "#[derive(candid::CandidType, serde::Serialize, serde::Deserialize)]",
     );

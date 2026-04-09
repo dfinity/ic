@@ -168,7 +168,7 @@ fn stable_write_traps_after_failed_stable_grow_due_to_subnet_memory() {
     );
 
     let canister_id = test
-        .canister_from_cycles_and_wat(Cycles::new(15_000_000_000_000), wat)
+        .canister_from_cycles_and_wat(Cycles::new(20_000_000_000_000), wat)
         .unwrap();
 
     // Execute the update method and expect a trap with "stable memory out of bounds"

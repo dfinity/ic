@@ -109,11 +109,16 @@ impl Bucket {
             return None;
         }
 
-        if let Some(v) = self.rule.canister_id
-            && let Some(x) = ctx.canister_id
-            && x != v
-        {
-            return None;
+        if let Some(v) = self.rule.canister_id {
+            if let Some(x) = ctx.canister_id {
+                // If we have a canister id - compare it
+                if x != v {
+                    return None;
+                }
+            } else {
+                // Otherwise ignore this rule
+                return None;
+            }
         }
 
         if let Some(v) = &self.rule.request_types
@@ -659,6 +664,34 @@ mod test {
                 _port: 31337,
             },
         ];
+
+        // Check that blocked canister is blocked
+        for _ in 0..100 {
+            assert_eq!(
+                limiter.evaluate(Context {
+                    subnet_id,
+                    canister_id: Some(id0),
+                    method: None,
+                    request_type: RequestType::QueryV2,
+                    ip: ip1,
+                }),
+                Decision::Block
+            );
+        }
+
+        // Check that the request w/o canister id is allowed
+        for _ in 0..100 {
+            assert_eq!(
+                limiter.evaluate(Context {
+                    subnet_id,
+                    canister_id: None,
+                    method: None,
+                    request_type: RequestType::QueryV2,
+                    ip: ip1,
+                }),
+                Decision::Pass
+            );
+        }
 
         // Check that blocked canister always works from localhost even if there's a block rule present
         for _ in 0..100 {

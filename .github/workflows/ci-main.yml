@@ -7,6 +7,11 @@ on:
         description: The commit sha to run the CI on
         required: true
         type: string
+      release-build:
+        description: Whether this CI run is for a release build, which may require additional steps such as uploading artifacts.
+        required: false
+        default: ''
+        type: string
 
 permissions:
   actions: write # needed for uploading artifacts to github
@@ -91,10 +96,9 @@ jobs:
               fi
           done
 
-          if [[ "${is_protected_branch:-}" == "true" && '${{ github.event_name }}' != 'workflow_dispatch' ]]; then
+          if [[ "${is_protected_branch:-}" == "true" ]]; then
               # if we are on a "protected" branch, targeting an rc branch or master we
               # upload all artifacts and run a release build (with versioning)
-              # but don't set this if it has been kicked off manually, because that is for external contribution PRs
               release_build="true"
               diff_only="false"
               skip_long_tests="false"
@@ -125,6 +129,11 @@ jobs:
               release_build="false"
               diff_only="true"
               skip_long_tests="true"
+          fi
+
+          # if release build was set, override whatever was determined above
+          if [[ '${{ inputs.release-build }}' != '' ]]; then
+              release_build=${{ inputs.release-build }}
           fi
 
           if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}' == 'true' ]]; then
