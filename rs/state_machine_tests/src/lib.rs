@@ -2583,7 +2583,6 @@ impl StateMachine {
     pub fn mock_canister_http_response(
         &self,
         request_id: u64,
-        timeout: Time,
         canister_id: CanisterId,
         contents: Vec<CanisterHttpResponseContent>,
     ) {
@@ -2592,15 +2591,14 @@ impl StateMachine {
             let registry_version = self.registry_client.get_latest_version();
             let response = CanisterHttpResponse {
                 id: CanisterHttpRequestId::from(request_id),
-                timeout,
                 canister_id,
                 content: content.clone(),
             };
             let response_metadata = CanisterHttpResponseMetadata {
                 id: CallbackId::from(request_id),
-                timeout,
                 registry_version,
                 content_hash: ic_types::crypto::crypto_hash(&response),
+                content_size: content.count_bytes() as u32,
                 replica_version: ReplicaVersion::default(),
             };
             let signature = CryptoReturningOk::default()
@@ -4369,6 +4367,7 @@ impl StateMachine {
                 user_id: UserId::from(sender),
                 ingress_expiry: 0,
                 nonce: None,
+                sender_info: None,
             },
             receiver,
             method_name: method.to_string(),
@@ -4453,6 +4452,7 @@ impl StateMachine {
                     sender: sender.into(),
                     ingress_expiry,
                     nonce: nonce_blob,
+                    sender_info: None,
                 },
             },
             sender_pubkey: None,
@@ -4906,9 +4906,7 @@ impl StateMachine {
         let canister_state = state
             .canister_state_make_mut(&canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} not found"));
-        canister_state
-            .system_state
-            .add_cycles(Cycles::from(amount), CyclesUseCase::NonConsumed);
+        canister_state.system_state.add_cycles(Cycles::from(amount));
         let balance = canister_state.system_state.balance().get();
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);
@@ -5300,6 +5298,7 @@ impl PayloadBuilder {
                     sender: Blob(sender.into_vec()),
                     ingress_expiry: self.expiry_time.as_nanos_since_unix_epoch(),
                     nonce: self.nonce.map(|n| Blob(n.to_be_bytes().to_vec())),
+                    sender_info: None,
                 },
             },
             sender_pubkey: None,

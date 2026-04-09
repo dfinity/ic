@@ -245,12 +245,15 @@ impl SchedulerTest {
 
     pub fn execution_cost(&self, num_instructions: NumInstructions) -> Cycles {
         use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
-        self.scheduler.cycles_account_manager.execution_cost(
-            num_instructions,
-            self.subnet_size(),
-            self.state.as_ref().unwrap().get_own_cost_schedule(),
-            WasmExecutionMode::Wasm32,
-        )
+        self.scheduler
+            .cycles_account_manager
+            .execution_cost(
+                num_instructions,
+                self.subnet_size(),
+                self.state.as_ref().unwrap().get_own_cost_schedule(),
+                WasmExecutionMode::Wasm32,
+            )
+            .real()
     }
 
     /// Creates a canister with the given balance and allocations.
@@ -683,17 +686,23 @@ impl SchedulerTest {
     }
 
     pub fn ecdsa_signature_fee(&self) -> Cycles {
-        self.scheduler.cycles_account_manager.ecdsa_signature_fee(
-            self.registry_settings.subnet_size,
-            self.state().get_own_cost_schedule(),
-        )
+        self.scheduler
+            .cycles_account_manager
+            .ecdsa_signature_fee(
+                self.registry_settings.subnet_size,
+                self.state().get_own_cost_schedule(),
+            )
+            .real()
     }
 
     pub fn schnorr_signature_fee(&self) -> Cycles {
-        self.scheduler.cycles_account_manager.schnorr_signature_fee(
-            self.registry_settings.subnet_size,
-            self.state().get_own_cost_schedule(),
-        )
+        self.scheduler
+            .cycles_account_manager
+            .schnorr_signature_fee(
+                self.registry_settings.subnet_size,
+                self.state().get_own_cost_schedule(),
+            )
+            .real()
     }
 
     pub fn http_request_fee(
@@ -701,21 +710,27 @@ impl SchedulerTest {
         request_size: NumBytes,
         response_size_limit: Option<NumBytes>,
     ) -> Cycles {
-        self.scheduler.cycles_account_manager.http_request_fee(
-            request_size,
-            response_size_limit,
-            self.subnet_size(),
-            self.state.as_ref().unwrap().get_own_cost_schedule(),
-        )
+        self.scheduler
+            .cycles_account_manager
+            .http_request_fee(
+                request_size,
+                response_size_limit,
+                self.subnet_size(),
+                self.state.as_ref().unwrap().get_own_cost_schedule(),
+            )
+            .real()
     }
 
     pub fn memory_cost(&self, bytes: NumBytes, duration: Duration) -> Cycles {
-        self.scheduler.cycles_account_manager.memory_cost(
-            bytes,
-            duration,
-            self.subnet_size(),
-            self.state.as_ref().unwrap().get_own_cost_schedule(),
-        )
+        self.scheduler
+            .cycles_account_manager
+            .memory_cost(
+                bytes,
+                duration,
+                self.subnet_size(),
+                self.state.as_ref().unwrap().get_own_cost_schedule(),
+            )
+            .real()
     }
 
     pub(crate) fn deliver_pre_signatures(

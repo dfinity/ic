@@ -538,6 +538,10 @@ crate.spec(
     version = "^0.4.1",
 )
 crate.spec(
+    package = "hickory-resolver",
+    version = "0.25.2",
+)
+crate.spec(
     package = "hkdf",
     version = "^0.12",
 )
@@ -1006,10 +1010,6 @@ crate.spec(
     features = ["prime"],
     package = "num-bigint-dig",
     version = "^0.9",
-)
-crate.spec(
-    package = "num-rational",
-    version = "^0.2.2",
 )
 crate.spec(
     default_features = False,
@@ -1783,6 +1783,10 @@ crate.spec(
     version = "^0.2.0",
 )
 crate.spec(
+    package = "tracing-journald",
+    version = "0.3",
+)
+crate.spec(
     package = "tracing-opentelemetry",
     version = "^0.28.0",
 )
@@ -1898,6 +1902,10 @@ crate.spec(
 crate.spec(
     package = "wat",
     version = "~1.244.0",
+)
+crate.spec(
+    package = "webpki-roots",
+    version = "1.0.6",
 )
 crate.spec(
     package = "which",
@@ -2025,11 +2033,6 @@ crate.annotation(
         "OPENSSL_STATIC": "1",
     },
     crate = "openssl-sys",
-)
-crate.annotation(
-    crate = "askama_derive",
-    patch_args = ["-p2"],
-    patches = ["@@//bazel:askama.patch"],
 )
 crate.annotation(
     crate = "canbench",

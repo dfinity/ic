@@ -1,6 +1,7 @@
 use crate::driver::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmResourceOverrides};
 use crate::driver::port_allocator::AddrType;
-use crate::driver::resource::{AllocatedVm, BootImage};
+use crate::driver::resource::AllocatedVm;
+use crate::driver::resource::BootImage;
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::*;
 use crate::driver::{
@@ -106,6 +107,7 @@ impl NestedNodes {
                     &NestedVmConfig {
                         // TEE not supported in virtual nodes
                         enable_trusted_execution_environment: false,
+                        boot_image: node.boot_image.clone(),
                         vcpus: vm_spec.vcpus(),
                         memory_kibibytes: vm_spec.memory_kibibytes(),
                     },
@@ -127,6 +129,7 @@ impl NestedNodes {
                 &vm,
                 &NestedVmConfig {
                     enable_trusted_execution_environment,
+                    boot_image: bare_metal_nodes[0].boot_image.clone(),
                     vcpus: DEFAULT_BARE_METAL_VCPUS,
                     memory_kibibytes: DEFAULT_BARE_METAL_MEMORY_KIB,
                 },
@@ -226,6 +229,7 @@ pub struct NestedVm {
 #[derive(Deserialize, Serialize)]
 pub struct NestedVmConfig {
     pub enable_trusted_execution_environment: bool,
+    pub boot_image: BootImage,
     pub vcpus: NrOfVCPUs,
     pub memory_kibibytes: AmountOfMemoryKiB,
 }

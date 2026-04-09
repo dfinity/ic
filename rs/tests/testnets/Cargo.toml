@@ -11,7 +11,9 @@ anyhow = { workspace = true }
 candid = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-limits = { path = "../../limits" }
+ic-protobuf = { path = "../../protobuf" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
+ic-types = { path = "../../types/types" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
 ic-testnet-mainnet-nns = { path = "./mainnet_nns" }
@@ -75,6 +77,10 @@ name = "src_testing"
 path = "src_testing.rs"
 
 [[bin]]
+name = "cloud_engine"
+path = "cloud_engine.rs"
+
+[[bin]]
 name = "from_config"
 path = "from_config.rs"
 
@@ -85,6 +91,10 @@ path = "single_app_large_node_with_nns.rs"
 [[bin]]
 name = "small_with_query_stats"
 path = "small_with_query_stats.rs"
+
+[[bin]]
+name = "sev_baremetal_app_subnet"
+path = "sev_baremetal_app_subnet.rs"
 
 [[bin]]
 name = "nns_recovery"

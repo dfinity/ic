@@ -1,0 +1,8 @@
+[package]
+name = "ic_os_logging"
+edition.workspace = true
+
+[dependencies]
+tracing-journald = { workspace = true }
+tracing-subscriber = { workspace = true }
+

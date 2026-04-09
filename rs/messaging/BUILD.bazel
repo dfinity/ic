@@ -91,9 +91,11 @@ rust_ic_test_suite_with_extra_srcs(
     ],
     data = [
         "//rs/rust_canisters/messaging_test:messaging-test-canister",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
     env = {
         "MESSAGING_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/messaging_test:messaging-test-canister)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
     extra_srcs = [
         "tests/common/mod.rs",
@@ -107,6 +109,9 @@ rust_ic_test_suite_with_extra_srcs(
         ":messaging",
         "//packages/ic-error-types",
         "//rs/config",
+        "//rs/protobuf",
+        "//rs/registry/keys",
+        "//rs/registry/proto_data_provider",
         "//rs/registry/routing_table",
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
@@ -119,6 +124,7 @@ rust_ic_test_suite_with_extra_srcs(
         "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",
+        "//rs/universal_canister/lib",
         "@crate_index//:assert_matches",
         "@crate_index//:proptest",
     ],

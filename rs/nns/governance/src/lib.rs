@@ -181,6 +181,9 @@ pub mod timer_tasks;
 mod voting;
 mod voting_history_store;
 
+/// As of Feb 2026, outside of this crate, this is only used by an integration test.
+pub use neuron::dissolve_delay_bonus_multiplier;
+
 /// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
 /// The value of 10_000 follows the Candid recommendation.
 const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
@@ -207,9 +210,6 @@ thread_local! {
     static ENABLE_NEURON_FOLLOW_RESTRICTIONS: Cell<bool>
         = const { Cell::new(true) };
 
-    static ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS: Cell<bool>
-        = const { Cell::new(true) };
-
     static ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS: Cell<bool>
         = const { Cell::new(true) };
 
@@ -219,6 +219,15 @@ thread_local! {
 
     static ENABLE_SUBNET_SPLITTING_PROPOSALS: Cell<bool>
         = const { Cell::new(false) };
+
+    // The planned effects of enabling this flag include
+    //   1. Reduce max dissolve delay from 8 years to 2 years. This includes capping existing neurons via data migration.
+    //   2. Reduce voting rewards pool by approximately 36.5% (equivalently, scale by 0.635 times).
+    //   3. Quadratic dissolve delay bonus (instead of linear).
+    //   4. Reduce the minimum dissolve delay needed to vote.
+    //   5. 8 year gang 10% bonus.
+    static ENABLE_MISSION_70_VOTING_REWARDS: Cell<bool>
+        = const { Cell::new(cfg!(feature = "test")) };
 }
 
 thread_local! {
@@ -280,20 +289,6 @@ pub fn temporarily_disable_neuron_follow_restrictions() -> Temporary {
     Temporary::new(&ENABLE_NEURON_FOLLOW_RESTRICTIONS, false)
 }
 
-pub fn is_self_describing_proposal_actions_enabled() -> bool {
-    ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS.get()
-}
-
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_self_describing_proposal_actions() -> Temporary {
-    Temporary::new(&ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS, true)
-}
-
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_self_describing_proposal_actions() -> Temporary {
-    Temporary::new(&ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS, false)
-}
-
 pub fn are_bless_alternative_guest_os_version_proposals_enabled() -> bool {
     ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS.get()
 }
@@ -329,6 +324,20 @@ pub fn temporarily_enable_subnet_splitting_proposals() -> Temporary {
 
 pub fn are_subnet_splitting_proposals_enabled() -> bool {
     ENABLE_SUBNET_SPLITTING_PROPOSALS.get()
+}
+
+pub fn is_mission_70_voting_rewards_enabled() -> bool {
+    ENABLE_MISSION_70_VOTING_REWARDS.get()
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_mission_70_voting_rewards() -> Temporary {
+    Temporary::new(&ENABLE_MISSION_70_VOTING_REWARDS, true)
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_mission_70_voting_rewards() -> Temporary {
+    Temporary::new(&ENABLE_MISSION_70_VOTING_REWARDS, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {

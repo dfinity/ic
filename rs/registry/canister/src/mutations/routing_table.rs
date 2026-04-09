@@ -1,7 +1,7 @@
 use crate::{
-    common::LOG_PREFIX,
-    mutations::node_management::common::{
-        get_key_family_iter_at_version, get_key_family_raw_iter_at_version,
+    common::{
+        LOG_PREFIX,
+        key_family::{get_key_family_iter_at_version, get_key_family_raw_iter_at_version},
     },
     pb::v1::SubnetForCanister,
     registry::Registry,
@@ -16,7 +16,7 @@ use ic_registry_keys::{
 };
 use ic_registry_routing_table::{
     CanisterIdRange, CanisterIdRanges, CanisterMigrations, RoutingTable,
-    routing_table_insert_subnet,
+    routing_table_insert_subnet, routing_table_insert_subnet_and_reroute_or_panic,
 };
 use ic_registry_transport::pb::v1::{RegistryMutation, registry_mutation};
 use ic_registry_transport::{delete, upsert};
@@ -321,6 +321,22 @@ impl Registry {
         })
     }
 
+    /// Handle adding a subnet to the routing table.
+    pub fn add_subnet_to_routing_table_and_reroute(
+        &self,
+        version: u64,
+        canister_id_ranges: CanisterIdRanges,
+        subnet_id_to_add: SubnetId,
+    ) -> Vec<RegistryMutation> {
+        self.modify_routing_table(version, |routing_table| {
+            routing_table_insert_subnet_and_reroute_or_panic(
+                subnet_id_to_add,
+                routing_table,
+                canister_id_ranges,
+            )
+        })
+    }
+
     /// Handle removing a subnet from the routing table.
     pub fn remove_subnet_from_routing_table(
         &self,
@@ -443,7 +459,7 @@ mod tests {
     use crate::common::test_helpers::invariant_compliant_registry;
 
     use super::*;
-    use crate::mutations::node_management::common::get_key_family;
+    use crate::common::key_family::get_key_family;
     use assert_matches::assert_matches;
     use ic_base_types::CanisterId;
     use ic_registry_keys::CANISTER_RANGES_PREFIX;

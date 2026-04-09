@@ -261,6 +261,7 @@ message AbridgedNeuron {
   optional Visibility visibility = 23;
   optional uint64 voting_power_refreshed_timestamp_seconds = 24;
   optional uint32 recent_ballots_next_entry_index = 25;
+  uint64 eight_year_gang_bonus_base_e8s = 26;
 
   reserved 1;
   reserved "id";
@@ -498,6 +499,12 @@ enum NnsFunction {
 
   // The proposal requests to split a subnet.
   NNS_FUNCTION_SPLIT_SUBNET = 56;
+
+  // Delete a subnet. The subnet record, catch-up package, threshold signing key
+  // and routing table entries are removed from the registry, and the subnet's
+  // nodes become unassigned.
+  // Currently limited to CloudEngine subnets.
+  NNS_FUNCTION_DELETE_SUBNET = 57;
 }
 
 // Payload of a proposal that calls a function on another NNS
@@ -1972,6 +1979,16 @@ message LoadCanisterSnapshot {
   bytes snapshot_id = 2;
 }
 
+// Snapshot of a neuron's dissolve state, recorded before clamping to the
+// Mission 70 maximum. Used to restore the original dissolve state if the
+// maximum dissolve delay is ever increased again.
+message NeuronDissolveStateSnapshot {
+  oneof dissolve_state {
+    uint64 dissolve_delay_seconds = 1;
+    uint64 when_dissolved_timestamp_seconds = 2;
+  }
+}
+
 // This represents the whole NNS governance system. It contains all
 // information about the NNS governance system that must be kept
 // across upgrades of the NNS governance system.
@@ -2207,6 +2224,14 @@ message Governance {
 
   // Map of proposal IDs to their topics for those garbage collected.
   map<uint64, Topic> topic_of_garbage_collected_proposals = 29;
+
+  // Whether the eight year gang bonus base migration has run for all neurons.
+  // This prevents the migration from running more than once.
+  bool eight_year_gang_bonus_migration_done = 31;
+
+  // Snapshot of each neuron's dissolve state taken while clamping to the Mission 70 maximum
+  // dissolve delay. Enables restoring original dissolve states if the maximum is reversed.
+  map<uint64, NeuronDissolveStateSnapshot> neuron_id_to_pre_clamp_dissolve_state = 32;
 
   reserved 30;
   reserved "first_proposal_id_to_record_voting_history";
