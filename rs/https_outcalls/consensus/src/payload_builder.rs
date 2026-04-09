@@ -31,7 +31,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, warn};
 use ic_management_canister_types_private::{
-    CanisterHttpResponsePayload, DataSize, FlexibleHttpRequestResult,
+    CanisterHttpResponsePayload, FlexibleHttpRequestResult,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
