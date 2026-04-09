@@ -65,14 +65,18 @@ where
     Ok(s)
 }
 
-fn is_cacheable_path(path: &[Blob]) -> bool {
-    path.len() == 2
-        && (path[0].0 == b"canister_ranges" || path[0].0 == b"subnet")
-        && Principal::try_from_slice(&path[1].0).is_ok()
-}
-
 pub(crate) fn should_cache_paths(paths: &[Vec<Blob>]) -> bool {
-    paths.len() == 2 && paths.iter().all(|x| is_cacheable_path(&x))
+    // Check that we have correct lengths
+    if paths.len() != 2 || paths.iter().any(|x| x.len() != 2) {
+        return false;
+    }
+
+    // Check that we have a correct combination of first labels and the second label
+    // is a valid principal in both paths
+    ((paths[0][0].0 == b"canister_ranges" && paths[1][0].0 == b"subnet")
+        || (paths[0][0].0 == b"subnet" && paths[1][0].0 == b"canister_ranges"))
+        && Principal::try_from_slice(&paths[0][1].0).is_ok()
+        && Principal::try_from_slice(&paths[1][1].0).is_ok()
 }
 
 // Middleware: preprocess the request before handing it over to handlers
@@ -406,6 +410,16 @@ mod tests {
                 subnet_id.clone(),
                 subnet_id.clone()
             ]
+        ]));
+
+        assert!(!should_cache_paths(&vec![
+            vec![Blob(b"subnet".to_vec()), subnet_id.clone(),],
+            vec![Blob(b"subnet".to_vec()), subnet_id.clone(),]
+        ]));
+
+        assert!(!should_cache_paths(&vec![
+            vec![Blob(b"canister_ranges".to_vec()), subnet_id.clone(),],
+            vec![Blob(b"canister_ranges".to_vec()), subnet_id.clone(),]
         ]));
 
         // too long slices for a principal
