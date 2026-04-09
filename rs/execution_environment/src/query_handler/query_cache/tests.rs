@@ -1621,6 +1621,10 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::MsgArgDataCopy
         | SystemApiCallId::MsgArgDataSize
         | SystemApiCallId::MsgCallerCopy
+        | SystemApiCallId::MsgCallerInfoDataCopy
+        | SystemApiCallId::MsgCallerInfoDataSize
+        | SystemApiCallId::MsgCallerInfoSignerCopy
+        | SystemApiCallId::MsgCallerInfoSignerSize
         | SystemApiCallId::MsgCallerSize
         | SystemApiCallId::MsgCyclesAccept
         | SystemApiCallId::MsgCyclesAccept128
