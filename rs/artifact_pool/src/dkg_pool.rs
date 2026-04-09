@@ -27,7 +27,7 @@ pub struct DkgPoolImpl {
 const POOL_DKG: &str = "dkg";
 
 impl DkgPoolImpl {
-    /// Instantiates a new DKG pool from the with the given start height.
+    /// Instantiates a new DKG pool with the given start height.
     pub fn new(
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
