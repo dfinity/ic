@@ -405,6 +405,7 @@ fn make_create_subnet_payload(node_ids: Vec<NodeId>) -> CreateSubnetPayload {
     CreateSubnetPayload {
         node_ids,
         subnet_id_override: None,
+        initial_dkg_subnet_id: None,
         max_ingress_bytes_per_message: 60 * 1024 * 1024,
         max_ingress_bytes_per_block: None,
         max_ingress_messages_per_block: 1000,

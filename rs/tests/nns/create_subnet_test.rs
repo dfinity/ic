@@ -30,7 +30,8 @@ use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder, SshSession,
 };
 use ic_system_test_driver::nns::{
-    self, get_software_version_from_snapshot, submit_create_application_subnet_proposal,
+    self, get_software_version_from_snapshot,
+    submit_create_application_subnet_proposal_with_initial_dkg_subnet,
 };
 use ic_system_test_driver::nns::{get_subnet_list_from_registry, vote_on_proposal};
 use ic_system_test_driver::systest;
@@ -64,6 +65,10 @@ pub fn setup(env: TestEnv) {
             Subnet::fast(SubnetType::System, NNS_PRE_MASTER)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH)),
         )
+        .add_subnet(
+            Subnet::fast(SubnetType::Application, APP_PRE_MASTER)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH)),
+        )
         .with_unassigned_nodes(APP_PRE_MASTER * APP_SUBNETS)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
@@ -84,6 +89,11 @@ pub fn test(env: TestEnv) {
     install_nns_canisters(&env);
     let topology_snapshot = &env.topology_snapshot();
     let subnet = topology_snapshot.root_subnet();
+    let initial_dkg_subnet_id = topology_snapshot
+        .subnets()
+        .find(|s| s.subnet_id != subnet.subnet_id)
+        .expect("missing second subnet for setup_initial_dkg")
+        .subnet_id;
     let endpoint = subnet.nodes().next().unwrap();
 
     // get IDs of all unassigned nodes
@@ -118,12 +128,13 @@ pub fn test(env: TestEnv) {
                 log,
                 "Submitting proposal to create subnet with nodes: {nodes:?}"
             );
-            let proposal_id = submit_create_application_subnet_proposal(
+            let proposal_id = submit_create_application_subnet_proposal_with_initial_dkg_subnet(
                 &governance,
                 nodes,
                 version.clone(),
                 Some(CanisterCyclesCostSchedule::Normal),
                 Some(0),
+                Some(initial_dkg_subnet_id),
             )
             .await;
             info!(log, "Voting on proposal {proposal_id}");

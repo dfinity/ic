@@ -101,6 +101,7 @@ type CreateSubnetPayload = record {
   replica_version_id : text;
   dkg_interval_length : nat64;
   subnet_id_override : opt principal;
+  initial_dkg_subnet_id : opt principal;
   ssh_backup_access : vec text;
   initial_notary_delay_millis : nat64;
   subnet_type : SubnetType;

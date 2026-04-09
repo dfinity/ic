@@ -38,6 +38,11 @@ pub(crate) struct ProposeToCreateSubnetCmd {
     pub subnet_id_override: Option<PrincipalId>,
 
     #[clap(long)]
+    /// Optional subnet that should handle `setup_initial_dkg` for subnet creation.
+    /// If not set, handling defaults to the NNS subnet.
+    pub initial_dkg_subnet_id: Option<PrincipalId>,
+
+    #[clap(long)]
     /// Maximum amount of bytes per message. This is a hard cap.
     pub max_ingress_bytes_per_message: Option<u64>,
 
@@ -302,6 +307,7 @@ impl ProposeToCreateSubnetCmd {
         do_create_subnet::CreateSubnetPayload {
             node_ids,
             subnet_id_override: self.subnet_id_override,
+            initial_dkg_subnet_id: self.initial_dkg_subnet_id.map(Into::into),
             max_ingress_bytes_per_message: self.max_ingress_bytes_per_message.unwrap_or_default(),
             max_ingress_messages_per_block: self.max_ingress_messages_per_block.unwrap_or_default(),
             max_ingress_bytes_per_block: self.max_ingress_bytes_per_block,
@@ -390,6 +396,7 @@ mod tests {
             summary_file: None,
             subnet_handler_id: None,
             subnet_id_override: None,
+            initial_dkg_subnet_id: None,
             max_ingress_bytes_per_message: None,
             max_ingress_messages_per_block: None,
             max_ingress_bytes_per_block: None,
@@ -502,6 +509,19 @@ mod tests {
                 features: SubnetFeaturesPb::from(features),
                 ..minimal_create_payload()
             },
+        );
+    }
+
+    #[test]
+    fn cli_to_payload_conversion_includes_initial_dkg_subnet_id() {
+        let initial_dkg_subnet_id = PrincipalId::from_str("gxevo-lhkam-aaaaa-aaaap-yai").unwrap();
+        let cmd = ProposeToCreateSubnetCmd {
+            initial_dkg_subnet_id: Some(initial_dkg_subnet_id),
+            ..empty_propose_to_create_subnet_cmd()
+        };
+        assert_eq!(
+            cmd.new_payload().initial_dkg_subnet_id,
+            Some(initial_dkg_subnet_id.into())
         );
     }
 

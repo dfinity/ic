@@ -61,6 +61,11 @@ impl Registry {
             payload.node_ids.clone(),
             RegistryVersion::new(self.latest_version()),
         );
+        let request = if let Some(initial_dkg_subnet_id) = payload.initial_dkg_subnet_id {
+            request.with_subnet_id(initial_dkg_subnet_id)
+        } else {
+            request
+        };
 
         // 2a. Invoke NI-DKG on ic_00
         let response_bytes = call(
@@ -266,6 +271,9 @@ pub struct CreateSubnetPayload {
     pub node_ids: Vec<NodeId>,
 
     pub subnet_id_override: Option<PrincipalId>,
+    /// Optional subnet that should handle `setup_initial_dkg`.
+    /// If not set, the request is handled by the NNS subnet as before.
+    pub initial_dkg_subnet_id: Option<SubnetId>,
 
     pub max_ingress_bytes_per_message: u64,
     pub max_ingress_bytes_per_block: Option<u64>,
