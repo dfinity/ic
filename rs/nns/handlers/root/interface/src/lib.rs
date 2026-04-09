@@ -119,7 +119,7 @@ pub enum CreateCanisterAndInstallCodeResponse {
     Err(CreateCanisterAndInstallCodeError),
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
 pub struct CreateCanisterAndInstallCodeOk {
     /// The ID of the newly created canister.
     pub canister_id: PrincipalId,

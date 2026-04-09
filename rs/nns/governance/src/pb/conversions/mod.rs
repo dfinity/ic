@@ -9,6 +9,7 @@ use ic_nns_governance_conversions::{
     convert_guest_launch_measurements_from_api_to_pb,
     convert_guest_launch_measurements_from_pb_to_api,
 };
+use ic_nns_handler_root_interface as root;
 
 #[cfg(test)]
 mod tests;
@@ -1795,10 +1796,8 @@ impl From<pb::CreateCanisterAndInstallCodeOk> for api::CreateCanisterAndInstallC
     }
 }
 
-impl From<&ic_nns_handler_root_interface::CreateCanisterAndInstallCodeOk>
-    for pb::CreateCanisterAndInstallCodeOk
-{
-    fn from(ok: &ic_nns_handler_root_interface::CreateCanisterAndInstallCodeOk) -> Self {
+impl From<root::CreateCanisterAndInstallCodeOk> for pb::CreateCanisterAndInstallCodeOk {
+    fn from(ok: root::CreateCanisterAndInstallCodeOk) -> Self {
         Self {
             canister_id: Some(ok.canister_id),
         }
@@ -1815,11 +1814,9 @@ impl From<()> for pb::SuccessfulProposalExecutionValue {
     }
 }
 
-impl From<ic_nns_handler_root_interface::CreateCanisterAndInstallCodeOk>
-    for pb::SuccessfulProposalExecutionValue
-{
-    fn from(ok: ic_nns_handler_root_interface::CreateCanisterAndInstallCodeOk) -> Self {
-        Self::from(pb::CreateCanisterAndInstallCodeOk::from(&ok))
+impl From<root::CreateCanisterAndInstallCodeOk> for pb::SuccessfulProposalExecutionValue {
+    fn from(ok: root::CreateCanisterAndInstallCodeOk) -> Self {
+        Self::from(pb::CreateCanisterAndInstallCodeOk::from(ok))
     }
 }
 
