@@ -391,8 +391,8 @@ mod tests {
 
         let should_cache_paths_wrapper = |paths: &[Vec<Vec<u8>>]| -> bool {
             let paths = paths
-                .into_iter()
-                .map(|x| x.into_iter().map(|x| Blob(x.clone())).collect())
+                .iter()
+                .map(|x| x.iter().map(|x| Blob(x.clone())).collect())
                 .collect::<Vec<_>>();
             should_cache_paths(&paths)
         };
