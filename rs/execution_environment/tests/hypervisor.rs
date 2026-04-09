@@ -2109,6 +2109,45 @@ fn ic0_msg_caller_info_works_in_ingress() {
 }
 
 #[test]
+fn ic0_msg_caller_info_works_in_reply_callback() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let info = vec![1u8, 2, 3, 4];
+    let signer = canister_test_id(42);
+    test.set_sender_info(SenderInfo {
+        info: info.clone(),
+        signer,
+    });
+
+    // Make a dummy self-call; in the reply callback, read back sender_info.
+    let caller = wasm()
+        .inter_update(
+            canister_id,
+            call_args()
+                .other_side(wasm().reply())
+                .on_reply(wasm().msg_caller_info_data().append_and_reply()),
+        )
+        .build();
+    let result = test.ingress(canister_id, "update", caller).unwrap();
+    assert_eq!(result, WasmResult::Reply(info));
+
+    let caller = wasm()
+        .inter_update(
+            canister_id,
+            call_args()
+                .other_side(wasm().reply())
+                .on_reply(wasm().msg_caller_info_signer().append_and_reply()),
+        )
+        .build();
+    let result = test.ingress(canister_id, "update", caller).unwrap();
+    assert_eq!(
+        result,
+        WasmResult::Reply(signer.get_ref().as_slice().to_vec())
+    );
+}
+
+#[test]
 fn ic0_msg_arg_data_copy_is_not_available_in_reject_callback() {
     let mut test = ExecutionTestBuilder::new().build();
     let caller_id = test.universal_canister().unwrap();
