@@ -145,3 +145,14 @@ impl From<Result<CanisterId, CreateCanisterAndInstallCodeError>>
         }
     }
 }
+
+impl From<CreateCanisterAndInstallCodeResponse>
+    for Result<CreateCanisterAndInstallCodeOk, CreateCanisterAndInstallCodeError>
+{
+    fn from(response: CreateCanisterAndInstallCodeResponse) -> Self {
+        match response {
+            CreateCanisterAndInstallCodeResponse::Ok(ok) => Ok(ok),
+            CreateCanisterAndInstallCodeResponse::Err(err) => Err(err),
+        }
+    }
+}

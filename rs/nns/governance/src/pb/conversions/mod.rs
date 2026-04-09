@@ -1,5 +1,7 @@
-use crate::pb::proposal_conversions::{ProposalDisplayOptions, convert_proposal};
-use crate::pb::v1 as pb;
+use crate::pb::{
+    proposal_conversions::{ProposalDisplayOptions, convert_proposal},
+    v1::{self as pb, successful_proposal_execution_value::ProposalType},
+};
 
 use ic_crypto_sha2::Sha256;
 use ic_nns_governance_api as api;
@@ -1486,8 +1488,9 @@ impl From<api::ProposalData> for pb::ProposalData {
             neurons_fund_data: item.neurons_fund_data.map(|x| x.into()),
             total_potential_voting_power: item.total_potential_voting_power,
             topic: item.topic,
-            // This is not intended to be initialized from outside of canister.
+            // These are not intended to be initialized from outside of canister.
             previous_ballots_timestamp_seconds: None,
+            success_value: None,
         }
     }
 }
@@ -1763,6 +1766,85 @@ impl From<api::DerivedProposalInformation> for pb::DerivedProposalInformation {
     fn from(item: api::DerivedProposalInformation) -> Self {
         Self {
             swap_background_information: item.swap_background_information.map(|x| x.into()),
+        }
+    }
+}
+
+impl From<pb::SuccessfulProposalExecutionValue> for api::SuccessfulProposalExecutionValue {
+    fn from(item: pb::SuccessfulProposalExecutionValue) -> Self {
+        match item.proposal_type {
+            Some(ProposalType::CreateCanisterAndInstallCode(ok)) => {
+                api::SuccessfulProposalExecutionValue::CreateCanisterAndInstallCode(ok.into())
+            }
+            None => {
+                // This shouldn't happen, but if it does, we need a fallback.
+                // Use a CreateCanisterAndInstallCode with None canister_id.
+                api::SuccessfulProposalExecutionValue::CreateCanisterAndInstallCode(
+                    api::CreateCanisterAndInstallCodeOk { canister_id: None },
+                )
+            }
+        }
+    }
+}
+
+impl From<api::SuccessfulProposalExecutionValue> for pb::SuccessfulProposalExecutionValue {
+    fn from(item: api::SuccessfulProposalExecutionValue) -> Self {
+        match item {
+            api::SuccessfulProposalExecutionValue::CreateCanisterAndInstallCode(ok) => Self {
+                proposal_type: Some(ProposalType::CreateCanisterAndInstallCode(ok.into())),
+            },
+        }
+    }
+}
+
+impl From<pb::CreateCanisterAndInstallCodeOk> for api::CreateCanisterAndInstallCodeOk {
+    fn from(item: pb::CreateCanisterAndInstallCodeOk) -> Self {
+        Self {
+            canister_id: item.canister_id,
+        }
+    }
+}
+
+impl From<api::CreateCanisterAndInstallCodeOk> for pb::CreateCanisterAndInstallCodeOk {
+    fn from(item: api::CreateCanisterAndInstallCodeOk) -> Self {
+        Self {
+            canister_id: item.canister_id,
+        }
+    }
+}
+
+impl From<&ic_nns_handler_root_interface::CreateCanisterAndInstallCodeOk>
+    for pb::CreateCanisterAndInstallCodeOk
+{
+    fn from(ok: &ic_nns_handler_root_interface::CreateCanisterAndInstallCodeOk) -> Self {
+        Self {
+            canister_id: Some(ok.canister_id),
+        }
+    }
+}
+
+/// This is not actually used. It is just needed to satisfy some `where` clause
+/// of perform_call_canister.
+impl From<()> for pb::SuccessfulProposalExecutionValue {
+    fn from(_: ()) -> Self {
+        Self {
+            proposal_type: None,
+        }
+    }
+}
+
+impl From<ic_nns_handler_root_interface::CreateCanisterAndInstallCodeOk>
+    for pb::SuccessfulProposalExecutionValue
+{
+    fn from(ok: ic_nns_handler_root_interface::CreateCanisterAndInstallCodeOk) -> Self {
+        Self::from(pb::CreateCanisterAndInstallCodeOk::from(&ok))
+    }
+}
+
+impl From<pb::CreateCanisterAndInstallCodeOk> for pb::SuccessfulProposalExecutionValue {
+    fn from(ok: pb::CreateCanisterAndInstallCodeOk) -> Self {
+        Self {
+            proposal_type: Some(ProposalType::CreateCanisterAndInstallCode(ok)),
         }
     }
 }
