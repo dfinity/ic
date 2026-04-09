@@ -526,7 +526,7 @@ fn queries_to_frozen_canisters_are_rejected() {
     //   and default_freeze_threshold = 2_592_000 s (30 days)
     //   and gib_storage_per_second_fee = 317_500 (10 SDR/GiB/year)
     //
-    // Memory at install time (~12_510 bytes with log, ~222 bytes without):
+    // Memory at install time (12_510 bytes with log, 222 bytes without):
     //   134 bytes canister history
     //   + 12_288 bytes log memory store (4 KiB header + 4 KiB index + 4 KiB data)
     //   + 88 bytes other system state overhead
