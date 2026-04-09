@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - The function `PocketIcBuilder::disable_ingress_validation` to specify that ingress validation
   should be disabled for mainnet-like endpoints `/instances/<instance_id>/api/...` of the instance.
+- The functions `PocketIc::submit_call_with_effective_principal_and_sender_info`, `PocketIc::submit_call_with_sender_info`,
+  `PocketIc::update_call_with_effective_principal_and_sender_info`, `PocketIc::update_call_with_sender_info`,
+  `PocketIc::query_call_with_effective_principal_and_sender_info`, and `PocketIc::query_call_with_sender_info`
+  to make canister calls with sender info (additional information provided by the canister with which the sender principal is associated).
 
 
 

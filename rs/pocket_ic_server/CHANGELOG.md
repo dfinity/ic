@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The endpoint `/instances/` takes an additional optional field `disable_ingress_validation` specifying that
   ingress validation is disabled for mainnet-like endpoints `/instances/<instance_id>/api/...` of the instance.
 - Support for canister signatures produced by the ICP mainnet in mainnet-like endpoints `/instances/<instance_id>/api/...`.
+- The endpoints `/instances/<instance_id>/update/submit_ingress_message` and `/instances/<instance_id>/read/query`
+  accept an additional optional field `sender_info` in the request body specifying additional information provided
+  by the canister with which the sender principal is associated.
 
 
 
