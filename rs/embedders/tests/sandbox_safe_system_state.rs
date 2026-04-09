@@ -584,6 +584,11 @@ fn test_inter_canister_call(
             SMALL_APP_SUBNET_MAX_SIZE,
             CanisterCyclesCostSchedule::Normal,
         );
+    let prepayment_for_call_transmission = cycles_account_manager.xnet_total_transmission_fee(
+        NumBytes::from((method_name.len() + arg.len()) as u64),
+        SMALL_APP_SUBNET_MAX_SIZE,
+        CanisterCyclesCostSchedule::Normal,
+    );
 
     // Register a callback for the response.
     let callback = Callback::new(
@@ -592,6 +597,7 @@ fn test_inter_canister_call(
         Cycles::zero(),
         prepayment_for_response_execution,
         prepayment_for_response_transmission,
+        prepayment_for_call_transmission,
         WasmClosure::new(0, 0),
         WasmClosure::new(0, 0),
         None,

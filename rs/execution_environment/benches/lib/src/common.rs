@@ -138,6 +138,7 @@ where
         Cycles::new(0),
         CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
         CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
         WasmClosure::new(0, 1),
         WasmClosure::new(0, 1),
         None,
