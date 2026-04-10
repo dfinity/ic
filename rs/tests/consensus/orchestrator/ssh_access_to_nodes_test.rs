@@ -549,8 +549,10 @@ fn can_add_max_number_of_keys(env: TestEnv) {
     ));
 
     // Also do that for unassigned nodes
-    let payload_for_the_unassigned =
-        get_update_ssh_keys_for_all_unassigned_nodes_payload(vec![public_key.clone(); 50]);
+    let payload_for_the_unassigned = get_update_ssh_keys_for_all_unassigned_nodes_payload(vec![
+            public_key.clone();
+            MAX_NUM_SSH_KEYS
+        ]);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         payload_for_the_unassigned,
