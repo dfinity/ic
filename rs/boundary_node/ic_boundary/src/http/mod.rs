@@ -62,6 +62,14 @@ impl RequestType {
     pub const fn is_call(&self) -> bool {
         matches!(self, Self::CallV2 | Self::CallV3 | Self::CallV4)
     }
+
+    pub const fn is_read_state(&self) -> bool {
+        matches!(self, Self::ReadStateV2 | Self::ReadStateV3)
+    }
+
+    pub const fn is_read_state_subnet(&self) -> bool {
+        matches!(self, Self::ReadStateSubnetV2 | Self::ReadStateSubnetV3)
+    }
 }
 
 // Try to categorize the error that we got from Reqwest call
