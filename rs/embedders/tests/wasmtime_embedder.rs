@@ -12,7 +12,9 @@ use ic_embedders::{
         system_api_complexity,
     },
 };
-use ic_interfaces::execution_environment::{HypervisorError, SystemApi, TrapCode};
+use ic_interfaces::execution_environment::{
+    CanisterBacktrace, HypervisorError, SystemApi, TrapCode,
+};
 use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
@@ -315,11 +317,9 @@ fn stack_overflow_traps() {
                 panic!("Unexpected error {err:?}");
             };
             assert_eq!(trap_code, TrapCode::StackOverflow);
-            // TODO(DSM): Re-enable backtrace checking when backtraces are enabled again.
-            // for (_index, name) in backtrace.unwrap().0 {
-            //     assert_eq!(name, Some("f".to_string()));
-            // }
-            assert!(backtrace.is_none());
+            for (_index, name) in backtrace.unwrap().0 {
+                assert_eq!(name, Some("f".to_string()));
+            }
         })
         .unwrap();
 
@@ -1657,19 +1657,11 @@ fn wasm_heap_oob_access() {
     let err = instance
         .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
         .unwrap_err();
-    // TODO(DSM): Re-enable backtrace checking when backtraces are enabled again.
-    // assert_eq!(
-    //     err,
-    //     HypervisorError::Trapped {
-    //         trap_code: TrapCode::HeapOutOfBounds,
-    //         backtrace: Some(CanisterBacktrace(vec![(5, Some("foo".to_string()))]))
-    //     }
-    // );
     assert_eq!(
         err,
         HypervisorError::Trapped {
             trap_code: TrapCode::HeapOutOfBounds,
-            backtrace: None,
+            backtrace: Some(CanisterBacktrace(vec![(5, Some("foo".to_string()))]))
         }
     );
 }
