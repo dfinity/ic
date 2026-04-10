@@ -823,12 +823,12 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: NNSRecoverySameNodes, 
 
     // The command is expected to reboot the node as part of the recovery, so if it returns
     // successfully, it means something went wrong.
-    // Set a 5-minute SSH timeout to detect when the node reboots and the TCP connection
+    // Set a 10-minute SSH timeout to detect when the node reboots and the TCP connection
     // hangs (e.g. abrupt reboot without clean TCP FIN). Without this, the SSH channel
     // can hang indefinitely waiting for data from the rebooted node.
-    session.set_timeout(5 * 60 * 1000);
+    session.set_timeout(10 * 60 * 1000);
     info!(logger, "Executing local recovery command: \n{command}");
-    node.block_on_bash_script_from_session(&session, &command)
+    node.block_on_bash_script_from_session(&session, &format!("{command} > /dev/null 2>&1"))
         .expect_err("Local recovery command completed without rebooting");
 
     info!(logger, "Node rebooted as part of the recovery");

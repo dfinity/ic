@@ -889,7 +889,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
     );
 
     info!(logger, "Executing local recovery command: \n{command}");
-    match node.block_on_bash_script_from_session(&session, &command) {
+    match node.block_on_bash_script_from_session(&session, &format!("{command} > /dev/null 2>&1")) {
         Ok(ret) => info!(logger, "Finished local recovery: \n{ret}"),
         Err(err) => panic!("Local recovery failed: \n{err}"),
     }
