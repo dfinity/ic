@@ -13,6 +13,8 @@ pub struct CallContext {
     pub instructions_executed: u64,
     #[prost(message, optional, tag = "11")]
     pub metadata: ::core::option::Option<super::super::queues::v1::RequestMetadata>,
+    #[prost(message, optional, tag = "14")]
+    pub sender_info: ::core::option::Option<super::super::ingress::v1::SenderInfo>,
     #[prost(oneof = "call_context::CallOrigin", tags = "1, 2, 4, 7, 12")]
     pub call_origin: ::core::option::Option<call_context::CallOrigin>,
 }
@@ -763,9 +765,6 @@ pub struct CanisterStateBits {
     /// The next local snapshot ID.
     #[prost(uint64, tag = "46")]
     pub next_snapshot_id: u64,
-    /// Captures the memory usage of all snapshots associated with a canister.
-    #[prost(uint64, tag = "52")]
-    pub snapshots_memory_usage: u64,
     #[prost(int64, tag = "48")]
     pub priority_credit: i64,
     #[prost(enumeration = "LongExecutionMode", tag = "49")]

@@ -14,8 +14,8 @@
 //! block is considered finalized.
 
 use ic_consensus_utils::{
-    active_high_threshold_nidkg_id, crypto::ConsensusCrypto,
-    get_oldest_idkg_state_registry_version, membership::Membership, pool_reader::PoolReader,
+    active_high_threshold_nidkg_id, crypto::ConsensusCrypto, get_oldest_state_registry_version,
+    membership::Membership, pool_reader::PoolReader,
 };
 use ic_interfaces::messaging::MessageRouting;
 use ic_interfaces_state_manager::{
@@ -224,7 +224,7 @@ impl CatchUpPackageMaker {
                             )
                         })
                         .ok()?;
-                    get_oldest_idkg_state_registry_version(state.get_ref())
+                    get_oldest_state_registry_version(state.get_ref())
                 } else {
                     None
                 };

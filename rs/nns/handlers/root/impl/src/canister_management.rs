@@ -3,10 +3,13 @@ use crate::PROXIED_CANISTER_CALLS_TRACKER;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::{
     api::call::{RejectionCode, call_with_payment},
-    call, caller, print,
+    call,
+    call::{Call, CallFailed},
+    caller, print,
 };
 use ic_management_canister_types_private::{
-    CanisterInstallMode::Install, CanisterSettingsArgsBuilder, CreateCanisterArgs, InstallCodeArgs,
+    self as management_canister, CanisterInstallMode::Install, CanisterSettingsArgsBuilder,
+    CreateCanisterArgs, InstallCodeArgs,
 };
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
@@ -24,7 +27,9 @@ use ic_nns_common::{
 };
 use ic_nns_handler_root_interface::{
     ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
-    UpdateCanisterSettingsError, UpdateCanisterSettingsRequest, UpdateCanisterSettingsResponse,
+    CreateCanisterAndInstallCodeError, CreateCanisterAndInstallCodeRequest,
+    CreateCanisterAndInstallCodeResponse, UpdateCanisterSettingsError,
+    UpdateCanisterSettingsRequest, UpdateCanisterSettingsResponse,
 };
 use ic_protobuf::{
     registry::nns::v1::{NnsCanisterRecord, NnsCanisterRecords},
@@ -249,5 +254,118 @@ pub async fn update_canister_settings(
                 description,
             })
         }
+    }
+}
+
+// Unlike update_canister_settings and change_canister_controllers, this does
+// not use ManagementCanisterClient because:
+//   1. We need to target a specific subnet (host_subnet_id), not IC_00.
+//   2. We use Call::bounded_wait for timeout protection against slow/malicious
+//      host subnets.
+//   3. ManagementCanisterClient lacks create_canister and install_code methods.
+//   4. Rate limiting (LimitedOutstandingCallsManagementCanisterClient) is not
+//      needed here, since only Governance can call this.
+pub async fn create_canister_and_install_code(
+    request: CreateCanisterAndInstallCodeRequest,
+) -> CreateCanisterAndInstallCodeResponse {
+    let CreateCanisterAndInstallCodeRequest {
+        host_subnet_id,
+        canister_settings,
+        wasm_module,
+        install_arg,
+    } = request;
+
+    // We call host_subnet_id directly (rather than the Management (virtual)
+    // canister) so that the canister is created on that specific subnet
+    // (not the one where this canister (i.e. Root) lives).
+    let callee = host_subnet_id.0;
+
+    let main = async {
+        // Step 1: Create canister.
+
+        // Step 1.1: Send create_canister call (to the subnet, not "aaaaa-aa", and attach cycles).
+        let create_canister_args = CreateCanisterArgs {
+            settings: canister_settings.map(management_canister::CanisterSettingsArgs::from),
+            sender_canister_version: Some(ic_cdk::api::canister_version()),
+        };
+        let create_canister_result = Call::bounded_wait(callee, "create_canister")
+            .with_arg(create_canister_args)
+            .await;
+
+        // Step 1.2: Handle the create_canister result. This consists of decoding
+        // the reply, and handling errors.
+        let response = create_canister_result.map_err(|err| {
+            convert_call_failed_to_create_canister_and_install_code_error("create_canister", err)
+        })?;
+        let create_canister_reply: CanisterIdRecord = response.candid().map_err(|err| {
+            // Show raw bytes to aid debugging when the response can't be decoded.
+            let response = humanize_blob(response.as_ref());
+            CreateCanisterAndInstallCodeError {
+                code: None,
+                description: format!(
+                    "Failed to decode create_canister response: {err}. Raw reply (hex): {response}"
+                ),
+            }
+        })?;
+        // This will be returned (assuming install_code goes well).
+        let new_canister_id = create_canister_reply.get_canister_id();
+
+        // Step 2: Install code into the new canister.
+        let install_code_args = InstallCodeArgs {
+            mode: Install,
+            canister_id: new_canister_id.get(),
+            wasm_module,
+            arg: install_arg,
+            sender_canister_version: None,
+        };
+        Call::bounded_wait(callee, "install_code")
+            .with_arg(install_code_args)
+            .await
+            .map_err(|err| {
+                convert_call_failed_to_create_canister_and_install_code_error("install_code", err)
+            })?;
+
+        Ok(new_canister_id)
+    };
+
+    let result = main.await;
+    CreateCanisterAndInstallCodeResponse::from(result)
+}
+
+/// Hex-encodes `bytes`, truncating to the first 200 bytes with a suffix if longer.
+fn humanize_blob(bytes: &[u8]) -> String {
+    if bytes.len() <= 200 {
+        bytes.iter().map(|b| format!("{b:02x}")).collect()
+    } else {
+        let encoded: String = bytes[..200].iter().map(|b| format!("{b:02x}")).collect();
+        format!("{encoded}... ({} bytes total)", bytes.len())
+    }
+}
+
+fn convert_call_failed_to_create_canister_and_install_code_error(
+    method_name: &str,
+    err: CallFailed,
+) -> CreateCanisterAndInstallCodeError {
+    match err {
+        CallFailed::CallRejected(err) => {
+            let code = err.reject_code().map(|code| code as i32).ok();
+            let message = err.reject_message();
+            CreateCanisterAndInstallCodeError {
+                code,
+                description: format!("{method_name} was rejected: {message}"),
+            }
+        }
+        CallFailed::CallPerformFailed(_) => CreateCanisterAndInstallCodeError {
+            code: None,
+            description: format!("{method_name} failed: ic0.call_perform returned non-zero"),
+        },
+        CallFailed::InsufficientLiquidCycleBalance(err) => CreateCanisterAndInstallCodeError {
+            code: None,
+            description: format!(
+                "{method_name} failed: insufficient cycles \
+                    (available: {}, required: {})",
+                err.available, err.required,
+            ),
+        },
     }
 }

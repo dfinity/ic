@@ -2583,7 +2583,6 @@ impl StateMachine {
     pub fn mock_canister_http_response(
         &self,
         request_id: u64,
-        timeout: Time,
         canister_id: CanisterId,
         contents: Vec<CanisterHttpResponseContent>,
     ) {
@@ -2592,13 +2591,11 @@ impl StateMachine {
             let registry_version = self.registry_client.get_latest_version();
             let response = CanisterHttpResponse {
                 id: CanisterHttpRequestId::from(request_id),
-                timeout,
                 canister_id,
                 content: content.clone(),
             };
             let response_metadata = CanisterHttpResponseMetadata {
                 id: CallbackId::from(request_id),
-                timeout,
                 registry_version,
                 content_hash: ic_types::crypto::crypto_hash(&response),
                 content_size: content.count_bytes() as u32,

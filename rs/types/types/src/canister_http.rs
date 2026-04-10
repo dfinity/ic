@@ -784,8 +784,6 @@ impl From<CanisterHttpRequestContextError> for UserError {
 /// client to make a request
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct CanisterHttpRequest {
-    /// Timestamp indicating when this request will be considered timed out.
-    pub timeout: Time,
     /// This requests unique identifier
     pub id: CanisterHttpRequestId,
     /// The context of the request which captures all the metadata about this request
@@ -801,7 +799,6 @@ pub struct CanisterHttpRequest {
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponse {
     pub id: CanisterHttpRequestId,
-    pub timeout: Time,
     pub canister_id: CanisterId,
     pub content: CanisterHttpResponseContent,
 }
@@ -810,14 +807,10 @@ impl CountBytes for CanisterHttpResponse {
     fn count_bytes(&self) -> usize {
         let CanisterHttpResponse {
             id,
-            timeout,
             canister_id,
             content,
         } = &self;
-        size_of_val(id)
-            + size_of_val(timeout)
-            + canister_id.get_ref().data_size()
-            + content.count_bytes()
+        size_of_val(id) + canister_id.get_ref().data_size() + content.count_bytes()
     }
 }
 
@@ -985,7 +978,6 @@ impl CountBytes for CanisterHttpResponseDivergence {
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponseMetadata {
     pub id: CallbackId,
-    pub timeout: Time,
     pub content_hash: CryptoHashOf<CanisterHttpResponse>,
     pub content_size: u32,
     pub registry_version: RegistryVersion,

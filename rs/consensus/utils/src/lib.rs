@@ -439,14 +439,26 @@ pub fn get_subnet_record(
     }
 }
 
-/// Return the oldest registry version of transcripts that were matched to signature
-/// request contexts in the given replicated state.
-pub fn get_oldest_idkg_state_registry_version(state: &ReplicatedState) -> Option<RegistryVersion> {
-    state
-        .signature_request_contexts()
+/// Return the oldest registry version that is still referenced by open request contexts included
+/// in the given replicated state.
+pub fn get_oldest_state_registry_version(state: &ReplicatedState) -> Option<RegistryVersion> {
+    let call_context_manager = &state.metadata.subnet_call_context_manager;
+    let oldest_chain_key_version = call_context_manager
+        .sign_with_threshold_contexts
         .values()
         .flat_map(|context| context.iter_idkg_transcripts())
         .map(|transcript| transcript.registry_version)
+        .min();
+
+    let oldest_setup_initial_dkg_version = call_context_manager
+        .setup_initial_dkg_contexts
+        .values()
+        .map(|context| context.registry_version)
+        .min();
+
+    [oldest_chain_key_version, oldest_setup_initial_dkg_version]
+        .into_iter()
+        .flatten()
         .min()
 }
 
@@ -472,14 +484,17 @@ mod tests {
     use super::*;
     use ic_consensus_mocks::{Dependencies, dependencies};
     use ic_management_canister_types_private::MasterPublicKeyId;
-    use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
+    use ic_replicated_state::metadata_state::subnet_call_context_manager::{
+        SetupInitialDkgContext, SignWithThresholdContext,
+    };
     use ic_test_utilities_state::ReplicatedStateBuilder;
-    use ic_test_utilities_types::ids::node_test_id;
+    use ic_test_utilities_types::{ids::node_test_id, messages::RequestBuilder};
     use ic_types::{
         consensus::{Rank, get_faults_tolerated, idkg::PreSigId},
-        crypto::{ThresholdSigShare, ThresholdSigShareOf},
+        crypto::{ThresholdSigShare, ThresholdSigShareOf, threshold_sig::ni_dkg::NiDkgTargetId},
         messages::CallbackId,
         signature::ThresholdSignatureShare,
+        time::UNIX_EPOCH,
     };
 
     /// Test that two shares with the same content are grouped together, and
@@ -551,17 +566,52 @@ mod tests {
         assert_eq!(round_robin.call_next(&calls), vec![1]);
     }
 
-    fn fake_state_with_contexts(contexts: Vec<SignWithThresholdContext>) -> ReplicatedState {
+    fn fake_state_with_contexts(
+        sign_with_threshold: Vec<SignWithThresholdContext>,
+        setup_initial_dkg: Vec<SetupInitialDkgContext>,
+    ) -> ReplicatedState {
         let mut state = ReplicatedStateBuilder::default().build();
-        let iter = contexts
-            .into_iter()
-            .enumerate()
-            .map(|(i, context)| (CallbackId::from(i as u64), context));
         state
             .metadata
             .subnet_call_context_manager
-            .sign_with_threshold_contexts = BTreeMap::from_iter(iter);
+            .sign_with_threshold_contexts = BTreeMap::from_iter(
+            sign_with_threshold
+                .into_iter()
+                .enumerate()
+                .map(|(i, c)| (CallbackId::from(i as u64), c)),
+        );
         state
+            .metadata
+            .subnet_call_context_manager
+            .setup_initial_dkg_contexts = BTreeMap::from_iter(
+            setup_initial_dkg
+                .into_iter()
+                .enumerate()
+                .map(|(i, c)| (CallbackId::from(i as u64), c)),
+        );
+        state
+    }
+
+    fn fake_state_with_signature_contexts(
+        contexts: Vec<SignWithThresholdContext>,
+    ) -> ReplicatedState {
+        fake_state_with_contexts(contexts, vec![])
+    }
+
+    fn fake_setup_initial_dkg_context(registry_version: RegistryVersion) -> SetupInitialDkgContext {
+        SetupInitialDkgContext {
+            request: RequestBuilder::new().build(),
+            nodes_in_target_subnet: BTreeSet::from([node_test_id(1)]),
+            target_id: NiDkgTargetId::new([7_u8; NiDkgTargetId::SIZE]),
+            registry_version,
+            time: UNIX_EPOCH,
+        }
+    }
+
+    fn fake_state_with_setup_initial_dkg_contexts(
+        contexts: Vec<SetupInitialDkgContext>,
+    ) -> ReplicatedState {
+        fake_state_with_contexts(vec![], contexts)
     }
 
     fn fake_key_ids() -> Vec<MasterPublicKeyId> {
@@ -573,22 +623,22 @@ mod tests {
 
     #[test]
     fn test_empty_state_should_return_no_registry_version() {
-        let state = fake_state_with_contexts(vec![]);
-        assert_eq!(None, get_oldest_idkg_state_registry_version(&state));
+        let state = fake_state_with_signature_contexts(vec![]);
+        assert_eq!(None, get_oldest_state_registry_version(&state));
     }
 
     #[test]
     fn test_state_without_matches_should_return_no_registry_version() {
         for key_id in fake_key_ids() {
             println!("Running test for key ID {key_id}");
-            let state = fake_state_with_contexts(vec![
+            let state = fake_state_with_signature_contexts(vec![
                 fake_signature_request_context_with_registry_version(
                     None,
                     &key_id,
                     RegistryVersion::from(4),
                 ),
             ]);
-            assert_eq!(None, get_oldest_idkg_state_registry_version(&state));
+            assert_eq!(None, get_oldest_state_registry_version(&state));
         }
     }
 
@@ -629,10 +679,69 @@ mod tests {
                 RegistryVersion::from(3),
             ));
         }
-        let state = fake_state_with_contexts(contexts);
+        let state = fake_state_with_signature_contexts(contexts);
         assert_eq!(
             Some(RegistryVersion::from(2)),
-            get_oldest_idkg_state_registry_version(&state)
+            get_oldest_state_registry_version(&state)
+        );
+    }
+
+    #[test]
+    fn test_get_oldest_state_registry_version_setup_initial_dkg_only() {
+        let state = fake_state_with_setup_initial_dkg_contexts(vec![
+            fake_setup_initial_dkg_context(RegistryVersion::from(10)),
+            fake_setup_initial_dkg_context(RegistryVersion::from(3)),
+            fake_setup_initial_dkg_context(RegistryVersion::from(7)),
+        ]);
+        assert_eq!(
+            Some(RegistryVersion::from(3)),
+            get_oldest_state_registry_version(&state)
+        );
+    }
+
+    #[test]
+    fn test_get_oldest_state_registry_version_setup_initial_dkg_younger_than_sign() {
+        let signature_contexts = fake_key_ids()
+            .into_iter()
+            .enumerate()
+            .map(|(i, key_id)| {
+                fake_signature_request_context_with_registry_version(
+                    Some(PreSigId(i as u64)),
+                    &key_id,
+                    RegistryVersion::from(5),
+                )
+            })
+            .collect();
+        let state = fake_state_with_contexts(
+            signature_contexts,
+            vec![fake_setup_initial_dkg_context(RegistryVersion::from(2))],
+        );
+        assert_eq!(
+            Some(RegistryVersion::from(2)),
+            get_oldest_state_registry_version(&state)
+        );
+    }
+
+    #[test]
+    fn test_get_oldest_state_registry_version_sign_younger_than_setup_initial_dkg() {
+        let signature_contexts = fake_key_ids()
+            .into_iter()
+            .enumerate()
+            .map(|(i, key_id)| {
+                fake_signature_request_context_with_registry_version(
+                    Some(PreSigId(i as u64)),
+                    &key_id,
+                    RegistryVersion::from(2),
+                )
+            })
+            .collect();
+        let state = fake_state_with_contexts(
+            signature_contexts,
+            vec![fake_setup_initial_dkg_context(RegistryVersion::from(11))],
+        );
+        assert_eq!(
+            Some(RegistryVersion::from(2)),
+            get_oldest_state_registry_version(&state)
         );
     }
 

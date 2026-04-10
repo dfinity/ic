@@ -11,6 +11,16 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-04-06: Proposal 141243
+
+http://dashboard.internetcomputer.org/proposal/141243
+
+## Added
+
+* New invariant ensuring that cloud engines contain only nodes with `type4` reward type and that
+  non-cloud engines do not contain any nodes with `type4` reward type.
+
+
 # 2026-03-27: Proposal 141091
 
 http://dashboard.internetcomputer.org/proposal/141091

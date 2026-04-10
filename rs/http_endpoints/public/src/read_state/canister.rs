@@ -28,6 +28,7 @@ use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvid
 use ic_replicated_state::{ReplicatedState, canister_state::execution_state::CustomSectionType};
 use ic_types::{
     CanisterId, PrincipalId, SubnetId, UserId,
+    crypto::threshold_sig::IcRootOfTrust,
     malicious_flags::MaliciousFlags,
     messages::{
         EXPECTED_MESSAGE_ID_LENGTH, HttpReadStateContent, HttpRequest, HttpRequestEnvelope,
@@ -64,6 +65,7 @@ pub struct CanisterReadStateService {
     time_source: Arc<dyn TimeSource>,
     validator: Arc<dyn HttpRequestVerifier<ReadState, RegistryRootOfTrustProvider>>,
     registry_client: Arc<dyn RegistryClient>,
+    additional_root_of_trust: Option<IcRootOfTrust>,
     nns_subnet_id: SubnetId,
     version: Version,
 }
@@ -78,6 +80,7 @@ pub struct CanisterReadStateServiceBuilder {
     time_source: Option<Arc<dyn TimeSource>>,
     ingress_verifier: Arc<dyn IngressSigVerifier>,
     registry_client: Arc<dyn RegistryClient>,
+    additional_root_of_trust: Option<IcRootOfTrust>,
     nns_subnet_id: SubnetId,
     version: Version,
 }
@@ -112,6 +115,7 @@ impl CanisterReadStateServiceBuilder {
             time_source: None,
             ingress_verifier,
             registry_client,
+            additional_root_of_trust: None,
             nns_subnet_id,
             version,
         }
@@ -135,6 +139,14 @@ impl CanisterReadStateServiceBuilder {
         self
     }
 
+    pub fn with_additional_root_of_trust(
+        mut self,
+        additional_root_of_trust: IcRootOfTrust,
+    ) -> Self {
+        self.additional_root_of_trust = Some(additional_root_of_trust);
+        self
+    }
+
     pub(crate) fn build_router(self) -> Router {
         let state = CanisterReadStateService {
             log: self.log,
@@ -147,6 +159,7 @@ impl CanisterReadStateServiceBuilder {
             time_source: self.time_source.unwrap_or(Arc::new(SysTimeSource::new())),
             validator: build_validator(self.ingress_verifier, self.malicious_flags),
             registry_client: self.registry_client,
+            additional_root_of_trust: self.additional_root_of_trust,
             nns_subnet_id: self.nns_subnet_id,
             version: self.version,
         };
@@ -175,6 +188,7 @@ pub(crate) async fn canister_read_state(
         time_source,
         validator,
         registry_client,
+        additional_root_of_trust,
         nns_subnet_id,
         version,
     }): State<CanisterReadStateService>,
@@ -201,8 +215,15 @@ pub(crate) async fn canister_read_state(
     let read_state = request.content().clone();
     let registry_version = registry_client.get_latest_version();
 
-    let root_of_trust_provider =
-        RegistryRootOfTrustProvider::new(Arc::clone(&registry_client), registry_version);
+    let root_of_trust_provider = if let Some(additional_root_of_trust) = additional_root_of_trust {
+        RegistryRootOfTrustProvider::new_with_additional_root_of_trust(
+            registry_client,
+            registry_version,
+            additional_root_of_trust,
+        )
+    } else {
+        RegistryRootOfTrustProvider::new(registry_client, registry_version)
+    };
     // Since spawn blocking requires 'static we can't use any references
     let request_c = request.clone();
 

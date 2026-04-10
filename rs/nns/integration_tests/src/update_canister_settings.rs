@@ -3,12 +3,12 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_clients::canister_status::{DefiniteCanisterSettings, LogVisibility};
 use ic_nns_constants::{LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::{
-    MakeProposalRequest, ProposalActionRequest, UpdateCanisterSettings,
-    manage_neuron_response::Command,
-    update_canister_settings::{
-        CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
+    CanisterSettings, MakeProposalRequest, ProposalActionRequest, UpdateCanisterSettings,
+    canister_settings::{
+        Controllers, LogVisibility as GovernanceLogVisibility,
         SnapshotVisibility as GovernanceSnapshotVisibility,
     },
+    manage_neuron_response::Command,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,

@@ -180,6 +180,7 @@ fn run_go_export(wat: &str) -> Result<(), HypervisorError> {
             Cycles::from(0_u128),
             PrincipalId::new_user_test_id(0),
             0.into(),
+            None,
         ))
         .with_num_instructions(LARGE_INSTRUCTION_LIMIT.into())
         .try_build()

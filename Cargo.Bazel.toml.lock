@@ -7734,16 +7734,15 @@ checksum = "2874a2af47a2325c2001a6e6fad9b16a53b802102b528163885171cf92b15976"
 
 [[package]]
 name = "libcryptsetup-rs"
-version = "0.13.2"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ffd3642e85d0a4a7852c28545764754e8f7ca00c33ea5f2035f241a1da869ed"
+checksum = "3ba8f9447e9320030e045b3c7f1b1a978355c43cd05cdaba7e618d1e080519dd"
 dependencies = [
  "bitflags 2.10.0",
  "either",
  "libc",
  "libcryptsetup-rs-sys",
  "log",
- "once_cell",
  "per-thread-mutex",
  "pkg-config",
  "semver",

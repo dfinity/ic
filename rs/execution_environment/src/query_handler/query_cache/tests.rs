@@ -222,6 +222,7 @@ fn query_cache_reports_memory_bytes_metric_on_invalidation() {
         method_name: "method".into(),
         method_payload: vec![],
         certificate_delegation_format: None,
+        sender_info: None,
     };
 
     // Assert initial cache state.
@@ -385,7 +386,7 @@ fn query_cache_returns_different_results_for_different_sources() {
 }
 
 #[test]
-fn query_cache_returns_same_results_for_different_sender_info() {
+fn query_cache_sender_info_is_not_ignored() {
     for_query_and_composite_query(wasm().reply_data(&[42]), |test, a_id, _b_id, method, q| {
         let res_1 = test.query(
             Query {
@@ -406,6 +407,7 @@ fn query_cache_returns_same_results_for_different_sender_info() {
         assert_eq!(query_cache_metrics(&test).misses.get(), 1);
         assert_eq!(res_1, Ok(WasmResult::Reply(vec![42])));
 
+        // Different sender_info => different cache key => cache miss.
         let res_2 = test.query(
             Query {
                 source: QuerySource::User {
@@ -420,14 +422,34 @@ fn query_cache_returns_same_results_for_different_sender_info() {
                 },
                 receiver: a_id,
                 method_name: method.into(),
+                method_payload: q.clone(),
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+            /*certificate_delegation_metadata=*/ None,
+        );
+        assert_eq!(query_cache_metrics(&test).misses.get(), 2);
+        assert_eq!(res_2, Ok(WasmResult::Reply(vec![42])));
+
+        // Same sender_info again => cache hit.
+        let res_3 = test.query(
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(1),
+                    ingress_expiry: 0,
+                    nonce: None,
+                    sender_info: None,
+                },
+                receiver: a_id,
+                method_name: method.into(),
                 method_payload: q,
             },
             Arc::new(test.state().clone()),
             vec![],
             /*certificate_delegation_metadata=*/ None,
         );
-        assert_eq!(query_cache_metrics(&test).misses.get(), 1);
-        assert_eq!(res_2, Ok(WasmResult::Reply(vec![42])));
+        assert_eq!(query_cache_metrics(&test).misses.get(), 2);
+        assert_eq!(res_3, Ok(WasmResult::Reply(vec![42])));
     });
 }
 
@@ -1621,6 +1643,10 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::MsgArgDataCopy
         | SystemApiCallId::MsgArgDataSize
         | SystemApiCallId::MsgCallerCopy
+        | SystemApiCallId::MsgCallerInfoDataCopy
+        | SystemApiCallId::MsgCallerInfoDataSize
+        | SystemApiCallId::MsgCallerInfoSignerCopy
+        | SystemApiCallId::MsgCallerInfoSignerSize
         | SystemApiCallId::MsgCallerSize
         | SystemApiCallId::MsgCyclesAccept
         | SystemApiCallId::MsgCyclesAccept128
@@ -1698,8 +1724,9 @@ fn total_bytes_future_proof_guard() {
         method_name: String::new(),
         method_payload: vec![],
         certificate_delegation_format: None,
+        sender_info: None,
     };
-    assert_eq!(size_of_val(&key), 112);
+    assert_eq!(size_of_val(&key), 168);
     assert_eq!(total_bytes(&key), size_of_val(&key));
 
     // Key with some heap data.
@@ -1709,8 +1736,9 @@ fn total_bytes_future_proof_guard() {
         method_name: " ".repeat(HEAP_BYTES),
         method_payload: vec![42; HEAP_BYTES],
         certificate_delegation_format: None,
+        sender_info: None,
     };
-    assert_eq!(size_of_val(&key), 112);
+    assert_eq!(size_of_val(&key), 168);
     assert_eq!(total_bytes(&key), size_of_val(&key) + HEAP_BYTES * 2);
 
     // Value with no heap data.

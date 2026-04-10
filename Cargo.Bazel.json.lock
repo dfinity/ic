@@ -1,5 +1,5 @@
 {
-  "checksum": "1d88faead9fe3d4ca18cc2287397ac1457604de13e94aded554c8104ad506e69",
+  "checksum": "d6ba737c2af952b1785742116c13e25c6f7e9f4586a4921bbe38ed42119b7c61",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21964,7 +21964,7 @@
               "target": "libc"
             },
             {
-              "id": "libcryptsetup-rs 0.13.2",
+              "id": "libcryptsetup-rs 0.15.0",
               "target": "libcryptsetup_rs"
             },
             {
@@ -44195,14 +44195,20 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "libcryptsetup-rs 0.13.2": {
+    "libcryptsetup-rs 0.15.0": {
       "name": "libcryptsetup-rs",
-      "version": "0.13.2",
+      "version": "0.15.0",
       "package_url": "https://github.com/stratis-storage/libcryptsetup-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/libcryptsetup-rs/0.13.2/download",
-          "sha256": "3ffd3642e85d0a4a7852c28545764754e8f7ca00c33ea5f2035f241a1da869ed"
+          "url": "https://static.crates.io/crates/libcryptsetup-rs/0.15.0/download",
+          "sha256": "3ba8f9447e9320030e045b3c7f1b1a978355c43cd05cdaba7e618d1e080519dd",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:libcryptsetup-rs.patch"
+          ]
         }
       },
       "targets": [
@@ -44257,7 +44263,7 @@
               "target": "libc"
             },
             {
-              "id": "libcryptsetup-rs 0.13.2",
+              "id": "libcryptsetup-rs 0.15.0",
               "target": "build_script_build"
             },
             {
@@ -44267,10 +44273,6 @@
             {
               "id": "log 0.4.28",
               "target": "log"
-            },
-            {
-              "id": "once_cell 1.21.3",
-              "target": "once_cell"
             },
             {
               "id": "per-thread-mutex 0.1.4",
@@ -44288,7 +44290,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.13.2"
+        "version": "0.15.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -98720,7 +98722,7 @@
     "lazy_static 1.5.0",
     "leb128 0.2.5",
     "libc 0.2.177",
-    "libcryptsetup-rs 0.13.2",
+    "libcryptsetup-rs 0.15.0",
     "libflate 2.1.0",
     "libfuzzer-sys 0.4.7",
     "libnss 0.5.0",
