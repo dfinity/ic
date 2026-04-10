@@ -58,7 +58,7 @@ fn load_metrics_e2e_test() {
         set_up(
             state_machine.as_ref(),
             other_state_machine.as_ref(),
-            /*canisters_count=*/ 10,
+            /*canisters_count=*/ 100,
             logger,
         );
         info!(logger, "Creating a checkpoint");
@@ -92,6 +92,10 @@ fn load_metrics_e2e_test() {
         let communication_samples_path = dir.path().join("comm_samples.csv");
         let mut file = std::fs::File::create(&communication_samples_path).unwrap();
 
+        info!(
+            logger,
+            "Using `split-finder` to find candidate canister ranges to be migrated"
+        );
         // TODO(CON-1569): use actual connectivity metrics
         {
             file.write_all(b"sender_canister_id,receiver_canister_id,count\n")
@@ -104,7 +108,6 @@ fn load_metrics_e2e_test() {
                     .unwrap()
             }
         }
-
         let split_output_path = dir.path().join("split_output.csv");
         let split_finder_path =
             std::env::var("SPLIT_FINDER_PATH").expect("SPLIT_FINDER_PATH not set");
@@ -128,7 +131,7 @@ fn load_metrics_e2e_test() {
         let canister_id_ranges = read_to_string(&split_output_path)
             .expect("The split finder script should have produced a valid output")
             .lines()
-            .map(|line| CanisterIdRange::from_str(&line).expect("Not a valid CanisterIdRange"))
+            .map(|line| CanisterIdRange::from_str(line).expect("Not a valid CanisterIdRange"))
             .collect();
 
         // And finally use the `subnet-splitting-tool` to estimate the loads on each subnet after a
@@ -275,7 +278,7 @@ fn set_up(
             body: vec![],
         });
         state_machine
-            .await_ingress(msg_id, /*max_ticks=*/ 100)
+            .await_ingress(msg_id, /*max_ticks=*/ 10)
             .unwrap();
 
         // Tell the canister to send a xnet message
