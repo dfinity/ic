@@ -2164,10 +2164,11 @@ mod tests {
             ],
         };
 
-        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 1);
+        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 10);
 
-        assert_eq!(selected.len(), 1);
+        assert_eq!(selected.len(), 2);
         assert_eq!(selected[0].content.dkg_id, remote_low_remaining_id);
+        assert_eq!(selected[1].content.dkg_id, remote_high_remaining_id);
     }
 
     #[test]
