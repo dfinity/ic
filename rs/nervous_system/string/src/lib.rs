@@ -47,7 +47,10 @@ pub fn humanize_blob(bytes: &[u8], max_bytes: usize) -> String {
     if bytes.len() <= max_bytes {
         bytes.iter().map(|b| format!("{b:02x}")).collect()
     } else {
-        let hex: String = bytes[..max_bytes].iter().map(|b| format!("{b:02x}")).collect();
+        let hex: String = bytes[..max_bytes]
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
         format!("{hex}... ({} bytes total)", bytes.len())
     }
 }
