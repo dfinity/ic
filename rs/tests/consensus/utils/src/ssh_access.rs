@@ -232,7 +232,7 @@ pub async fn update_subnet_record(nns_url: Url, payload: UpdateSubnetPayload) {
     vote_execute_proposal_assert_executed(&gov_can, proposal_id).await;
 }
 
-pub async fn fail_to_update_subnet_record(nns_url: Url, payload: UpdateSubnetPayload) {
+pub async fn assert_update_subnet_record_fails(nns_url: Url, payload: UpdateSubnetPayload) {
     let r = runtime_from_url(nns_url, REGISTRY_CANISTER_ID.into());
     let gov_can = get_governance_canister(&r);
 
@@ -268,7 +268,7 @@ pub async fn update_ssh_keys_for_all_unassigned_nodes(
     vote_execute_proposal_assert_executed(&gov_can, proposal_id).await;
 }
 
-pub async fn fail_updating_ssh_keys_for_all_unassigned_nodes(
+pub async fn assert_update_ssh_keys_for_all_unassigned_nodes_fails(
     nns_url: Url,
     payload: UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
 ) {
@@ -321,7 +321,7 @@ pub async fn set_subnet_operational_level(nns_url: Url, payload: SetSubnetOperat
     vote_execute_proposal_assert_executed(&gov_can, proposal_id).await;
 }
 
-pub async fn fail_to_set_subnet_operational_level(
+pub async fn assert_set_subnet_operational_level_fails(
     nns_url: Url,
     payload: SetSubnetOperationalLevelPayload,
 ) {

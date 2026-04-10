@@ -20,9 +20,9 @@ use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
     ssh_access::{
         AuthMean, SshSession, assert_authentication_fails, assert_authentication_works,
-        fail_to_set_subnet_operational_level, fail_to_update_subnet_record,
-        fail_updating_ssh_keys_for_all_unassigned_nodes, generate_key_strings,
-        get_set_subnet_operational_level_payload_with_keys,
+        assert_set_subnet_operational_level_fails,
+        assert_update_ssh_keys_for_all_unassigned_nodes_fails, assert_update_subnet_record_fails,
+        generate_key_strings, get_set_subnet_operational_level_payload_with_keys,
         get_update_ssh_keys_for_all_unassigned_nodes_payload, get_update_subnet_payload_with_keys,
         set_subnet_operational_level, update_ssh_keys_for_all_unassigned_nodes,
         update_subnet_record, wait_until_authentication_fails,
@@ -584,7 +584,7 @@ fn cannot_add_more_than_max_number_of_keys(env: TestEnv) {
         Some(vec![public_key.clone(); MAX_NUM_SSH_KEYS + 1]),
         Some(vec![]),
     );
-    block_on(fail_to_update_subnet_record(
+    block_on(assert_update_subnet_record_fails(
         nns_node.get_public_url(),
         readonly_payload,
     ));
@@ -595,7 +595,7 @@ fn cannot_add_more_than_max_number_of_keys(env: TestEnv) {
         Some(vec![]),
         Some(vec![public_key.clone(); MAX_NUM_SSH_KEYS + 1]),
     );
-    block_on(fail_to_update_subnet_record(
+    block_on(assert_update_subnet_record_fails(
         nns_node.get_public_url(),
         backup_payload,
     ));
@@ -609,7 +609,7 @@ fn cannot_add_more_than_max_number_of_keys(env: TestEnv) {
             vec![public_key.clone(); MAX_NUM_SSH_KEYS + 1],
         )]),
     );
-    block_on(fail_to_set_subnet_operational_level(
+    block_on(assert_set_subnet_operational_level_fails(
         nns_node.get_public_url(),
         recovery_payload,
     ));
@@ -620,7 +620,7 @@ fn cannot_add_more_than_max_number_of_keys(env: TestEnv) {
             public_key.clone();
             MAX_NUM_SSH_KEYS + 1
         ]);
-    block_on(fail_updating_ssh_keys_for_all_unassigned_nodes(
+    block_on(assert_update_ssh_keys_for_all_unassigned_nodes_fails(
         nns_node.get_public_url(),
         readonly_payload_for_the_unassigned,
     ));
@@ -632,7 +632,7 @@ fn cannot_add_more_than_max_number_of_keys(env: TestEnv) {
             vec![public_key; MAX_NUM_SSH_KEYS + 1],
         )]),
     );
-    block_on(fail_to_set_subnet_operational_level(
+    block_on(assert_set_subnet_operational_level_fails(
         nns_node.get_public_url(),
         recovery_payload_for_the_unassigned,
     ));
