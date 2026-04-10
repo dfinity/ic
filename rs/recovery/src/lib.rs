@@ -390,7 +390,7 @@ impl Recovery {
     ///
     /// If `download_height` is given, the checkpoint at that height is downloaded. If it does not
     /// exist, an error is returned.
-    /// Otherwise, the latest checkpoint on the remote node is downloaded.
+    /// If it is not given, the latest checkpoint on the remote node is downloaded.
     ///
     /// If there are no checkpoints, this function returns an empty list and does not consider it
     /// an error, as the subnet could have stalled in its first DKG interval before producing any
