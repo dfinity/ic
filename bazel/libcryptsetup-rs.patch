@@ -1,3 +1,5 @@
+# Fixes CryptKeyslotHandle::get_pbkdf() segfault for type Argon2I/Argon2Id keyslots
+# See: https://github.com/stratis-storage/libcryptsetup-rs/issues/473
 diff --git a/src/settings.rs b/src/settings.rs
 --- a/src/settings.rs
 +++ b/src/settings.rs
