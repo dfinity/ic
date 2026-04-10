@@ -2252,4 +2252,56 @@ mod tests {
         assert_eq!(selected.len(), 1);
         assert_eq!(selected[0].content.dkg_id, remote_target_0);
     }
+
+    #[test]
+    fn test_select_dealings_completed_remote_is_counted_per_target_id() {
+        let target_id = [7_u8; 32];
+        let local_low_id = local_dkg_id(NiDkgTag::LowThreshold);
+        let remote_low_id = remote_dkg_id_with_target(NiDkgTag::LowThreshold, target_id);
+        let remote_high_id = remote_dkg_id_with_target(NiDkgTag::HighThreshold, target_id);
+
+        // collection_threshold = 2 for all configs.
+        let configs: BTreeMap<_, _> = [
+            (
+                local_low_id.clone(),
+                make_test_config(local_low_id.clone(), 1),
+            ),
+            (
+                remote_low_id.clone(),
+                make_test_config(remote_low_id.clone(), 1),
+            ),
+            (
+                remote_high_id.clone(),
+                make_test_config(remote_high_id.clone(), 1),
+            ),
+        ]
+        .into();
+
+        // remote_low is completed, remote_high still has remaining capacity.
+        // Both remotes share one target ID, so that target should not count as "completed".
+        let dealers_from_chain: HashSet<_> = [
+            (remote_low_id.clone(), node_test_id(0)),
+            (remote_low_id.clone(), node_test_id(1)),
+            (remote_high_id.clone(), node_test_id(0)),
+        ]
+        .into();
+
+        let pool = TestDkgPool {
+            messages: vec![
+                create_dealing(1, local_low_id.clone()),
+                create_dealing(1, remote_high_id.clone()),
+            ],
+        };
+
+        // With MAX_REMOTE_DKGS_PER_INTERVAL = 1 and no completed remote target IDs,
+        // remote dealings should still be prioritized.
+        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 1);
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].content.dkg_id, remote_high_id);
+
+        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 10);
+        assert_eq!(selected.len(), 2);
+        assert_eq!(selected[0].content.dkg_id, remote_high_id);
+        assert_eq!(selected[1].content.dkg_id, local_low_id);
+    }
 }
