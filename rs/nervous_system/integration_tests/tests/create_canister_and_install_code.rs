@@ -90,7 +90,10 @@ async fn test_create_canister_and_install_code() {
     };
 
     // Step 3.3: Verify the canister lives on the expected subnet.
-    let canister_subnet = pocket_ic.get_subnet(CanisterId::from(canister_id)).await.unwrap();
+    let canister_subnet = pocket_ic
+        .get_subnet(Principal::from(canister_id))
+        .await
+        .unwrap();
     assert_eq!(
         PrincipalId::from(canister_subnet),
         host_subnet_id,
