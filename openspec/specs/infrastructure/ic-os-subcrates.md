@@ -876,3 +876,19 @@ The vsock guest binary runs inside GuestOS and sends commands to the HostOS.
 - **THEN** it obtains its local CID via `vsock::get_local_cid()`
 - **AND** constructs and sends a request to the host
 - **AND** parses and returns the response
+
+#### Scenario: Notify messages echoed to guest console
+- **WHEN** the vsock guest binary sends a `Notify` command
+- **THEN** the notification message is written to `/dev/tty1` and `/dev/ttyS0` before transmission
+- **AND** this ensures visibility in cloud environments where the host console is not accessible
+- **AND** write failures to either console path are silently ignored
+
+#### Scenario: Configurable port
+- **WHEN** the vsock guest binary is invoked
+- **THEN** the `--port` flag allows overriding the default vsock port (19090)
+
+#### Scenario: Response payload output
+- **WHEN** a response is received from the host
+- **AND** the payload is `HostOSVsockVersion` — the version fields are printed
+- **AND** the payload is `HostOSVersion(version)` — the version string is printed
+- **AND** the payload is `NoPayload` — nothing is printed

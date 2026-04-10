@@ -532,3 +532,60 @@ The payload builder must record operational metrics for observability.
 #### Scenario: Errors are counted by type
 - **WHEN** a payload building or validation error occurs
 - **THEN** the `vetkd_payload_errors` counter is incremented with the appropriate error type label and key ID
+
+---
+
+## Crate: ic-consensus-dkg
+
+The DKG (Distributed Key Generation) consensus crate manages the lifecycle of non-interactive DKG (NiDKG) transcripts used for threshold signatures. It coordinates dealing creation, validation, pool management, and payload assembly for DKG intervals.
+
+### Requirements
+
+### Requirement: DKG Pool Initialization
+The DKG pool must be initialized with the current start height derived from the latest Catch-Up Package (CUP), not a hardcoded value.
+
+#### Scenario: Pool initialized with CUP height
+- **WHEN** a `DkgPoolImpl` is created
+- **THEN** `current_start_height` is set to the height of the latest CUP summary block
+- **AND** this ensures the bouncer correctly accepts dealings for the current DKG interval from startup
+
+#### Scenario: Pool initialization at genesis
+- **WHEN** a `DkgPoolImpl` is created during genesis (no prior CUP)
+- **THEN** `current_start_height` is set to the genesis CUP height (typically 0)
+
+### Requirement: DKG Bouncer (Artifact Priority)
+The DKG bouncer determines which DKG dealing artifacts should be fetched from peers based on the pool's `current_start_height`.
+
+#### Scenario: Dealing at current start height is wanted
+- **WHEN** a DKG dealing artifact is advertised with a height equal to the pool's `current_start_height`
+- **THEN** the bouncer returns `Wants`
+
+#### Scenario: Dealing above current start height is deferred
+- **WHEN** a DKG dealing artifact is advertised with a height greater than the pool's `current_start_height`
+- **THEN** the bouncer returns `MaybeWantsLater`
+
+#### Scenario: Dealing below current start height is unwanted
+- **WHEN** a DKG dealing artifact is advertised with a height less than the pool's `current_start_height`
+- **THEN** the bouncer returns `Unwanted`
+
+### Requirement: DKG Pool Purging and Height Advancement
+When the pool is purged, the `current_start_height` advances to the new summary block height, updating the bouncer's acceptance window.
+
+#### Scenario: Purge advances current start height
+- **WHEN** `Purge(height)` is applied to the DKG pool
+- **THEN** `current_start_height` is updated to the purge height
+- **AND** all dealings below the new height become `Unwanted` for the bouncer
+- **AND** dealings at the new height become `Wants`
+
+### Requirement: DKG Payload Validation
+DKG payloads in proposed blocks must be validated against the expected DKG summary derived from the pool and registry state.
+
+#### Scenario: Valid DKG payload matches expected summary
+- **WHEN** a block payload contains a DKG summary
+- **AND** the summary is re-derived from the parent chain and registry
+- **THEN** the payload is accepted if it matches the expected summary
+
+#### Scenario: Mismatched DKG transcript tags are rejected
+- **WHEN** a DKG payload references transcript configurations
+- **AND** the transcript tags do not match the expected tags from the registry
+- **THEN** the payload is rejected as invalid

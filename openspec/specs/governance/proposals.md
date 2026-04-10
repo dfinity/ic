@@ -139,7 +139,7 @@ These proposals bless new versions of the guest OS for node machines.
 - **THEN** its topic is NodeAdmin
 
 ### Requirement: TakeCanisterSnapshot and LoadCanisterSnapshot Proposals
-These proposals manage canister snapshots for backup and restore purposes.
+These proposals manage canister snapshots for backup and restore purposes. Snapshot proposals are always enabled (no feature flag gating).
 
 #### Scenario: TakeCanisterSnapshot topic varies by target
 - **WHEN** a TakeCanisterSnapshot proposal is submitted
@@ -148,6 +148,22 @@ These proposals manage canister snapshots for backup and restore purposes.
 #### Scenario: LoadCanisterSnapshot topic varies by target
 - **WHEN** a LoadCanisterSnapshot proposal is submitted
 - **THEN** its topic is determined by the target canister
+
+#### Scenario: LoadCanisterSnapshot validated
+- **WHEN** a LoadCanisterSnapshot proposal is submitted
+- **THEN** the canister_id must be present and valid
+- **AND** the snapshot_id must not be empty
+- **AND** its topic is determined by the target canister
+
+#### Scenario: TakeCanisterSnapshot validated
+- **WHEN** a TakeCanisterSnapshot proposal is submitted
+- **THEN** the canister_id must be present and valid
+- **AND** the optional replace_snapshot field determines snapshot behavior
+- **AND** its topic is determined by the target canister
+
+#### Scenario: Snapshot proposals always enabled
+- **WHEN** the governance canister processes snapshot proposals
+- **THEN** LoadCanisterSnapshot and TakeCanisterSnapshot proposals are always accepted without feature flag gating
 
 ### Requirement: Proposal Reward Status
 Proposals have a reward status that determines how they affect voting rewards.
