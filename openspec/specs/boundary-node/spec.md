@@ -188,6 +188,59 @@ The boundary node caches responses for query requests to reduce load on replica 
 
 ---
 
+### Requirement: Subnet Read-State Response Caching
+
+The boundary node caches responses for subnet `read_state` requests to reduce load on replica nodes. Only requests with cacheable path patterns are eligible.
+
+#### Scenario: Cache hit for identical subnet read_state request
+- **WHEN** a subnet `read_state` request is made with the same subnet ID and paths as a recent request
+- **THEN** the cached response is returned without forwarding to a replica
+- **AND** the `subnet_read_state_cache_hits_total` metric is incremented
+
+#### Scenario: Cache miss for first subnet read_state request
+- **WHEN** a subnet `read_state` request is made for the first time with a given (subnet_id, paths) pair
+- **THEN** the request is forwarded to a replica node
+- **AND** the response is cached for future requests
+- **AND** the `subnet_read_state_cache_misses_total` metric is incremented
+
+#### Scenario: Only cacheable path patterns are cached
+- **WHEN** a subnet `read_state` request contains paths
+- **THEN** paths are only cacheable if they consist of exactly 2 path entries, each with exactly 2 labels
+- **AND** the first labels must be a combination of `"subnet"` and `"canister_ranges"` (one of each)
+- **AND** the second labels must be valid principal-length byte sequences
+- **AND** requests with non-cacheable paths (e.g., `"time"`) bypass the cache entirely
+
+#### Scenario: Mixed cacheable and non-cacheable paths bypass cache
+- **WHEN** a subnet `read_state` request contains a mix of cacheable and non-cacheable paths
+- **THEN** the cache is bypassed entirely (no partial caching)
+
+#### Scenario: Path order does not affect cache key
+- **WHEN** two subnet `read_state` requests contain the same paths in different order
+- **THEN** they resolve to the same cache entry (paths are sorted before keying)
+
+#### Scenario: Different subnets have separate cache entries
+- **WHEN** subnet `read_state` requests are made to different subnets with the same paths
+- **THEN** each subnet has its own cache entry
+
+#### Scenario: Cache respects TTL expiration
+- **WHEN** a cached subnet `read_state` response has exceeded the configured TTL
+- **THEN** the next request is a cache miss and the response is fetched fresh from a replica
+
+#### Scenario: Oversized responses are not cached
+- **WHEN** a subnet `read_state` response body exceeds the configured `max_item_size`
+- **THEN** the response is returned to the client but not stored in the cache
+
+#### Scenario: Failed responses are not cached
+- **WHEN** a subnet `read_state` request returns a non-success HTTP status
+- **THEN** the response is not cached
+
+#### Scenario: Cache entry weighing
+- **WHEN** a response is stored in the cache
+- **THEN** its weight is computed as the sum of the cache key size, paths size, response metadata, headers, and body
+- **AND** the total cache size is bounded by the configured `cache_size` capacity
+
+---
+
 ### Requirement: IP-Based Rate Limiting
 
 The boundary node supports per-IP rate limiting for call (update) requests.
