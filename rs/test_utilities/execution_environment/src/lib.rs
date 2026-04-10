@@ -2356,6 +2356,9 @@ impl Default for ExecutionTestBuilder {
                 rate_limiting_of_instructions: FlagStatus::Disabled,
                 canister_sandboxing_flag: FlagStatus::Enabled,
                 composite_queries: FlagStatus::Enabled,
+                // Use a large time limit for composite queries in tests to
+                // avoid flakiness due to slow CI machines.
+                max_query_call_walltime: Duration::from_secs(60),
                 ..Config::default()
             },
             subnet_config,
