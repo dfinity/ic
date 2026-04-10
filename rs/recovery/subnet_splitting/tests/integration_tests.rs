@@ -121,7 +121,7 @@ fn load_metrics_e2e_test() {
         assert_eq!(
             output.status.code(),
             Some(0),
-            "The script return a non-zero value:\n\n === stdout ===\n{}\n\n === stderr ===\n{}",
+            "The script returned a non-zero value:\n\n === stdout ===\n{}\n\n === stderr ===\n{}",
             str::from_utf8(&output.stdout).unwrap(),
             str::from_utf8(&output.stderr).unwrap(),
         );
