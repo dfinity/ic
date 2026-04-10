@@ -258,6 +258,25 @@ Signed<T, S> pairs content of type T with a signature S, providing a generic sig
 - **THEN** it contains both .content of type T and .signature of type S
 - **AND** CountBytes is implemented if both T and S implement CountBytes
 
+### Requirement: CompoundCycles Dual-Account Resource Tracking
+CompoundCycles pairs real cycles with nominal cycles to track resource consumption under different cost schedules. It is parameterized by a use case marker (e.g., Instructions, RequestAndResponseTransmission).
+
+#### Scenario: CompoundCycles structure
+- **WHEN** a `CompoundCycles<T>` value is constructed
+- **THEN** it contains both a real `Cycles` amount and a `NominalCycles` amount
+- **AND** the type parameter `T` indicates the resource use case (e.g., instruction execution, message transmission)
+
+#### Scenario: CompoundCycles in callback prepayments
+- **WHEN** a callback's prepaid cycles are stored
+- **THEN** they use `CompoundCycles<Instructions>` for execution prepayment
+- **AND** `CompoundCycles<RequestAndResponseTransmission>` for transmission prepayment
+- **AND** this enables correct refund accounting across different cost schedules
+
+#### Scenario: CompoundCycles cost schedule integration
+- **WHEN** a canister has `CanisterCyclesCostSchedule::Free`
+- **THEN** the real cycles component is zero while the nominal component tracks usage for accounting
+- **AND** this enables transparent cost tracking even when no real cycles are deducted
+
 ### Requirement: hash_of_map Deterministic Hashing
 hash_of_map computes a deterministic hash of a BTreeMap following the IC public spec's hash_of_map specification.
 

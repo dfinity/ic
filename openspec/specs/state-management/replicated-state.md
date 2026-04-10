@@ -129,6 +129,17 @@ System metadata tracks subnet-level state that is not canister-specific.
   - Ingress history
   - Certification version
   - Subnet call context manager (for management canister calls)
+  - `own_resource_limits: ResourceLimits` for subnet-wide resource constraints
+
+#### Scenario: Subnet resource limits from registry
+- **WHEN** the subnet's `ResourceLimits` are initialized or updated
+- **THEN** they are populated from the registry each execution round
+- **AND** they constrain subnet-wide resource usage (e.g., memory, compute)
+
+#### Scenario: Get own subnet size
+- **WHEN** `ReplicatedState::get_own_subnet_size()` is called
+- **THEN** it returns the number of nodes in the subnet based on the current network topology
+- **AND** this value is used for fee scaling calculations
 
 ### Requirement: Ingress History State
 

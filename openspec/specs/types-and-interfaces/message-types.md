@@ -18,6 +18,23 @@ SignedIngressContent represents the contents of a signed ingress message, contai
 - **THEN** it returns true if canister_id equals IC_00 (the management canister)
 - **AND** false otherwise
 
+### Requirement: SenderInfo Sender Identity Certification
+SenderInfo carries certified identity attributes attached to ingress messages, allowing canisters to access verified sender metadata.
+
+#### Scenario: SenderInfo structure
+- **WHEN** a `SenderInfo` is present on an ingress message
+- **THEN** it contains `info: Vec<u8>` (certified identity attributes) and `signer: CanisterId` (the signing canister principal)
+
+#### Scenario: SenderInfo in SignedIngressContent
+- **WHEN** a `SignedIngressContent` includes a `sender_info` field
+- **THEN** `as_sender_info()` returns the optional `SignedSenderInfo`
+- **AND** `SenderInfo` is accessible to canisters via the `msg_caller_info_*` system API functions
+
+#### Scenario: SenderInfo absent by default
+- **WHEN** an ingress message is submitted without sender info
+- **THEN** `sender_info` is `None`
+- **AND** `msg_caller_info_data_size` returns 0
+
 ### Requirement: SignedIngress Authenticated Ingress
 SignedIngress combines SignedIngressContent with Authentication (signatures and delegation), providing the complete ingress message as received by the HTTP handler.
 

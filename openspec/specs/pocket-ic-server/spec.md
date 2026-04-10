@@ -306,3 +306,20 @@ PocketIC supports configuring which nodes are blockmakers for each subnet.
 #### Scenario: Convert from raw blockmaker config
 - **WHEN** a `RawSubnetBlockmakers` is received from the API
 - **THEN** it is correctly converted to internal `SubnetBlockmakers` with proper Principal-to-NodeId mapping
+
+---
+
+### Requirement: Mainnet Canister Signature Verification
+
+PocketIC supports verifying canister signatures produced on the IC mainnet by configuring an additional root of trust.
+
+#### Scenario: Verify mainnet canister signature in PocketIC
+- **WHEN** a PocketIC instance is configured with the IC mainnet root public key as an additional root of trust
+- **AND** a canister signature produced on mainnet is submitted for verification
+- **THEN** the signature is verified against the mainnet root key
+- **AND** this enables testing of canister signatures without requiring a live mainnet connection
+
+#### Scenario: Default PocketIC without mainnet root of trust
+- **WHEN** a PocketIC instance is created without an additional root of trust
+- **THEN** only signatures from the local PocketIC instance's own root key are accepted
+- **AND** mainnet canister signatures are rejected
