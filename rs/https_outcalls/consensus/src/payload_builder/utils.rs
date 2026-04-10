@@ -343,8 +343,10 @@ pub(crate) fn find_flexible_result(
     let mut entries_sorted_asc: Vec<_> = grouped_shares.iter().collect();
     entries_sorted_asc.sort_unstable_by_key(|(metadata, _)| metadata.content_size);
 
+    let min_responses = min_responses as usize;
     let mut ok_responses: Vec<(CanisterHttpResponse, &CanisterHttpResponseShare)> = Vec::new();
     let mut ok_responses_size = size_of::<CallbackId>();
+    // Tracks all signers processed (both OK and reject)
     let mut seen_signers = BTreeSet::new();
     let mut reject_responses: Vec<(CanisterHttpResponse, &CanisterHttpResponseShare)> = Vec::new();
     let mut all_ok_shares_sorted_asc: Vec<(&CanisterHttpResponseShare, usize)> = Vec::new();
@@ -386,7 +388,7 @@ pub(crate) fn find_flexible_result(
     }
 
     // 1. Enough OK responses collected?
-    if ok_responses.len() >= min_responses as usize {
+    if ok_responses.len() >= min_responses {
         return FlexibleFindResult::OkResponses(
             FlexibleCanisterHttpResponses {
                 callback_id,
@@ -403,7 +405,7 @@ pub(crate) fn find_flexible_result(
     }
 
     // 2. Too many nodes returned rejects (so that we can never reach min_responses OK responses)?
-    if reject_responses.len() > committee.len().saturating_sub(min_responses as usize) {
+    if reject_responses.len() > committee.len().saturating_sub(min_responses) {
         let error = FlexibleCanisterHttpError::TooManyRequestErrors {
             callback_id,
             reject_responses: reject_responses
@@ -419,11 +421,12 @@ pub(crate) fn find_flexible_result(
     }
 
     // 3. Even the smallest OK responses exceed the absolute payload limit?
-    if all_ok_shares_sorted_asc.len() >= min_responses as usize {
-        let mut truncated_to_min = all_ok_shares_sorted_asc;
-        truncated_to_min.truncate(min_responses as usize);
+    if all_ok_shares_sorted_asc.len() >= min_responses {
+        let num_unseen = committee.len() - seen_signers.len();
+        // Unseen responses could still submit small OK responses, so we account for them.
+        let min_minus_unseen = min_responses.saturating_sub(num_unseen);
 
-        let smallest_content_sum: usize = truncated_to_min
+        let smallest_content_sum: usize = all_ok_shares_sorted_asc[..min_minus_unseen]
             .iter()
             .map(|(_share, response_with_proof_size)| response_with_proof_size)
             .sum();
@@ -431,9 +434,9 @@ pub(crate) fn find_flexible_result(
         if smallest_content_sum > MAX_CANISTER_HTTP_PAYLOAD_SIZE {
             let error = FlexibleCanisterHttpError::ResponsesTooLarge {
                 callback_id,
-                metadata_shares: truncated_to_min
-                    .into_iter()
-                    .map(|(share, _size)| share.clone())
+                metadata_shares: all_ok_shares_sorted_asc[..min_responses]
+                    .iter()
+                    .map(|(share, _size)| (*share).clone())
                     .collect(),
             };
             let error_size = error.count_bytes();

@@ -2777,13 +2777,15 @@ fn flexible_build_responses_too_large() {
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    // min_responses = 2; we add 2 OK responses each >1 MiB so that the smallest
-    // 2 exceed MAX_CANISTER_HTTP_PAYLOAD_SIZE when summed.
+    // min_responses = 2; all 4 nodes submit OK responses each >1 MiB so that
+    // the smallest 2 exceed MAX_CANISTER_HTTP_PAYLOAD_SIZE when summed.
+    // All members must respond so that num_unseen=0, otherwise the check
+    // correctly stays Pending (unseen members could still send small responses).
     let body_size = (MAX_CANISTER_HTTP_PAYLOAD_SIZE / 2) + 100_000;
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, pool| {
         {
             let mut pool_access = pool.write().unwrap();
-            for node_idx in 0..2_u64 {
+            for node_idx in 0..4_u64 {
                 let body = vec![0xAA_u8; body_size];
                 let (response, metadata) = test_response_and_metadata_with_content(
                     callback_id.get(),
@@ -2806,6 +2808,96 @@ fn flexible_build_responses_too_large() {
             } => {
                 assert_eq!(*cb, callback_id);
                 assert_eq!(metadata_shares.len(), 2);
+            }
+        );
+    });
+}
+
+#[test]
+fn flexible_build_responses_too_large_stays_pending_when_unseen_members_could_help() {
+    let num_nodes = 6;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    // min_responses=3, committee=6. We submit 3 large OK shares that individually exceed
+    // MAX/3, making their sum exceed MAX. But 3 committee members are still unseen and
+    // could submit small responses, so the result should be Pending, not ResponsesTooLarge.
+    let body_size = (MAX_CANISTER_HTTP_PAYLOAD_SIZE / 3) + 100_000;
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 6, |pb, pool| {
+        {
+            let mut pool_access = pool.write().unwrap();
+            for node_idx in 0..3_u64 {
+                let body = vec![0xAA_u8; body_size];
+                let (response, metadata) = test_response_and_metadata_with_content(
+                    callback_id.get(),
+                    CanisterHttpResponseContent::Success(body),
+                );
+                let share = metadata_to_share(node_idx, &metadata);
+                add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
+            }
+        }
+
+        let parsed = build_and_validate_and_parse_payload(&pb);
+
+        // Unseen members could still submit small OK responses → Pending.
+        assert!(parsed.flexible_responses.is_empty());
+        assert!(parsed.flexible_errors.is_empty());
+    });
+}
+
+#[test]
+fn flexible_build_responses_too_large_with_rejects_reducing_unseen() {
+    let num_nodes = 6;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    // min_responses=3, committee=6.
+    // 3 large OK shares (sum > MAX) from nodes 0..3.
+    // 2 rejects from nodes 3..5 → only 1 unseen member remains.
+    // min_minus_unseen = 3 - 1 = 2, and even the 2 smallest known OK shares exceed MAX.
+    let body_size = (MAX_CANISTER_HTTP_PAYLOAD_SIZE / 2) + 100_000;
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 6, |pb, pool| {
+        {
+            use ic_types::canister_http::CanisterHttpReject;
+
+            let mut pool_access = pool.write().unwrap();
+            for node_idx in 0..3_u64 {
+                let body = vec![0xAA_u8; body_size];
+                let (response, metadata) = test_response_and_metadata_with_content(
+                    callback_id.get(),
+                    CanisterHttpResponseContent::Success(body),
+                );
+                let share = metadata_to_share(node_idx, &metadata);
+                add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
+            }
+            for node_idx in 3..5_u64 {
+                let (response, metadata) = test_response_and_metadata_with_content(
+                    callback_id.get(),
+                    CanisterHttpResponseContent::Reject(CanisterHttpReject {
+                        reject_code: RejectCode::SysTransient,
+                        message: format!("error_{node_idx}"),
+                    }),
+                );
+                let share = metadata_to_share(node_idx, &metadata);
+                add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
+            }
+        }
+
+        let parsed = build_and_validate_and_parse_payload(&pb);
+
+        // Rejects reduce unseen count, making it impossible to fit → ResponsesTooLarge.
+        // The error includes min_responses (3) shares for validation, even though
+        // only min_minus_unseen (2) were needed to prove impossibility.
+        assert!(parsed.flexible_responses.is_empty());
+        assert_eq!(parsed.flexible_errors.len(), 1);
+        assert_matches!(
+            &parsed.flexible_errors[0],
+            FlexibleCanisterHttpError::ResponsesTooLarge {
+                callback_id: cb,
+                metadata_shares,
+            } => {
+                assert_eq!(*cb, callback_id);
+                assert_eq!(metadata_shares.len(), 3);
             }
         );
     });
