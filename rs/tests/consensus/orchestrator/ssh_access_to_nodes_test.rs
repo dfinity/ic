@@ -468,7 +468,7 @@ fn updating_recovery_does_not_remove_readonly_and_backup_keys(env: TestEnv) {
     let app_subnet_id = app_subnet.subnet_id;
     let node_ip: IpAddr = app_node.get_ip_addr();
 
-    // Add a readonly and backup keys.
+    // Add readonly and backup keys.
     let (readonly_mean, readonly_public_key) = generate_key_and_auth_mean();
     let (backup_mean, backup_public_key) = generate_key_and_auth_mean();
     let payload1 = get_update_subnet_payload_with_keys(
