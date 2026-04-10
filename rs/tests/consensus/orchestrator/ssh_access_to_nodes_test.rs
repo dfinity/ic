@@ -22,10 +22,11 @@ use ic_consensus_system_test_utils::{
         AuthMean, SshSession, assert_authentication_fails, assert_authentication_works,
         fail_to_set_subnet_operational_level, fail_to_update_subnet_record,
         fail_updating_ssh_keys_for_all_unassigned_nodes, generate_key_strings,
-        get_setsubnetoperationallevelpayload_with_keys, get_updatesshreadonlyaccesskeyspayload,
-        get_updatesubnetpayload_with_keys, set_subnet_operational_level,
-        update_ssh_keys_for_all_unassigned_nodes, update_subnet_record,
-        wait_until_authentication_fails, wait_until_authentication_is_granted,
+        get_set_subnet_operational_level_payload_with_keys,
+        get_update_ssh_readonly_access_keys_payload, get_update_subnet_payload_with_keys,
+        set_subnet_operational_level, update_ssh_keys_for_all_unassigned_nodes,
+        update_subnet_record, wait_until_authentication_fails,
+        wait_until_authentication_is_granted,
     },
 };
 use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
@@ -150,7 +151,7 @@ fn keys_in_the_subnet_record_can_be_updated(env: TestEnv) {
     info!(logger, "Updating the registry with new pairs of keys...");
     let (readonly_mean, readonly_public_key) = generate_key_and_auth_mean();
     let (backup_mean, backup_public_key) = generate_key_and_auth_mean();
-    let payload = get_updatesubnetpayload_with_keys(
+    let payload = get_update_subnet_payload_with_keys(
         app_subnet_id,
         Some(vec![readonly_public_key]),
         Some(vec![backup_public_key]),
@@ -171,7 +172,7 @@ fn keys_in_the_subnet_record_can_be_updated(env: TestEnv) {
 
     // Clear the keys in the registry
     let no_key_payload =
-        get_updatesubnetpayload_with_keys(app_subnet_id, Some(vec![]), Some(vec![]));
+        get_update_subnet_payload_with_keys(app_subnet_id, Some(vec![]), Some(vec![]));
     block_on(update_subnet_record(
         nns_node.get_public_url(),
         no_key_payload,
@@ -192,7 +193,7 @@ fn keys_in_the_node_record_can_be_updated(env: TestEnv) {
 
     info!(logger, "Updating the registry with new pairs of keys...");
     let (recovery_mean, recovery_public_key) = generate_key_and_auth_mean();
-    let payload = get_setsubnetoperationallevelpayload_with_keys(
+    let payload = get_set_subnet_operational_level_payload_with_keys(
         Some(app_subnet_id),
         None,
         Some(vec![(app_node.node_id, vec![recovery_public_key])]),
@@ -211,7 +212,7 @@ fn keys_in_the_node_record_can_be_updated(env: TestEnv) {
     wait_until_authentication_is_granted(&logger, &node_ip, "recovery", &recovery_mean);
 
     // Clear the keys in the registry
-    let no_key_payload = get_setsubnetoperationallevelpayload_with_keys(
+    let no_key_payload = get_set_subnet_operational_level_payload_with_keys(
         Some(app_subnet_id),
         None,
         Some(vec![(app_node.node_id, vec![])]),
@@ -236,7 +237,7 @@ fn set_subnet_operational_level_updates_readonly_and_recovery_keys(env: TestEnv)
     info!(logger, "Updating the registry with new pairs of keys...");
     let (readonly_mean, readonly_public_key) = generate_key_and_auth_mean();
     let (recovery_mean, recovery_public_key) = generate_key_and_auth_mean();
-    let payload = get_setsubnetoperationallevelpayload_with_keys(
+    let payload = get_set_subnet_operational_level_payload_with_keys(
         Some(app_subnet_id),
         Some(vec![readonly_public_key]),
         Some(vec![(app_node.node_id, vec![recovery_public_key])]),
@@ -262,7 +263,7 @@ fn set_subnet_operational_level_updates_readonly_and_recovery_keys(env: TestEnv)
     assert_authentication_works(&node_ip, "readonly", &readonly_mean);
 
     // Clear the keys in the registry
-    let no_key_payload = get_setsubnetoperationallevelpayload_with_keys(
+    let no_key_payload = get_set_subnet_operational_level_payload_with_keys(
         Some(app_subnet_id),
         Some(vec![]),
         Some(vec![(app_node.node_id, vec![])]),
@@ -286,12 +287,12 @@ fn keys_for_unassigned_nodes_can_be_updated(env: TestEnv) {
     info!(logger, "Updating the registry with new pairs of keys...");
     let (readonly_mean, readonly_public_key) = generate_key_and_auth_mean();
     let (recovery_mean, recovery_public_key) = generate_key_and_auth_mean();
-    let payload = get_updatesshreadonlyaccesskeyspayload(vec![readonly_public_key]);
+    let payload = get_update_ssh_readonly_access_keys_payload(vec![readonly_public_key]);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         payload,
     ));
-    let payload = get_setsubnetoperationallevelpayload_with_keys(
+    let payload = get_set_subnet_operational_level_payload_with_keys(
         None,
         None,
         Some(vec![(unassigned_node.node_id, vec![recovery_public_key])]),
@@ -317,12 +318,12 @@ fn keys_for_unassigned_nodes_can_be_updated(env: TestEnv) {
     assert_authentication_works(&node_ip, "readonly", &readonly_mean);
 
     // Clear the keys in the registry
-    let no_key_payload = get_updatesshreadonlyaccesskeyspayload(vec![]);
+    let no_key_payload = get_update_ssh_readonly_access_keys_payload(vec![]);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         no_key_payload,
     ));
-    let no_key_payload = get_setsubnetoperationallevelpayload_with_keys(
+    let no_key_payload = get_set_subnet_operational_level_payload_with_keys(
         None,
         None,
         Some(vec![(unassigned_node.node_id, vec![])]),
@@ -348,13 +349,13 @@ fn multiple_keys_can_access_one_account(env: TestEnv) {
     let (readonly_means, readonly_public_keys) = generate_keys_and_auth_means(3);
     let (backup_means, backup_public_keys) = generate_keys_and_auth_means(3);
     let (recovery_means, recovery_public_keys) = generate_keys_and_auth_means(3);
-    let payload = get_updatesubnetpayload_with_keys(
+    let payload = get_update_subnet_payload_with_keys(
         app_subnet_id,
         Some(readonly_public_keys),
         Some(backup_public_keys),
     );
     block_on(update_subnet_record(nns_node.get_public_url(), payload));
-    let payload = get_setsubnetoperationallevelpayload_with_keys(
+    let payload = get_set_subnet_operational_level_payload_with_keys(
         Some(app_subnet_id),
         None,
         Some(vec![(app_node.node_id, recovery_public_keys)]),
@@ -391,12 +392,12 @@ fn multiple_keys_can_access_one_account_on_unassigned_nodes(env: TestEnv) {
     info!(logger, "Updating the registry with new pairs of keys...");
     let (readonly_means, readonly_public_keys) = generate_keys_and_auth_means(3);
     let (recovery_means, recovery_public_keys) = generate_keys_and_auth_means(3);
-    let payload = get_updatesshreadonlyaccesskeyspayload(readonly_public_keys);
+    let payload = get_update_ssh_readonly_access_keys_payload(readonly_public_keys);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         payload,
     ));
-    let payload = get_setsubnetoperationallevelpayload_with_keys(
+    let payload = get_set_subnet_operational_level_payload_with_keys(
         None,
         None,
         Some(vec![(unassigned_node.node_id, recovery_public_keys)]),
@@ -433,7 +434,7 @@ fn updating_readonly_does_not_remove_backup_keys(env: TestEnv) {
     // Add a backup key.
     let (backup_mean, backup_public_key) = generate_key_and_auth_mean();
     let payload1 =
-        get_updatesubnetpayload_with_keys(app_subnet_id, None, Some(vec![backup_public_key]));
+        get_update_subnet_payload_with_keys(app_subnet_id, None, Some(vec![backup_public_key]));
     block_on(update_subnet_record(nns_node.get_public_url(), payload1));
 
     // Check that the backup key can authenticate.
@@ -442,7 +443,7 @@ fn updating_readonly_does_not_remove_backup_keys(env: TestEnv) {
     // Now add a readonly key.
     let (readonly_mean, readonly_public_key) = generate_key_and_auth_mean();
     let payload2 =
-        get_updatesubnetpayload_with_keys(app_subnet_id, Some(vec![readonly_public_key]), None);
+        get_update_subnet_payload_with_keys(app_subnet_id, Some(vec![readonly_public_key]), None);
     block_on(update_subnet_record(nns_node.get_public_url(), payload2));
 
     // Check that the readonly key can authenticate now and the backup key can still
@@ -451,7 +452,7 @@ fn updating_readonly_does_not_remove_backup_keys(env: TestEnv) {
     assert_authentication_works(&node_ip, "backup", &backup_mean);
 
     // Now send a proposal that only removes the readonly keys.
-    let payload3 = get_updatesubnetpayload_with_keys(app_subnet_id, Some(vec![]), None);
+    let payload3 = get_update_subnet_payload_with_keys(app_subnet_id, Some(vec![]), None);
     block_on(update_subnet_record(nns_node.get_public_url(), payload3));
 
     // Wait until the readonly key loses its access and ensure backup key still has
@@ -470,7 +471,7 @@ fn updating_recovery_does_not_remove_readonly_and_backup_keys(env: TestEnv) {
     // Add a readonly and backup keys.
     let (readonly_mean, readonly_public_key) = generate_key_and_auth_mean();
     let (backup_mean, backup_public_key) = generate_key_and_auth_mean();
-    let payload1 = get_updatesubnetpayload_with_keys(
+    let payload1 = get_update_subnet_payload_with_keys(
         app_subnet_id,
         Some(vec![readonly_public_key]),
         Some(vec![backup_public_key]),
@@ -483,7 +484,7 @@ fn updating_recovery_does_not_remove_readonly_and_backup_keys(env: TestEnv) {
 
     // Now add a recovery key.
     let (recovery_mean, recovery_public_key) = generate_key_and_auth_mean();
-    let payload2 = get_setsubnetoperationallevelpayload_with_keys(
+    let payload2 = get_set_subnet_operational_level_payload_with_keys(
         Some(app_subnet_id),
         None,
         Some(vec![(app_node.node_id, vec![recovery_public_key])]),
@@ -500,7 +501,7 @@ fn updating_recovery_does_not_remove_readonly_and_backup_keys(env: TestEnv) {
     assert_authentication_works(&node_ip, "readonly", &readonly_mean);
 
     // Now send a proposal that only removes the recovery keys.
-    let payload3 = get_setsubnetoperationallevelpayload_with_keys(
+    let payload3 = get_set_subnet_operational_level_payload_with_keys(
         Some(app_subnet_id),
         None,
         Some(vec![(app_node.node_id, vec![])]),
@@ -525,7 +526,7 @@ fn can_add_max_number_of_keys(env: TestEnv) {
 
     let (_private_key, public_key) = generate_key_strings();
     // Update the registry with MAX_NUM_SSH_KEYS new pairs of keys.
-    let payload_for_subnet = get_updatesubnetpayload_with_keys(
+    let payload_for_subnet = get_update_subnet_payload_with_keys(
         app_subnet_id,
         Some(vec![public_key.clone(); MAX_NUM_SSH_KEYS]),
         Some(vec![public_key.clone(); MAX_NUM_SSH_KEYS]),
@@ -534,7 +535,7 @@ fn can_add_max_number_of_keys(env: TestEnv) {
         nns_node.get_public_url(),
         payload_for_subnet,
     ));
-    let payload_for_assigned_recovery_keys = get_setsubnetoperationallevelpayload_with_keys(
+    let payload_for_assigned_recovery_keys = get_set_subnet_operational_level_payload_with_keys(
         Some(app_subnet_id),
         None,
         Some(vec![(
@@ -549,12 +550,12 @@ fn can_add_max_number_of_keys(env: TestEnv) {
 
     // Also do that for unassigned nodes
     let payload_for_the_unassigned =
-        get_updatesshreadonlyaccesskeyspayload(vec![public_key.clone(); 50]);
+        get_update_ssh_readonly_access_keys_payload(vec![public_key.clone(); 50]);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         payload_for_the_unassigned,
     ));
-    let payload_for_unassigned_recovery_keys = get_setsubnetoperationallevelpayload_with_keys(
+    let payload_for_unassigned_recovery_keys = get_set_subnet_operational_level_payload_with_keys(
         None,
         None,
         Some(vec![(
@@ -576,7 +577,7 @@ fn cannot_add_more_than_max_number_of_keys(env: TestEnv) {
     let (_private_key, public_key) = generate_key_strings();
 
     // Try to update the registry with MAX_NUM_SSH_KEYS+1 readonly keys.
-    let readonly_payload = get_updatesubnetpayload_with_keys(
+    let readonly_payload = get_update_subnet_payload_with_keys(
         app_subnet_id,
         Some(vec![public_key.clone(); MAX_NUM_SSH_KEYS + 1]),
         Some(vec![]),
@@ -587,7 +588,7 @@ fn cannot_add_more_than_max_number_of_keys(env: TestEnv) {
     ));
 
     // Try to update the registry with MAX_NUM_SSH_KEYS backup keys.
-    let backup_payload = get_updatesubnetpayload_with_keys(
+    let backup_payload = get_update_subnet_payload_with_keys(
         app_subnet_id,
         Some(vec![]),
         Some(vec![public_key.clone(); MAX_NUM_SSH_KEYS + 1]),
@@ -598,7 +599,7 @@ fn cannot_add_more_than_max_number_of_keys(env: TestEnv) {
     ));
 
     // Try to update the registry with MAX_NUM_SSH_KEYS recovery keys.
-    let recovery_payload = get_setsubnetoperationallevelpayload_with_keys(
+    let recovery_payload = get_set_subnet_operational_level_payload_with_keys(
         Some(app_subnet_id),
         None,
         Some(vec![(
@@ -613,12 +614,12 @@ fn cannot_add_more_than_max_number_of_keys(env: TestEnv) {
 
     // Also do that for unassigned nodes
     let readonly_payload_for_the_unassigned =
-        get_updatesshreadonlyaccesskeyspayload(vec![public_key.clone(); MAX_NUM_SSH_KEYS + 1]);
+        get_update_ssh_readonly_access_keys_payload(vec![public_key.clone(); MAX_NUM_SSH_KEYS + 1]);
     block_on(fail_updating_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         readonly_payload_for_the_unassigned,
     ));
-    let recovery_payload_for_the_unassigned = get_setsubnetoperationallevelpayload_with_keys(
+    let recovery_payload_for_the_unassigned = get_set_subnet_operational_level_payload_with_keys(
         None,
         None,
         Some(vec![(
@@ -647,14 +648,14 @@ fn node_does_not_remove_keys_on_restart(env: TestEnv) {
     let (recovery_mean, recovery_public_key) = generate_key_and_auth_mean();
 
     info!(logger, "Updating app subnet record...");
-    let payload = get_updatesubnetpayload_with_keys(
+    let payload = get_update_subnet_payload_with_keys(
         app_subnet_id,
         Some(vec![readonly_public_key.clone()]),
         Some(vec![backup_public_key]),
     );
     block_on(update_subnet_record(nns_node.get_public_url(), payload));
     info!(logger, "Updating app node record...");
-    let payload = get_setsubnetoperationallevelpayload_with_keys(
+    let payload = get_set_subnet_operational_level_payload_with_keys(
         Some(app_subnet_id),
         None,
         Some(vec![(app_node.node_id, vec![recovery_public_key.clone()])]),
@@ -665,13 +666,13 @@ fn node_does_not_remove_keys_on_restart(env: TestEnv) {
     ));
 
     info!(logger, "Updating unassigned nodes record...");
-    let payload = get_updatesshreadonlyaccesskeyspayload(vec![readonly_public_key]);
+    let payload = get_update_ssh_readonly_access_keys_payload(vec![readonly_public_key]);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         payload,
     ));
     info!(logger, "Updating unassigned node record...");
-    let payload = get_setsubnetoperationallevelpayload_with_keys(
+    let payload = get_set_subnet_operational_level_payload_with_keys(
         None,
         None,
         Some(vec![(unassigned_node.node_id, vec![recovery_public_key])]),
@@ -762,13 +763,13 @@ fn node_keeps_keys_until_it_completely_leaves_its_subnet(env: TestEnv) {
     let (readonly_mean, readonly_public_key) = generate_key_and_auth_mean();
     let (backup_mean, backup_public_key) = generate_key_and_auth_mean();
     let (recovery_mean, recovery_public_key) = generate_key_and_auth_mean();
-    let payload = get_updatesubnetpayload_with_keys(
+    let payload = get_update_subnet_payload_with_keys(
         app_subnet_id,
         Some(vec![readonly_public_key]),
         Some(vec![backup_public_key]),
     );
     block_on(update_subnet_record(nns_node.get_public_url(), payload));
-    let payload = get_setsubnetoperationallevelpayload_with_keys(
+    let payload = get_set_subnet_operational_level_payload_with_keys(
         Some(app_subnet_id),
         None,
         Some(vec![(app_node.node_id, vec![recovery_public_key])]),

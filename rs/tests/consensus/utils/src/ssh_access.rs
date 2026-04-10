@@ -182,7 +182,7 @@ pub fn disable_ssh_access_to_node(
     Ok(session)
 }
 
-pub fn get_updatesubnetpayload_with_keys(
+pub fn get_update_subnet_payload_with_keys(
     subnet_id: SubnetId,
     readonly_keys: Option<Vec<String>>,
     backup_keys: Option<Vec<String>>,
@@ -243,7 +243,7 @@ pub async fn fail_to_update_subnet_record(nns_url: Url, payload: UpdateSubnetPay
     vote_execute_proposal_assert_failed(&gov_can, proposal_id, "too long").await;
 }
 
-pub fn get_updatesshreadonlyaccesskeyspayload(
+pub fn get_update_ssh_readonly_access_keys_payload(
     readonly_keys: Vec<String>,
 ) -> UpdateSshReadOnlyAccessForAllUnassignedNodesPayload {
     UpdateSshReadOnlyAccessForAllUnassignedNodesPayload {
@@ -285,7 +285,7 @@ pub async fn fail_updating_ssh_keys_for_all_unassigned_nodes(
     vote_execute_proposal_assert_failed(&gov_can, proposal_id, "too long").await;
 }
 
-pub fn get_setsubnetoperationallevelpayload_with_keys(
+pub fn get_set_subnet_operational_level_payload_with_keys(
     subnet_id: Option<SubnetId>,
     readonly_keys: Option<Vec<String>>,
     state_write_access: Option<Vec<(NodeId, Vec<String>)>>,
