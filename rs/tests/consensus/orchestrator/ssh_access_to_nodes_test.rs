@@ -23,7 +23,7 @@ use ic_consensus_system_test_utils::{
         fail_to_set_subnet_operational_level, fail_to_update_subnet_record,
         fail_updating_ssh_keys_for_all_unassigned_nodes, generate_key_strings,
         get_set_subnet_operational_level_payload_with_keys,
-        get_update_ssh_readonly_access_keys_payload, get_update_subnet_payload_with_keys,
+        get_update_ssh_keys_for_all_unassigned_nodes_payload, get_update_subnet_payload_with_keys,
         set_subnet_operational_level, update_ssh_keys_for_all_unassigned_nodes,
         update_subnet_record, wait_until_authentication_fails,
         wait_until_authentication_is_granted,
@@ -287,7 +287,7 @@ fn keys_for_unassigned_nodes_can_be_updated(env: TestEnv) {
     info!(logger, "Updating the registry with new pairs of keys...");
     let (readonly_mean, readonly_public_key) = generate_key_and_auth_mean();
     let (recovery_mean, recovery_public_key) = generate_key_and_auth_mean();
-    let payload = get_update_ssh_readonly_access_keys_payload(vec![readonly_public_key]);
+    let payload = get_update_ssh_keys_for_all_unassigned_nodes_payload(vec![readonly_public_key]);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         payload,
@@ -318,7 +318,7 @@ fn keys_for_unassigned_nodes_can_be_updated(env: TestEnv) {
     assert_authentication_works(&node_ip, "readonly", &readonly_mean);
 
     // Clear the keys in the registry
-    let no_key_payload = get_update_ssh_readonly_access_keys_payload(vec![]);
+    let no_key_payload = get_update_ssh_keys_for_all_unassigned_nodes_payload(vec![]);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         no_key_payload,
@@ -392,7 +392,7 @@ fn multiple_keys_can_access_one_account_on_unassigned_nodes(env: TestEnv) {
     info!(logger, "Updating the registry with new pairs of keys...");
     let (readonly_means, readonly_public_keys) = generate_keys_and_auth_means(3);
     let (recovery_means, recovery_public_keys) = generate_keys_and_auth_means(3);
-    let payload = get_update_ssh_readonly_access_keys_payload(readonly_public_keys);
+    let payload = get_update_ssh_keys_for_all_unassigned_nodes_payload(readonly_public_keys);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         payload,
@@ -550,7 +550,7 @@ fn can_add_max_number_of_keys(env: TestEnv) {
 
     // Also do that for unassigned nodes
     let payload_for_the_unassigned =
-        get_update_ssh_readonly_access_keys_payload(vec![public_key.clone(); 50]);
+        get_update_ssh_keys_for_all_unassigned_nodes_payload(vec![public_key.clone(); 50]);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         payload_for_the_unassigned,
@@ -614,7 +614,10 @@ fn cannot_add_more_than_max_number_of_keys(env: TestEnv) {
 
     // Also do that for unassigned nodes
     let readonly_payload_for_the_unassigned =
-        get_update_ssh_readonly_access_keys_payload(vec![public_key.clone(); MAX_NUM_SSH_KEYS + 1]);
+        get_update_ssh_keys_for_all_unassigned_nodes_payload(vec![
+            public_key.clone();
+            MAX_NUM_SSH_KEYS + 1
+        ]);
     block_on(fail_updating_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         readonly_payload_for_the_unassigned,
@@ -666,7 +669,7 @@ fn node_does_not_remove_keys_on_restart(env: TestEnv) {
     ));
 
     info!(logger, "Updating unassigned nodes record...");
-    let payload = get_update_ssh_readonly_access_keys_payload(vec![readonly_public_key]);
+    let payload = get_update_ssh_keys_for_all_unassigned_nodes_payload(vec![readonly_public_key]);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         payload,

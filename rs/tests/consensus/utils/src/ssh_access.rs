@@ -243,7 +243,7 @@ pub async fn fail_to_update_subnet_record(nns_url: Url, payload: UpdateSubnetPay
     vote_execute_proposal_assert_failed(&gov_can, proposal_id, "too long").await;
 }
 
-pub fn get_update_ssh_readonly_access_keys_payload(
+pub fn get_update_ssh_keys_for_all_unassigned_nodes_payload(
     readonly_keys: Vec<String>,
 ) -> UpdateSshReadOnlyAccessForAllUnassignedNodesPayload {
     UpdateSshReadOnlyAccessForAllUnassignedNodesPayload {
