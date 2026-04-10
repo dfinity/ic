@@ -1,3 +1,22 @@
+// Some Conventions
+// ================
+//
+// One of the patterns you might notice here is pairs of super similar types. In
+// fact, it might be hard to spot the difference(s)! One type will be named
+// something like Widget, while the other is named WidgetRequest. Depending on
+// where you come from, WidgetRequest is a misnomer, because it does not imply
+// that the Governance canister has a method named widget (whose argument is of
+// type WidgetRequest). Rather, what's really going on in such cases is this:
+// Widget is nested (deeply) within responses, while WidgetRequest is nested
+// (deeply) within requests. The reason for split is usually that WidgetRequest
+// contains some large blob, such as a wasm, while Widget only has the hash of
+// that blob. So yes, they are super similar to one another, but they are NOT
+// interchangeable!  In some cases, the large blob is buried deep within the
+// type), and so, it is not obvious why the pair of types exists. Nevertheless,
+// even in such cases, this request vs. response distinction is still
+// needed. This is, of course, pretty confusing and unfortunate; it came about
+// exactly as you would imagine: it growed organically. Sigh.
+
 #![allow(clippy::all)]
 use candid::{Int, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
@@ -669,6 +688,8 @@ pub mod proposal {
         TakeCanisterSnapshot(super::TakeCanisterSnapshot),
         /// Load a canister snapshot.
         LoadCanisterSnapshot(super::LoadCanisterSnapshot),
+        /// Create a canister in a (possibly non-NNS) subnet and install code into it.
+        CreateCanisterAndInstallCode(super::CreateCanisterAndInstallCode),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -1429,6 +1450,7 @@ pub enum ProposalActionRequest {
     BlessAlternativeGuestOsVersion(BlessAlternativeGuestOsVersion),
     TakeCanisterSnapshot(TakeCanisterSnapshot),
     LoadCanisterSnapshot(LoadCanisterSnapshot),
+    CreateCanisterAndInstallCode(CreateCanisterAndInstallCodeRequest),
 }
 
 #[derive(
@@ -2567,6 +2589,9 @@ pub mod install_code {
 pub struct InstallCodeRequest {
     pub canister_id: ::core::option::Option<PrincipalId>,
     pub install_mode: ::core::option::Option<i32>,
+    // If we add support for chunked WASMs later, the WasmModule type should
+    // probably be used in place of this field in order to be consistent with
+    // CreateCanisterAndInstallCodeRequest.
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub wasm_module: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
@@ -2635,10 +2660,27 @@ pub struct UpdateCanisterSettings {
     /// The target canister ID to call update_settings on. Required.
     pub canister_id: Option<PrincipalId>,
     /// The settings to update. Required.
-    pub settings: Option<update_canister_settings::CanisterSettings>,
+    pub settings: Option<CanisterSettings>,
 }
-/// Nested message and enum types in `UpdateCanisterSettings`.
-pub mod update_canister_settings {
+
+/// The CanisterSettings struct as defined in the ic-interface-spec
+/// <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid.>
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct CanisterSettings {
+    pub controllers: Option<canister_settings::Controllers>,
+    pub compute_allocation: Option<u64>,
+    pub memory_allocation: Option<u64>,
+    pub freezing_threshold: Option<u64>,
+    pub log_visibility: Option<i32>,
+    pub snapshot_visibility: Option<i32>,
+    pub wasm_memory_limit: Option<u64>,
+    pub wasm_memory_threshold: Option<u64>,
+}
+
+/// Nested message and enum types in `CanisterSettings`.
+pub mod canister_settings {
     use super::*;
 
     /// The controllers of the canister. We use a message to wrap the repeated field because prost does
@@ -2650,21 +2692,7 @@ pub mod update_canister_settings {
         /// The controllers of the canister.
         pub controllers: Vec<PrincipalId>,
     }
-    /// The CanisterSettings struct as defined in the ic-interface-spec
-    /// <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid.>
-    #[derive(
-        candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
-    )]
-    pub struct CanisterSettings {
-        pub controllers: Option<Controllers>,
-        pub compute_allocation: Option<u64>,
-        pub memory_allocation: Option<u64>,
-        pub freezing_threshold: Option<u64>,
-        pub log_visibility: Option<i32>,
-        pub wasm_memory_limit: Option<u64>,
-        pub wasm_memory_threshold: Option<u64>,
-        pub snapshot_visibility: Option<i32>,
-    }
+
     /// Log visibility of a canister.
     #[derive(
         candid::CandidType,
@@ -2810,6 +2838,48 @@ pub struct LoadCanisterSnapshot {
     /// The ID of the snapshot to load.
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub snapshot_id: Option<Vec<u8>>,
+}
+
+/// A WASM module. Currently only supports inlined WASMs.
+/// This type is only used in requests (proposal submission), not in responses.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug)]
+pub enum WasmModule {
+    Inlined(Vec<u8>),
+}
+
+/// Create a canister in a (possibly non-NNS) subnet and install code into it.
+/// This is the response type: only hashes are included, not the full WASM or install_arg.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct CreateCanisterAndInstallCode {
+    /// The subnet where the canister will be created.
+    pub host_subnet_id: Option<PrincipalId>,
+    /// Settings for the new canister.
+    pub canister_settings: Option<CanisterSettings>,
+    /// Derived from the WASM content in the proposal. Cached to speed up
+    /// responses by avoiding re-calculation.
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub wasm_module_hash: Option<Vec<u8>>,
+    /// Derived from the install_arg in the proposal. Cached to speed up
+    /// responses by avoiding re-calculation.
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub install_arg_hash: Option<Vec<u8>>,
+}
+
+/// Create a canister in a (possibly non-NNS) subnet and install code into it.
+/// This is the submission type: includes the full WASM and install_arg.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug)]
+pub struct CreateCanisterAndInstallCodeRequest {
+    /// The subnet where the canister will be created.
+    pub host_subnet_id: Option<PrincipalId>,
+    /// Settings for the new canister.
+    pub canister_settings: Option<CanisterSettings>,
+    /// The WASM module to install.
+    pub wasm_module: Option<WasmModule>,
+    /// The argument to pass to the canister's install handler.
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub install_arg: Option<Vec<u8>>,
 }
 
 /// This represents the whole NNS governance system. It contains all

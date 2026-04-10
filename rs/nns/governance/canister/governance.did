@@ -24,6 +24,7 @@ type Action = variant {
   BlessAlternativeGuestOsVersion : BlessAlternativeGuestOsVersion;
   TakeCanisterSnapshot : TakeCanisterSnapshot;
   LoadCanisterSnapshot : LoadCanisterSnapshot;
+  CreateCanisterAndInstallCode : CreateCanisterAndInstallCode;
 };
 
 type AddHotKey = record {
@@ -232,6 +233,20 @@ type Countries = record {
   iso_codes : vec text;
 };
 
+type CreateCanisterAndInstallCode = record {
+  host_subnet_id : opt principal;
+  canister_settings : opt CanisterSettings;
+  wasm_module_hash : opt blob;
+  install_arg_hash : opt blob;
+};
+
+type CreateCanisterAndInstallCodeRequest = record {
+  host_subnet_id : opt principal;
+  canister_settings : opt CanisterSettings;
+  wasm_module : opt WasmModule;
+  install_arg : opt blob;
+};
+
 type CreateServiceNervousSystem = record {
   url : opt text;
   governance_parameters : opt GovernanceParameters;
@@ -436,6 +451,9 @@ type InstallCode = record {
 
 type InstallCodeRequest = record {
   arg : opt blob;
+  // If we add support for chunked WASMs later, the WasmModule type should
+  // probably be used in place of this field in order to be consistent with
+  // CreateCanisterAndInstallCodeRequest.
   wasm_module : opt blob;
   skip_stopping_before_installing : opt bool;
   canister_id : opt principal;
@@ -1051,6 +1069,7 @@ type ProposalActionRequest = variant {
   BlessAlternativeGuestOsVersion : BlessAlternativeGuestOsVersion;
   TakeCanisterSnapshot : TakeCanisterSnapshot;
   LoadCanisterSnapshot : LoadCanisterSnapshot;
+  CreateCanisterAndInstallCode : CreateCanisterAndInstallCodeRequest;
 };
 
 // Creates a rented subnet from a rental request (in the Subnet Rental
@@ -1411,6 +1430,10 @@ type VotingRewardParameters = record {
 
 type CustomProposalCriticality = record {
   additional_critical_native_action_ids : opt vec nat64;
+};
+
+type WasmModule = variant {
+  Inlined : blob;
 };
 
 type WaitForQuietState = record {

@@ -462,6 +462,9 @@ impl From<api::proposal::Action> for pb::proposal::Action {
             api::proposal::Action::LoadCanisterSnapshot(v) => {
                 pb::proposal::Action::LoadCanisterSnapshot(v.into())
             }
+            api::proposal::Action::CreateCanisterAndInstallCode(v) => {
+                pb::proposal::Action::CreateCanisterAndInstallCode(v.into())
+            }
         }
     }
 }
@@ -519,6 +522,9 @@ impl From<api::ProposalActionRequest> for pb::proposal::Action {
             }
             api::ProposalActionRequest::LoadCanisterSnapshot(v) => {
                 pb::proposal::Action::LoadCanisterSnapshot(v.into())
+            }
+            api::ProposalActionRequest::CreateCanisterAndInstallCode(v) => {
+                pb::proposal::Action::CreateCanisterAndInstallCode(v.into())
             }
         }
     }
@@ -2749,10 +2755,8 @@ impl From<api::LoadCanisterSnapshot> for pb::LoadCanisterSnapshot {
     }
 }
 
-impl From<pb::update_canister_settings::CanisterSettings>
-    for api::update_canister_settings::CanisterSettings
-{
-    fn from(item: pb::update_canister_settings::CanisterSettings) -> Self {
+impl From<pb::CanisterSettings> for api::CanisterSettings {
+    fn from(item: pb::CanisterSettings) -> Self {
         Self {
             controllers: item.controllers.map(|x| x.into()),
             compute_allocation: item.compute_allocation,
@@ -2766,10 +2770,8 @@ impl From<pb::update_canister_settings::CanisterSettings>
     }
 }
 
-impl From<api::update_canister_settings::CanisterSettings>
-    for pb::update_canister_settings::CanisterSettings
-{
-    fn from(item: api::update_canister_settings::CanisterSettings) -> Self {
+impl From<api::CanisterSettings> for pb::CanisterSettings {
+    fn from(item: api::CanisterSettings) -> Self {
         Self {
             controllers: item.controllers.map(|x| x.into()),
             compute_allocation: item.compute_allocation,
@@ -2783,58 +2785,107 @@ impl From<api::update_canister_settings::CanisterSettings>
     }
 }
 
-impl From<pb::update_canister_settings::Controllers>
-    for api::update_canister_settings::Controllers
-{
-    fn from(item: pb::update_canister_settings::Controllers) -> Self {
+impl From<pb::canister_settings::Controllers> for api::canister_settings::Controllers {
+    fn from(item: pb::canister_settings::Controllers) -> Self {
         Self {
             controllers: item.controllers,
         }
     }
 }
 
-impl From<api::update_canister_settings::Controllers>
-    for pb::update_canister_settings::Controllers
-{
-    fn from(item: api::update_canister_settings::Controllers) -> Self {
+impl From<api::canister_settings::Controllers> for pb::canister_settings::Controllers {
+    fn from(item: api::canister_settings::Controllers) -> Self {
         Self {
             controllers: item.controllers,
         }
     }
 }
 
-impl From<pb::update_canister_settings::LogVisibility>
-    for api::update_canister_settings::LogVisibility
-{
-    fn from(item: pb::update_canister_settings::LogVisibility) -> Self {
+impl From<pb::canister_settings::LogVisibility> for api::canister_settings::LogVisibility {
+    fn from(item: pb::canister_settings::LogVisibility) -> Self {
         match item {
-            pb::update_canister_settings::LogVisibility::Unspecified => {
-                api::update_canister_settings::LogVisibility::Unspecified
+            pb::canister_settings::LogVisibility::Unspecified => {
+                api::canister_settings::LogVisibility::Unspecified
             }
-            pb::update_canister_settings::LogVisibility::Controllers => {
-                api::update_canister_settings::LogVisibility::Controllers
+            pb::canister_settings::LogVisibility::Controllers => {
+                api::canister_settings::LogVisibility::Controllers
             }
-            pb::update_canister_settings::LogVisibility::Public => {
-                api::update_canister_settings::LogVisibility::Public
+            pb::canister_settings::LogVisibility::Public => {
+                api::canister_settings::LogVisibility::Public
             }
         }
     }
 }
 
-impl From<api::update_canister_settings::LogVisibility>
-    for pb::update_canister_settings::LogVisibility
-{
-    fn from(item: api::update_canister_settings::LogVisibility) -> Self {
+impl From<api::canister_settings::LogVisibility> for pb::canister_settings::LogVisibility {
+    fn from(item: api::canister_settings::LogVisibility) -> Self {
         match item {
-            api::update_canister_settings::LogVisibility::Unspecified => {
-                pb::update_canister_settings::LogVisibility::Unspecified
+            api::canister_settings::LogVisibility::Unspecified => {
+                pb::canister_settings::LogVisibility::Unspecified
             }
-            api::update_canister_settings::LogVisibility::Controllers => {
-                pb::update_canister_settings::LogVisibility::Controllers
+            api::canister_settings::LogVisibility::Controllers => {
+                pb::canister_settings::LogVisibility::Controllers
             }
-            api::update_canister_settings::LogVisibility::Public => {
-                pb::update_canister_settings::LogVisibility::Public
+            api::canister_settings::LogVisibility::Public => {
+                pb::canister_settings::LogVisibility::Public
             }
+        }
+    }
+}
+
+// The api type here (the conversion destination) is a response type (per the
+// Widget (response) vs. WidgetRequest convention described at the top of
+// api/src/types.rs), and thus, it doesn't have the whole wasm (nor install arg),
+// but rather, just the hashes of those.
+impl From<pb::CreateCanisterAndInstallCode> for api::CreateCanisterAndInstallCode {
+    fn from(item: pb::CreateCanisterAndInstallCode) -> Self {
+        Self {
+            host_subnet_id: item.host_subnet_id,
+            canister_settings: item.canister_settings.map(|x| x.into()),
+            wasm_module_hash: item.wasm_module.as_ref().and_then(|w| w.hash.clone()),
+            install_arg_hash: item.install_arg_hash,
+        }
+    }
+}
+
+// Only used during canister_init (see InstallCode for the same pattern).
+impl From<api::CreateCanisterAndInstallCode> for pb::CreateCanisterAndInstallCode {
+    fn from(item: api::CreateCanisterAndInstallCode) -> Self {
+        Self {
+            host_subnet_id: item.host_subnet_id,
+            canister_settings: item.canister_settings.map(|x| x.into()),
+            install_arg_hash: item.install_arg_hash,
+
+            // The api version of this type does not have these. Really,
+            // this conversion should just explode, since it is impossible
+            // to do correctly, but quietly letting errors happen in these
+            // cases was an existing pattern, and we just carry on that
+            // (bad) tradition here. It wouldn't cause a problem in
+            // in production, since canister_init would never again
+            // be called in production, since the Governance canister
+            // already exists, and there would only be one of them.
+            wasm_module: None,
+            install_arg: None,
+        }
+    }
+}
+
+// Used when submitting a proposal.
+impl From<api::CreateCanisterAndInstallCodeRequest> for pb::CreateCanisterAndInstallCode {
+    fn from(item: api::CreateCanisterAndInstallCodeRequest) -> Self {
+        let install_arg_hash = item
+            .install_arg
+            .as_ref()
+            .map(|arg| Sha256::hash(arg).to_vec());
+
+        let wasm_module = item.wasm_module.map(pb::WasmModule::from);
+
+        Self {
+            host_subnet_id: item.host_subnet_id,
+            canister_settings: item.canister_settings.map(|x| x.into()),
+            wasm_module,
+            install_arg: item.install_arg,
+            install_arg_hash,
         }
     }
 }
