@@ -376,6 +376,8 @@ pub(crate) fn find_flexible_result(
                 (accumulated_size + ok_responses_size + response_with_proof_size) as u64,
             );
             if new_total >= max_payload_size {
+                // We `continue` rather than `break` here, to further populate
+                // the Vec later used to detect ResponsesTooLarge errors.
                 continue;
             }
             ok_responses_size += response_with_proof_size;
