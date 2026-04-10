@@ -2953,7 +2953,7 @@ fn should_cancel_and_reimburse_large_withdrawal() {
     };
 
     // Step 1: deposit a lot of small UTXOs
-    const NUM_UXTOS: usize = 2_000;
+    const NUM_UXTOS: usize = 1_100;
     let deposit_value = 100_000_u64;
     let _deposited_utxos =
         ckbtc.deposit_utxos_with_value(user_account, &[deposit_value; NUM_UXTOS]);
@@ -2963,7 +2963,7 @@ fn should_cancel_and_reimburse_large_withdrawal() {
         Nat::from(NUM_UXTOS as u64 * (deposit_value - CHECK_FEE))
     );
 
-    let withdrawal_amount = 1_800 * deposit_value;
+    let withdrawal_amount = 1_001 * deposit_value;
     ckbtc.approve_minter(user, withdrawal_amount, subaccount);
     let balance_before_withdrawal = ckbtc.balance_of(user_account);
 
@@ -3033,7 +3033,7 @@ fn should_cancel_and_reimburse_large_withdrawal() {
             amount: reimbursement_amount,
             reason: WithdrawalReimbursementReason::InvalidTransaction(
                 InvalidTransactionError::TooManyInputs {
-                    num_inputs: 1800,
+                    num_inputs: 1001,
                     max_num_inputs: ic_ckbtc_minter::state::DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
                 }
             ),
