@@ -105,6 +105,11 @@ The `ic_crypto_iccsa` crate implements canister signature verification.
 - **AND** the root of trust (root subnet public key) is used to verify the tree's root hash
 - **AND** the canister's certified data is checked against the public key's embedded canister ID and seed
 
+#### Scenario: Additional root of trust for canister signatures
+- **WHEN** `RootOfTrustProvider::additional_root_of_trust()` returns a secondary root public key
+- **THEN** canister signature verification also accepts certificates signed under the additional root
+- **AND** this enables test environments (e.g., PocketIC) to validate mainnet canister signatures
+
 ### Requirement: Crypto Utility Crates
 
 #### Scenario: Basic signature utilities (ic_crypto_utils_basic_sig)

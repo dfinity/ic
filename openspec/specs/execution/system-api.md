@@ -17,6 +17,16 @@ Canisters interact with incoming and outgoing messages via the System API.
 - **WHEN** a canister calls `ic0.msg_caller_size` and `ic0.msg_caller_copy`
 - **THEN** the principal ID of the message sender is returned
 
+#### Scenario: Get caller sender info
+- **WHEN** a canister calls `ic0.msg_caller_info_data_size` and `ic0.msg_caller_info_data_copy`
+- **THEN** the size and contents of the sender's certified identity attributes are returned
+- **AND** this is available in Update, ReplicatedQuery, NonReplicatedQuery, CompositeQuery, ReplyCallback, and InspectMessage contexts
+
+#### Scenario: Get caller sender info signer
+- **WHEN** a canister calls `ic0.msg_caller_info_signer_size` and `ic0.msg_caller_info_signer_copy`
+- **THEN** the size and contents of the sender info signer principal are returned
+- **AND** these functions are available in the same contexts as the data variants
+
 #### Scenario: Reply to a message
 - **WHEN** a canister calls `ic0.msg_reply_data_append` followed by `ic0.msg_reply`
 - **THEN** the accumulated reply data is sent as a response

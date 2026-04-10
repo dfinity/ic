@@ -96,3 +96,18 @@ The XNet payload builder constructs and validates cross-subnet message payloads 
 - **WHEN** constructing a payload for a system subnet
 - **THEN** the stream message limit is `SYSTEM_SUBNET_STREAM_MSG_LIMIT`
 - **AND** for application subnets, the limit is `MAX_STREAM_MESSAGES`
+
+#### Scenario: CloudEngine subnet XNet isolation
+- **WHEN** the payload builder constructs a payload for a non-CloudEngine subnet
+- **THEN** stream slices from CloudEngine subnets are filtered out
+- **AND** CloudEngine subnets do not appear in the list of remote subnets to query
+
+#### Scenario: CloudEngine subnet self-only XNet
+- **WHEN** the payload builder constructs a payload for a CloudEngine subnet
+- **THEN** only stream slices from the same CloudEngine subnet (self-to-self) are included
+- **AND** slices from non-engine subnets and other engine subnets are excluded
+
+#### Scenario: CloudEngine empty payload behavior
+- **WHEN** a CloudEngine subnet has no self-directed XNet streams
+- **THEN** the payload builder produces an empty XNet payload
+- **AND** the validator accepts empty payloads for CloudEngine subnets

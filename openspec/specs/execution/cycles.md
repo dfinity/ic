@@ -91,6 +91,7 @@ Sending messages between canisters costs cycles.
 - **WHEN** a canister sends an inter-canister request
 - **THEN** cycles are charged for the call: `xnet_call_fee + xnet_byte_transmission_fee * payload_size`
 - **AND** cycles for the maximum response size are also reserved
+- **AND** both the call fee and max response reservation are scaled by the actual subnet size (from registry), not a fixed reference size
 
 #### Scenario: Response transmission refund
 - **WHEN** a response is received that is smaller than the maximum reserved size

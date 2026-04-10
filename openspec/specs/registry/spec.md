@@ -106,6 +106,12 @@ Before any mutation is applied, the registry validates that the resulting state 
 - **AND** System subnets are not allowed to have a free cycles cost schedule
 - **AND** if a non-Application, non-CloudEngine subnet attempts to use the free schedule, the invariant check fails
 
+#### Scenario: CloudEngine node reward type invariants
+- **WHEN** the registry state is validated
+- **THEN** all nodes assigned to a CloudEngine subnet must have node reward type `type4`
+- **AND** non-CloudEngine subnets must NOT contain any `type4` nodes
+- **AND** this invariant ensures CloudEngine resource isolation
+
 #### Scenario: Replica version invariants
 - **WHEN** the registry state is validated
 - **THEN** all referenced replica versions exist in the blessed versions list
@@ -434,6 +440,34 @@ Canister migration is a multi-step process: prepare (register migration intent),
 #### Scenario: Rollback canister migration
 - **WHEN** a reroute is submitted with a destination-to-source trace
 - **THEN** the rerouting is allowed as a rollback of the migration
+
+### Requirement: Subnet Splitting
+
+Subnet splitting creates a new subnet by splitting an existing subnet's canister ranges and membership.
+
+#### Scenario: Split subnet operation
+- **WHEN** a `split_subnet` registry mutation is submitted
+- **THEN** a new subnet record is created with the specified node membership
+- **AND** the routing table is updated to reroute the specified canister ranges to the new subnet
+- **AND** a new CUP (Catch-Up Package) is created for the new subnet
+- **AND** the operation is atomic: all mutations succeed or none are applied
+
+#### Scenario: Split subnet invariant validation
+- **WHEN** a subnet split is processed
+- **THEN** the source subnet must exist and be well-formed
+- **AND** the specified canister ranges must be hosted by the source subnet
+- **AND** the split must not violate routing table invariants
+
+### Requirement: Engine Deletion
+
+CloudEngine subnets can be deleted, cascading registry cleanup.
+
+#### Scenario: Delete engine subnet
+- **WHEN** an engine deletion is requested
+- **THEN** the subnet record is removed from the registry
+- **AND** associated node assignments are cleaned up
+- **AND** routing table entries for the engine are removed
+- **AND** the deletion must not leave orphaned references in the registry
 
 ### Requirement: Firewall Rules Management
 

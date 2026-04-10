@@ -15,6 +15,16 @@ The `CanisterSigVerifier` trait verifies Internet Computer Canister Signature Al
 - **WHEN** `verify_canister_sig` is called with a public key whose algorithm is not `IcCanisterSignature`
 - **THEN** a `CryptoError::AlgorithmNotSupported` is returned
 
+#### Scenario: Reject canister signature from untrusted subnet type
+- **WHEN** `verify_canister_sig` is called with a signature whose delegation certificate originates from a CloudEngine subnet
+- **THEN** a `CertificateValidationError::UntrustedDelegationSubnet` error is returned
+- **AND** the signature is rejected regardless of cryptographic validity
+
+#### Scenario: Canister signature verified with cached delegation
+- **WHEN** `verify_certified_data_with_cache_for_canister_sig` is called
+- **THEN** the BLS signature verification result may be served from cache
+- **AND** the subnet type check is always performed (not cached)
+
 ### Requirement: Threshold ECDSA Signing
 The `ThresholdEcdsaSigner` trait creates ECDSA signature shares using canister threshold signature protocols. Supports secp256k1 (K-256) and P-256 curves.
 

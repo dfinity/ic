@@ -155,6 +155,11 @@ Modified memory pages are tracked for state persistence.
 - **THEN** additional instructions are charged: `dirty_page_count * dirty_page_overhead`
 - **AND** this overhead is added to the total instructions used by the execution
 
+#### Scenario: Accessed page overhead charging
+- **WHEN** pages are accessed (read or written) during execution
+- **THEN** additional instructions are charged: `accessed_page_count * accessed_page_overhead`
+- **AND** this overhead is added alongside the dirty page overhead to the total instructions used
+
 #### Scenario: Heap delta accumulation
 - **WHEN** execution produces dirty pages
 - **THEN** the canister's heap delta increases by the number of dirty pages * page size

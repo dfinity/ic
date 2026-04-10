@@ -71,7 +71,7 @@ Composite queries can make inter-canister query calls within the non-replicated 
 Query results are cached to improve performance for repeated identical queries.
 
 #### Scenario: Cache hit
-- **WHEN** a query is received with the same canister ID, method name, payload, and caller
+- **WHEN** a query is received with the same canister ID, method name, payload, caller, and sender info
 - **AND** the cached entry is still valid (canister version unchanged, time within bounds, balance unchanged)
 - **THEN** the cached result is returned without re-executing the query
 
