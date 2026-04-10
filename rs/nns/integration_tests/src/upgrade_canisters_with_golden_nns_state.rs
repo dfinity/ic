@@ -1,9 +1,9 @@
-use candid::{CandidType, Encode, Principal};
+use candid::{CandidType, Decode, Encode, Principal};
 use cycles_minting_canister::CyclesCanisterInitPayload;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
-use ic_nervous_system_common::ONE_MONTH_SECONDS;
+use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
@@ -11,9 +11,13 @@ use ic_nns_constants::{
     NNS_UI_CANISTER_ID, NODE_REWARDS_CANISTER_ID, PROTOCOL_CANISTER_IDS, REGISTRY_CANISTER_ID,
     ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
-use ic_nns_governance_api::{MonthlyNodeProviderRewards, Vote};
+use ic_nns_governance_api::{
+    ExecuteNnsFunction, MakeProposalRequest, MonthlyNodeProviderRewards, NnsFunction,
+    ProposalActionRequest, Vote, manage_neuron_response::Command as CommandResponse,
+};
 use ic_nns_test_utils::state_test_helpers::{
-    nns_get_most_recent_monthly_node_provider_rewards, scrape_metrics,
+    nns_get_most_recent_monthly_node_provider_rewards, nns_governance_make_proposal,
+    nns_wait_for_proposal_execution, query, registry_get_value, scrape_metrics,
 };
 use ic_nns_test_utils::{
     common::modify_wasm_bytes,
@@ -23,14 +27,28 @@ use ic_nns_test_utils::{
     },
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
+use ic_node_rewards_canister_api::DateUtc;
+use ic_node_rewards_canister_api::provider_rewards_calculation::{
+    DailyNodeRewards, DailyResults, GetNodeProvidersRewardsCalculationRequest,
+    GetNodeProvidersRewardsCalculationResponse,
+};
+use ic_protobuf::registry::node_rewards::v2::{
+    NodeRewardRate, NodeRewardRates, NodeRewardsTable, UpdateNodeRewardsTableProposalPayload,
+};
+use ic_registry_keys::NODE_REWARDS_TABLE_KEY;
+use ic_registry_transport::pb::v1::high_capacity_registry_get_value_response::Content;
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::Tokens;
+use maplit::btreemap;
+use prost::Message;
 use serde::Deserialize;
 use std::{
+    collections::BTreeMap,
     env,
     fmt::{Debug, Formatter},
     fs,
     str::FromStr,
+    time::Duration,
 };
 
 struct NnsCanisterUpgrade {
@@ -390,6 +408,404 @@ fn check_canisters_are_all_protocol_canisters(state_machine: &StateMachine) {
             "Canister {canister_id} is in the NNS subnet but not a protocol canister",
         );
     }
+}
+
+fn get_node_rewards_table(state_machine: &StateMachine) -> NodeRewardsTable {
+    let response = registry_get_value(state_machine, NODE_REWARDS_TABLE_KEY.as_bytes());
+    assert!(response.error.is_none(), "Registry error: {:?}", response.error);
+    match response.content.expect("No content in registry response") {
+        Content::Value(bytes) => NodeRewardsTable::decode(bytes.as_slice())
+            .expect("Failed to decode NodeRewardsTable"),
+        Content::LargeValueChunkKeys(_) => panic!("NodeRewardsTable was chunked; not supported here"),
+    }
+}
+
+fn print_node_rewards_table(table: &NodeRewardsTable, label: &str) {
+    println!("\n=== Node Rewards Table ({label}) ===");
+    for (region, reward_rates) in &table.table {
+        for (node_type, rate) in &reward_rates.rates {
+            println!(
+                "  {region} / {node_type}: xdr_permyriad={}, coeff={:?}",
+                rate.xdr_permyriad_per_node_per_month, rate.reward_coefficient_percent,
+            );
+        }
+    }
+    println!("=== End Node Rewards Table ({label}) ===\n");
+}
+
+fn call_get_node_providers_rewards_calculation(
+    state_machine: &StateMachine,
+    day: DateUtc,
+) -> GetNodeProvidersRewardsCalculationResponse {
+    let request = GetNodeProvidersRewardsCalculationRequest {
+        day,
+        algorithm_version: None,
+    };
+    query(
+        state_machine,
+        NODE_REWARDS_CANISTER_ID,
+        "get_node_providers_rewards_calculation",
+        Encode!(&request).unwrap(),
+    )
+    .map(|result| Decode!(&result, GetNodeProvidersRewardsCalculationResponse).unwrap())
+    .unwrap()
+}
+
+fn print_daily_results(results: &DailyResults, label: &str) {
+    println!("\n=== Node Providers Rewards Calculation ({label}) ===");
+    for (provider, provider_rewards) in &results.provider_results {
+        let type1_nodes: Vec<&DailyNodeRewards> = provider_rewards
+            .daily_nodes_rewards
+            .iter()
+            .filter(|n| {
+                n.node_reward_type
+                    .as_deref()
+                    .map_or(false, |t| t.starts_with("type1"))
+            })
+            .collect();
+        if type1_nodes.is_empty() {
+            continue;
+        }
+        println!("  Provider {provider}:");
+        for node in &type1_nodes {
+            println!(
+                "    node={:?} type={:?} region={:?} base_xdr={:?} adjusted_xdr={:?}",
+                node.node_id,
+                node.node_reward_type,
+                node.region,
+                node.base_rewards_xdr_permyriad,
+                node.adjusted_rewards_xdr_permyriad,
+            );
+        }
+    }
+    println!("=== End Rewards Calculation ({label}) ===\n");
+}
+
+fn submit_update_node_rewards_table_proposal(
+    state_machine: &StateMachine,
+    neuron_controller: PrincipalId,
+    neuron_id: NeuronId,
+    payload: UpdateNodeRewardsTableProposalPayload,
+) {
+    let response = nns_governance_make_proposal(
+        state_machine,
+        neuron_controller,
+        neuron_id,
+        &MakeProposalRequest {
+            title: Some("Update node rewards table".to_string()),
+            summary: "Test: update node rewards table values".to_string(),
+            action: Some(ProposalActionRequest::ExecuteNnsFunction(
+                ExecuteNnsFunction {
+                    nns_function: NnsFunction::UpdateNodeRewardsTable as i32,
+                    payload: Encode!(&payload).unwrap(),
+                },
+            )),
+            ..Default::default()
+        },
+    );
+
+    let proposal_id = match response.command.unwrap() {
+        CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
+        other => panic!("Unexpected response: {other:?}"),
+    };
+
+    vote_yes_with_well_known_public_neurons(state_machine, proposal_id.id);
+    nns_wait_for_proposal_execution(state_machine, proposal_id.id);
+}
+
+/// Simulates the execution of a real proposal to reduce Gen-1 node rewards (type1.1)
+/// by 40% across multiple regions. Prints the full node rewards table before and after,
+/// and verifies the affected entries match the expected new values.
+#[test]
+fn test_print_and_update_node_rewards_table() {
+    let state_machine = new_state_machine_with_golden_nns_state_or_panic();
+
+    let neuron_controller = PrincipalId::new_self_authenticating(&[1, 2, 3, 4]);
+    let neuron_id = nns_create_super_powerful_neuron(
+        &state_machine,
+        neuron_controller,
+        Tokens::from_tokens(100_000_000).unwrap(),
+    );
+
+    // 0. Upgrade the node-rewards canister to the test WASM.
+    //    The test WASM simulates management canister calls for blockmaker statistics,
+    //    which are not available in state_machine tests (only NNS subnet is present).
+    {
+        let nrc = NnsCanisterUpgrade::new("node-rewards");
+        println!("Upgrading node-rewards canister to test WASM...");
+        let proposal_id = nns_propose_upgrade_nns_canister(
+            &state_machine,
+            neuron_controller,
+            neuron_id,
+            nrc.canister_id,
+            nrc.wasm_content.clone(),
+            nrc.module_arg.clone(),
+        );
+        vote_yes_with_well_known_public_neurons(&state_machine, proposal_id.id);
+        wait_for_canister_upgrade_to_succeed(
+            &state_machine,
+            nrc.canister_id,
+            &nrc.wasm_hash,
+            nrc.controller_principal_id(),
+            true,
+        );
+        println!("Node-rewards canister upgraded successfully.");
+    }
+
+    // 1. Print the registry rewards table before the proposal.
+    let table_before = get_node_rewards_table(&state_machine);
+    print_node_rewards_table(&table_before, "BEFORE proposal");
+
+    // 1b. Call get_node_providers_rewards_calculation BEFORE the proposal.
+    let yesterday_secs =
+        state_machine.get_time().as_secs_since_unix_epoch() - ONE_DAY_SECONDS;
+    let query_day = DateUtc::from_unix_timestamp_seconds(yesterday_secs);
+    println!("Querying NRC for rewards calculation on {query_day} (before proposal)...");
+    let nrc_before = call_get_node_providers_rewards_calculation(&state_machine, query_day);
+    match &nrc_before {
+        Ok(results) => print_daily_results(results, "BEFORE proposal"),
+        Err(e) => println!("NRC query before proposal returned error: {e}"),
+    }
+
+    // 2. Build the exact payload from the proposal:
+    //    "Adjust Gen-1 node rewards: reduce XDR permyriad rates for type1.1 by 40%"
+    let type1_1 = "type1.1".to_string();
+    let coeff_100 = Some(100);
+
+    let update_payload = UpdateNodeRewardsTableProposalPayload {
+        new_entries: btreemap! {
+            "Asia,JP".to_string() => NodeRewardRates {
+                rates: btreemap! {
+                    type1_1.clone() => NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: 7_128_000,
+                        reward_coefficient_percent: coeff_100,
+                    },
+                },
+            },
+            "Asia,SG".to_string() => NodeRewardRates {
+                rates: btreemap! {
+                    type1_1.clone() => NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: 7_404_000,
+                        reward_coefficient_percent: coeff_100,
+                    },
+                },
+            },
+            "Europe".to_string() => NodeRewardRates {
+                rates: btreemap! {
+                    type1_1.clone() => NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: 6_366_000,
+                        reward_coefficient_percent: coeff_100,
+                    },
+                },
+            },
+            "Europe,CH".to_string() => NodeRewardRates {
+                rates: btreemap! {
+                    type1_1.clone() => NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: 6_816_000,
+                        reward_coefficient_percent: coeff_100,
+                    },
+                },
+            },
+            "Europe,IM".to_string() => NodeRewardRates {
+                rates: btreemap! {
+                    type1_1.clone() => NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: 8_142_000,
+                        reward_coefficient_percent: coeff_100,
+                    },
+                },
+            },
+            "Europe,SI".to_string() => NodeRewardRates {
+                rates: btreemap! {
+                    type1_1.clone() => NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: 6_912_000,
+                        reward_coefficient_percent: coeff_100,
+                    },
+                },
+            },
+            "North America,CA".to_string() => NodeRewardRates {
+                rates: btreemap! {
+                    type1_1.clone() => NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: 6_528_000,
+                        reward_coefficient_percent: coeff_100,
+                    },
+                },
+            },
+            "North America,US".to_string() => NodeRewardRates {
+                rates: btreemap! {
+                    type1_1.clone() => NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: 6_024_000,
+                        reward_coefficient_percent: coeff_100,
+                    },
+                },
+            },
+            "North America,US,California".to_string() => NodeRewardRates {
+                rates: btreemap! {
+                    type1_1.clone() => NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: 6_432_000,
+                        reward_coefficient_percent: coeff_100,
+                    },
+                },
+            },
+            "North America,US,Florida".to_string() => NodeRewardRates {
+                rates: btreemap! {
+                    type1_1.clone() => NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: 6_432_000,
+                        reward_coefficient_percent: coeff_100,
+                    },
+                },
+            },
+            "North America,US,Georgia".to_string() => NodeRewardRates {
+                rates: btreemap! {
+                    type1_1.clone() => NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: 6_432_000,
+                        reward_coefficient_percent: coeff_100,
+                    },
+                },
+            },
+        },
+    };
+
+    // Record expected values for verification.
+    let expected: BTreeMap<&str, u64> = btreemap! {
+        "Asia,JP" => 7_128_000,
+        "Asia,SG" => 7_404_000,
+        "Europe" => 6_366_000,
+        "Europe,CH" => 6_816_000,
+        "Europe,IM" => 8_142_000,
+        "Europe,SI" => 6_912_000,
+        "North America,CA" => 6_528_000,
+        "North America,US" => 6_024_000,
+        "North America,US,California" => 6_432_000,
+        "North America,US,Florida" => 6_432_000,
+        "North America,US,Georgia" => 6_432_000,
+    };
+
+    println!("Submitting UpdateNodeRewardsTable proposal (Gen-1 -40% reduction)...");
+    submit_update_node_rewards_table_proposal(
+        &state_machine,
+        neuron_controller,
+        neuron_id,
+        update_payload,
+    );
+    println!("Proposal executed successfully.");
+
+    // 3. Print the registry table after the proposal.
+    let table_after = get_node_rewards_table(&state_machine);
+    print_node_rewards_table(&table_after, "AFTER proposal");
+
+    // 3b. Advance 1 day and call get_node_providers_rewards_calculation again.
+    //     The new "yesterday" is the day the proposal took effect, so the NRC
+    //     should pick up the updated registry version with the reduced rewards.
+    println!("Advancing time by 1 day...");
+    state_machine.advance_time(Duration::from_secs(ONE_DAY_SECONDS));
+    for _ in 0..20 {
+        state_machine.tick();
+    }
+
+    let new_yesterday_secs =
+        state_machine.get_time().as_secs_since_unix_epoch() - ONE_DAY_SECONDS;
+    let query_day_after = DateUtc::from_unix_timestamp_seconds(new_yesterday_secs);
+    println!(
+        "Querying NRC for rewards calculation on {query_day_after} (after proposal, day before)..."
+    );
+    let nrc_after =
+        call_get_node_providers_rewards_calculation(&state_machine, query_day_after);
+    match &nrc_after {
+        Ok(results) => print_daily_results(results, "AFTER proposal (day before)"),
+        Err(e) => println!("NRC query after proposal returned error: {e}"),
+    }
+
+    // 3c. Compare type1 base rewards between before and after.
+    if let (Ok(before_results), Ok(after_results)) = (&nrc_before, &nrc_after) {
+        println!("\n=== type1 Rewards Comparison ===");
+        for (provider, after_provider) in &after_results.provider_results {
+            let before_provider = before_results.provider_results.get(provider);
+            for node in &after_provider.daily_nodes_rewards {
+                let is_type1 = node
+                    .node_reward_type
+                    .as_deref()
+                    .map_or(false, |t| t.starts_with("type1"));
+                if !is_type1 {
+                    continue;
+                }
+                let before_base = before_provider.and_then(|bp| {
+                    bp.daily_nodes_rewards
+                        .iter()
+                        .find(|n| n.node_id == node.node_id)
+                        .and_then(|n| n.base_rewards_xdr_permyriad)
+                });
+                println!(
+                    "  node={:?} type={:?} region={:?}: base_before={:?} base_after={:?}",
+                    node.node_id,
+                    node.node_reward_type,
+                    node.region,
+                    before_base,
+                    node.base_rewards_xdr_permyriad,
+                );
+                if let (Some(before_val), Some(after_val)) =
+                    (before_base, node.base_rewards_xdr_permyriad)
+                {
+                    assert!(
+                        after_val < before_val,
+                        "Expected type1 base rewards to decrease: before={before_val}, after={after_val} for node {:?}",
+                        node.node_id,
+                    );
+                }
+            }
+        }
+        println!("=== End type1 Rewards Comparison ===\n");
+    }
+
+    // 4. Verify every updated entry in the registry table.
+    for (region, expected_xdr) in &expected {
+        let region_rates = table_after
+            .table
+            .get(*region)
+            .unwrap_or_else(|| panic!("Region '{region}' missing after update"));
+        let rate = region_rates
+            .rates
+            .get("type1.1")
+            .unwrap_or_else(|| panic!("type1.1 missing in '{region}' after update"));
+
+        assert_eq!(
+            rate.xdr_permyriad_per_node_per_month, *expected_xdr,
+            "Mismatch for {region}/type1.1: expected {expected_xdr}, got {}",
+            rate.xdr_permyriad_per_node_per_month,
+        );
+        assert_eq!(
+            rate.reward_coefficient_percent,
+            Some(100),
+            "Mismatch for {region}/type1.1 coefficient",
+        );
+
+        // Print before vs after for this specific entry.
+        let before_rate = table_before
+            .table
+            .get(*region)
+            .and_then(|r| r.rates.get("type1.1"));
+        println!(
+            "  {region}/type1.1: before={:?} => after={}",
+            before_rate.map(|r| r.xdr_permyriad_per_node_per_month),
+            rate.xdr_permyriad_per_node_per_month,
+        );
+    }
+
+    // 5. Verify regions NOT in the proposal still have their original values.
+    for (region, original_rates) in &table_before.table {
+        if expected.contains_key(region.as_str()) {
+            continue;
+        }
+        let after_rates = table_after
+            .table
+            .get(region)
+            .unwrap_or_else(|| panic!("Region '{region}' disappeared after update"));
+        assert_eq!(
+            original_rates, after_rates,
+            "Region '{region}' was modified but should not have been",
+        );
+    }
+
+    println!("All assertions passed.");
 }
 
 mod sanity_check {
