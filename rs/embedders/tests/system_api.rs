@@ -1445,6 +1445,47 @@ fn call_perform_not_enough_cycles_does_not_trap() {
     assert_eq!(call_context_manager.callbacks().len(), 0);
 }
 
+/// If the canister does not have the requested number of cycles to burn, then
+/// it clamps the amount to the available cycles (minus freeze threshold).
+#[test]
+fn cycles_burn128_clamps_to_available_cycles() {
+    const CYCLE_BALANCE: Cycles = Cycles::new(10);
+    const CYCLES_TO_BURN: Cycles = Cycles::new(100);
+
+    let cycles_account_manager = CyclesAccountManagerBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    let mut system_state = SystemStateBuilder::new()
+        .initial_cycles(CYCLE_BALANCE)
+        .build();
+    let mut api = get_system_api(
+        ApiTypeBuilder::build_update_api(),
+        &system_state,
+        cycles_account_manager,
+    );
+
+    let mut heap = vec![0; 16];
+    api.ic0_cycles_burn128(CYCLES_TO_BURN, 0, &mut heap)
+        .unwrap();
+
+    // Only the available cycle balance is burned.
+    assert_eq!(CYCLE_BALANCE, Cycles::from(&heap));
+
+    // The balance is now zero.
+    let system_state_modifications = api.take_system_state_modifications();
+    system_state_modifications
+        .apply_changes(
+            UNIX_EPOCH,
+            &mut system_state,
+            &default_network_topology(),
+            subnet_test_id(1),
+            false,
+            &no_op_logger(),
+        )
+        .unwrap();
+    assert_eq!(system_state.balance(), Cycles::zero());
+}
+
 #[test]
 fn growing_wasm_memory_updates_subnet_available_memory() {
     let wasm_page_size = 64 << 10;
