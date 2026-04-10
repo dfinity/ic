@@ -1727,6 +1727,9 @@ pub struct ProposalData {
     pub total_potential_voting_power: ::core::option::Option<u64>,
     /// The topic of the proposal.
     pub topic: ::core::option::Option<i32>,
+    /// When an adopted proposal has been executed successfully, this may contain
+    /// a value produced by the execution. This is the dual of failure_reason.
+    pub success_value: Option<SuccessfulProposalExecutionValue>,
 }
 /// This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
 #[derive(
