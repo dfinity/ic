@@ -523,13 +523,18 @@ impl Recovery {
 
     /// Return a [CopyLocalIcStateStep] copying the ic_state of the current
     /// node to the recovery data directory.
-    pub fn get_copy_local_state_step(&self, download_height: Option<u64>) -> impl Step + use<> {
-        CopyLocalIcStateStep {
+    pub fn get_copy_local_state_step(
+        &self,
+        download_height: Option<u64>,
+    ) -> RecoveryResult<impl Step + use<>> {
+        let data_includes = Self::get_ic_state_includes(None, download_height)?;
+
+        Ok(CopyLocalIcStateStep {
             logger: self.logger.clone(),
             working_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
-            download_height,
-        }
+            data_includes,
+        })
     }
 
     /// Return a [ReplayStep] to replay the downloaded state of the given
