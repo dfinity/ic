@@ -896,7 +896,7 @@ fn update_balance_and_consumed_cycles_correctly() {
     );
     assert_eq!(
         system_state.canister_metrics().consumed_cycles(),
-        NominalCycles::new(initial_consumed_cycles.get())
+        prepaid_cycles.nominal()
     );
 
     let refund = CompoundCycles::<Instructions>::new(Cycles::new(100), cost_schedule);
@@ -907,7 +907,7 @@ fn update_balance_and_consumed_cycles_correctly() {
     );
     assert_eq!(
         system_state.canister_metrics().consumed_cycles(),
-        NominalCycles::new((initial_consumed_cycles - refund.real()).get())
+        (prepaid_cycles - refund).nominal()
     );
 }
 
@@ -929,9 +929,9 @@ fn update_balance_and_consumed_cycles_by_use_case_correctly() {
         *system_state
             .canister_metrics()
             .consumed_cycles_by_use_cases()
-            .get(&CyclesUseCase::Memory)
+            .get(&CyclesUseCase::Instructions)
             .unwrap(),
-        NominalCycles::new((cycles_to_consume - refund.real()).get())
+        (prepaid_cycles - refund).nominal()
     );
 }
 
