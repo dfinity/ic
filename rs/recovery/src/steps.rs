@@ -627,11 +627,12 @@ impl Step for UploadStateAndRestartStep {
             let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
             // path of latest checkpoint on upload node
             let copy_from = ic_checkpoints_path.join(
-                Recovery::get_maybe_latest_checkpoint_name_remotely(
+                Recovery::get_maybe_latest_checkpoint_name_and_height_remotely(
                     &ssh_helper,
                     &ic_checkpoints_path,
                 )?
-                .unwrap_or_default(),
+                .unwrap_or_default()
+                .0,
             );
             // path and name of checkpoint after replay
             let copy_to = upload_dir.join(CHECKPOINTS).join(max_checkpoint);

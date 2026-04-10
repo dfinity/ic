@@ -7,7 +7,7 @@
 //! execution.
 use crate::{
     cli::wait_for_confirmation,
-    file_sync_helper::{path_exists, path_exists_remotely, remove_dir},
+    file_sync_helper::{path_exists, remove_dir},
     registry_helper::RegistryHelper,
     ssh_helper::SshHelper,
     util::SshUser,
@@ -91,6 +91,10 @@ pub struct NodeMetrics {
     pub certification_height: Height,
     pub certification_share_height: Height,
     pub manifest_height: Height,
+}
+
+struct MaybeRemote<'a> {
+    ssh_helper: Option<&'a SshHelper>,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
@@ -400,52 +404,34 @@ impl Recovery {
         download_height: Option<u64>,
     ) -> RecoveryResult<Vec<PathBuf>> {
         let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
-        let maybe_latest_checkpoint_name = match (ssh_helper, download_height) {
-            (Some(ssh_helper), Some(height)) => {
-                let name = format!("{:016x}", height);
-                if height == 0 {
-                    None
-                } else if !path_exists_remotely(&ic_checkpoints_path.join(&name), ssh_helper)? {
-                    return Err(RecoveryError::invalid_output_error(format!(
-                        "Checkpoint {} at height {} does not exist at {}",
-                        name,
-                        height,
-                        ic_checkpoints_path.display()
-                    )));
-                } else {
-                    Some(name)
-                }
-            }
-            (None, Some(height)) => {
-                let name = format!("{:016x}", height);
-                if height == 0 {
-                    None
-                } else if !path_exists(&ic_checkpoints_path.join(&name))? {
-                    return Err(RecoveryError::invalid_output_error(format!(
-                        "Checkpoint {} at height {} does not exist at {}",
-                        name,
-                        height,
-                        ic_checkpoints_path.display()
-                    )));
-                } else {
-                    Some(name)
-                }
-            }
-            (Some(ssh_helper), None) => {
-                Self::get_maybe_latest_checkpoint_name_remotely(ssh_helper, &ic_checkpoints_path)?
-            }
-            (None, None) => {
-                Self::get_maybe_latest_checkpoint_name_and_height(&ic_checkpoints_path)?
-                    .map(|(name, _height)| name)
-            }
-        };
+        let maybe_remote = MaybeRemote { ssh_helper };
 
-        let Some(latest_checkpoint_name) = maybe_latest_checkpoint_name else {
-            return Ok(vec![]);
+        let checkpoint_name = if let Some(height) = download_height {
+            let name = format!("{:016x}", height);
+            if !maybe_remote.path_exists(&ic_checkpoints_path.join(&name))? {
+                return Err(RecoveryError::invalid_output_error(format!(
+                    "Checkpoint {} at height {} does not exist at {}",
+                    name,
+                    height,
+                    ic_checkpoints_path.display()
+                )));
+            }
+
+            name
+        } else {
+            let Some((name, _height)) =
+                maybe_remote.get_maybe_latest_checkpoint_name_and_height(&ic_checkpoints_path)?
+            else {
+                // No checkpoints, return an empty list of includes. This is not an error, as the
+                // subnet could have stalled in its first DKG interval.
+                return Ok(vec![]);
+            };
+
+            name
         };
 
         Ok(
-            Self::get_state_includes_with_given_checkpoint(&latest_checkpoint_name)
+            Self::get_state_includes_with_given_checkpoint(&checkpoint_name)
                 .iter()
                 .map(|p| PathBuf::from(IC_STATE).join(p))
                 .collect(),
@@ -653,16 +639,23 @@ impl Recovery {
     }
 
     /// Get the name of the latest checkpoint currently on the remote node, if any.
-    pub fn get_maybe_latest_checkpoint_name_remotely(
+    pub fn get_maybe_latest_checkpoint_name_and_height_remotely(
         ssh_helper: &SshHelper,
         checkpoints_path: &Path,
-    ) -> RecoveryResult<Option<String>> {
+    ) -> RecoveryResult<Option<(String, Height)>> {
         let maybe_output = ssh_helper.ssh(format!(
             "ls -1 {} | sort | tail -n 1",
             checkpoints_path.display()
         ))?;
 
-        Ok(maybe_output.map(|output| output.trim().to_string()))
+        let Some(output) = maybe_output else {
+            return Ok(None);
+        };
+
+        let name = output.trim();
+        let height = parse_hex_str(name)?;
+
+        Ok(Some((name.to_string(), Height::from(height))))
     }
 
     /// Get the name and the height of the latest checkpoint currently on disk, if any.
@@ -1147,6 +1140,45 @@ impl Recovery {
             require_confirmation: self.ssh_confirmation,
             key_file: self.admin_key_file.clone(),
         }
+    }
+}
+
+/// Helper struct to abstract over local and remote implementations of functions that need to access
+/// the filesystem of the node. Local implementations use the standard library, while remote
+/// implementations use ssh to execute commands on the remote node.
+impl<'a> MaybeRemote<'a> {
+    fn path_exists(&self, path: &Path) -> RecoveryResult<bool> {
+        let Some(ssh_helper) = self.ssh_helper else {
+            // Local implementation
+            return path_exists(path);
+        };
+
+        // Remote implementation
+        let command = format!("test -e {} && echo y || echo n", path.display());
+        Ok(ssh_helper
+            .ssh(command.clone())?
+            .ok_or_else(|| {
+                RecoveryError::cmd_error(
+                    &ssh_helper.get_command(command),
+                    None,
+                    "Could not check if path exists remotely".to_string(),
+                )
+            })?
+            .trim()
+            == "y")
+    }
+
+    fn get_maybe_latest_checkpoint_name_and_height(
+        &self,
+        checkpoints_path: &Path,
+    ) -> RecoveryResult<Option<(String, Height)>> {
+        let Some(ssh_helper) = self.ssh_helper else {
+            // Local implementation
+            return Recovery::get_maybe_latest_checkpoint_name_and_height(checkpoints_path);
+        };
+
+        // Remote implementation
+        Recovery::get_maybe_latest_checkpoint_name_and_height_remotely(ssh_helper, checkpoints_path)
     }
 }
 
