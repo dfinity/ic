@@ -181,3 +181,26 @@ The pprof system provides in-process CPU profiling for performance analysis.
 - **WHEN** the profiler guard is created
 - **THEN** it is spawned via `spawn_blocking` to avoid blocking the Tokio runtime
 - **AND** the guard has a latency of 40-60 milliseconds for initialization
+
+### Requirement: Per-Canister Load Metrics
+
+The system collects per-canister load metrics for capacity planning and subnet splitting decisions.
+
+#### Scenario: Canister load metric fields
+- **WHEN** `CanisterMetrics` are collected for a canister
+- **THEN** the following load counters are tracked (40 bytes per canister):
+  - Ingress message count
+  - XNet (cross-subnet) request count
+  - Intranet (intra-subnet) request count
+  - HTTP outcall count
+  - Total instructions executed
+
+#### Scenario: Load metrics export via state tool
+- **WHEN** the state tool exports canister metrics
+- **THEN** per-canister load data is written in CSV format
+- **AND** this data is consumed by subnet splitting estimation tools to plan optimal canister distribution
+
+#### Scenario: Load metrics aggregation for subnet splitting
+- **WHEN** canister load metrics are aggregated for a subnet split decision
+- **THEN** ingress, XNet, intranet, HTTP outcalls, and instruction counts are summed per canister range
+- **AND** a baseline sample is subtracted to normalize for ambient load

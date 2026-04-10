@@ -301,3 +301,9 @@ Transaction memos encode deposit and withdrawal metadata for auditability.
 #### Scenario: Reimbursement memo
 - **WHEN** a reimbursement is processed
 - **THEN** the memo encodes the original burn details and reimbursement reason
+
+#### Scenario: Decode ledger memo query endpoint
+- **WHEN** the `decode_ledger_memo` query endpoint is called with a memo byte sequence
+- **THEN** the memo is parsed to extract the encoded transaction metadata
+- **AND** the decoded fields (event source, amounts, transaction type) are returned in human-readable form
+- **AND** this enables external tools and dashboards to audit ckETH/ckERC20 transaction history

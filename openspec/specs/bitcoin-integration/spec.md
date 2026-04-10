@@ -282,6 +282,17 @@ Users deposit BTC by sending it to their derived address; the minter detects new
 - **AND** for each passing UTXO, ckBTC tokens are minted on the ledger
 - **AND** the UTXO is recorded in the minter state to prevent double-minting
 
+#### Scenario: UTXO deduplication via minted outpoints tracking
+- **WHEN** `update_balance` processes UTXOs
+- **THEN** each successfully minted UTXO's outpoint is recorded in `minted_outpoints` state
+- **AND** on subsequent `update_balance` calls, UTXOs whose outpoints are already in `minted_outpoints` are skipped
+- **AND** this prevents double-minting even if cached UTXOs reappear after finalization
+
+#### Scenario: Quarantined UTXOs
+- **WHEN** a UTXO fails the compliance check but is later re-evaluated
+- **THEN** the outpoint deduplication ensures it cannot be minted if it was already processed
+- **AND** the minter state maintains a consistent record of all minted outpoints
+
 #### Scenario: UTXO value too small
 - **WHEN** a UTXO's value does not cover the Bitcoin check cost
 - **THEN** a `ValueTooSmall` status is returned for that UTXO

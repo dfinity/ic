@@ -119,6 +119,12 @@ Application subnet recovery is a multi-step process that recovers a stalled or b
   13. **Unhalt** - resume subnet computation and remove readonly SSH keys
   14. **Cleanup** - delete the working directory
 
+#### Scenario: Early recovery without checkpoints
+- **WHEN** a subnet stalls before any checkpoint has been created (e.g., before the first DKG interval completes)
+- **THEN** the DownloadState step is skipped because no state is available to download
+- **AND** the genesis CUP from the consensus pool is used to initialize replay
+- **AND** all other recovery steps proceed normally
+
 #### Scenario: State divergence detection
 - **WHEN** certification pools are merged
 - **THEN** certifications from at least `n - f` nodes must be present (where f = (n-1)/3)
@@ -253,3 +259,9 @@ The ic-replay tool replays past finalized blocks to reconstruct state at any hei
 #### Scenario: Test-mode subcommands
 - **WHEN** test subcommands are used (`WithNeuronForTests`, `WithLedgerAccountForTests`, `WithTrustedNeuronsFollowingNeuronForTests`)
 - **THEN** test-specific ingress messages are injected for setting up test environments
+
+#### Scenario: Test registry isolation via OverwriteSubnetListWithSingleton
+- **WHEN** the `OverwriteSubnetListWithSingleton` subcommand is used during replay
+- **THEN** the subnet list in the registry is replaced to contain only the recovered subnet
+- **AND** this prevents test nodes from opening XNet connections to production subnets
+- **AND** enables safe replay of mainnet state in isolated test environments
