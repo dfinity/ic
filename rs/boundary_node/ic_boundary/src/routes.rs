@@ -38,7 +38,8 @@ pub struct HttpRequest {
     pub body: Vec<u8>,
 }
 
-/// Paths for a read state call
+/// Paths for a read state call.
+/// To avoid multiple caching the paths must be sorted.
 #[derive(Debug, Clone, Default, Hash, Eq, PartialEq)]
 pub struct ReadStatePaths(Vec<Vec<Vec<u8>>>);
 
@@ -78,10 +79,6 @@ pub struct RequestContext {
 
     /// Filled in when the inner request is HTTP
     pub http_request: Option<HttpRequest>,
-
-    /// Filled for the subnet read_state requests
-    /// when the request is cacheable
-    pub read_state_paths: Option<ReadStatePaths>,
 }
 
 impl RequestContext {

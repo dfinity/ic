@@ -17,7 +17,7 @@ use moka::sync::Cache;
 
 use crate::{
     errors::{ApiError, buffer_body_to_bytes},
-    routes::{ReadStatePaths, RequestContext},
+    routes::ReadStatePaths,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -107,14 +107,13 @@ impl SubnetReadStateCacheState {
 
 pub async fn subnet_read_state_cache_middleware(
     State(state): State<Arc<SubnetReadStateCacheState>>,
-    request: Request,
+    mut request: Request,
     next: Next,
 ) -> Result<impl IntoResponse, ApiError> {
     let subnet_id = request.extensions().get::<SubnetId>().copied();
-    let ctx = request.extensions().get::<Arc<RequestContext>>().cloned();
-    let paths = ctx.as_ref().and_then(|ctx| ctx.read_state_paths.as_ref());
+    let paths = request.extensions_mut().remove::<ReadStatePaths>();
 
-    let (Some(subnet_id), Some(paths)) = (subnet_id, paths.cloned()) else {
+    let (Some(subnet_id), Some(paths)) = (subnet_id, paths) else {
         return Ok(next.run(request).await);
     };
 
@@ -159,10 +158,7 @@ mod tests {
     use ic_types::{PrincipalId, messages::Blob};
     use tower::Service;
 
-    use crate::{
-        http::{RequestType, middleware::process::should_cache_paths},
-        routes::RequestContext,
-    };
+    use crate::http::middleware::process::should_cache_paths;
 
     const DEFAULT_TTL: Duration = Duration::from_secs(60);
     const DEFAULT_CACHE_SIZE: u64 = 1024 * 1024;
@@ -171,19 +167,16 @@ mod tests {
 
     fn make_request(subnet_id: SubnetId, paths: Vec<Vec<Vec<u8>>>) -> Request<Body> {
         let paths = paths
-            .into_iter()
-            .map(|x| x.into_iter().map(|x| Blob(x.clone())).collect())
+            .iter()
+            .map(|x| x.iter().map(|x| Blob(x.clone())).collect())
             .collect::<Vec<_>>();
 
-        let ctx = Arc::new(RequestContext {
-            request_type: RequestType::ReadStateSubnetV2,
-            read_state_paths: should_cache_paths(&paths).then(|| paths.into()),
-            ..Default::default()
-        });
-
         let mut req = Request::post("/").body(Body::from("body")).unwrap();
+        if should_cache_paths(&paths) {
+            req.extensions_mut().insert(ReadStatePaths::from(paths));
+        }
+
         req.extensions_mut().insert(subnet_id);
-        req.extensions_mut().insert(ctx);
         req
     }
 
@@ -334,16 +327,8 @@ mod tests {
     async fn test_no_paths_bypasses_cache() {
         let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_CACHE_SIZE);
 
-        // Request with no paths in context
-        let ctx = Arc::new(RequestContext {
-            request_type: RequestType::ReadStateSubnetV2,
-            read_state_paths: None,
-            ..Default::default()
-        });
-
         let mut req = Request::post("/").body(Body::from("body")).unwrap();
         req.extensions_mut().insert(test_subnet_id(1));
-        req.extensions_mut().insert(ctx);
 
         let resp = app.call(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);

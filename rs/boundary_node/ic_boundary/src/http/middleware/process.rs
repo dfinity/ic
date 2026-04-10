@@ -10,6 +10,7 @@ use ic_types::messages::Blob;
 use serde::de::Error as SerdeDeError;
 use serde::{Deserialize, Deserializer, Serialize};
 
+use crate::routes::ReadStatePaths;
 use crate::{
     core::{MAX_REQUEST_BODY_SIZE, decoder_config},
     errors::{ApiError, ErrorCause, buffer_body_to_bytes},
@@ -46,7 +47,7 @@ pub struct ICRequestEnvelope {
     content: ICRequestContent,
 }
 
-// Restrict the method name to its max length
+/// Restrict the method name to its max length
 pub const MAX_METHOD_NAME_LENGTH: usize = 20_000;
 
 fn check_method_name_length<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
@@ -96,7 +97,7 @@ pub async fn preprocess_request(
     next: Next,
 ) -> Result<impl IntoResponse, ApiError> {
     // Consume body
-    let (parts, body) = request.into_parts();
+    let (mut parts, body) = request.into_parts();
 
     // Early check for the body size to avoid streaming too big requests
     if body.size_hint().exact() > Some(MAX_REQUEST_BODY_SIZE as u64) {
@@ -135,15 +136,14 @@ pub async fn preprocess_request(
         (_, arg) => (arg, None),
     };
 
-    // Check if it's a subnet read state request & it's eligible for caching
-    let read_state_paths = if request_type.is_read_state_subnet()
+    // Check if it's a subnet read state request & it's eligible for caching.
+    // If it is - insert the paths into extensions.
+    if request_type.is_read_state_subnet()
         && let Some(x) = content.paths
         && should_cache_paths(&x)
     {
-        Some(x.into())
-    } else {
-        None
-    };
+        parts.extensions.insert(ReadStatePaths::from(x));
+    }
 
     // Construct the context
     let ctx = RequestContext {
@@ -156,7 +156,6 @@ pub async fn preprocess_request(
         arg: arg.map(|x| x.0),
         nonce: content.nonce.map(|x| x.0),
         http_request,
-        read_state_paths,
     };
 
     let ctx = Arc::new(ctx);
@@ -389,32 +388,32 @@ mod tests {
     fn test_should_cache_paths() {
         let subnet_id = principal!("aaaaa-aa").as_slice().to_vec();
 
-        let should_cache_paths_wrapper = |paths: &[Vec<Vec<u8>>]| -> bool {
+        // Wraps with Blob
+        let wrapper = |paths: &[Vec<Vec<u8>>]| -> bool {
             let paths = paths
                 .iter()
                 .map(|x| x.iter().map(|x| Blob(x.clone())).collect())
                 .collect::<Vec<_>>();
+
             should_cache_paths(&paths)
         };
 
         // non-cacheable
-        assert!(!should_cache_paths_wrapper(&[vec![]]));
-        assert!(!should_cache_paths_wrapper(&[vec![
-            b"canister_ranges".to_vec()
-        ]]));
-        assert!(!should_cache_paths_wrapper(&[vec![b"subnet".to_vec()]]));
-        assert!(!should_cache_paths_wrapper(&[
+        assert!(!wrapper(&[vec![]]));
+        assert!(!wrapper(&[vec![b"canister_ranges".to_vec()]]));
+        assert!(!wrapper(&[vec![b"subnet".to_vec()]]));
+        assert!(!wrapper(&[
             vec![b"subnet".to_vec()],
             vec![b"canister_ranges".to_vec()]
         ]));
 
-        assert!(!should_cache_paths_wrapper(&[
+        assert!(!wrapper(&[
             vec![b"subnet".to_vec(), subnet_id.clone()],
             vec![b"canister_ranges".to_vec(), subnet_id.clone()],
             vec![b"some_other".to_vec(), b"label".to_vec()]
         ]));
 
-        assert!(!should_cache_paths_wrapper(&[
+        assert!(!wrapper(&[
             vec![b"subnet".to_vec(), subnet_id.clone(), subnet_id.clone()],
             vec![
                 b"canister_ranges".to_vec(),
@@ -423,18 +422,18 @@ mod tests {
             ]
         ]));
 
-        assert!(!should_cache_paths_wrapper(&[
+        assert!(!wrapper(&[
             vec![b"subnet".to_vec(), subnet_id.clone(),],
             vec![b"subnet".to_vec(), subnet_id.clone(),]
         ]));
 
-        assert!(!should_cache_paths_wrapper(&[
+        assert!(!wrapper(&[
             vec![b"canister_ranges".to_vec(), subnet_id.clone(),],
             vec![b"canister_ranges".to_vec(), subnet_id.clone(),]
         ]));
 
         // too long slices for a principal
-        assert!(!should_cache_paths_wrapper(&[
+        assert!(!wrapper(&[
             vec![
                 b"subnet".to_vec(),
                 b"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_vec(),
@@ -442,7 +441,7 @@ mod tests {
             vec![b"canister_ranges".to_vec(), subnet_id.clone()]
         ]));
 
-        assert!(!should_cache_paths_wrapper(&[
+        assert!(!wrapper(&[
             vec![b"subnet".to_vec(), subnet_id.clone()],
             vec![
                 b"canister_ranges".to_vec(),
@@ -451,12 +450,12 @@ mod tests {
         ]));
 
         // cacheable
-        assert!(should_cache_paths_wrapper(&[
+        assert!(wrapper(&[
             vec![b"subnet".to_vec(), subnet_id.clone()],
             vec![b"canister_ranges".to_vec(), subnet_id.clone()]
         ]));
 
-        assert!(should_cache_paths_wrapper(&[
+        assert!(wrapper(&[
             vec![b"canister_ranges".to_vec(), subnet_id.clone()],
             vec![b"subnet".to_vec(), subnet_id]
         ]));
