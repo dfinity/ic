@@ -59,7 +59,7 @@ rust_test(
     crate = "subnet_splitting",
     deps = DEPENDENCIES + [
         "//rs/test_utilities/tmpdir",
-    ]
+    ],
 )
 
 rust_ic_test(

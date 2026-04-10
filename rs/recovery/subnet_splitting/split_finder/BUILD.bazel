@@ -2,22 +2,22 @@ load("@python_deps//:requirements.bzl", "requirement")
 load("@rules_python//python:defs.bzl", "py_binary")
 
 py_binary(
-    name="split_finder",
-    srcs=[
+    name = "split_finder",
+    srcs = [
         "data_io.py",
         "solver_core.py",
         "split_finder.py",
     ],
-    deps=[
+    imports = ["."],
+    visibility = [
+        "//rs:release-pkg",
+        "//rs/recovery/subnet_splitting:__subpackages__",
+    ],
+    deps = [
         requirement("matplotlib"),
         requirement("networkx"),
         requirement("pandas"),
         requirement("pulp"),
         requirement("seaborn"),
-    ],
-    imports=["."],
-    visibility = [
-        "//rs/recovery/subnet_splitting:__subpackages__",
-        "//rs:release-pkg",
     ],
 )
