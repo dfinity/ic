@@ -56,7 +56,7 @@ fn get_hostos_version_record(snapshot: &RegistrySnapshot, version: String) -> Ho
 /// by at least one node.
 fn get_all_hostos_versions_of_nodes(snapshot: &RegistrySnapshot) -> Vec<String> {
     get_all_node_records(snapshot)
-        .iter()
-        .filter_map(|(_, node_record)| node_record.hostos_version_id.clone())
+        .values()
+        .filter_map(|node_record| node_record.hostos_version_id.clone())
         .collect()
 }

@@ -36,7 +36,7 @@ pub(crate) fn check_firewall_invariants(
 ) -> Result<(), InvariantCheckError> {
     validate_firewall_rule_principals(snapshot)?;
 
-    for node_id in get_all_node_records(snapshot).iter().map(|(k, _)| k) {
+    for node_id in get_all_node_records(snapshot).keys() {
         let node_ruleset = get_node_firewall_rules(snapshot, node_id);
         validate_firewall_ruleset(node_ruleset)?;
     }
@@ -64,8 +64,7 @@ fn validate_firewall_rule_principals(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
     let mut principal_ids: BTreeSet<PrincipalId> = get_all_node_records(snapshot)
-        .iter()
-        .map(|(k, _)| k)
+        .keys()
         .map(|s| s.get())
         .collect();
 

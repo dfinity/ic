@@ -81,7 +81,7 @@ fn check_node_crypto_keys_exist_and_are_unique(
     let mut ok_node_count = 0;
     let mut bad_node_count = 0;
     let mut maybe_error: Option<Result<(), InvariantCheckError>> = None;
-    for node_id in nodes.iter().map(|(k, _)| k) {
+    for node_id in nodes.keys() {
         // Check that all the nodes' keys and certs are present, and node_id is consistent
         match node_has_all_keys_and_cert_and_valid_node_id(node_id, &pks, &certs) {
             Ok(()) => ok_node_count += 1,

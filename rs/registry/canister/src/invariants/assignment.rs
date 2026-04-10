@@ -30,7 +30,7 @@ pub(crate) fn check_node_assignment_invariants(
         .into_keys()
         .collect();
 
-    let errors: Vec<String> = get_all_node_records(snapshot).iter().map(|(node_id, _)| {
+    let errors: Vec<String> = get_all_node_records(snapshot).keys().map(|node_id| {
             let (is_replica, is_api_boundary_node) = (
                 replicas.contains(node_id),
                 api_boundary_nodes.contains(node_id),

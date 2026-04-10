@@ -47,12 +47,12 @@ impl error::Error for InvariantCheckError {
 }
 
 /// Returns all node records in the snapshot.
-pub(crate) fn get_all_node_records(snapshot: &RegistrySnapshot) -> Vec<(NodeId, NodeRecord)> {
-    let mut nodes = Vec::new();
+pub(crate) fn get_all_node_records(snapshot: &RegistrySnapshot) -> BTreeMap<NodeId, NodeRecord> {
+    let mut nodes = BTreeMap::new();
     for (k, v) in snapshot {
         if let Some(id) = get_node_record_node_id(str::from_utf8(k).unwrap()) {
             let record = NodeRecord::decode(v.as_slice()).unwrap();
-            nodes.push((NodeId::from(id), record));
+            nodes.insert(NodeId::from(id), record);
         }
     }
 
