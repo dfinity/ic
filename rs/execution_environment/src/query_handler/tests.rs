@@ -1,8 +1,6 @@
 use crate::InternalHttpQueryHandler;
 use ic_base_types::{CanisterId, NumSeconds};
-use ic_config::execution_environment::{
-    INSTRUCTION_OVERHEAD_PER_QUERY_CALL, LOG_MEMORY_STORE_FEATURE_ENABLED,
-};
+use ic_config::execution_environment::INSTRUCTION_OVERHEAD_PER_QUERY_CALL;
 use ic_error_types::{ErrorCode, UserError};
 use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
@@ -501,72 +499,36 @@ fn queries_to_frozen_canisters_are_rejected() {
     let mut test = ExecutionTestBuilder::new().build();
     let freezing_threshold = NumSeconds::from(3_000_000_000);
 
-    // Create two canisters A and B with different amount of cycles.
-    // Canister A will not have enough to process queries in contrast
-    // to Canister B which will have more than enough.
-    //
-    // The amount of cycles must be just enough for `install_code` to
-    // succeed (the prepay check in `prepay_execution_cycles` requires
-    // balance >= execution_cost + freeze_threshold_cycles), but low
-    // enough that the canister becomes frozen after `update_freezing_threshold`.
-    //
-    // low_cycles = execution_cost + freeze_threshold_cycles
-    //
-    // execution_cost
-    //   = update_message_execution_fee
-    //     + MAX_INSTRUCTIONS_PER_INSTALL_CODE
-    //       * ten_update_instructions_execution_fee / 10
-    //   = 5_000_000 + 300_000_000_000 * 10 / 10
-    //   = 300_005_000_000
-    //
-    // freeze_threshold_cycles
-    //   = idle_cycles_burned_rate * default_freeze_threshold / SECONDS_PER_DAY
-    //   where idle_cycles_burned_rate
-    //     = floor(memory_bytes * gib_storage_per_second_fee * SECONDS_PER_DAY / GiB)
-    //   and default_freeze_threshold = 2_592_000 s (30 days)
-    //   and gib_storage_per_second_fee = 317_500 (10 SDR/GiB/year)
-    //
-    // Memory at install time (12_422 bytes with log, 134 bytes without):
-    //   134 bytes canister history
-    //   + 12_288 bytes log memory store (4 KiB header + 4 KiB index + 4 KiB data)
-    //
-    // With log (12_422 bytes):
-    //   idle = floor(12_422 * 317_500 * 86_400 / 1_073_741_824) = 317_357
-    //   freeze = 317_357 * 2_592_000 / 86_400 = 9_520_710
-    //   low_cycles = 300_005_000_000 + 9_520_710 = 300_014_520_710
-    //
-    // Without log (134 bytes):
-    //   idle = floor(134 * 317_500 * 86_400 / 1_073_741_824) = 3_423
-    //   freeze = 3_423 * 2_592_000 / 86_400 = 102_690
-    //   low_cycles = 300_005_000_000 + 102_690 = 300_005_102_690
-    let low_cycles = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-        Cycles::new(300_014_520_710)
-    } else {
-        Cycles::new(300_005_102_690)
-    };
-    let canister_a = test.universal_canister_with_cycles(low_cycles).unwrap();
+    // Create two canisters A and B with the same freezing threshold.
+    // Canister A has few cycles and is frozen; canister B has plenty and is not.
+    // Using a very high freezing threshold so that canister A is frozen
+    // regardless of the exact cycle costs (no need to compute precise balances).
+    let canister_a = test
+        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000))
+        .unwrap();
     test.update_freezing_threshold(canister_a, freezing_threshold)
         .unwrap();
 
-    let high_cycles = Cycles::new(1_000_000_000_000_000);
-    let canister_b = test.universal_canister_with_cycles(high_cycles).unwrap();
+    let canister_b = test
+        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000_000))
+        .unwrap();
     test.update_freezing_threshold(canister_b, freezing_threshold)
         .unwrap();
 
-    // Canister A is below its freezing threshold, so queries will be rejected.
+    // Canister A is frozen, so queries are rejected.
     let result = test.non_replicated_query(canister_a, "query", wasm().reply().build());
     assert_eq!(
         result,
         Err(UserError::new(
             ErrorCode::CanisterOutOfCycles,
             format!(
-                "Canister {canister_a} is unable to process query calls because it's frozen. Please top up the canister with cycles and try again."
+                "Canister {canister_a} is unable to process query calls because it's frozen. \
+                 Please top up the canister with cycles and try again."
             )
         )),
     );
 
-    // Canister B has a high cycles balance that's above its freezing
-    // threshold and so it can still process queries.
+    // Canister B is not frozen, so queries succeed.
     let result = test.non_replicated_query(canister_b, "query", wasm().reply().build());
     assert!(result.is_ok());
 }
