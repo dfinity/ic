@@ -869,7 +869,7 @@ crate.spec(
         "mutex",
     ],
     package = "libcryptsetup-rs",
-    version = "^0.13.2",
+    version = "0.15",
 )
 crate.spec(
     package = "libflate",
@@ -2051,6 +2051,11 @@ crate.annotation(
     # Patch for determinism issues
     patch_args = ["-p1"],
     patches = ["@@//bazel:libssh2-sys.patch"],
+)
+crate.annotation(
+    crate = "libcryptsetup-rs",
+    patch_args = ["-p1"],
+    patches = ["@@//bazel:libcryptsetup-rs.patch"],
 )
 crate.annotation(
     crate = "libz-sys",

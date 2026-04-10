@@ -733,7 +733,7 @@ k256 = { version = "0.13.4", default-features = false, features = [
 lazy_static = "1.4.0"
 leb128 = "0.2.5"
 libc = "0.2.158"
-libcryptsetup-rs = "0.13"
+libcryptsetup-rs = "0.15"
 libflate = "2.1.0"
 libnss = "0.5.0"
 lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "64eb770caa940f215190d86d61e4c132511be5e2" }
