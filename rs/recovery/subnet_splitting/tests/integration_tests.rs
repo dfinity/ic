@@ -13,6 +13,8 @@ use ic_universal_canister::{call_args, wasm};
 use proxy_canister::{RemoteHttpRequest, UnvalidatedCanisterHttpRequestArgs};
 use slog::{Logger, info};
 
+const EPSILON: f64 = 0.0001;
+
 /// Checks whether the first argument is equal to the second argument with a relative error
 /// tolerance up to the third argument.
 macro_rules! assert_near {
@@ -119,6 +121,8 @@ fn load_metrics_e2e_test() {
             ])
             .args(["--output-path", &split_output_path.display().to_string()])
             .args(["--load-type", "instructions_executed"])
+            .args(["--epsilon-load", &EPSILON.to_string()])
+            .args(["--max-cuts", "10"])
             .output()
             .unwrap();
         assert_eq!(
@@ -167,15 +171,15 @@ fn load_metrics_e2e_test() {
         // Accept up to 10% error. The precise values are not important here and they're very sensitive
         // to the changes to the replicated state / execution. It's mostly a sanity check that the
         // returned values are not too ridiculous and they might have to be updated once in a while.
-        assert_near!(states_sizes_bytes.source, 4572726, 0.1);
-        assert_near!(states_sizes_bytes.destination, 4572702, 0.1);
-        assert_near!(instructions_executed.source, 7675890, 0.1);
-        assert_near!(instructions_executed.destination, 7652590, 0.1);
+        assert_near!(states_sizes_bytes.source, 4572729, 0.1);
+        assert_near!(states_sizes_bytes.destination, 4572699, 0.1);
+        assert_near!(instructions_executed.source, 7663691, 0.1);
+        assert_near!(instructions_executed.destination, 7664789, 0.1);
         assert_eq!(
             ingress_messages_executed,
             Estimates {
-                source: 20,
-                destination: 19,
+                source: 19,
+                destination: 20,
             }
         );
         assert_eq!(
@@ -188,8 +192,8 @@ fn load_metrics_e2e_test() {
         assert_eq!(
             local_subnet_messages_executed_upper_bound,
             Estimates {
-                source: 15,
-                destination: 13,
+                source: 14,
+                destination: 14,
             }
         );
         assert_eq!(
@@ -202,9 +206,20 @@ fn load_metrics_e2e_test() {
         assert_eq!(
             heartbeats_and_global_timers_executed,
             Estimates {
-                source: 341,
-                destination: 353,
+                source: 444,
+                destination: 250,
             }
+        );
+        // Check if the split finder found a split satisfying the load constraints
+        assert_near!(
+            instructions_executed.source,
+            instructions_executed.total() / 2,
+            EPSILON
+        );
+        assert_near!(
+            instructions_executed.destination,
+            instructions_executed.total() / 2,
+            EPSILON
         );
     })
 }
