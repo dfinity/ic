@@ -54,6 +54,7 @@ BASE_DEPENDENCIES = [
         "//rs/protobuf",
         "//rs/registry/canister",
         "//rs/registry/keys",
+        "//rs/registry/resource_limits",
         "//rs/registry/routing_table",
         "//rs/registry/subnet_type",
         "//rs/registry/transport",
@@ -361,5 +362,8 @@ rust_ic_test(
         "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
         "requires-network",  # Because mainnet state is downloaded (and used).
     ],
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        "//rs/crypto/test_utils/ni-dkg",
+        "//rs/crypto/utils/threshold_sig_der",
+    ],
 )

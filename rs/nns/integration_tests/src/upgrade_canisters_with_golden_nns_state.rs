@@ -1,7 +1,10 @@
 use candid::{CandidType, Encode, Principal};
 use cycles_minting_canister::CyclesCanisterInitPayload;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{CanisterId, NodeId, PrincipalId, SubnetId};
 use ic_crypto_sha2::Sha256;
+use ic_crypto_test_utils_ni_dkg::dummy_initial_dkg_transcript_with_master_key;
+use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
+use ic_management_canister_types_private::SetupInitialDKGResponse;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nns_common::pb::v1::NeuronId;
@@ -11,9 +14,15 @@ use ic_nns_constants::{
     NNS_UI_CANISTER_ID, NODE_REWARDS_CANISTER_ID, PROTOCOL_CANISTER_IDS, REGISTRY_CANISTER_ID,
     ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
-use ic_nns_governance_api::{MonthlyNodeProviderRewards, Vote};
+use ic_nns_governance_api::{
+    ExecuteNnsFunction, MakeProposalRequest, MonthlyNodeProviderRewards, NnsFunction,
+    ProposalActionRequest, ProposalStatus, Vote,
+    manage_neuron_response::Command as CommandResponse,
+};
 use ic_nns_test_utils::state_test_helpers::{
-    nns_get_most_recent_monthly_node_provider_rewards, scrape_metrics,
+    nns_get_most_recent_monthly_node_provider_rewards,
+    nns_governance_get_proposal_info_as_anonymous, nns_governance_make_proposal,
+    nns_wait_for_proposal_execution, registry_get_value, scrape_metrics,
 };
 use ic_nns_test_utils::{
     common::modify_wasm_bytes,
@@ -23,14 +32,34 @@ use ic_nns_test_utils::{
     },
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
-use ic_state_machine_tests::StateMachine;
+use ic_protobuf::registry::subnet::v1::{
+    SubnetFeatures as SubnetFeaturesPb, SubnetListRecord, SubnetRecord,
+    SubnetType as SubnetTypePb,
+};
+use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
+use ic_registry_resource_limits::ResourceLimits;
+use ic_registry_subnet_type::SubnetType;
+use ic_registry_transport::pb::v1::high_capacity_registry_get_value_response::Content;
+use ic_state_machine_tests::{PayloadBuilder, StateMachine};
+use ic_types::{
+    NumBytes,
+    batch::ConsensusResponse,
+    crypto::threshold_sig::ni_dkg::NiDkgTag,
+    messages::Payload as MsgPayload,
+};
 use icp_ledger::Tokens;
+use prost::Message;
+use rand::{SeedableRng, rngs::StdRng};
+use registry_canister::mutations::do_create_subnet::{
+    CanisterCyclesCostSchedule, CreateSubnetPayload,
+};
 use serde::Deserialize;
 use std::{
     env,
     fmt::{Debug, Formatter},
     fs,
     str::FromStr,
+    time::Duration,
 };
 
 struct NnsCanisterUpgrade {
@@ -390,6 +419,262 @@ fn check_canisters_are_all_protocol_canisters(state_machine: &StateMachine) {
             "Canister {canister_id} is in the NNS subnet but not a protocol canister",
         );
     }
+}
+
+fn get_subnet_list(state_machine: &StateMachine) -> SubnetListRecord {
+    let response = registry_get_value(
+        state_machine,
+        make_subnet_list_record_key().as_bytes(),
+    );
+    assert!(
+        response.error.is_none(),
+        "Registry error: {:?}",
+        response.error
+    );
+    match response.content.expect("No content in registry response") {
+        Content::Value(bytes) => {
+            SubnetListRecord::decode(bytes.as_slice()).expect("Failed to decode SubnetListRecord")
+        }
+        Content::LargeValueChunkKeys(_) => {
+            panic!("SubnetListRecord was chunked; not supported here")
+        }
+    }
+}
+
+/// Builds the CreateSubnetPayload matching NNS proposal 141306:
+/// "Create a test cloud engine" with 4 cloud nodes across aws, gcp, and azure.
+/// See: https://dashboard.internetcomputer.org/proposal/141306
+fn build_proposal_141306_payload() -> CreateSubnetPayload {
+    let node_ids: Vec<NodeId> = [
+        "lg45v-ktek6-6bca5-cd7cf-ptrwr-dovu4-ptt3k-6vkse-6hwsh-ogzhm-oqe",
+        "sgrf7-u2i64-nmybq-qmldk-cq67h-fkpcg-mv55a-zuqsf-7dmc4-b5gcf-eqe",
+        "y7han-ubz4t-qfs4j-uc27t-6t5ag-3zpyb-yoagk-vn7b3-dqz2m-eo6dz-uae",
+        "sunbj-pky5k-bgeaw-5egfi-ywf37-j5fjr-jstjx-utqg4-zkoec-sdn44-3qe",
+    ]
+    .iter()
+    .map(|s| NodeId::from(PrincipalId::from_str(s).unwrap()))
+    .collect();
+
+    CreateSubnetPayload {
+        node_ids,
+        subnet_id_override: None,
+        max_ingress_bytes_per_message: 3_670_016,
+        max_ingress_bytes_per_block: None,
+        max_ingress_messages_per_block: 1_000,
+        max_block_payload_size: 4_194_304,
+        unit_delay_millis: 3_000,
+        initial_notary_delay_millis: 300,
+        replica_version_id: "606cab75d9840e2e1c5ef1ce734a7e6a4f754f0b".to_string(),
+        dkg_interval_length: 499,
+        dkg_dealings_per_block: 1,
+        start_as_nns: false,
+        subnet_type: SubnetType::CloudEngine,
+        is_halted: false,
+        features: SubnetFeaturesPb {
+            canister_sandboxing: false,
+            http_requests: true,
+            sev_enabled: None,
+        },
+        max_number_of_canisters: 0,
+        ssh_readonly_access: vec![],
+        ssh_backup_access: vec![],
+        chain_key_config: None,
+        canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Free),
+        subnet_admins: None,
+        resource_limits: Some(ResourceLimits {
+            maximum_state_size: Some(NumBytes::new(42_949_672_960)),
+            maximum_state_delta: Some(NumBytes::new(10_737_418_240)),
+        }),
+        ingress_bytes_per_block_soft_cap: 0,
+        gossip_max_artifact_streams_per_peer: 0,
+        gossip_max_chunk_wait_ms: 0,
+        gossip_max_duplicity: 0,
+        gossip_max_chunk_size: 0,
+        gossip_receive_check_cache_size: 0,
+        gossip_pfn_evaluation_period_ms: 0,
+        gossip_registry_poll_period_ms: 0,
+        gossip_retransmission_request_ms: 0,
+    }
+}
+
+/// Simulates the execution of NNS proposal 141306: "Create a test cloud engine".
+/// Submits the CreateSubnetPayload and verifies that a new CloudEngine subnet
+/// is added to the registry's subnet list with the expected 4 nodes.
+/// See: https://dashboard.internetcomputer.org/proposal/141306
+#[test]
+fn test_create_cloud_engine_subnet_proposal_141306() {
+    let state_machine = new_state_machine_with_golden_nns_state_or_panic();
+
+    let neuron_controller = PrincipalId::new_self_authenticating(&[1, 2, 3, 4]);
+    let neuron_id = nns_create_super_powerful_neuron(
+        &state_machine,
+        neuron_controller,
+        Tokens::from_tokens(100_000_000).unwrap(),
+    );
+
+    let subnet_list_before = get_subnet_list(&state_machine);
+    let num_subnets_before = subnet_list_before.subnets.len();
+    println!("Subnet count before proposal: {num_subnets_before}");
+
+    let payload = build_proposal_141306_payload();
+    let payload_bytes = Encode!(&payload).expect("Failed to Candid-encode CreateSubnetPayload");
+
+    println!("Submitting CreateSubnet proposal (proposal 141306: Create a test cloud engine)...");
+    let response = nns_governance_make_proposal(
+        &state_machine,
+        neuron_controller,
+        neuron_id,
+        &MakeProposalRequest {
+            title: Some("Create a test cloud engine".to_string()),
+            summary: "This proposal creates the first test cloud engine, which will be \
+                made up of four cloud nodes that reside in aws, gcp and azure."
+                .to_string(),
+            action: Some(ProposalActionRequest::ExecuteNnsFunction(
+                ExecuteNnsFunction {
+                    nns_function: NnsFunction::CreateSubnet as i32,
+                    payload: payload_bytes,
+                },
+            )),
+            ..Default::default()
+        },
+    );
+
+    let proposal_id = match response.command.unwrap() {
+        CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
+        other => panic!("Unexpected response: {other:?}"),
+    };
+    println!("Proposal submitted with id: {}", proposal_id.id);
+
+    vote_yes_with_well_known_public_neurons(&state_machine, proposal_id.id);
+
+    // CreateSubnet triggers setup_initial_dkg on the management canister.
+    // The golden NNS StateMachine doesn't have pocket_xnet/payload_builder,
+    // so execute_round() cannot be used. Instead, we tick() normally and
+    // when DKG contexts appear in the state, we build dummy DKG responses
+    // and deliver them via tick_with_config().
+    let mut rng = StdRng::seed_from_u64(42);
+    for i in 0..200 {
+        let state = state_machine.get_latest_state();
+        let dkg_contexts = &state
+            .metadata
+            .subnet_call_context_manager
+            .setup_initial_dkg_contexts;
+
+        if dkg_contexts.is_empty() {
+            state_machine.tick();
+        } else {
+            let mut consensus_responses = Vec::new();
+            for callback_id in dkg_contexts.keys() {
+                let ni_dkg_transcript =
+                    dummy_initial_dkg_transcript_with_master_key(&mut rng).0;
+                let public_key = (&ni_dkg_transcript).try_into().unwrap();
+                let public_key_der = threshold_sig_public_key_to_der(public_key).unwrap();
+                let subnet_id =
+                    PrincipalId::new_self_authenticating(&public_key_der).into();
+                let mut high_threshold = ni_dkg_transcript.clone();
+                high_threshold.dkg_id.dkg_tag = NiDkgTag::HighThreshold;
+                let mut low_threshold = ni_dkg_transcript;
+                low_threshold.dkg_id.dkg_tag = NiDkgTag::LowThreshold;
+                let response = SetupInitialDKGResponse {
+                    low_threshold_transcript_record: high_threshold.into(),
+                    high_threshold_transcript_record: low_threshold.into(),
+                    fresh_subnet_id: subnet_id,
+                    subnet_threshold_public_key: public_key.into(),
+                };
+                consensus_responses.push(ConsensusResponse::new(
+                    *callback_id,
+                    MsgPayload::Data(response.encode()),
+                ));
+            }
+            let payload = PayloadBuilder::new()
+                .with_consensus_responses(consensus_responses);
+            state_machine.tick_with_config(payload);
+        }
+
+        let proposal =
+            nns_governance_get_proposal_info_as_anonymous(&state_machine, proposal_id.id);
+        if proposal.status == ProposalStatus::Executed as i32
+            && proposal.executed_timestamp_seconds > 0
+        {
+            println!("Proposal executed after {i} ticks.");
+            break;
+        }
+        if proposal.status == ProposalStatus::Failed as i32 {
+            panic!("Proposal failed: {proposal:#?}");
+        }
+        state_machine.advance_time(Duration::from_millis(100));
+    }
+    let final_proposal =
+        nns_governance_get_proposal_info_as_anonymous(&state_machine, proposal_id.id);
+    assert_eq!(
+        final_proposal.status,
+        ProposalStatus::Executed as i32,
+        "Proposal was not executed: {final_proposal:#?}",
+    );
+    println!("Proposal executed successfully.");
+
+    let subnet_list_after = get_subnet_list(&state_machine);
+    let num_subnets_after = subnet_list_after.subnets.len();
+    println!("Subnet count after proposal: {num_subnets_after}");
+
+    assert_eq!(
+        num_subnets_after,
+        num_subnets_before + 1,
+        "Expected exactly one new subnet. Before: {num_subnets_before}, After: {num_subnets_after}",
+    );
+
+    let new_subnet_bytes: Vec<&Vec<u8>> = subnet_list_after
+        .subnets
+        .iter()
+        .filter(|s| !subnet_list_before.subnets.contains(s))
+        .collect();
+    assert_eq!(new_subnet_bytes.len(), 1, "Expected exactly one new subnet ID");
+
+    let new_subnet_principal =
+        PrincipalId::try_from(new_subnet_bytes[0].as_slice()).expect("Invalid principal bytes");
+    println!("New cloud engine subnet created: {new_subnet_principal}");
+
+    let subnet_record_key = make_subnet_record_key(SubnetId::from(new_subnet_principal));
+    let sr_response = registry_get_value(&state_machine, subnet_record_key.as_bytes());
+    assert!(
+        sr_response.error.is_none(),
+        "Failed to read SubnetRecord: {:?}",
+        sr_response.error,
+    );
+    let subnet_record = match sr_response
+        .content
+        .expect("No content for SubnetRecord")
+    {
+        Content::Value(bytes) => {
+            SubnetRecord::decode(bytes.as_slice()).expect("Failed to decode SubnetRecord")
+        }
+        Content::LargeValueChunkKeys(_) => panic!("SubnetRecord was chunked; not supported here"),
+    };
+
+    assert_eq!(
+        subnet_record.subnet_type,
+        SubnetTypePb::CloudEngine as i32,
+        "Expected CloudEngine ({}), got {}",
+        SubnetTypePb::CloudEngine as i32,
+        subnet_record.subnet_type,
+    );
+    println!(
+        "Subnet type verified: CloudEngine ({})",
+        subnet_record.subnet_type,
+    );
+
+    assert_eq!(
+        subnet_record.membership.len(),
+        4,
+        "Expected 4 nodes in the cloud engine subnet, found {}",
+        subnet_record.membership.len(),
+    );
+    println!(
+        "Membership verified: {} nodes in the subnet",
+        subnet_record.membership.len(),
+    );
+
+    println!("All assertions passed: cloud engine subnet was successfully created.");
 }
 
 mod sanity_check {
