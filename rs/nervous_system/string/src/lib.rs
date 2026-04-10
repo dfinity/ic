@@ -51,11 +51,11 @@ pub fn clamp_debug_len(object: &impl Debug, max_len: usize) -> String {
         // or just append if the string is very short.
         let s = &mut buf.buffer;
         if s.len() >= 3 {
-            s.truncate(s.len() - 3);
-            s.push_str("...");
-        } else {
-            s.push_str("...");
+            for _ in 0..3 {
+                 s.pop();
+            }
         }
+        s.push_str("...");
     }
 
     buf.buffer
