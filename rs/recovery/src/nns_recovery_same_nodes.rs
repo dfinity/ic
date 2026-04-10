@@ -284,11 +284,6 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 }
 
                 if self.params.download_state_height.is_none() {
-                    print_height_info(
-                        &self.logger,
-                        &self.recovery.registry_helper,
-                        self.params.subnet_id,
-                    );
                     self.params.download_state_height = read_optional(
                         &self.logger,
                         "Enter the height of the checkpoint to download (leave empty for latest checkpoint):",
