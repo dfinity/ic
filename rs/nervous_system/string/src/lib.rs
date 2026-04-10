@@ -52,7 +52,7 @@ pub fn clamp_debug_len(object: &impl Debug, max_len: usize) -> String {
         let s = &mut buf.buffer;
         if s.len() >= 3 {
             for _ in 0..3 {
-                 s.pop();
+                s.pop();
             }
         }
         s.push_str("...");
