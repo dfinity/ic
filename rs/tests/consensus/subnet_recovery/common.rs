@@ -567,18 +567,10 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         download_pool_node,
         download_state_node,
         upload_node,
-        mut admin_nodes,
+        admin_nodes,
         replay_height,
         download_state_height,
-    } = if ssh_readonly_pub_key_deployed.is_some() {
-        get_recovery_parameters_when_ssh_key_can_be_deployed(&env, &app_subnet, &logger)
-    } else {
-        get_recovery_parameters_when_ssh_key_cannot_be_deployed(&env, &app_node, &logger)
-    };
-    // If we provision write access to a node, there are no admin nodes in the subnet
-    if cfg.provision_write_access {
-        admin_nodes = vec![];
-    }
+    } = get_recovery_parameters(&env, &cfg, &app_subnet, &app_node);
     info!(
         logger,
         "Using node {} to download the consensus pool, node {} to download the state, and node {} to upload the state. \
@@ -1080,92 +1072,103 @@ struct RecoveryParameters {
     download_state_height: u64,
 }
 
-/// If we can deploy read-only access to the subnet, then:
-///   - We can download the consensus pool from the node with highest certification and
-///     CUP share height.
-///   - The node where we download the state from must have a last manifest height at
-///     least as high as the highest CUP height to be able to replay correctly.
-///   - The upload node is either an unassigned node (in case of failover nodes recovery)
-///     or the same as the download state node (in case of same nodes recovery).
-///   - The admin nodes are only the upload node.
-fn get_recovery_parameters_when_ssh_key_can_be_deployed(
+fn get_recovery_parameters(
     env: &TestEnv,
+    cfg: &TestConfig,
     app_subnet: &SubnetSnapshot,
-    logger: &Logger,
-) -> RecoveryParameters {
-    let (download_pool_node, highest_cert_share, highest_cup, _) =
-        node_with_highest_cert_share_and_cup_heights(app_subnet, logger);
-
-    let download_state_node = app_subnet
-        .nodes()
-        .filter_map(|n| {
-            block_on(get_node_metrics(logger, &n.get_ip_addr()))
-                .map(|m| (n, m.manifest_height.get()))
-        })
-        .find(|(_node, manifest_height)| *manifest_height >= highest_cup)
-        .map(|(node, _)| node)
-        .expect("No node found with last manifest height >= highest CUP height");
-
-    let upload_node = env
-        .topology_snapshot()
-        .unassigned_nodes()
-        .next()
-        .unwrap_or_else(|| download_state_node.clone());
-
-    let admin_nodes = vec![upload_node.clone()];
-
-    let replay_height = highest_cert_share;
-
-    RecoveryParameters {
-        download_pool_node,
-        download_state_node,
-        upload_node,
-        admin_nodes,
-        replay_height,
-        download_state_height: highest_cup,
-    }
-}
-
-/// If we cannot deploy read-only access to the subnet, this would mean that the CUP is
-/// corrupted on enough nodes to stall the subnet which, in practice, should happen only
-/// during upgrades. In that case, all nodes stalled at the same height (the upgrade height)
-/// and the node with admin access (if not lagging behind) will have the highest
-/// certification height (and thus state), which can be used to download both the consensus
-/// pool and the state. Though, this means that this node requires admin access to read them
-/// without a readonly key.
-/// Note: inside this system test, it is not the case that all nodes stalled at the same
-/// height, and it is not the case that they stalled at an upgrade height. We would normally
-/// not need to replay anything (because it would be an upgrade height), but we need here,
-/// and since we do not break `app_node`, we know that it will have the highest
-/// certification height available in the subnet.
-fn get_recovery_parameters_when_ssh_key_cannot_be_deployed(
-    env: &TestEnv,
     app_node: &IcNodeSnapshot,
-    logger: &Logger,
 ) -> RecoveryParameters {
-    let download_pool_node = app_node.clone();
+    let logger = env.logger();
 
-    let download_state_node = download_pool_node.clone();
+    let mut parameters = if cfg.corrupt_cup.can_determine_subnet_id() {
+        // If we can deploy read-only access to the subnet, then:
+        //   - We can download the consensus pool from the node with highest certification and
+        //     CUP share height.
+        //   - The node where we download the state from must have a last manifest height at
+        //     least as high as the highest CUP height to be able to replay correctly.
+        //   - The upload node is either an unassigned node (in case of failover nodes recovery)
+        //     or the same as the download state node (in case of same nodes recovery).
+        //   - The admin nodes are only the upload node.
 
-    let upload_node = env
-        .topology_snapshot()
-        .unassigned_nodes()
-        .next()
-        .unwrap_or_else(|| download_state_node.clone());
+        let (download_pool_node, highest_cert_share, highest_cup, _) =
+            node_with_highest_cert_share_and_cup_heights(app_subnet, &logger);
 
-    let admin_nodes = vec![upload_node.clone(), download_state_node.clone()];
+        let download_state_node = app_subnet
+            .nodes()
+            .filter_map(|n| {
+                block_on(get_node_metrics(&logger, &n.get_ip_addr()))
+                    .map(|m| (n, m.manifest_height.get()))
+            })
+            .find(|(_node, manifest_height)| *manifest_height >= highest_cup)
+            .map(|(node, _)| node)
+            .expect("No node found with last manifest height >= highest CUP height");
 
-    let metrics = block_on(get_node_metrics(logger, &download_state_node.get_ip_addr()))
+        let upload_node = env
+            .topology_snapshot()
+            .unassigned_nodes()
+            .next()
+            .unwrap_or_else(|| download_state_node.clone());
+
+        let admin_nodes = vec![upload_node.clone()];
+
+        let replay_height = highest_cert_share;
+
+        RecoveryParameters {
+            download_pool_node,
+            download_state_node,
+            upload_node,
+            admin_nodes,
+            replay_height,
+            download_state_height: highest_cup,
+        }
+    } else {
+        // If we cannot deploy read-only access to the subnet, this would mean that the CUP is
+        // corrupted on enough nodes to stall the subnet which, in practice, should happen only
+        // during upgrades. In that case, all nodes stalled at the same height (the upgrade height)
+        // and the node with admin access (if not lagging behind) will have the highest
+        // certification height (and thus state), which can be used to download both the consensus
+        // pool and the state. Though, this means that this node requires admin access to read them
+        // without a readonly key.
+        // Note: inside this system test, it is not the case that all nodes stalled at the same
+        // height, and it is not the case that they stalled at an upgrade height. We would normally
+        // not need to replay anything (because it would be an upgrade height), but we need here,
+        // and since we do not break `app_node`, we know that it will have the highest
+        // certification height available in the subnet.
+
+        let download_pool_node = app_node.clone();
+
+        let download_state_node = download_pool_node.clone();
+
+        let upload_node = env
+            .topology_snapshot()
+            .unassigned_nodes()
+            .next()
+            .unwrap_or_else(|| download_state_node.clone());
+
+        let admin_nodes = vec![upload_node.clone(), download_state_node.clone()];
+
+        let metrics = block_on(get_node_metrics(
+            &logger,
+            &download_state_node.get_ip_addr(),
+        ))
         .expect("Could not fetch metrics from download node");
-    let replay_height = metrics.certification_share_height.get();
-    let download_state_height = metrics.catch_up_package_height.get();
+        let replay_height = metrics.certification_share_height.get();
+        let highest_cup = metrics.catch_up_package_height.get();
 
-    RecoveryParameters {
-        download_pool_node,
-        download_state_node,
-        upload_node,
-        admin_nodes,
-        replay_height,
-        download_state_height,
+        RecoveryParameters {
+            download_pool_node,
+            download_state_node,
+            upload_node,
+            admin_nodes,
+            replay_height,
+            download_state_height: highest_cup,
+        }
+    };
+
+    // If we provision write access to a node, there are no admin nodes in the subnet
+    if cfg.provision_write_access {
+        parameters.admin_nodes = vec![];
     }
+
+    parameters
 }
