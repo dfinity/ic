@@ -1547,7 +1547,25 @@ impl PocketIc {
                 HttpMethod::Get => reqwest_client.get(url),
                 HttpMethod::Post => reqwest_client.post(url).json(&body),
             };
-            let result = builder.send().await.expect("HTTP failure");
+            let result = match builder.send().await {
+                Ok(result) => result,
+                Err(e) => {
+                    warn!(
+                        "instance_id={} transient HTTP failure, retrying: {e}",
+                        self.instance_id,
+                    );
+                    if let Some(max_request_time_ms) = self.max_request_time_ms
+                        && start.elapsed().unwrap_or_default()
+                            > Duration::from_millis(max_request_time_ms)
+                    {
+                        panic!(
+                            "request to PocketIC server timed out after transient HTTP failure: {e}"
+                        );
+                    }
+                    std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
+                    continue;
+                }
+            };
             let status = result.status();
             match ApiResponse::<_>::from_response(result).await {
                 ApiResponse::Success(t) => break Ok(t),
@@ -1577,7 +1595,7 @@ impl PocketIc {
                     };
                     loop {
                         std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
-                        let result = reqwest_client
+                        let result = match reqwest_client
                             .get(
                                 self.server_url
                                     .join(&format!("/read_graph/{state_label}/{op_id}"))
@@ -1585,7 +1603,16 @@ impl PocketIc {
                             )
                             .send()
                             .await
-                            .expect("HTTP failure");
+                        {
+                            Ok(result) => result,
+                            Err(e) => {
+                                warn!(
+                                    "instance_id={} transient HTTP failure while polling, retrying: {e}",
+                                    self.instance_id,
+                                );
+                                continue;
+                            }
+                        };
                         if result.status() == reqwest::StatusCode::NOT_FOUND {
                             let message =
                                 String::from_utf8(result.bytes().await.unwrap().to_vec()).unwrap();
