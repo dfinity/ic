@@ -982,6 +982,7 @@ mod tests {
                 time_source,
                 replica_config,
                 state_manager,
+                dkg_pool,
                 ..
             } = dependencies_with_subnet_params(
                 pool_config.clone(),
@@ -1003,11 +1004,6 @@ mod tests {
                     ),
                 ],
             );
-            let dkg_pool = Arc::new(RwLock::new(ic_artifact_pool::dkg_pool::DkgPoolImpl::new(
-                MetricsRegistry::new(),
-                no_op_logger(),
-                Height::from(0),
-            )));
 
             let idkg_pool = Arc::new(RwLock::new(ic_artifact_pool::idkg_pool::IDkgPoolImpl::new(
                 replica_config.node_id,
