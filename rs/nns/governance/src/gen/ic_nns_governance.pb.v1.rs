@@ -440,7 +440,7 @@ pub struct Proposal {
     /// take.
     #[prost(
         oneof = "proposal::Action",
-        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28, 31, 32, 33"
+        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28, 31, 32, 33, 34"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -556,6 +556,9 @@ pub mod proposal {
         /// Load a canister snapshot.
         #[prost(message, tag = "33")]
         LoadCanisterSnapshot(super::LoadCanisterSnapshot),
+        /// Create a canister in a (possibly non-NNS) subnet and install code into it.
+        #[prost(message, tag = "34")]
+        CreateCanisterAndInstallCode(super::CreateCanisterAndInstallCode),
     }
 }
 /// Take a canister snapshot.
@@ -2609,6 +2612,9 @@ pub struct InstallCode {
     #[prost(enumeration = "install_code::CanisterInstallMode", optional, tag = "2")]
     pub install_mode: ::core::option::Option<i32>,
     /// The wasm module to install. required.
+    /// If we add support for chunked WASMs later, the WasmModule type should
+    /// probably be used in place of this field in order to be consistent with
+    /// CreateCanisterAndInstallCode.
     #[prost(bytes = "vec", optional, tag = "3")]
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub wasm_module: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
@@ -2743,6 +2749,8 @@ pub mod stop_or_start_canister {
         }
     }
 }
+/// The CanisterSettings struct as defined in the ic-interface-spec
+/// <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid.>
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -2752,17 +2760,31 @@ pub mod stop_or_start_canister {
     PartialEq,
     ::prost::Message,
 )]
-pub struct UpdateCanisterSettings {
-    /// The target canister ID to call update_settings on. Required.
+pub struct CanisterSettings {
     #[prost(message, optional, tag = "1")]
-    pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
-    /// The settings to update. Required.
-    #[prost(message, optional, tag = "2")]
-    pub settings: ::core::option::Option<update_canister_settings::CanisterSettings>,
+    pub controllers: ::core::option::Option<canister_settings::Controllers>,
+    #[prost(uint64, optional, tag = "2")]
+    pub compute_allocation: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "3")]
+    pub memory_allocation: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "4")]
+    pub freezing_threshold: ::core::option::Option<u64>,
+    #[prost(enumeration = "canister_settings::LogVisibility", optional, tag = "5")]
+    pub log_visibility: ::core::option::Option<i32>,
+    #[prost(uint64, optional, tag = "6")]
+    pub wasm_memory_limit: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "7")]
+    pub wasm_memory_threshold: ::core::option::Option<u64>,
+    #[prost(
+        enumeration = "canister_settings::SnapshotVisibility",
+        optional,
+        tag = "8"
+    )]
+    pub snapshot_visibility: ::core::option::Option<i32>,
 }
-/// Nested message and enum types in `UpdateCanisterSettings`.
-pub mod update_canister_settings {
-    /// The controllers of the canister. We use a message to wrap the repeated field because prost does
+/// Nested message and enum types in `CanisterSettings`.
+pub mod canister_settings {
+    /// We used a message to wrap the repeated field because prost does
     /// not generate `Option<Vec<T>>` for repeated fields.
     #[derive(
         candid::CandidType,
@@ -2777,35 +2799,6 @@ pub mod update_canister_settings {
         /// The controllers of the canister.
         #[prost(message, repeated, tag = "1")]
         pub controllers: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
-    }
-    /// The CanisterSettings struct as defined in the ic-interface-spec
-    /// <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid.>
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct CanisterSettings {
-        #[prost(message, optional, tag = "1")]
-        pub controllers: ::core::option::Option<Controllers>,
-        #[prost(uint64, optional, tag = "2")]
-        pub compute_allocation: ::core::option::Option<u64>,
-        #[prost(uint64, optional, tag = "3")]
-        pub memory_allocation: ::core::option::Option<u64>,
-        #[prost(uint64, optional, tag = "4")]
-        pub freezing_threshold: ::core::option::Option<u64>,
-        #[prost(enumeration = "LogVisibility", optional, tag = "5")]
-        pub log_visibility: ::core::option::Option<i32>,
-        #[prost(uint64, optional, tag = "6")]
-        pub wasm_memory_limit: ::core::option::Option<u64>,
-        #[prost(uint64, optional, tag = "7")]
-        pub wasm_memory_threshold: ::core::option::Option<u64>,
-        #[prost(enumeration = "SnapshotVisibility", optional, tag = "8")]
-        pub snapshot_visibility: ::core::option::Option<i32>,
     }
     /// Log visibility of a canister.
     #[derive(
@@ -2909,6 +2902,23 @@ pub mod update_canister_settings {
     PartialEq,
     ::prost::Message,
 )]
+pub struct UpdateCanisterSettings {
+    /// The target canister ID to call update_settings on. Required.
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// The settings to update. Required.
+    #[prost(message, optional, tag = "2")]
+    pub settings: ::core::option::Option<CanisterSettings>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct FulfillSubnetRentalRequest {
     #[prost(message, optional, tag = "1")]
     pub user: ::core::option::Option<::ic_base_types::PrincipalId>,
@@ -2954,6 +2964,72 @@ pub struct LoadCanisterSnapshot {
     /// The ID of the snapshot to load.
     #[prost(bytes = "vec", tag = "2")]
     pub snapshot_id: ::prost::alloc::vec::Vec<u8>,
+}
+/// A WASM module. Currently only supports inlined WASMs.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct WasmModule {
+    /// Derived from the `content` field. Cached here to speed up responses by
+    /// avoiding re-calculation.
+    #[prost(bytes = "vec", optional, tag = "10")]
+    pub hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(oneof = "wasm_module::Content", tags = "1")]
+    pub content: ::core::option::Option<wasm_module::Content>,
+}
+/// Nested message and enum types in `WasmModule`.
+pub mod wasm_module {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum Content {
+        /// Chunked WASMs could be added here as another oneof variant.
+        #[prost(bytes, tag = "1")]
+        Inlined(::prost::alloc::vec::Vec<u8>),
+    }
+}
+/// Create a canister in a (possibly non-NNS) subnet and install code into it.
+/// The canister is created by the NNS Root canister, which becomes its default
+/// controller.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct CreateCanisterAndInstallCode {
+    /// The subnet where the canister will be created.
+    #[prost(message, optional, tag = "1")]
+    pub host_subnet_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// Settings for the new canister.
+    /// If not specified, defaults are used (Root becomes the sole controller).
+    #[prost(message, optional, tag = "2")]
+    pub canister_settings: ::core::option::Option<CanisterSettings>,
+    /// The WASM module to install.
+    #[prost(message, optional, tag = "3")]
+    pub wasm_module: ::core::option::Option<WasmModule>,
+    /// The argument to pass to the canister's install handler.
+    #[prost(bytes = "vec", optional, tag = "4")]
+    pub install_arg: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// Derived from the `install_arg` field. Cached here to speed up responses by
+    /// avoiding re-calculation.
+    #[prost(bytes = "vec", optional, tag = "6")]
+    pub install_arg_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 /// Snapshot of a neuron's dissolve state, recorded before clamping to the
 /// Mission 70 maximum. Used to restore the original dissolve state if the

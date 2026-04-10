@@ -110,6 +110,33 @@ fn convert_install_code(item: &pb::InstallCode) -> api::InstallCode {
     }
 }
 
+/// Why this (and similar functions) exist: convert_action takes a stored Action
+/// (i.e. a pb object) by reference and converts it to a response API type.
+/// For most action types, the conversion is done via a.clone().into(). The same thing
+/// should NOT be done for CreateCanisterAndInstallCode (and similar types), because
+/// it would be very wasteful. The waste comes from cloning wasm_module, which gets
+/// immediately dropped by into.
+fn convert_create_canister_and_install_code(
+    item: &pb::CreateCanisterAndInstallCode,
+) -> api::CreateCanisterAndInstallCode {
+    let pb::CreateCanisterAndInstallCode {
+        host_subnet_id,
+        canister_settings,
+        wasm_module,
+        install_arg_hash,
+
+        // Not used.
+        install_arg: _,
+    } = item;
+
+    api::CreateCanisterAndInstallCode {
+        host_subnet_id: *host_subnet_id,
+        canister_settings: canister_settings.clone().map(|x| x.into()),
+        wasm_module_hash: wasm_module.as_ref().and_then(|w| w.hash.clone()),
+        install_arg_hash: install_arg_hash.clone(),
+    }
+}
+
 fn convert_ledger_parameters(
     item: &pb::create_service_nervous_system::LedgerParameters,
     omit_large_fields: bool,
@@ -249,6 +276,11 @@ fn convert_action(
 
         // The action types with potentially large fields need to be converted in a way that avoids
         // cloning the action first.
+        pb::proposal::Action::CreateCanisterAndInstallCode(v) => {
+            api::proposal::Action::CreateCanisterAndInstallCode(
+                convert_create_canister_and_install_code(v),
+            )
+        }
         pb::proposal::Action::InstallCode(v) => {
             api::proposal::Action::InstallCode(convert_install_code(v))
         }

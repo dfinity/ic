@@ -721,6 +721,8 @@ message Proposal {
     TakeCanisterSnapshot take_canister_snapshot = 32;
     // Load a canister snapshot.
     LoadCanisterSnapshot load_canister_snapshot = 33;
+    // Create a canister in a (possibly non-NNS) subnet and install code into it.
+    CreateCanisterAndInstallCode create_canister_and_install_code = 34;
   }
 }
 
@@ -1888,6 +1890,9 @@ message InstallCode {
   optional CanisterInstallMode install_mode = 2;
 
   // The wasm module to install. required.
+  // If we add support for chunked WASMs later, the WasmModule type should
+  // probably be used in place of this field in order to be consistent with
+  // CreateCanisterAndInstallCode.
   optional bytes wasm_module = 3;
   // The arg to pass to the canister. Optional.
   optional bytes arg = 4;
@@ -1913,10 +1918,9 @@ message StopOrStartCanister {
   optional CanisterAction action = 2;
 }
 
-message UpdateCanisterSettings {
-  // The target canister ID to call update_settings on. Required.
-  optional ic_base_types.pb.v1.PrincipalId canister_id = 1;
-
+// The CanisterSettings struct as defined in the ic-interface-spec
+// https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid.
+message CanisterSettings {
   // Log visibility of a canister.
   enum LogVisibility {
     LOG_VISIBILITY_UNSPECIFIED = 0;
@@ -1935,25 +1939,26 @@ message UpdateCanisterSettings {
     SNAPSHOT_VISIBILITY_PUBLIC = 2;
   }
 
-  // The controllers of the canister. We use a message to wrap the repeated field because prost does
+  // We used a message to wrap the repeated field because prost does
   // not generate `Option<Vec<T>>` for repeated fields.
   message Controllers {
     // The controllers of the canister.
     repeated ic_base_types.pb.v1.PrincipalId controllers = 1;
   }
 
-  // The CanisterSettings struct as defined in the ic-interface-spec
-  // https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid.
-  message CanisterSettings {
-    optional Controllers controllers = 1;
-    optional uint64 compute_allocation = 2;
-    optional uint64 memory_allocation = 3;
-    optional uint64 freezing_threshold = 4;
-    optional LogVisibility log_visibility = 5;
-    optional uint64 wasm_memory_limit = 6;
-    optional uint64 wasm_memory_threshold = 7;
-    optional SnapshotVisibility snapshot_visibility = 8;
-  }
+  optional Controllers controllers = 1;
+  optional uint64 compute_allocation = 2;
+  optional uint64 memory_allocation = 3;
+  optional uint64 freezing_threshold = 4;
+  optional LogVisibility log_visibility = 5;
+  optional uint64 wasm_memory_limit = 6;
+  optional uint64 wasm_memory_threshold = 7;
+  optional SnapshotVisibility snapshot_visibility = 8;
+}
+
+message UpdateCanisterSettings {
+  // The target canister ID to call update_settings on. Required.
+  optional ic_base_types.pb.v1.PrincipalId canister_id = 1;
 
   // The settings to update. Required.
   optional CanisterSettings settings = 2;
@@ -1977,6 +1982,39 @@ message LoadCanisterSnapshot {
 
   // The ID of the snapshot to load.
   bytes snapshot_id = 2;
+}
+
+// A WASM module. Currently only supports inlined WASMs.
+message WasmModule {
+  oneof content {
+    bytes inlined = 1;
+    // Chunked WASMs could be added here as another oneof variant.
+  }
+  // Derived from the `content` field. Cached here to speed up responses by
+  // avoiding re-calculation.
+  optional bytes hash = 10;
+}
+
+// Create a canister in a (possibly non-NNS) subnet and install code into it.
+// The canister is created by the NNS Root canister, which becomes its default
+// controller.
+message CreateCanisterAndInstallCode {
+  // The subnet where the canister will be created.
+  optional ic_base_types.pb.v1.PrincipalId host_subnet_id = 1;
+
+  // Settings for the new canister.
+  // If not specified, defaults are used (Root becomes the sole controller).
+  optional CanisterSettings canister_settings = 2;
+
+  // The WASM module to install.
+  optional WasmModule wasm_module = 3;
+
+  // The argument to pass to the canister's install handler.
+  optional bytes install_arg = 4;
+
+  // Derived from the `install_arg` field. Cached here to speed up responses by
+  // avoiding re-calculation.
+  optional bytes install_arg_hash = 6;
 }
 
 // Snapshot of a neuron's dissolve state, recorded before clamping to the

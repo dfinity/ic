@@ -8,6 +8,7 @@ use ic_types::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::execution_environment::SUBNET_HEAP_DELTA_CAPACITY;
 use crate::flag_status::FlagStatus;
 
 // Defining 100000 globals in a module can result in significant overhead in
@@ -71,9 +72,6 @@ pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 10_000;
 /// A sandbox process may be evicted after it has been idle for this
 /// duration and sandbox process eviction is activated.
 pub(crate) const DEFAULT_MAX_SANDBOX_IDLE_TIME: Duration = Duration::from_secs(30 * 60);
-
-/// Sandbox processes may be evicted if their total RSS exceeds 50 GiB.
-pub(crate) const DEFAULT_MAX_SANDBOXES_RSS: NumBytes = NumBytes::new(50 * 1024 * 1024 * 1024);
 
 /// The maximum number of pages that a message dirties without optimizing dirty
 /// page copying by triggering a new execution slice for copying pages.
@@ -218,13 +216,11 @@ pub struct Config {
     /// duration and sandbox process eviction is activated.
     pub max_sandbox_idle_time: Duration,
 
-    /// Sandbox processes may be evicted if their total RSS exceeds
-    /// the specified amount in bytes. By default, we assume that
-    /// each sandbox process has 50 MiB RSS (see `DEFAULT_SANDBOX_PROCESS_RSS`).
-    /// The actual RSS is updated in the background thread, while the
-    /// synchronous RSS-based eviction is only triggered when there is
-    /// a memory pressure (see `DEFAULT_MIN_MEM_AVAILABLE_TO_EVICT_SANDBOXES`)
-    pub max_sandboxes_rss: NumBytes,
+    /// The subnet heap delta capacity used for computing the maximum
+    /// sandbox RSS (`default_subnet_heap_delta_capacity / 3`).
+    /// This is the default value from `SchedulerConfig` and may be
+    /// overridden at runtime by the registry's `maximum_state_delta`.
+    pub default_subnet_heap_delta_capacity: NumBytes,
 
     /// Dirty page overhead. The number of instructions to charge for each dirty
     /// page created by a write to stable memory. The default value should be
@@ -286,7 +282,7 @@ impl Config {
             },
             max_sandbox_count: DEFAULT_MAX_SANDBOX_COUNT,
             max_sandbox_idle_time: DEFAULT_MAX_SANDBOX_IDLE_TIME,
-            max_sandboxes_rss: DEFAULT_MAX_SANDBOXES_RSS,
+            default_subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
             dirty_page_overhead: NumInstructions::new(0),
             trace_execution: FlagStatus::Disabled,
             max_dirty_pages_without_optimization: DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION,

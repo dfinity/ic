@@ -14,7 +14,10 @@ use axum::{
 use candid::{CandidType, Principal};
 use ic_bn_lib::http::proxy;
 use ic_bn_lib_common::traits::http::Client as HttpClient;
-use ic_types::{CanisterId, SubnetId, messages::ReplicaHealthStatus};
+use ic_types::{
+    CanisterId, SubnetId,
+    messages::{Blob, ReplicaHealthStatus},
+};
 use serde::Deserialize;
 use url::Url;
 
@@ -35,6 +38,31 @@ pub struct HttpRequest {
     pub body: Vec<u8>,
 }
 
+/// Paths for a read state call.
+/// To avoid multiple caching the paths must be sorted.
+#[derive(Debug, Clone, Default, Hash, Eq, PartialEq)]
+pub struct ReadStatePaths(Vec<Vec<Vec<u8>>>);
+
+impl ReadStatePaths {
+    /// Returns the combined length of all labels
+    pub fn len(&self) -> usize {
+        self.0.iter().flat_map(|x| x.iter().map(|x| x.len())).sum()
+    }
+}
+
+impl From<Vec<Vec<Blob>>> for ReadStatePaths {
+    fn from(paths: Vec<Vec<Blob>>) -> Self {
+        let mut paths: Vec<Vec<Vec<u8>>> = paths
+            .into_iter()
+            .map(|x| x.into_iter().map(|x| x.0).collect())
+            .collect();
+
+        paths.sort();
+
+        Self(paths)
+    }
+}
+
 /// Per-request information
 #[derive(Debug, Clone, Default)]
 pub struct RequestContext {
@@ -49,11 +77,8 @@ pub struct RequestContext {
     pub ingress_expiry: Option<u64>,
     pub arg: Option<Vec<u8>>,
 
-    // Filled in when the inner request is HTTP
+    /// Filled in when the inner request is HTTP
     pub http_request: Option<HttpRequest>,
-
-    // Filled in for read_state requests
-    pub read_state_paths: Option<Vec<Vec<Vec<u8>>>>,
 }
 
 impl RequestContext {

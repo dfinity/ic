@@ -213,6 +213,9 @@ thread_local! {
     static ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS: Cell<bool>
         = const { Cell::new(true) };
 
+    static ENABLE_CREATE_CANISTER_AND_INSTALL_CODE_PROPOSALS: Cell<bool>
+        = const { Cell::new(cfg!(feature = "test")) };
+
     static ENABLE_SUBNET_SPLITTING_PROPOSALS: Cell<bool>
         = const { Cell::new(false) };
 
@@ -297,6 +300,20 @@ pub fn temporarily_enable_bless_alternative_guest_os_version_proposals() -> Temp
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_bless_alternative_guest_os_version_proposals() -> Temporary {
     Temporary::new(&ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS, false)
+}
+
+pub fn are_create_canister_and_install_code_proposals_enabled() -> bool {
+    ENABLE_CREATE_CANISTER_AND_INSTALL_CODE_PROPOSALS.get()
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_create_canister_and_install_code_proposals() -> Temporary {
+    Temporary::new(&ENABLE_CREATE_CANISTER_AND_INSTALL_CODE_PROPOSALS, true)
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_create_canister_and_install_code_proposals() -> Temporary {
+    Temporary::new(&ENABLE_CREATE_CANISTER_AND_INSTALL_CODE_PROPOSALS, false)
 }
 
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]

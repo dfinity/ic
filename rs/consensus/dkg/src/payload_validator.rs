@@ -733,7 +733,8 @@ mod tests {
                 MetricsRegistry::new(),
                 no_op_logger(),
             );
-            let mut dkg_pool = DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+            let mut dkg_pool =
+                DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger(), dkg_summary.height);
             // Update start height
             let start_height = Height::new(10);
             dkg_pool.apply(vec![ChangeAction::Purge(start_height)]);
