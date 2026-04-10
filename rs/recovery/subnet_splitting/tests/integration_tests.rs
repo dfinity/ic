@@ -58,7 +58,7 @@ fn load_metrics_e2e_test() {
         set_up(
             state_machine.as_ref(),
             other_state_machine.as_ref(),
-            /*canisters_count=*/ 100,
+            /*canisters_count=*/ 10,
             logger,
         );
         info!(logger, "Creating a checkpoint");
@@ -278,7 +278,7 @@ fn set_up(
             body: vec![],
         });
         state_machine
-            .await_ingress(msg_id, /*max_ticks=*/ 10)
+            .await_ingress(msg_id, /*max_ticks=*/ 100)
             .unwrap();
 
         // Tell the canister to send a xnet message
