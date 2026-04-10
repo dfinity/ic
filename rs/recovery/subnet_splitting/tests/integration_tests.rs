@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::{fs::read_to_string, io::Write, str::FromStr};
 
 use candid::Encode;
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, HttpMethod};
@@ -89,16 +89,47 @@ fn load_metrics_e2e_test() {
         let load_samples_path = dir.path().join("load_samples.csv");
         ic_state_tool::commands::canister_metrics::get(checkpoint_dir.clone(), &load_samples_path)
             .expect("Should compute canister metrics for a valid checkpoint");
+        let communication_samples_path = dir.path().join("comm_samples.csv");
+        let mut file = std::fs::File::create(&communication_samples_path).unwrap();
 
-        // TODO(CON-1569): use a tool for finding a good split, once it's in the `ic-public` repo.
-        // For now we use a static set of ranges.
-        let mut canister_ids = state_machine.get_canister_ids();
-        canister_ids.sort();
-        // middle half of the canisters
-        let canister_id_ranges = vec![CanisterIdRange {
-            start: canister_ids[5],
-            end: canister_ids[14],
-        }];
+        // TODO(CON-1569): use actual connectivity metrics
+        {
+            file.write_all(b"sender_canister_id,receiver_canister_id,count\n")
+                .unwrap();
+            let mut canister_ids = state_machine.get_canister_ids();
+            canister_ids.sort();
+
+            for canister_id in &canister_ids {
+                file.write_all(format!("{canister_id},{canister_id},1\n").as_bytes())
+                    .unwrap()
+            }
+        }
+
+        let split_output_path = dir.path().join("split_output.csv");
+        let split_finder_path =
+            std::env::var("SPLIT_FINDER_PATH").expect("SPLIT_FINDER_PATH not set");
+        let output = std::process::Command::new(split_finder_path)
+            .args(["--load-path", &load_samples_path.display().to_string()])
+            .args([
+                "--comm-data-path",
+                &communication_samples_path.display().to_string(),
+            ])
+            .args(["--output-path", &split_output_path.display().to_string()])
+            .args(["--load-type", "instructions_executed"])
+            .output()
+            .unwrap();
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "The script return a non-zero value:\n\n === stdout ===\n{}\n\n === stderr ===\n{}",
+            str::from_utf8(&output.stdout).unwrap(),
+            str::from_utf8(&output.stderr).unwrap(),
+        );
+        let canister_id_ranges = read_to_string(&split_output_path)
+            .expect("The split finder script should have produced a valid output")
+            .lines()
+            .map(|line| CanisterIdRange::from_str(&line).expect("Not a valid CanisterIdRange"))
+            .collect();
 
         // And finally use the `subnet-splitting-tool` to estimate the loads on each subnet after a
         // split.
@@ -133,15 +164,15 @@ fn load_metrics_e2e_test() {
         // Accept up to 10% error. The precise values are not important here and they're very sensitive
         // to the changes to the replicated state / execution. It's mostly a sanity check that the
         // returned values are not too ridiculous and they might have to be updated once in a while.
-        assert_near!(states_sizes_bytes.source, 4662083, 0.1);
-        assert_near!(states_sizes_bytes.destination, 4662072, 0.1);
-        assert_near!(instructions_executed.source, 7664259, 0.1);
-        assert_near!(instructions_executed.destination, 7680855, 0.1);
+        assert_near!(states_sizes_bytes.source, 4572726, 0.1);
+        assert_near!(states_sizes_bytes.destination, 4572702, 0.1);
+        assert_near!(instructions_executed.source, 7675890, 0.1);
+        assert_near!(instructions_executed.destination, 7652590, 0.1);
         assert_eq!(
             ingress_messages_executed,
             Estimates {
-                source: 19,
-                destination: 20,
+                source: 20,
+                destination: 19,
             }
         );
         assert_eq!(
@@ -154,8 +185,8 @@ fn load_metrics_e2e_test() {
         assert_eq!(
             local_subnet_messages_executed_upper_bound,
             Estimates {
-                source: 13,
-                destination: 15,
+                source: 15,
+                destination: 13,
             }
         );
         assert_eq!(
@@ -168,8 +199,8 @@ fn load_metrics_e2e_test() {
         assert_eq!(
             heartbeats_and_global_timers_executed,
             Estimates {
-                source: 379,
-                destination: 315,
+                source: 341,
+                destination: 353,
             }
         );
     })

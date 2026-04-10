@@ -1,0 +1,121 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import argparse
+import os
+import sys
+from pathlib import Path
+
+import pulp
+
+from solver_core import solve_partition
+from data_io import load_subnet_data
+
+################################################################
+# Parameters
+EPSILON_LOAD_DEFAULT = 0.05  # Acceptable primary load deviation
+MAX_CUTS = 20
+LOAD_TYPES = [
+    'instructions_executed',
+    'ingress_messages_executed',
+    'remote_subnet_messages_executed',
+    'local_subnet_messages_executed',
+    'http_outcalls_executed',
+    'heartbeats_and_global_timers_executed'
+]
+
+################################################################
+# Main pipeline functions
+
+
+def compute_targets(load_c):
+    total_load_c = sum(load_c)
+    max_canister_load = max(load_c) if len(load_c) > 0 else 0
+    average_load = total_load_c / 2
+    target_load_0 = max(max_canister_load, average_load)
+    target_load_1 = total_load_c - target_load_0
+    return total_load_c, max_canister_load, average_load, target_load_0, target_load_1
+
+def run_partition(path: Path,
+                  comm_data_path: Path,
+                  output_path: Path,
+                  load_type: str,
+                  epsilon_load: float,
+                  max_cuts: int):
+    data = load_subnet_data(path, load_type, comm_data_path)
+    communicating_canisters = data["communicating_canisters"]
+    edges = data["edges"]
+    load = data["load"]
+    index_to_canister_id = data["index_to_canister_id"]
+    comm_data = data["comm_data"]
+    N_c = data["N_c"]
+
+    total_load_primary, max_load_primary, avg_load_primary, target_0_primary, target_1_primary = compute_targets(load)
+
+    result = solve_partition(
+        load,
+        edges,
+        target_0_primary,
+        target_1_primary,
+        epsilon=epsilon_load,
+        max_cuts=max_cuts,
+        load_secondary=None,
+        target_sec_0=None,
+        target_sec_1=None,
+        epsilon_secondary=None,
+    )
+
+    prob = result["prob"]
+    assignments = result["assignments"]
+
+    if prob.status != pulp.LpStatusOptimal:
+        print("Status: Solution Not Optimal")
+        print("Please check model constraints and settings.")
+        sys.exit(1)
+
+    with open(output_path, 'w') as output_file:
+        first_in_range = None
+        last_in_range = None
+
+        for k in range(N_c):
+            is_to_be_migrated = (assignments[k] == 1)
+
+            if is_to_be_migrated:
+                if first_in_range is not None and last_in_range is not None:
+                    output_file.write(f"{first_in_range}:{last_in_range}\n")
+                first_in_range, last_in_range = None, None
+            else:
+                canister_id = index_to_canister_id[k]
+                last_in_range = canister_id
+                if first_in_range is None:
+                    first_in_range = canister_id
+
+        if first_in_range is not None and last_in_range is not None:
+            output_file.write(f"{first_in_range}:{last_in_range}\n")
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Run subnet splitting MILP.")
+    parser.add_argument("--load-path", type=Path, help="Path to load data", required=True)
+    parser.add_argument("--comm-data-path", type=Path, help="Path to canister-to-canister communication data", required=True)
+    parser.add_argument("--output-path", type=Path, help="Path to output data", required=True)
+    parser.add_argument("--load-type", type=str, help="Type of load to optimize for", choices=LOAD_TYPES, default="instructions_executed", required=True)
+    parser.add_argument("--epsilon-load", type=float, default=EPSILON_LOAD_DEFAULT, help="Allowed primary load deviation fraction")
+    parser.add_argument("--max-cuts", type=int, default=MAX_CUTS, help="Maximum number of routing cuts")
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+
+    run_partition(
+        path=args.load_path,
+        output_path=args.output_path,
+        comm_data_path=args.comm_data_path,
+        load_type=args.load_type,
+        epsilon_load=args.epsilon_load,
+        max_cuts=args.max_cuts,
+    )
+
+
+if __name__ == "__main__":
+    main()
