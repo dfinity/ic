@@ -31,7 +31,7 @@
 
 use anyhow::Result;
 use ic_consensus_system_test_subnet_recovery::utils::{
-    BACKUP_USERNAME, SshKeys, break_nodes, get_ssh_keys_for_user,
+    BACKUP_USERNAME, NodeHeights, SshKeys, break_nodes, get_ssh_keys_for_user,
     node_with_highest_cert_share_and_cup_heights,
 };
 use ic_limits::DKG_INTERVAL_HEIGHT;
@@ -144,7 +144,11 @@ fn log_instructions(env: TestEnv) {
     };
 
     loop {
-        let (_, highest_cert_share, _, _) = node_with_highest_cert_share_and_cup_heights(
+        let NodeHeights {
+            node: _,
+            cert_share: highest_cert_share,
+            cup: _,
+        } = node_with_highest_cert_share_and_cup_heights(
             &env.topology_snapshot().root_subnet(),
             &logger,
         );

@@ -2,7 +2,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::bail;
 use ic_consensus_system_test_subnet_recovery::utils::{
-    BACKUP_USERNAME, SshKeys, assert_subnet_is_broken, break_nodes, get_ssh_keys_for_user,
+    BACKUP_USERNAME, NodeHeights, SshKeys, assert_subnet_is_broken, break_nodes,
+    get_ssh_keys_for_user,
     local::{NNS_RECOVERY_OUTPUT_DIR_REMOTE_PATH, nns_subnet_recovery_same_nodes_local_cli_args},
     node_with_highest_cert_share_and_cup_heights, remote_recovery,
 };
@@ -330,9 +331,12 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         );
     }
 
-    // Download pool from the node with the highest certification share height
-    let (download_pool_node, highest_cert_share, highest_cup, _) =
-        node_with_highest_cert_share_and_cup_heights(&nns_subnet, &logger);
+    // Download pool from the node with the highest certification share and CUP heights
+    let NodeHeights {
+        node: download_pool_node,
+        cert_share: highest_cert_share,
+        cup: highest_cup,
+    } = node_with_highest_cert_share_and_cup_heights(&nns_subnet, &logger);
     info!(
         logger,
         "Selected node {} ({:?}) as download pool with certification share height {}",

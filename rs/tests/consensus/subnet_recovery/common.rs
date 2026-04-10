@@ -29,8 +29,8 @@ Success::
 end::catalog[] */
 
 use crate::utils::{
-    READONLY_USERNAME, RECOVERY_USERNAME, SshKeys, assert_subnet_is_broken, break_nodes,
-    get_ssh_keys_for_user, halt_subnet, local::app_subnet_recovery_local_cli_args,
+    NodeHeights, READONLY_USERNAME, RECOVERY_USERNAME, SshKeys, assert_subnet_is_broken,
+    break_nodes, get_ssh_keys_for_user, halt_subnet, local::app_subnet_recovery_local_cli_args,
     node_with_highest_cert_share_and_cup_heights, remote_recovery, unhalt_subnet,
 };
 use canister_test::Canister;
@@ -51,7 +51,7 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
-    RecoveryArgs,
+    NodeMetrics, RecoveryArgs,
     admin_helper::AdminHelper,
     app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs, StepType},
     get_node_metrics,
@@ -1090,8 +1090,11 @@ fn get_recovery_parameters(
         //     or the same as the download state node (in case of same nodes recovery).
         //   - The admin nodes are only the upload node.
 
-        let (download_pool_node, highest_cert_share, highest_cup, _) =
-            node_with_highest_cert_share_and_cup_heights(app_subnet, &logger);
+        let NodeHeights {
+            node: download_pool_node,
+            cert_share: highest_cert_share,
+            cup: highest_cup,
+        } = node_with_highest_cert_share_and_cup_heights(app_subnet, &logger);
 
         let download_state_node = app_subnet
             .nodes()
@@ -1111,14 +1114,12 @@ fn get_recovery_parameters(
 
         let admin_nodes = vec![upload_node.clone()];
 
-        let replay_height = highest_cert_share;
-
         RecoveryParameters {
             download_pool_node,
             download_state_node,
             upload_node,
             admin_nodes,
-            replay_height,
+            replay_height: highest_cert_share,
             download_state_height: highest_cup,
         }
     } else {
@@ -1147,21 +1148,23 @@ fn get_recovery_parameters(
 
         let admin_nodes = vec![upload_node.clone(), download_state_node.clone()];
 
-        let metrics = block_on(get_node_metrics(
+        let NodeMetrics {
+            certification_share_height: highest_cert_share,
+            catch_up_package_height: highest_cup,
+            ..
+        } = block_on(get_node_metrics(
             &logger,
             &download_state_node.get_ip_addr(),
         ))
         .expect("Could not fetch metrics from download node");
-        let replay_height = metrics.certification_share_height.get();
-        let highest_cup = metrics.catch_up_package_height.get();
 
         RecoveryParameters {
             download_pool_node,
             download_state_node,
             upload_node,
             admin_nodes,
-            replay_height,
-            download_state_height: highest_cup,
+            replay_height: highest_cert_share.get(),
+            download_state_height: highest_cup.get(),
         }
     };
 
