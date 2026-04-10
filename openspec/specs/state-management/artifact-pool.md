@@ -1,8 +1,8 @@
 # Artifact Pool Management
 
-**Crates**: `ic-artifact-pool`
+**Crates**: `ic-artifact-pool`, `load_blocks`, `ic-consensus-pool-util`
 
-The artifact pool manages consensus, certification, DKG, IDKG, ingress, and canister HTTP artifacts using a combination of in-memory and persistent storage.
+The artifact pool manages consensus, certification, DKG, IDKG, ingress, and canister HTTP artifacts using a combination of in-memory and persistent storage. The `load_blocks` utility loads finalized blocks from the persistent pool for replay and recovery. The `ic-consensus-pool-util` crate provides helper functions for querying and navigating the consensus pool (e.g., finding blocks at specific heights, iterating finalized chains).
 
 ## Requirements
 

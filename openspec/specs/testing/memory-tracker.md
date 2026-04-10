@@ -1,6 +1,6 @@
 # Memory Tracker
 
-The `ic-memory-tracker` crate (`rs/memory_tracker/`) provides memory page tracking for the IC execution environment, using signal handlers to intercept memory accesses and manage page-level permissions.
+The `ic-memory-tracker` crate (`rs/memory_tracker/`) provides memory page tracking for the IC execution environment, using signal handlers to intercept memory accesses and manage page-level permissions. Sub-crates include `memory_ops` (low-level memory copy/fill operations) and `bit_vec` (bit vector utilities for page tracking bitmaps).
 
 ## Requirements
 
