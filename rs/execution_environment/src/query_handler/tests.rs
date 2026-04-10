@@ -526,24 +526,23 @@ fn queries_to_frozen_canisters_are_rejected() {
     //   and default_freeze_threshold = 2_592_000 s (30 days)
     //   and gib_storage_per_second_fee = 317_500 (10 SDR/GiB/year)
     //
-    // Memory at install time (~12_510 bytes with log, ~222 bytes without):
+    // Memory at install time (12_422 bytes with log, 134 bytes without):
     //   134 bytes canister history
     //   + 12_288 bytes log memory store (4 KiB header + 4 KiB index + 4 KiB data)
-    //   + 88 bytes other system state overhead
     //
-    // With log (12_510 bytes):
-    //   idle = floor(12_510 * 317_500 * 86_400 / 1_073_741_824) = 319_605
-    //   freeze = 319_605 * 2_592_000 / 86_400 = 9_588_150
-    //   low_cycles = 300_005_000_000 + 9_588_150 = 300_014_588_150
+    // With log (12_422 bytes):
+    //   idle = floor(12_422 * 317_500 * 86_400 / 1_073_741_824) = 317_357
+    //   freeze = 317_357 * 2_592_000 / 86_400 = 9_520_710
+    //   low_cycles = 300_005_000_000 + 9_520_710 = 300_014_520_710
     //
-    // Without log (222 bytes):
-    //   idle = floor(222 * 317_500 * 86_400 / 1_073_741_824) = 5_671
-    //   freeze = 5_671 * 2_592_000 / 86_400 = 170_130
-    //   low_cycles = 300_005_000_000 + 170_130 = 300_005_170_130
+    // Without log (134 bytes):
+    //   idle = floor(134 * 317_500 * 86_400 / 1_073_741_824) = 3_423
+    //   freeze = 3_423 * 2_592_000 / 86_400 = 102_690
+    //   low_cycles = 300_005_000_000 + 102_690 = 300_005_102_690
     let low_cycles = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-        Cycles::new(300_014_588_150)
+        Cycles::new(300_014_520_710)
     } else {
-        Cycles::new(300_005_170_130)
+        Cycles::new(300_005_102_690)
     };
     let canister_a = test.universal_canister_with_cycles(low_cycles).unwrap();
     test.update_freezing_threshold(canister_a, freezing_threshold)
