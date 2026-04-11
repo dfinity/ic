@@ -30,6 +30,12 @@ Update calls MUST invoke canister methods that modify state, with proper call co
 **When** the context is created
 **Then** the call context tracks origin, outstanding calls, and whether a response has been sent
 
+### SCENARIO-MSGEXEC-015: Replicated query call execution
+**Given** a query method is called via an ingress or inter-canister request in replicated context
+**When** execution runs
+**Then** the query executes with replicated state changes
+**And** the canister can reply or reject but cannot make inter-canister calls
+
 ---
 
 ## REQ-MSGEXEC-002: Response Callback Execution
@@ -60,6 +66,20 @@ When a response arrives, the appropriate callback MUST be executed.
 **Then** cycles sent but not accepted by the callee are refunded
 **And** cycles reserved for response transmission but not fully used are refunded
 **And** the refund for sent cycles cannot exceed the originally sent cycles
+
+### SCENARIO-MSGEXEC-016: Callback unregistration
+**Given** a response callback finishes (including cleanup if needed)
+**When** post-execution cleanup runs
+**Then** the callback is unregistered from the call context
+**And** if all callbacks are unregistered and a response was sent, the call context is closed
+**And** unused execution cycles are refunded
+
+### SCENARIO-MSGEXEC-017: Response callback with DTS
+**Given** a response callback exceeds the slice instruction limit
+**When** deterministic time slicing pauses the callback
+**Then** the callback execution is paused and resumed in a subsequent round
+**And** if the callback traps after resumption, the cleanup callback may also be paused
+**And** the clean canister state is preserved for re-application of state changes on resume
 
 ---
 
@@ -111,6 +131,55 @@ The `canister_inspect_message` system method MUST allow canisters to filter ingr
 **When** an ingress message arrives
 **Then** the message is accepted by default
 
+### SCENARIO-MSGEXEC-018: Inspect message for management canister
+**Given** an ingress message is directed to the management canister (`IC_00`)
+**When** ingress inspection runs
+**Then** method-specific validation is performed (e.g., controller check, subnet admin check)
+**And** certain methods are rejected entirely for ingress (e.g., `raw_rand`, `deposit_cycles`, `http_request`)
+
+---
+
+## REQ-MSGEXEC-005: Call or Task Execution Flow
+
+The execution of calls and tasks MUST follow a common flow with cycle prepayment, metadata propagation, and validation.
+
+### SCENARIO-MSGEXEC-019: Execution cycle prepayment
+**Given** a call or task begins execution
+**When** cycles are prepaid based on the message instruction limit
+**Then** the prepaid cycles are deducted from the canister balance
+**And** if prepayment fails (canister frozen), the message fails with `CanisterOutOfCycles`
+
+### SCENARIO-MSGEXEC-020: Request metadata propagation
+**Given** an inter-canister request triggers execution
+**When** the execution context is set up
+**Then** request metadata (call tree depth, call tree start time) is propagated to any downstream calls
+**And** for new call trees (ingress or tasks), metadata is initialized with the current time
+
+### SCENARIO-MSGEXEC-021: Message validation
+**Given** a message arrives for execution
+**When** pre-execution validation runs
+**Then** the canister must be in `Running` state (not `Stopping` or `Stopped`)
+**And** the canister must have a Wasm module installed
+**And** the Wasm module must export the requested method
+
+---
+
+## REQ-MSGEXEC-006: Ingress Filtering
+
+Ingress messages MUST be filtered before entering the execution pipeline.
+
+### SCENARIO-MSGEXEC-022: Ingress filter service
+**Given** an ingress message arrives at the replica
+**When** the ingress filter service processes the message
+**Then** it checks the message against the latest certified state
+**And** for management canister messages, method-level permissions are checked
+**And** for canister messages, `canister_inspect_message` is executed if available
+
+### SCENARIO-MSGEXEC-023: Certified state unavailable
+**Given** the ingress filter cannot obtain certified state
+**When** an ingress message arrives
+**Then** the message is rejected with `CertifiedStateUnavailable`
+
 ---
 
 ## Traceability
@@ -121,3 +190,5 @@ The `canister_inspect_message` system method MUST allow canisters to filter ingr
 | REQ-MSGEXEC-002 | Response callback | narrative | rs/execution_environment/src/execution/response.rs |
 | REQ-MSGEXEC-003 | System task execution | narrative | rs/execution_environment/tests/ |
 | REQ-MSGEXEC-004 | Inspect message | narrative | rs/execution_environment/tests/ |
+| REQ-MSGEXEC-005 | Call or task execution flow | narrative | rs/execution_environment/src/execution/call_or_task.rs |
+| REQ-MSGEXEC-006 | Ingress filtering | narrative | rs/execution_environment/src/ |
