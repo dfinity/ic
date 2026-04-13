@@ -987,6 +987,7 @@ pub struct CanisterHttpResponseMetadata {
     pub id: CallbackId,
     pub content_hash: CryptoHashOf<CanisterHttpResponse>,
     pub content_size: u32,
+    pub is_reject: bool,
     pub registry_version: RegistryVersion,
     pub replica_version: ReplicaVersion,
 }
@@ -997,12 +998,14 @@ impl CountBytes for CanisterHttpResponseMetadata {
             id,
             content_hash,
             content_size,
+            is_reject,
             registry_version,
             replica_version,
         } = self;
         size_of_val(id)
             + content_hash.get_ref().0.len()
             + size_of_val(content_size)
+            + size_of_val(is_reject)
             + size_of_val(registry_version)
             + replica_version.as_ref().len()
     }

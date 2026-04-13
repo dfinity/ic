@@ -554,6 +554,26 @@ fn content_size_validation() {
     );
 }
 
+/// Test that payloads with wrong is_reject flag don't validate
+#[test]
+fn is_reject_validation() {
+    let validation_result = run_validatation_test(
+        true,
+        |_response, metadata| {
+            metadata.is_reject = !metadata.is_reject;
+        },
+        &default_validation_context(),
+    );
+    assert_matches!(
+        validation_result,
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::IsRejectMismatch { .. },
+            ),
+        ))
+    );
+}
+
 /// Test that payloads don't validate, if registry for height does not exist
 #[test]
 fn registry_unavailable_validation() {
@@ -1373,6 +1393,7 @@ fn test_response_and_metadata_with_content(
         id: response.id,
         content_hash: crypto_hash(&response),
         content_size: response.content.count_bytes() as u32,
+        is_reject: matches!(response.content, CanisterHttpResponseContent::Reject(_)),
         registry_version: RegistryVersion::new(1),
         replica_version: ReplicaVersion::default(),
     };
@@ -2344,6 +2365,37 @@ fn flexible_invalid_content_size_mismatch() {
                     }
                 )
             )) if metadata_size == wrong_size && calculated_size == expected_size
+        );
+    });
+}
+
+#[test]
+fn flexible_invalid_is_reject_mismatch() {
+    let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_flexible_context(4, callback_id, committee, 1, 4, |payload_builder, _pool| {
+        let mut entry = flexible_response(42, 0, b"data");
+        entry.proof.content.is_reject = !entry.proof.content.is_reject;
+
+        let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
+            callback_id,
+            responses: vec![entry],
+        }]);
+
+        let result = payload_builder.validate_payload(
+            Height::from(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_to_bytes_max_4mb(payload),
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::IsRejectMismatch { .. }
+                )
+            ))
         );
     });
 }
@@ -3850,6 +3902,41 @@ fn flexible_error_too_many_request_errors_content_size_mismatch() {
 }
 
 #[test]
+fn flexible_error_too_many_request_errors_is_reject_mismatch() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
+        let entry_ok = flexible_reject_response(callback_id.get(), 0);
+        let mut entry_bad = flexible_reject_response(callback_id.get(), 1);
+        entry_bad.proof.content.is_reject = !entry_bad.proof.content.is_reject;
+
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+                callback_id,
+                reject_responses: vec![entry_ok, entry_bad],
+            }],
+            ..Default::default()
+        };
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_to_bytes_max_4mb(payload),
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::IsRejectMismatch { .. }
+                )
+            ))
+        );
+    });
+}
+
+#[test]
 fn flexible_error_too_many_request_errors_proof_id_mismatch() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
@@ -4084,6 +4171,7 @@ fn metadata_share_with_content_size(
         id: CallbackId::new(callback_id),
         content_hash: CryptoHashOf::new(CryptoHash(vec![0xAB; 32])),
         content_size,
+        is_reject: false,
         registry_version: RegistryVersion::new(1),
         replica_version: ReplicaVersion::default(),
     };

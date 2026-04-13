@@ -40,6 +40,11 @@ pub enum InvalidCanisterHttpPayloadReason {
         metadata_size: u32,
         calculated_size: u32,
     },
+    /// The is_reject flag of the signed metadata does not match the actual response content type
+    IsRejectMismatch {
+        metadata_is_reject: bool,
+        calculated_is_reject: bool,
+    },
     /// A timeout refers to a CallbackId that is unknown by the StateManager
     UnknownCallbackId(CallbackId),
     /// A CallbackId was included as a timeout, however the Request has not timed out at all
