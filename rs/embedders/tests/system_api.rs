@@ -115,6 +115,7 @@ fn replicated_query_api() -> ApiType {
         vec![],
         user_test_id(1).get(),
         call_context_test_id(1),
+        None,
     )
 }
 
@@ -159,6 +160,7 @@ fn cleanup_api() -> ApiType {
         time: UNIX_EPOCH,
         reject_code: 0,
         call_context_instructions_executed: 0.into(),
+        sender_info: None,
     }
 }
 
@@ -167,11 +169,18 @@ fn composite_cleanup_api() -> ApiType {
         caller: PrincipalId::new_anonymous(),
         time: UNIX_EPOCH,
         call_context_instructions_executed: 0.into(),
+        sender_info: None,
     }
 }
 
 fn inspect_message_api() -> ApiType {
-    ApiType::inspect_message(user_test_id(1).get(), "".to_string(), vec![], UNIX_EPOCH)
+    ApiType::inspect_message(
+        user_test_id(1).get(),
+        "".to_string(),
+        vec![],
+        UNIX_EPOCH,
+        None,
+    )
 }
 
 fn system_task_api() -> ApiType {
@@ -187,6 +196,10 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::MsgArgDataCopy => vec!["I", "U", "RQ", "NRQ", "CQ", "Ry", "CRy", "F"],
         SystemApiCallId::MsgCallerSize => vec!["*"],
         SystemApiCallId::MsgCallerCopy => vec!["*"],
+        SystemApiCallId::MsgCallerInfoDataSize => vec!["U", "RQ", "NRQ", "CQ", "Ry", "Rt", "CRy", "CRt", "C", "CC", "F"],
+        SystemApiCallId::MsgCallerInfoDataCopy => vec!["U", "RQ", "NRQ", "CQ", "Ry", "Rt", "CRy", "CRt", "C", "CC", "F"],
+        SystemApiCallId::MsgCallerInfoSignerSize => vec!["U", "RQ", "NRQ", "CQ", "Ry", "Rt", "CRy", "CRt", "C", "CC", "F"],
+        SystemApiCallId::MsgCallerInfoSignerCopy => vec!["U", "RQ", "NRQ", "CQ", "Ry", "Rt", "CRy", "CRt", "C", "CC", "F"],
         SystemApiCallId::MsgRejectCode => vec!["Ry", "Rt", "CRy", "CRt", "C"],
         SystemApiCallId::MsgRejectMsgSize => vec!["Rt", "CRt"],
         SystemApiCallId::MsgRejectMsgCopy => vec!["Rt", "CRt"],
@@ -282,6 +295,46 @@ fn api_availability_test(
         SystemApiCallId::MsgCallerCopy => {
             assert_api_availability(
                 |api| api.ic0_msg_caller_copy(0, 0, 0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::MsgCallerInfoDataSize => {
+            assert_api_availability(
+                |api| api.ic0_msg_caller_info_data_size(),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::MsgCallerInfoDataCopy => {
+            assert_api_availability(
+                |api| api.ic0_msg_caller_info_data_copy(0, 0, 0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::MsgCallerInfoSignerSize => {
+            assert_api_availability(
+                |api| api.ic0_msg_caller_info_signer_size(),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::MsgCallerInfoSignerCopy => {
+            assert_api_availability(
+                |api| api.ic0_msg_caller_info_signer_copy(0, 0, 0, &mut [42; 128]),
                 api_type,
                 &system_state,
                 cycles_account_manager,
@@ -1082,6 +1135,7 @@ fn test_canister_balance() {
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
 
@@ -1115,6 +1169,7 @@ fn test_canister_cycle_balance() {
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
 
@@ -1155,6 +1210,7 @@ fn test_msg_cycles_available_traps() {
             available_cycles,
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
 
@@ -1247,6 +1303,7 @@ fn data_certificate_copy() {
             subnet_test_id(1),
             vec![],
             Some(vec![1, 2, 3, 4, 5, 6]),
+            None,
         ),
         &system_state,
         cycles_account_manager,
@@ -1325,6 +1382,7 @@ fn msg_cycles_accept_all_cycles_in_call_context() {
             Cycles::from(amount),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
     let mut api = get_system_api(
@@ -1353,6 +1411,7 @@ fn msg_cycles_accept_all_cycles_in_call_context_when_more_asked() {
             Cycles::new(40),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
     let mut api = get_system_api(
@@ -1395,6 +1454,7 @@ fn call_perform_not_enough_cycles_does_not_trap() {
             Cycles::new(40),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
     let mut api = get_system_api(

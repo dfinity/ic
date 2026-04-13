@@ -1,7 +1,7 @@
 use crate::{
-    common::LOG_PREFIX,
-    mutations::node_management::common::{
-        get_key_family_iter_at_version, get_key_family_raw_iter_at_version,
+    common::{
+        LOG_PREFIX,
+        key_family::{get_key_family_iter_at_version, get_key_family_raw_iter_at_version},
     },
     pb::v1::SubnetForCanister,
     registry::Registry,
@@ -459,7 +459,7 @@ mod tests {
     use crate::common::test_helpers::invariant_compliant_registry;
 
     use super::*;
-    use crate::mutations::node_management::common::get_key_family;
+    use crate::common::key_family::get_key_family;
     use assert_matches::assert_matches;
     use ic_base_types::CanisterId;
     use ic_registry_keys::CANISTER_RANGES_PREFIX;

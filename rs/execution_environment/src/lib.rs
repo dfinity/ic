@@ -43,6 +43,7 @@ use ic_query_stats::QueryStatsPayloadBuilderParams;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{CallOrigin, NetworkTopology, ReplicatedState};
+use ic_types::messages::SenderInfo;
 use ic_types::{
     Height, SubnetId,
     messages::{CallContextId, MessageId},
@@ -82,8 +83,14 @@ pub enum QueryExecutionType {
 #[doc(hidden)]
 #[derive(Clone, Eq, PartialEq)]
 pub enum NonReplicatedQueryKind {
-    Stateful { call_origin: CallOrigin },
-    Pure { caller: PrincipalId },
+    Stateful {
+        call_origin: CallOrigin,
+        sender_info: Option<SenderInfo>,
+    },
+    Pure {
+        caller: PrincipalId,
+        sender_info: Option<SenderInfo>,
+    },
 }
 
 // This struct holds public facing components that are created by Execution.

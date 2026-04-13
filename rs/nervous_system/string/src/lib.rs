@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{self, Debug, Write};
 
 /// Returns a possibly modified version of `s` that fits within the specified bounds (in terms of
 /// the number of UTF-8 characters).
@@ -37,8 +37,77 @@ pub fn clamp_string_len(s: &str, max_len: usize) -> String {
     )
 }
 
+/// Formats object, but limits the output size.
+///
+/// Unlike clamp_string_len, does not include the tail (when truncating).
 pub fn clamp_debug_len(object: &impl Debug, max_len: usize) -> String {
-    clamp_string_len(&format!("{object:#?}"), max_len)
+    let mut buf = LimitedWriter::new(max_len);
+    // write! returns Err if the writer returns Err, which LimitedWriter does
+    // once the limit is hit. We intentionally ignore this "error".
+    let _ignore_err = write!(buf, "{object:#?}");
+
+    if buf.truncated {
+        // Replace the last 3 chars with "..." to indicate truncation,
+        // or just append if the string is very short.
+        let s = &mut buf.buffer;
+        if s.len() >= 3 {
+            for _ in 0..3 {
+                s.pop();
+            }
+        }
+        s.push_str("...");
+    }
+
+    buf.buffer
+}
+
+/// A `fmt::Write` implementation that stops accepting characters after a limit.
+struct LimitedWriter {
+    buffer: String,
+    remaining: usize,
+    truncated: bool,
+}
+
+impl LimitedWriter {
+    fn new(max_len: usize) -> Self {
+        Self {
+            buffer: String::with_capacity(max_len.min(1024)),
+            remaining: max_len,
+            truncated: false,
+        }
+    }
+}
+
+impl fmt::Write for LimitedWriter {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        if self.remaining == 0 {
+            self.truncated = true;
+            return Err(fmt::Error);
+        }
+
+        let chars_available = self.remaining;
+        let mut char_count = 0;
+        let byte_limit = s
+            .char_indices()
+            .take_while(|(_, _)| {
+                char_count += 1;
+                char_count <= chars_available
+            })
+            .last()
+            .map(|(i, c)| i + c.len_utf8())
+            .unwrap_or(0);
+
+        if byte_limit < s.len() {
+            self.buffer.push_str(&s[..byte_limit]);
+            self.remaining = 0;
+            self.truncated = true;
+            Err(fmt::Error)
+        } else {
+            self.buffer.push_str(s);
+            self.remaining -= char_count;
+            Ok(())
+        }
+    }
 }
 
 #[cfg(test)]

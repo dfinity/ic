@@ -35,29 +35,25 @@ use url::Url;
 * `[name_of_the_proposal]`.
 *
 * IMPORTANT: Before making any proposal with this module, you MUST call
-* `ProposalWithMainnetState::read_dictator_neuron_id_from_env(&env)` once in your `test` function
-* (not in `setup`, as those functions run in different processes). This is necessary, so that the
-* neuron ID is initialized from the test environment and used in subsequent proposals.
+* `ProposalWithMainnetState::read_dictator_neuron_identity_from_env(&env)` once in your `test`
+* function (not in `setup`, as those functions run in different processes). This is necessary, so
+* that the neuron identity is initialized from the test environment and used in subsequent
+* proposals.
 */
 
-// Test neuron secret key and corresponding controller principal
-pub(crate) const NEURON_CONTROLLER: &str =
-    "bc7vk-kulc6-vswcu-ysxhv-lsrxo-vkszu-zxku3-xhzmh-iac7m-lwewm-2ae";
-pub(crate) const NEURON_SECRET_KEY_PEM: &str = "-----BEGIN PRIVATE KEY-----
-MFMCAQEwBQYDK2VwBCIEIKohpVANxO4xElQYXElAOXZHwJSVHERLE8feXSfoKwxX
-oSMDIQBqgs2z86b+S5X9HvsxtE46UZwfDHtebwmSQWSIcKr2ew==
------END PRIVATE KEY-----";
-
-static RECOVERED_NNS_DICTATOR_NEURON_ID: OnceCell<NeuronId> = OnceCell::new();
+/// Test neuron ID and secret key of its controller encoded in PEM format.
+pub(crate) static RECOVERED_NNS_DICTATOR_NEURON_IDENTITY: OnceCell<(NeuronId, String)> =
+    OnceCell::new();
 
 #[derive(Deserialize, Serialize)]
 pub struct RecoveredNnsDictatorNeuron {
-    recovered_nns_dictator_neuron_id: NeuronId,
+    pub neuron_id: NeuronId,
+    pub neuron_secret_key_pem: String,
 }
 
 impl TestEnvAttribute for RecoveredNnsDictatorNeuron {
     fn attribute_name() -> String {
-        String::from("recovered_nns_dictator_neuron_id")
+        String::from("recovered_nns_dictator_neuron_identity")
     }
 }
 
@@ -67,50 +63,49 @@ pub struct ProposalWithMainnetState {
 }
 
 impl ProposalWithMainnetState {
-    /// Initializes a ProposalWithMainnetState instance reading the neuron ID from the static
-    /// variable, which must have been initialized before via `read_dictator_neuron_id_from_env`.
+    /// Initializes a [`ProposalWithMainnetState`] instance reading the neuron identity from the
+    /// static variable, which must have been initialized before via
+    /// `read_dictator_neuron_identity_from_env`.
     ///
     /// This function is not intended to be called externally (thus it is not `pub`), but only called
     /// at the beginning of each proposal function below.
     fn new() -> Self {
-        let neuron_id = *RECOVERED_NNS_DICTATOR_NEURON_ID.get().expect(
-            "'read_dictator_neuron_id_from_env' must be called before using ProposalWithMainnetState",
+        let (neuron_id, secret_key_pem) = RECOVERED_NNS_DICTATOR_NEURON_IDENTITY.get().expect(
+            "'read_dictator_neuron_identity_from_env' must be called before using ProposalWithMainnetState",
         );
-        let sig_keys =
-            SigKeys::from_pem(NEURON_SECRET_KEY_PEM).expect("Failed to parse secret key");
+        let sig_keys = SigKeys::from_pem(secret_key_pem).expect("Failed to parse secret key");
         let proposal_sender = Sender::SigKeys(sig_keys);
 
         Self {
-            neuron_id,
+            neuron_id: *neuron_id,
             proposal_sender,
         }
     }
 
-    /// Writes the given dictator neuron ID to the test environment, so that it can be read later on
-    /// potentially by a different process. Currently used in the `setup` function that creates a
-    /// testnet with NNS mainnet state.
-    pub fn write_dictator_neuron_id_to_env(env: &TestEnv, neuron_id: NeuronId) {
-        RecoveredNnsDictatorNeuron {
-            recovered_nns_dictator_neuron_id: neuron_id,
-        }
-        .write_attribute(env);
+    /// Writes the given dictator neuron identity to the test environment, so that it can be read
+    /// later on potentially by a different process. Currently used in the `setup` function that
+    /// creates a testnet with NNS mainnet state.
+    pub fn write_dictator_neuron_identity_to_env(
+        env: &TestEnv,
+        neuron: RecoveredNnsDictatorNeuron,
+    ) {
+        neuron.write_attribute(env);
 
-        RECOVERED_NNS_DICTATOR_NEURON_ID
-            .set(neuron_id)
-            .expect("'write_dictator_neuron_id_to_env' can only be called once");
+        RECOVERED_NNS_DICTATOR_NEURON_IDENTITY
+            .set((neuron.neuron_id, neuron.neuron_secret_key_pem))
+            .expect("'write_dictator_neuron_identity_to_env' can only be called once");
     }
 
-    /// Initializes the static variable holding the dictator neuron ID by reading it from the test
-    /// environment. This function MUST be called once before using any of the proposal functions
-    /// below.
-    pub fn read_dictator_neuron_id_from_env(env: &TestEnv) {
-        let neuron_id = RecoveredNnsDictatorNeuron::try_read_attribute(env)
-            .expect("'write_dictator_neuron_id_to_env' must be called before reading")
-            .recovered_nns_dictator_neuron_id;
+    /// Initializes the static variable holding the dictator neuron identity by reading it from the
+    /// test environment. This function MUST be called once before using any of the proposal
+    /// functions below.
+    pub fn read_dictator_neuron_identity_from_env(env: &TestEnv) {
+        let neuron = RecoveredNnsDictatorNeuron::try_read_attribute(env)
+            .expect("'write_dictator_neuron_identity_to_env' must be called before reading");
 
-        RECOVERED_NNS_DICTATOR_NEURON_ID
-            .set(neuron_id)
-            .expect("'read_dictator_neuron_id_from_env' can only be called once");
+        RECOVERED_NNS_DICTATOR_NEURON_IDENTITY
+            .set((neuron.neuron_id, neuron.neuron_secret_key_pem))
+            .expect("'read_dictator_neuron_identity_from_env' can only be called once");
     }
 
     /// Code duplicate of rs/tests/consensus/utils/src/upgrade.rs:bless_replica_version
