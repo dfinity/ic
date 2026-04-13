@@ -10,20 +10,13 @@
 //   - `BARE_METAL_HOST_SECRETS` must name an INI file with bare-metal login info
 //     (same as `//rs/tests/nested:sev_recovery`). Without it, setup fails.
 //
-// Setup example (either export in your shell or pass `--test_env` so the driver sees it):
-//
-//   SEV-SNP host:
-//   $ export BARE_METAL_HOST_SECRETS="$(realpath /path/to/host.ini)"
-//   $ export TRUSTED_EXECUTION_ENVIRONMENT=true
-//
-//   Non-SEV bare metal:
-//   $ export BARE_METAL_HOST_SECRETS="$(realpath /path/to/host.ini)"
+// Setup example (pass `--test_env` so the driver sees it):
 //
 //   $ ./ci/container/container-run.sh
 //   $ ict testnet create baremetal_app_subnet --verbose --output-dir=./test_tmpdir -- \
 //       --test_tmpdir=./test_tmpdir \
 //       --test_env BARE_METAL_HOST_SECRETS="$(realpath /path/to/host.ini)" \
-//       --test_env TRUSTED_EXECUTION_ENVIRONMENT=true   # omit for non-SEV
+//       --test_env TRUSTED_EXECUTION_ENVIRONMENT=true   # false for non-SEV
 //
 // The bare-metal guest IPv6 appears in the driver log after registration; SSH uses the
 // same admin key layout as other testnets under `test_tmpdir`.
