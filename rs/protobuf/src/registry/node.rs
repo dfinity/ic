@@ -16,6 +16,7 @@ impl From<NodeRewardType> for String {
             NodeRewardType::Type2 => "type2".to_string(),
             NodeRewardType::Type3 => "type3".to_string(),
             NodeRewardType::Type3dot1 => "type3.1".to_string(),
+            NodeRewardType::Type4 => "type4".to_string(),
         }
     }
 }
@@ -35,6 +36,7 @@ impl From<String> for NodeRewardType {
             "type2" => NodeRewardType::Type2,
             "type3" => NodeRewardType::Type3,
             "type3.1" => NodeRewardType::Type3dot1,
+            "type4" => NodeRewardType::Type4,
             _ => NodeRewardType::Unspecified,
         }
     }

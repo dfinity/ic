@@ -1,20 +1,29 @@
 use crate::partitions::{A_BOOT_UUID, A_ROOT_UUID, B_BOOT_UUID, B_ROOT_UUID};
-use crate::recovery::{CONFIG_PARTITION_LABEL, RECOVERY_PROPOSAL_FILE_NAME};
+use crate::recovery::{CONFIG_DEVICE_LABEL, RECOVERY_PROPOSAL_FILE_NAME};
 use anyhow::{Context, Result};
 use candid::Encode;
 use command_runner::MockCommandRunner;
 use config_tool::serialize_and_write_config;
-use config_types::{GuestOSConfig, TrustedExecutionEnvironmentConfig};
-use ic_agent::export::Principal;
-use ic_certification_test_utils::{CertificateBuilder, CertificateData};
+use config_types::{
+    GuestOSConfig, GuestOSDevSettings, GuestOSSettings, TrustedExecutionEnvironmentConfig,
+};
+use ic_certification_test_utils::{
+    CertificateBuilder, CertificateData, SecretKeyBytes, generate_root_of_trust,
+};
 use ic_crypto_tree_hash::{Label, LabeledTree, flatmap};
+use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_pem;
 use ic_device::mount::PartitionSelector;
 use ic_device::mount::testing::MockPartitionProvider;
+use ic_nns_common::pb::v1::ProposalId;
+use ic_nns_governance_api::proposal::Action;
 use ic_nns_governance_api::{
-    BlessAlternativeGuestOsVersion, GuestLaunchMeasurement, GuestLaunchMeasurements,
+    BlessAlternativeGuestOsVersion, GuestLaunchMeasurement, GuestLaunchMeasurements, Proposal,
+    ProposalInfo, ProposalStatus,
 };
+use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use linux_kernel_command_line::KernelCommandLine;
 use rand::SeedableRng;
+use rand::rngs::StdRng;
 use sev_guest_testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
 use std::collections::HashMap;
 use std::fs;
@@ -28,8 +37,8 @@ use uuid::Uuid;
 const BASE_ROOTFS_HASH: &str = "ba5e";
 const RECOVERY_ROOTFS_HASH: &str =
     "1d0dad2a5a983ae4be9a401b0aac325d2a38f1ba217efe0c43bc68806d2ba54a";
-const CHIP_ID: [u8; 64] = [42u8; 64];
-const MEASUREMENT: [u8; 48] = [66u8; 48];
+const CHIP_ID: [u8; 64] = [42_u8; 64];
+const MEASUREMENT: [u8; 48] = [66_u8; 48];
 
 const A_ROOT_PATH: &str = "/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7";
 const B_ROOT_PATH: &str = "/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5";
@@ -40,25 +49,36 @@ struct TestFixture {
     sev_firmware: Option<MockSevGuestFirmwareBuilder>,
     command_runner: MockCommandRunner,
     partition_provider: MockPartitionProvider,
+    nns_key: (ThresholdSigPublicKey, SecretKeyBytes),
+    guestos_config: GuestOSConfig,
 }
 
 impl TestFixture {
     fn new() -> Self {
+        let nns_key = generate_root_of_trust(&mut StdRng::from_seed([42_u8; 32]));
         let signer = FakeAttestationReportSigner::default();
+        let sev_certificate_chain_pem = signer.get_certificate_chain_pem();
+
+        let guestos_config = GuestOSConfig {
+            trusted_execution_environment_config: Some(TrustedExecutionEnvironmentConfig {
+                sev_cert_chain_pem: sev_certificate_chain_pem.clone(),
+            }),
+            guestos_settings: GuestOSSettings {
+                guestos_dev_settings: GuestOSDevSettings {
+                    nns_pub_key_override: Some(
+                        String::from_utf8(threshold_sig_public_key_to_pem(nns_key.0).unwrap())
+                            .unwrap(),
+                    ),
+                    ..Default::default()
+                },
+            },
+            ..Default::default()
+        };
 
         let cmdline =
             KernelCommandLine::from_str(&format!("root_hash={BASE_ROOTFS_HASH}")).unwrap();
 
         let config_media = Arc::new(TempDir::with_prefix("config").unwrap());
-        let guestos_config = GuestOSConfig {
-            trusted_execution_environment_config: Some(TrustedExecutionEnvironmentConfig {
-                sev_cert_chain_pem: signer.get_certificate_chain_pem(),
-            }),
-            ..Default::default()
-        };
-
-        serialize_and_write_config(&config_media.path().join("config.json"), &guestos_config)
-            .expect("Failed to write GuestOS config");
 
         let mut partitions = HashMap::new();
         partitions.insert(
@@ -70,7 +90,7 @@ impl TestFixture {
             Arc::new(TempDir::with_prefix("b_boot").unwrap()),
         );
         partitions.insert(
-            PartitionSelector::ByLabel(CONFIG_PARTITION_LABEL.to_string()),
+            PartitionSelector::ByLabel(CONFIG_DEVICE_LABEL.to_string()),
             config_media,
         );
 
@@ -104,6 +124,8 @@ impl TestFixture {
             root_device: A_ROOT_PATH.into(),
             kernel_cmdline: cmdline,
             sev_firmware: Some(sev_firmware),
+            nns_key,
+            guestos_config,
             command_runner,
             partition_provider: MockPartitionProvider::new(partitions),
         }
@@ -122,28 +144,31 @@ impl TestFixture {
     /// Set up the expectation for the veritysetup command for `device` and `hash`
     /// with the expectation that veritysetup will succeed or fail as specified
     fn expect_verity(&mut self, device_str: &str, hash: &str, success: bool) -> &mut Self {
-        let verifysetup_verify = format!(
-            r#""veritysetup" "verify" "{device_str}" "{device_str}" "{hash}" "--hash-offset" "10603200512""#
-        );
-        self.command_runner
-            .expect_output()
-            .withf(move |cmd| format!("{cmd:?}") == verifysetup_verify)
-            .once()
-            .returning(move |_| {
-                if success {
-                    Ok(std::process::Output {
-                        status: std::process::ExitStatus::from_raw(0),
-                        stdout: vec![],
-                        stderr: vec![],
-                    })
-                } else {
-                    Ok(std::process::Output {
-                        status: std::process::ExitStatus::from_raw(1),
-                        stdout: vec![],
-                        stderr: b"Mock veritysetup was configured to fail".to_vec(),
-                    })
-                }
-            });
+        // Expect that 'veritysetup verify' is called if we have an SEV firmware defined
+        if self.sev_firmware.is_some() {
+            let verifysetup_verify = format!(
+                r#""veritysetup" "verify" "{device_str}" "{device_str}" "{hash}" "--hash-offset" "10603200512""#
+            );
+            self.command_runner
+                .expect_output()
+                .withf(move |cmd| format!("{cmd:?}") == verifysetup_verify)
+                .once()
+                .returning(move |_| {
+                    if success {
+                        Ok(std::process::Output {
+                            status: std::process::ExitStatus::from_raw(0),
+                            stdout: vec![],
+                            stderr: vec![],
+                        })
+                    } else {
+                        Ok(std::process::Output {
+                            status: std::process::ExitStatus::from_raw(1),
+                            stdout: vec![],
+                            stderr: b"Mock veritysetup was configured to fail".to_vec(),
+                        })
+                    }
+                });
+        }
 
         // If success, expect a following open command
         let verifysetup_open = format!(
@@ -169,35 +194,37 @@ impl TestFixture {
     /// Adds an alternative GuestOS proposal to the partition with the given UUID.
     fn add_recovery_proposal(
         &mut self,
-        proposal: BlessAlternativeGuestOsVersion,
         partition_uuid: Uuid,
+        proposal: BlessAlternativeGuestOsVersion,
+        status: ProposalStatus,
     ) -> &mut Self {
-        let governance_canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
-        let request_id = vec![1u8; 32];
-        let reply_bytes = Encode!(&proposal).unwrap();
+        let proposal_info = ProposalInfo {
+            id: Some(ProposalId { id: 1 }),
+            status: status as i32,
+            proposal: Some(Proposal {
+                action: Some(Action::BlessAlternativeGuestOsVersion(proposal)),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        // Encode as Option<ProposalInfo> to match what get_proposal_info returns
+        let reply_bytes = Encode!(&Some(proposal_info)).unwrap();
 
         let tree = LabeledTree::SubTree(flatmap![
-            Label::from("canister") => LabeledTree::SubTree(flatmap![
-                Label::from(governance_canister_id.as_slice()) => LabeledTree::SubTree(flatmap![
-                    Label::from("certified_data") => LabeledTree::Leaf(vec![0u8; 32]),
-                ])
-            ]),
             Label::from("request_status") => LabeledTree::SubTree(flatmap![
-                Label::from(request_id) => LabeledTree::SubTree(flatmap![
+                Label::from(vec![1_u8; 32]) => LabeledTree::SubTree(flatmap![
                     Label::from("status") => LabeledTree::Leaf(b"replied".to_vec()),
                     Label::from("reply") => LabeledTree::Leaf(reply_bytes),
                 ])
             ]),
-            Label::from("time") => LabeledTree::Leaf(vec![0u8; 8])
+            Label::from("time") => LabeledTree::Leaf(vec![0_u8; 8])
         ]);
 
-        let mut rng = rand::rngs::StdRng::from_seed([42u8; 32]);
-        let (_cert, root_pk, cert_cbor) =
-            CertificateBuilder::new_with_rng(CertificateData::CustomTree(tree), &mut rng).build();
-
-        let nns_public_key =
-            ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_pem(root_pk)
-                .expect("Failed to encode NNS public key");
+        let (_cert, _root_pk, cert_cbor) =
+            CertificateBuilder::new(CertificateData::CustomTree(tree))
+                .with_root_of_trust(self.nns_key.0, self.nns_key.1.clone())
+                .build();
 
         // Write proposal to boot partition
         fs::write(
@@ -209,27 +236,17 @@ impl TestFixture {
         )
         .expect("Failed to write recovery proposal");
 
-        fs::write("/tmp/test_recovery_proposal.cbor", &cert_cbor)
-            .expect("Failed to write recovery proposal to /tmp");
-
-        // Write NNS public key override to CONFIG media
-        fs::write(
-            self.partition_provider
-                .get_partition(PartitionSelector::ByLabel(
-                    CONFIG_PARTITION_LABEL.to_string(),
-                ))
-                .unwrap()
-                .join("nns_public_key_override.pem"),
-            &nns_public_key,
-        )
-        .expect("Failed to write NNS public key");
-
-        println!("{}", String::from_utf8(nns_public_key).unwrap());
-
         self
     }
 
     fn run(self) -> Result<()> {
+        let config_media_path = self
+            .partition_provider
+            .get_partition(PartitionSelector::ByLabel(CONFIG_DEVICE_LABEL.to_string()))
+            .unwrap();
+        serialize_and_write_config(&config_media_path.join("config.json"), &self.guestos_config)
+            .expect("Failed to write GuestOS config");
+
         crate::run(
             &self.root_device,
             &self.kernel_cmdline,
@@ -305,9 +322,7 @@ fn test_run_attempts_recovery_when_base_hash_fails() {
         .expect_err("Expected failure when no alternative GuestOS proposal found");
 
     assert!(
-        result
-            .to_string()
-            .contains("No alternative GuestOS proposal found"),
+        format!("{result:?}").contains("No alternative GuestOS proposal found"),
         "Error should mention missing alternative GuestOS proposal"
     );
 }
@@ -329,7 +344,7 @@ fn test_recovery_proposal_end_to_end() {
     fixture
         .expect_verity(A_ROOT_PATH, BASE_ROOTFS_HASH, false)
         .expect_verity(A_ROOT_PATH, RECOVERY_ROOTFS_HASH, true)
-        .add_recovery_proposal(proposal, A_BOOT_UUID);
+        .add_recovery_proposal(A_BOOT_UUID, proposal, ProposalStatus::Executed);
 
     fixture
         .run()
@@ -341,7 +356,7 @@ fn test_recovery_proposal_chip_id_mismatch() {
     let mut fixture = TestFixture::new();
 
     let proposal = BlessAlternativeGuestOsVersion {
-        chip_ids: Some(vec![vec![1u8; 64]]), // does not include CHIP_ID
+        chip_ids: Some(vec![vec![1_u8; 64]]), // does not include CHIP_ID
         rootfs_hash: Some(RECOVERY_ROOTFS_HASH.to_string()),
         base_guest_launch_measurements: Some(GuestLaunchMeasurements {
             guest_launch_measurements: Some(vec![GuestLaunchMeasurement {
@@ -353,7 +368,7 @@ fn test_recovery_proposal_chip_id_mismatch() {
     fixture
         .set_root_device(B_ROOT_PATH)
         .expect_verity(B_ROOT_PATH, BASE_ROOTFS_HASH, false)
-        .add_recovery_proposal(proposal, B_BOOT_UUID);
+        .add_recovery_proposal(B_BOOT_UUID, proposal, ProposalStatus::Executed);
 
     let error = fixture
         .run()
@@ -370,7 +385,7 @@ fn test_recovery_proposal_measurement_mismatch() {
         rootfs_hash: Some(RECOVERY_ROOTFS_HASH.to_string()),
         base_guest_launch_measurements: Some(GuestLaunchMeasurements {
             guest_launch_measurements: Some(vec![GuestLaunchMeasurement {
-                measurement: Some(vec![1u8; 48]), // different from MEASUREMENT
+                measurement: Some(vec![1_u8; 48]), // different from MEASUREMENT
                 metadata: None,
             }]),
         }),
@@ -378,7 +393,7 @@ fn test_recovery_proposal_measurement_mismatch() {
     fixture
         .set_root_device(B_ROOT_PATH)
         .expect_verity(B_ROOT_PATH, BASE_ROOTFS_HASH, false)
-        .add_recovery_proposal(proposal, B_BOOT_UUID);
+        .add_recovery_proposal(B_BOOT_UUID, proposal, ProposalStatus::Executed);
 
     let error = fixture.run().expect_err(
         "rootfs via alternative GuestOS proposal should fail due to measurement mismatch",
@@ -407,7 +422,7 @@ fn test_recovery_proposal_rootfs_mismatch() {
         .expect_verity(B_ROOT_PATH, BASE_ROOTFS_HASH, false)
         // Failure when trying recovery hash
         .expect_verity(B_ROOT_PATH, RECOVERY_ROOTFS_HASH, false)
-        .add_recovery_proposal(proposal, B_BOOT_UUID);
+        .add_recovery_proposal(B_BOOT_UUID, proposal, ProposalStatus::Executed);
     let error = fixture.run().expect_err(
         "rootfs via alternative GuestOS proposal should fail due to rootfs hash mismatch",
     );
@@ -430,26 +445,21 @@ fn test_nns_root_key_mismatch() {
     fixture
         .set_root_device(B_ROOT_PATH)
         .expect_verity(B_ROOT_PATH, BASE_ROOTFS_HASH, false)
-        .add_recovery_proposal(proposal, B_BOOT_UUID);
+        .add_recovery_proposal(B_BOOT_UUID, proposal, ProposalStatus::Executed);
 
     // Remove NNS public key override, so proposal will be verified against public NNS key
     // which will fail.
-    fs::remove_file(
-        fixture
-            .partition_provider
-            .get_partition(PartitionSelector::ByLabel(
-                CONFIG_PARTITION_LABEL.to_string(),
-            ))
-            .unwrap()
-            .join("nns_public_key_override.pem"),
-    )
-    .expect("Failed to remove NNS public key");
+    fixture
+        .guestos_config
+        .guestos_settings
+        .guestos_dev_settings
+        .nns_pub_key_override = None;
 
     let error = fixture
         .run()
         .expect_err("rootfs via alternative GuestOS proposal should fail due to NNS key mismatch");
     assert!(
-        format!("{error:?}").contains("Certificate verification"),
+        format!("{error:?}").contains("Signature verification failed"),
         "{error:?}"
     );
 }
@@ -478,13 +488,39 @@ fn test_attestation_report_signature_mismatch() {
     };
     fixture
         .expect_verity(A_ROOT_PATH, BASE_ROOTFS_HASH, false)
-        .add_recovery_proposal(proposal, A_BOOT_UUID);
+        .add_recovery_proposal(A_BOOT_UUID, proposal, ProposalStatus::Executed);
 
     let error = fixture.run().expect_err(
         "rootfs via alternative GuestOS proposal should fail due to signature mismatch",
     );
     assert!(
         format!("{error:?}").contains("InvalidSignature"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn test_recovery_proposal_status_not_executed() {
+    let mut fixture = TestFixture::new();
+    let proposal = BlessAlternativeGuestOsVersion {
+        chip_ids: Some(vec![CHIP_ID.to_vec()]),
+        rootfs_hash: Some(RECOVERY_ROOTFS_HASH.to_string()),
+        base_guest_launch_measurements: Some(GuestLaunchMeasurements {
+            guest_launch_measurements: Some(vec![GuestLaunchMeasurement {
+                measurement: Some(MEASUREMENT.to_vec()),
+                metadata: None,
+            }]),
+        }),
+    };
+    fixture
+        .expect_verity(A_ROOT_PATH, BASE_ROOTFS_HASH, false)
+        .add_recovery_proposal(A_BOOT_UUID, proposal, ProposalStatus::Open);
+
+    let error = fixture.run().expect_err(
+        "rootfs via alternative GuestOS proposal should fail due to proposal status mismatch",
+    );
+    assert!(
+        format!("{error:?}").contains("PROPOSAL_STATUS_OPEN"),
         "{error:?}"
     );
 }

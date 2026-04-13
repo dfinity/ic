@@ -23,12 +23,13 @@ use ic_test_utilities_execution_environment::bytes_and_logging_cost;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{call_context_test_id, user_test_id};
+use ic_types::MemoryAllocation;
 use ic_types::{
-    ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId,
+    ComputeAllocation, NumBytes, NumInstructions, PrincipalId,
     methods::{FuncRef, WasmMethod},
     time::UNIX_EPOCH,
 };
-use ic_types::{MemoryAllocation, batch::CanisterCyclesCostSchedule};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_wasm_types::BinaryEncodedWasm;
 use lazy_static::lazy_static;
 use proptest::prelude::*;
@@ -41,6 +42,8 @@ const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000
 const STABLE_OP_BYTES: u64 = 37;
 
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
+
+const TEST_DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * 1024; // 4 KiB
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
@@ -59,7 +62,9 @@ fn test_api_for_update(
     instruction_limit: NumInstructions,
 ) -> SystemApiImpl {
     let caller = caller.unwrap_or_else(|| user_test_id(24).get());
-    let system_state = SystemStateBuilder::default().build();
+    let system_state = SystemStateBuilder::default()
+        .log_memory_limit(TEST_DEFAULT_LOG_MEMORY_LIMIT)
+        .build();
     let cycles_account_manager = Arc::new(
         CyclesAccountManagerBuilder::new()
             .with_subnet_type(subnet_type)
@@ -72,6 +77,7 @@ fn test_api_for_update(
         Cycles::zero(),
         caller,
         call_context_test_id(13),
+        None,
     );
 
     let static_system_state = SandboxSafeSystemState::new_for_testing(
@@ -82,6 +88,7 @@ fn test_api_for_update(
             SubnetType::Application => SchedulerConfig::application_subnet(),
             SubnetType::System => SchedulerConfig::system_subnet(),
             SubnetType::VerifiedApplication => SchedulerConfig::verified_application_subnet(),
+            SubnetType::CloudEngine => SchedulerConfig::cloud_engine(),
         }
         .dirty_page_overhead,
         ComputeAllocation::default(),
@@ -655,7 +662,7 @@ mod tests {
             // properly convert `size: i32` to u64 and this process does not charge
             // more than the equivalent of `size` for values >= 2^31.
             let num_bytes = 2147483648; // equivalent to 2^31
-            let payload = vec![0u8; num_bytes];
+            let payload = vec![0_u8; num_bytes];
             let wasm = wat2wasm(
                 r#"
               (module
@@ -983,6 +990,9 @@ mod tests {
                                 .dirty_page_overhead
                                 .get()
                         }
+                        SubnetType::CloudEngine => {
+                            SchedulerConfig::cloud_engine().dirty_page_overhead.get()
+                        }
                     },
                     _ => 0,
                 };
@@ -1063,6 +1073,7 @@ mod tests {
                 SubnetType::System => SchedulerConfig::system_subnet(),
                 SubnetType::Application => SchedulerConfig::application_subnet(),
                 SubnetType::VerifiedApplication => SchedulerConfig::verified_application_subnet(),
+                SubnetType::CloudEngine => SchedulerConfig::cloud_engine(),
             }
             .dirty_page_overhead,
             ..EmbeddersConfig::default()

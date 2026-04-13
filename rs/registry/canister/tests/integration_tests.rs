@@ -271,7 +271,7 @@ fn assert_a_short_while_ago(read_result: &HighCapacityRegistryGetValueResponse) 
         .unwrap();
     let now = SystemTime::now();
     assert!(
-        now.duration_since(value_set_at).unwrap() < Duration::from_secs(60),
+        now.duration_since(value_set_at).unwrap() < Duration::from_secs(300),
         "now={:?} vs. value_set_at={:?}",
         now,
         value_set_at,

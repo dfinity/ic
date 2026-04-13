@@ -61,6 +61,8 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test))
+        // The replica binary is "broken" and restarted by the orchestrator multiple times
+        .remove_metrics_to_check("orchestrator_replica_process_start_attempts_total")
         .execute_from_args()?;
     Ok(())
 }
@@ -187,7 +189,6 @@ pub fn test(env: TestEnv) {
         admin_key_file: Some(ssh_authorized_priv_keys_dir.join(SSH_USERNAME)),
         test_mode: true,
         skip_prompts: true,
-        use_local_binaries: false,
     };
     let subnet_args = NNSRecoveryFailoverNodesArgs {
         subnet_id: topo_broken_ic.root_subnet_id(),

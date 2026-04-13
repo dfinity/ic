@@ -51,6 +51,20 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
                     }
                 })
                 .collect(),
+            full_topology: item
+                .full_topology
+                .as_ref()
+                .map(|ft| pb_metadata::FullTopology {
+                    subnets: ft
+                        .subnets
+                        .iter()
+                        .map(|(subnet_id, subnet_topology)| pb_metadata::SubnetsEntry {
+                            subnet_id: Some(subnet_id_into_protobuf(*subnet_id)),
+                            subnet_topology: Some(subnet_topology.into()),
+                        })
+                        .collect(),
+                    routing_table: Some(ft.routing_table.as_ref().into()),
+                }),
         }
     }
 }
@@ -109,6 +123,28 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
             chain_key_enabled_subnets,
             bitcoin_testnet_canister_id,
             bitcoin_mainnet_canister_id,
+            full_topology: match item.full_topology {
+                None => None,
+                Some(ft) => {
+                    let mut ft_subnets = BTreeMap::new();
+                    for entry in ft.subnets {
+                        ft_subnets.insert(
+                            subnet_id_try_from_option(entry.subnet_id, "FullTopology::subnets::K")?,
+                            try_from_option_field(
+                                entry.subnet_topology,
+                                "FullTopology::subnets::V",
+                            )?,
+                        );
+                    }
+                    let ft_routing_table: Arc<RoutingTable> =
+                        try_from_option_field(ft.routing_table, "FullTopology::routing_table")
+                            .map(Arc::new)?;
+                    Some(FullTopology {
+                        subnets: ft_subnets,
+                        routing_table: ft_routing_table,
+                    })
+                }
+            },
         })
     }
 }
@@ -130,6 +166,7 @@ impl From<&SubnetTopology> for pb_metadata::SubnetTopology {
             canister_cycles_cost_schedule: i32::from(CanisterCyclesCostScheduleProto::from(
                 item.cost_schedule,
             )),
+            subnet_admins: item.subnet_admins.iter().map(|sa| (*sa).into()).collect(),
         }
     }
 }
@@ -156,6 +193,10 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
                 },
             )?,
         );
+        let mut subnet_admins = BTreeSet::new();
+        for subnet_admin in item.subnet_admins {
+            subnet_admins.insert(PrincipalId::try_from(subnet_admin)?);
+        }
 
         Ok(Self {
             public_key: item.public_key,
@@ -170,6 +211,7 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
                 .unwrap_or_default(),
             chain_keys_held,
             cost_schedule,
+            subnet_admins,
         })
     }
 }
@@ -240,12 +282,12 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
                 item.consumed_cycles_http_outcalls,
                 "SubnetMetrics::consumed_cycles_http_outcalls",
             )
-            .unwrap_or_else(|_| NominalCycles::from(0_u128)),
+            .unwrap_or_else(|_| NominalCycles::zero()),
             consumed_cycles_ecdsa_outcalls: try_from_option_field(
                 item.consumed_cycles_ecdsa_outcalls,
                 "SubnetMetrics::consumed_cycles_ecdsa_outcalls",
             )
-            .unwrap_or_else(|_| NominalCycles::from(0_u128)),
+            .unwrap_or_else(|_| NominalCycles::zero()),
             threshold_signature_agreements,
             consumed_cycles_by_use_case,
             num_canisters: try_from_option_field(
@@ -292,6 +334,7 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
             certification_version: item.certification_version as u32,
             heap_delta_estimate: item.heap_delta_estimate.get(),
             own_subnet_features: Some(item.own_subnet_features.into()),
+            own_resource_limits: Some(item.own_resource_limits.into()),
             subnet_metrics: Some((&item.subnet_metrics).into()),
             bitcoin_get_successors_follow_up_responses: item
                 .bitcoin_get_successors_follow_up_responses
@@ -332,11 +375,21 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
 
 /// Decodes a `SystemMetadata` proto. The metrics are provided as a side-channel
 /// for recording errors without being forced to return `Err(_)`.
-impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for SystemMetadata {
+impl
+    TryFrom<(
+        pb_metadata::SystemMetadata,
+        SubnetSchedule,
+        &dyn CheckpointLoadingMetrics,
+    )> for SystemMetadata
+{
     type Error = ProxyDecodeError;
 
     fn try_from(
-        (item, metrics): (pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics),
+        (item, subnet_schedule, metrics): (
+            pb_metadata::SystemMetadata,
+            SubnetSchedule,
+            &dyn CheckpointLoadingMetrics,
+        ),
     ) -> Result<Self, Self::Error> {
         let mut streams = BTreeMap::<SubnetId, Stream>::new();
         for entry in item.streams {
@@ -410,6 +463,7 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             // properly set this value.
             own_subnet_type: SubnetType::default(),
             own_subnet_features: item.own_subnet_features.unwrap_or_default().into(),
+            own_resource_limits: item.own_resource_limits.unwrap_or_default().into(),
             node_public_keys,
             api_boundary_nodes,
             // Note: `load_checkpoint()` will set this to the contents of `split_marker.pbuf`,
@@ -427,6 +481,7 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             // properly set this value.
             ingress_history: Default::default(),
             streams: Arc::new(streams),
+            subnet_schedule,
             network_topology: try_from_option_field(
                 item.network_topology,
                 "SystemMetadata::network_topology",
@@ -448,7 +503,7 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
                 Some(subnet_metrics) => subnet_metrics.try_into()?,
                 None => SubnetMetrics::default(),
             },
-            expected_compiled_wasms: BTreeSet::new(),
+            expected_compiled_wasms: Arc::new(BTreeSet::new()),
             bitcoin_get_successors_follow_up_responses,
             blockmaker_metrics_time_series: match item.blockmaker_metrics_time_series {
                 Some(blockmaker_metrics) => (blockmaker_metrics, metrics).try_into()?,

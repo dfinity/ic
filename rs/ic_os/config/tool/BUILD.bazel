@@ -16,18 +16,21 @@ DEPENDENCIES = [
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
     "@crate_index//:askama",
+    "@crate_index//:base64",
     "@crate_index//:clap",
     "@crate_index//:fs_extra",
-    "@crate_index//:get_if_addrs",
+    "@crate_index//:getifs",
+    "@crate_index//:ipnet",
     "@crate_index//:macaddr",
     "@crate_index//:regex",
+    "@crate_index//:reqwest",
     "@crate_index//:rust_ini",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:serde_with",
+    "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:url",
-    "@crate_index//:walkdir",
 ]
 
 TEST_DEPENDENCIES = [
@@ -36,7 +39,9 @@ TEST_DEPENDENCIES = [
     "@crate_index//:tempfile",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:securefmt",
+]
 
 ALIASES = {}
 

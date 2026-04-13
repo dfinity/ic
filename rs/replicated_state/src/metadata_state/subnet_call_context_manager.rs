@@ -16,7 +16,7 @@ use ic_types::{
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetId, id::ni_dkg_target_id},
     },
     messages::{CallbackId, CanisterCall, Request, StopCanisterCallId},
-    node_id_into_protobuf, node_id_try_from_option,
+    node_id_into_protobuf, node_id_try_from_protobuf,
 };
 use phantom_newtype::Id;
 use std::{
@@ -545,54 +545,12 @@ impl ThresholdArguments {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub struct IDkgSignWithThresholdContext<'a>(&'a SignWithThresholdContext);
-
-impl<'a> TryFrom<&'a SignWithThresholdContext> for IDkgSignWithThresholdContext<'a> {
-    type Error = ();
-
-    fn try_from(val: &'a SignWithThresholdContext) -> Result<Self, Self::Error> {
-        if !val.is_idkg() {
-            Err(())
-        } else {
-            Ok(Self(val))
-        }
-    }
-}
-
-impl<'a> From<IDkgSignWithThresholdContext<'a>> for &'a SignWithThresholdContext {
-    fn from(val: IDkgSignWithThresholdContext<'a>) -> Self {
-        val.0
-    }
-}
-
-impl IDkgSignWithThresholdContext<'_> {
-    pub fn inner(&self) -> &SignWithThresholdContext {
-        self.0
-    }
-}
-
-impl std::ops::Deref for IDkgSignWithThresholdContext<'_> {
-    type Target = SignWithThresholdContext;
-
-    fn deref(&self) -> &<Self as std::ops::Deref>::Target {
-        self.inner()
-    }
-}
-
-impl std::borrow::Borrow<SignWithThresholdContext> for IDkgSignWithThresholdContext<'_> {
-    fn borrow(&self) -> &SignWithThresholdContext {
-        self.inner()
-    }
-}
-
-#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SignWithThresholdContext {
     pub request: Request,
     pub args: ThresholdArguments,
     pub derivation_path: Arc<Vec<Vec<u8>>>,
     pub pseudo_random_id: [u8; PSEUDO_RANDOM_ID_SIZE],
     pub batch_time: Time,
-    pub matched_pre_signature: Option<(PreSigId, Height)>,
     pub nonce: Option<[u8; NONCE_SIZE]>,
 }
 
@@ -608,13 +566,21 @@ impl SignWithThresholdContext {
 
     pub fn requires_pre_signature(&self) -> bool {
         match &self.args {
+            ThresholdArguments::Ecdsa(args) => args.pre_signature.is_none(),
+            ThresholdArguments::Schnorr(args) => args.pre_signature.is_none(),
+            ThresholdArguments::VetKd(_) => false,
+        }
+    }
+
+    pub fn height(&self) -> Option<Height> {
+        match &self.args {
             ThresholdArguments::Ecdsa(args) => {
-                self.matched_pre_signature.is_none() && args.pre_signature.is_none()
+                args.pre_signature.as_ref().map(|pre_sig| pre_sig.height)
             }
             ThresholdArguments::Schnorr(args) => {
-                self.matched_pre_signature.is_none() && args.pre_signature.is_none()
+                args.pre_signature.as_ref().map(|pre_sig| pre_sig.height)
             }
-            ThresholdArguments::VetKd(_) => false,
+            ThresholdArguments::VetKd(args) => Some(args.height),
         }
     }
 

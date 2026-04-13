@@ -13,7 +13,6 @@ use ic_state_layout::{
     SUBNET_QUEUES_FILE, SYSTEM_METADATA_FILE,
 };
 use ic_state_manager::CheckpointMetrics;
-use ic_types::CanisterId;
 use std::convert::TryFrom;
 use std::path::PathBuf;
 
@@ -28,10 +27,23 @@ pub fn do_decode(path: PathBuf) -> Result<(), String> {
         .ok_or_else(|| format!("failed to convert path {} to UTF-8 string", path.display()))?;
     match fname {
         SYSTEM_METADATA_FILE => {
-            display_proto_with_error_metric::<pb_metadata::SystemMetadata, SystemMetadata>(
-                path.clone(),
-                &dummy_metrics as &dyn CheckpointLoadingMetrics,
-            )
+            // display_proto_with_error_metric::<pb_metadata::SystemMetadata, SystemMetadata>(
+            //     path.clone(),
+            //     &dummy_metrics as &dyn CheckpointLoadingMetrics,
+            // )
+            let f: ProtoFileWith<pb_metadata::SystemMetadata, ReadOnly> = path.into();
+            let pb = f.deserialize().map_err(|e| format!("{e:?}"))?;
+            let metrics = &dummy_metrics as &dyn CheckpointLoadingMetrics;
+            let t = SystemMetadata::try_from((pb, Default::default(), metrics)).map_err(|e| {
+                format!(
+                    "failed to decode rust type {} from protobuf {}: {}",
+                    std::any::type_name::<SystemMetadata>(),
+                    std::any::type_name::<pb_metadata::SystemMetadata>(),
+                    e
+                )
+            })?;
+            println!("{t:#?}");
+            Ok(())
         }
         INGRESS_HISTORY_FILE => {
             display_proto::<pb_ingress::IngressHistoryState, IngressHistoryState>(path.clone())
@@ -43,21 +55,7 @@ pub fn do_decode(path: PathBuf) -> Result<(), String> {
             )
         }
         CANISTER_FILE => {
-            // display_proto::<pb_canister::CanisterStateBits, CanisterStateBits>(path.clone())
-
-            // TODO(MR-539): Temporary workaround. Revert after the next replica release.
-            let f: ProtoFileWith<pb_canister::CanisterStateBits, ReadOnly> = path.into();
-            let pb = f.deserialize().map_err(|e| format!("{e:?}"))?;
-            let t = CanisterStateBits::try_from((pb, CanisterId::ic_00())).map_err(|e| {
-                format!(
-                    "failed to decode rust type {} from protobuf {}: {}",
-                    std::any::type_name::<CanisterStateBits>(),
-                    std::any::type_name::<pb_canister::CanisterStateBits>(),
-                    e
-                )
-            })?;
-            println!("{t:#?}");
-            Ok(())
+            display_proto::<pb_canister::CanisterStateBits, CanisterStateBits>(path.clone())
         }
         _ => Err(format!("don't know how to decode {fname}")),
     }

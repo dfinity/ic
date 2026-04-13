@@ -76,11 +76,12 @@ mod tests {
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
         ExecutionState, ExportedFunctions, Memory, NumWasmPages, PageMap, ReplicatedState,
-        canister_state::{
-            execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
-            system_state::CyclesUseCase,
+        canister_state::execution_state::{
+            CustomSection, CustomSectionType, WasmBinary, WasmMetadata,
         },
-        metadata_state::{ApiBoundaryNodeEntry, Stream, SubnetMetrics},
+        metadata_state::{
+            ApiBoundaryNodeEntry, Stream, SubnetMetrics, testing::NetworkTopologyTesting,
+        },
         page_map::{PAGE_SIZE, PageIndex},
         testing::{ReplicatedStateTesting, StreamTesting},
     };
@@ -90,20 +91,17 @@ mod tests {
     };
     use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
     use ic_types::{
-        CanisterId, CryptoHashOfPartialState, Cycles, Height, Time,
+        CanisterId, CryptoHashOfPartialState, Height, Time,
         crypto::CryptoHash,
         ingress::{IngressState, IngressStatus},
         messages::{NO_DEADLINE, Refund, RequestMetadata},
-        nominal_cycles::NominalCycles,
         time::CoarseTime,
         xnet::{RejectReason, StreamFlags, StreamIndex, StreamIndexedQueue},
     };
+    use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting};
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
-    use std::{
-        collections::{BTreeMap, BTreeSet},
-        sync::Arc,
-    };
+    use std::collections::{BTreeMap, BTreeSet};
 
     const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 
@@ -183,7 +181,7 @@ mod tests {
             let mut wasm_memory = Memory::new(PageMap::new_for_testing(), NumWasmPages::from(2));
             wasm_memory
                 .page_map
-                .update(&[(PageIndex::from(1), &[0u8; PAGE_SIZE])]);
+                .update(&[(PageIndex::from(1), &[0_u8; PAGE_SIZE])]);
             let wasm_binary = WasmBinary::new(CanisterModule::new(vec![]));
             let metadata = WasmMetadata::new(btreemap! {
                 String::from("dummy1") => CustomSection::new(CustomSectionType::Private, vec![0, 2]),
@@ -321,11 +319,14 @@ mod tests {
             })
             .unwrap();
 
-            state.metadata.network_topology.subnets = btreemap! {
+            state.metadata.network_topology.set_subnets(btreemap! {
                 own_subnet_id => Default::default(),
                 other_subnet_id => Default::default(),
-            };
-            state.metadata.network_topology.routing_table = Arc::new(routing_table);
+            });
+            state
+                .metadata
+                .network_topology
+                .set_routing_table(routing_table);
             state.metadata.prev_state_hash =
                 Some(CryptoHashOfPartialState::new(CryptoHash(vec![3, 2, 1])));
 
@@ -333,19 +334,21 @@ mod tests {
 
             let mut subnet_metrics = SubnetMetrics::default();
 
-            subnet_metrics.consumed_cycles_by_deleted_canisters = NominalCycles::from(0);
-            subnet_metrics.consumed_cycles_http_outcalls = NominalCycles::from(50_000_000_000);
-            subnet_metrics.consumed_cycles_ecdsa_outcalls = NominalCycles::from(100_000_000_000);
+            subnet_metrics.observe_consumed_cycles_by_deleted_canisters(NominalCycles::zero());
+            subnet_metrics
+                .observe_consumed_cycles_http_outcalls(NominalCycles::new(50_000_000_000));
+            subnet_metrics
+                .observe_consumed_cycles_ecdsa_outcalls(NominalCycles::new(100_000_000_000));
             subnet_metrics.num_canisters = 5;
             subnet_metrics.canister_state_bytes = NumBytes::from(5 * 1024 * 1024);
             subnet_metrics.update_transactions_total = 4200;
             subnet_metrics.observe_consumed_cycles_with_use_case(
                 CyclesUseCase::Instructions,
-                NominalCycles::from(80_000_000_000),
+                NominalCycles::new(80_000_000_000),
             );
             subnet_metrics.observe_consumed_cycles_with_use_case(
                 CyclesUseCase::RequestAndResponseTransmission,
-                NominalCycles::from(20_000_000_000),
+                NominalCycles::new(20_000_000_000),
             );
             let schnorr_key_id = MasterPublicKeyId::Schnorr(SchnorrKeyId {
                 algorithm: SchnorrAlgorithm::Bip340Secp256k1,
@@ -389,6 +392,7 @@ mod tests {
             "7FA3E764326968A311F7FE760CE7B6D29978BC9165DCDA332B4350EBEEC6D90C",
             "07797459A2F82D6F64628C0668C5BDB7F83447680DDB178208A40C2256409E8D",
             "F80B2659485C03F68935F214E4CB5D8CCAC02913DCA88E913C4B497F2120DA50",
+            "416172D9AFD573236F1CDE2459756736EEB25028D64FB8D7192AAF33AFC0DA6F",
         ];
         assert_eq!(expected_hashes.len(), all_supported_versions().count());
 

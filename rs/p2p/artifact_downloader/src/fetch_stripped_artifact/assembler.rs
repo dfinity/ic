@@ -74,6 +74,13 @@ impl<Pool: ValidatedPoolReader<ConsensusMessage>> ValidatedPoolReader<MaybeStrip
             .get(id.as_ref())
             .map(Strippable::strip)
     }
+
+    fn get_all_for_initial_broadcast(
+        &self,
+    ) -> Box<dyn Iterator<Item = MaybeStrippedConsensusMessage> + '_> {
+        // Not used for stripped consensus messages.
+        Box::new(std::iter::empty())
+    }
 }
 
 impl<Pool: ValidatedPoolReader<ConsensusMessage>>
@@ -496,7 +503,7 @@ impl PayloadAssembler<SignedIDkgDealing> for BlockProposalAssembler {
 
         for transcript in &mut payload.idkg_transcripts {
             let transcript_id =
-                try_from_option_field(transcript.transcript_id.as_ref(), "transcript_id")
+                try_from_option_field(transcript.transcript_id.clone(), "transcript_id")
                     .map_err(AssemblyError::DeserializationFailed)?;
             for dealing in &mut transcript.verified_dealings {
                 let dealer_index = dealing.dealer_index;

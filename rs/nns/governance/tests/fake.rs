@@ -27,7 +27,10 @@ use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse}
 use ic_sns_swap::pb::v1 as sns_swap_pb;
 use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
-use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
+use icrc_ledger_types::{
+    icrc1::account::Account,
+    icrc3::blocks::{GetBlocksRequest, GetBlocksResult},
+};
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use rand::{RngCore, SeedableRng};
@@ -367,6 +370,17 @@ impl IcpLedger for FakeDriver {
         Ok(0)
     }
 
+    async fn icrc2_transfer_from(
+        &self,
+        _from: Account,
+        _to: Account,
+        _amount_e8s: u64,
+        _fee_e8s: u64,
+        _memo: u64,
+    ) -> Result<u64, NervousSystemError> {
+        unimplemented!()
+    }
+
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
         if let Some(err) = self.error_on_next_ledger_call.lock().unwrap().take() {
             return Err(err);
@@ -454,7 +468,7 @@ impl RandomnessGenerator for FakeDriver {
     }
 
     fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
-        let mut bytes = [0u8; 32];
+        let mut bytes = [0_u8; 32];
         self.state.try_lock().unwrap().rng.fill_bytes(&mut bytes);
         Ok(bytes)
     }
@@ -647,7 +661,7 @@ impl Environment for FakeDriver {
         }
 
         if method_name == "raw_rand" {
-            let mut bytes = [0u8; 32];
+            let mut bytes = [0_u8; 32];
             self.state.try_lock().unwrap().rng.fill_bytes(&mut bytes);
             return Ok(Encode!(&bytes).unwrap());
         }

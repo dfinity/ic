@@ -25,11 +25,11 @@ pub trait AttestationPackageVerifier: Sized {
     fn verify_all<T: EncodeSevCustomData + Debug>(
         self,
         expected_custom_data: &T,
-        blessed_guest_launch_measurements: &[impl AsRef<[u8]>],
+        elected_guest_launch_measurements: &[impl AsRef<[u8]>],
         expected_chip_ids: &[impl AsRef<[u8]>],
     ) -> Result<Self::Target, VerificationError> {
         self.verify_custom_data(expected_custom_data)
-            .verify_measurement(blessed_guest_launch_measurements)
+            .verify_measurement(elected_guest_launch_measurements)
             .verify_chip_id(expected_chip_ids)
     }
 
@@ -45,11 +45,11 @@ pub trait AttestationPackageVerifier: Sized {
         expected_custom_data: &T,
     ) -> Result<Self::Target, VerificationError>;
 
-    /// Verify that the attestation report launch measurement matches one of the blessed guest
+    /// Verify that the attestation report launch measurement matches one of the elected guest
     /// launch measurements.
     fn verify_measurement(
         self,
-        blessed_guest_launch_measurements: &[impl AsRef<[u8]>],
+        elected_guest_launch_measurements: &[impl AsRef<[u8]>],
     ) -> Result<Self::Target, VerificationError>;
 }
 
@@ -72,7 +72,7 @@ pub trait AttestationPackageVerifier: Sized {
 pub struct ParsedSevAttestationPackage {
     attestation_report: AttestationReport,
     certificate_chain: SevCertificateChain,
-    custom_data_debug_info: String,
+    custom_data_debug_info: Option<String>,
 }
 
 impl ParsedSevAttestationPackage {
@@ -82,7 +82,7 @@ impl ParsedSevAttestationPackage {
         attestation_report: AttestationReport,
         certificate_chain: SevCertificateChain,
         sev_root_certificate_verification: SevRootCertificateVerification,
-        custom_data_debug_info: String,
+        custom_data_debug_info: Option<String>,
     ) -> Result<Self, VerificationError> {
         verify_sev_attestation_report_signature(
             &attestation_report,
@@ -101,7 +101,7 @@ impl ParsedSevAttestationPackage {
     pub fn new_with_unverified_certificate_chain(
         attestation_report: AttestationReport,
         certificate_chain: SevCertificateChain,
-        custom_data_debug_info: String,
+        custom_data_debug_info: Option<String>,
     ) -> Self {
         Self {
             attestation_report,
@@ -142,7 +142,7 @@ impl ParsedSevAttestationPackage {
             attestation_report,
             certificate_chain,
             sev_root_certificate_verification,
-            package.custom_data_debug_info.unwrap_or_default(),
+            package.custom_data_debug_info,
         )
     }
 
@@ -162,7 +162,7 @@ impl From<ParsedSevAttestationPackage> for SevAttestationPackage {
                     .to_vec(),
             ),
             certificate_chain: Some(value.certificate_chain),
-            custom_data_debug_info: Some(value.custom_data_debug_info),
+            custom_data_debug_info: value.custom_data_debug_info,
         }
     }
 }
@@ -220,25 +220,28 @@ impl<T: Borrow<ParsedSevAttestationPackage>> AttestationPackageVerifier for T {
              Debug info: \
              expected: {expected_custom_data:?} \
              actual: {}",
-            self.borrow().custom_data_debug_info
+            self.borrow()
+                .custom_data_debug_info
+                .as_deref()
+                .unwrap_or("[none]")
         )))
     }
 
     fn verify_measurement(
         self,
-        blessed_guest_launch_measurements: &[impl AsRef<[u8]>],
+        elected_guest_launch_measurements: &[impl AsRef<[u8]>],
     ) -> Result<Self, VerificationError> {
         let launch_measurement = self.borrow().attestation_report.measurement;
-        if !blessed_guest_launch_measurements
+        if !elected_guest_launch_measurements
             .iter()
-            .any(|blessed_measurement| {
-                blessed_measurement.as_ref() == launch_measurement.as_slice()
+            .any(|elected_measurement| {
+                elected_measurement.as_ref() == launch_measurement.as_slice()
             })
         {
             return Err(VerificationError::invalid_measurement(format!(
                 "Launch measurement {launch_measurement:?} is not in the list of \
-                 blessed guest launch measurements: {}",
-                blessed_guest_launch_measurements
+                 elected guest launch measurements: {}",
+                elected_guest_launch_measurements
                     .iter()
                     .map(|m| format!("{:?}", m.as_ref()))
                     .collect::<Vec<_>>()
@@ -270,9 +273,9 @@ impl<T: AttestationPackageVerifier> AttestationPackageVerifier for Result<T, Ver
 
     fn verify_measurement(
         self,
-        blessed_guest_launch_measurements: &[impl AsRef<[u8]>],
+        elected_guest_launch_measurements: &[impl AsRef<[u8]>],
     ) -> Result<Self::Target, VerificationError> {
-        self?.verify_measurement(blessed_guest_launch_measurements)
+        self?.verify_measurement(elected_guest_launch_measurements)
     }
 }
 

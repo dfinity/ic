@@ -17,14 +17,15 @@ on:
         type: boolean
 
 jobs:
-  get-pr-base-ref:
-    name: Get PR Base Ref
+  get-pr-refs:
+    name: Get PR Refs
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: read
     outputs:
       base-ref: ${{ steps.fetch.outputs.base_ref }}
+      head-ref: ${{ steps.fetch.outputs.head_ref }}
     steps:
       - name: Fetch PR Base Ref
         id: fetch
@@ -41,8 +42,9 @@ jobs:
               repo: context.repo.repo,
               pull_number: prNumber
             });
-            core.info(`PR #${prNumber} base ref: ${pr.base.ref}`);
+            core.info(`PR #${prNumber} base ref: ${pr.base.ref}, head ref: ${pr.head.ref}`);
             core.setOutput('base_ref', pr.base.ref);
+            core.setOutput('head_ref', pr.head.ref);
 
   ci-main:
     name: CI Main
@@ -50,18 +52,22 @@ jobs:
     secrets: inherit
     with:
       commit-sha: ${{ inputs.commit-sha }}
+      release-build: 'false'
     permissions:
+      actions: write
       contents: read
+      id-token: write
       pull-requests: read
 
   ci-pr-only:
     name: CI PR Only
-    needs: [get-pr-base-ref]
+    needs: [get-pr-refs]
     uses: ./.github/workflows/ci-pr-only.yml
     secrets: inherit
     with:
       commit-sha: ${{ inputs.commit-sha }}
-      base-ref: ${{ needs.get-pr-base-ref.outputs.base-ref }}
+      base-ref: ${{ needs.get-pr-refs.outputs.base-ref }}
+      head-ref: ${{ needs.get-pr-refs.outputs.head-ref }}
       pr-number: ${{ inputs.pr-number }}
     permissions:
       contents: read
@@ -77,7 +83,7 @@ jobs:
       pull-requests: write
       statuses: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ inputs.commit-sha }}
       - uses: ./.github/actions/post-commit-status
@@ -96,7 +102,7 @@ jobs:
       pull-requests: write
       statuses: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ inputs.commit-sha }}
       - uses: ./.github/actions/post-commit-status

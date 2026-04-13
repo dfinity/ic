@@ -16,9 +16,6 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::registry::subnet::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::ChainKeyConfig;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-    SignWithThresholdContext, ThresholdArguments,
-};
 use ic_types::{
     Height, RegistryVersion, SubnetId,
     batch::{AvailablePreSignatures, ConsensusResponse},
@@ -26,19 +23,14 @@ use ic_types::{
         Block, HasHeight,
         idkg::{
             CompletedSignature, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId,
-            IDkgMessage, IDkgPayload, IDkgTranscriptParamsRef, PreSigId, RequestId,
-            TranscriptLookupError, TranscriptRef,
-            common::{BuildSignatureInputsError, ThresholdSigInputs},
+            IDkgMessage, IDkgPayload, IDkgTranscriptParamsRef, PreSigId, TranscriptLookupError,
+            TranscriptRef,
         },
     },
-    crypto::{
-        canister_threshold_sig::{
-            MasterPublicKey, ThresholdEcdsaSigInputs, ThresholdSchnorrSigInputs,
-            idkg::{IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings},
-        },
-        vetkd::{VetKdArgs, VetKdDerivationContextRef},
+    crypto::canister_threshold_sig::{
+        MasterPublicKey,
+        idkg::{IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings},
     },
-    messages::CallbackId,
     registry::RegistryClientError,
 };
 use rayon::{ThreadPool, ThreadPoolBuilder};
@@ -226,86 +218,6 @@ pub(super) fn block_chain_cache(
     }
 }
 
-/// Helper to build threshold signature inputs from the context
-pub(super) fn build_signature_inputs<'a>(
-    callback_id: CallbackId,
-    context: &'a SignWithThresholdContext,
-) -> Result<(RequestId, ThresholdSigInputs<'a>), BuildSignatureInputsError> {
-    match &context.args {
-        ThresholdArguments::Ecdsa(args) => {
-            let matched_data = args
-                .pre_signature
-                .as_ref()
-                .ok_or(BuildSignatureInputsError::ContextIncomplete)?;
-            let request_id = RequestId {
-                callback_id,
-                height: matched_data.height,
-            };
-            let nonce_ref = context
-                .nonce
-                .as_ref()
-                .ok_or(BuildSignatureInputsError::ContextIncomplete)?;
-            let inputs = ThresholdSigInputs::Ecdsa(
-                ThresholdEcdsaSigInputs::new(
-                    context.request.sender.get_ref(),
-                    &context.derivation_path,
-                    &args.message_hash,
-                    nonce_ref,
-                    matched_data.pre_signature.as_ref(),
-                    matched_data.key_transcript.as_ref(),
-                )
-                .map_err(BuildSignatureInputsError::ThresholdEcdsaSigInputsCreationError)?,
-            );
-            Ok((request_id, inputs))
-        }
-        ThresholdArguments::Schnorr(args) => {
-            let matched_data = args
-                .pre_signature
-                .as_ref()
-                .ok_or(BuildSignatureInputsError::ContextIncomplete)?;
-            let request_id = RequestId {
-                callback_id,
-                height: matched_data.height,
-            };
-            let nonce_ref = context
-                .nonce
-                .as_ref()
-                .ok_or(BuildSignatureInputsError::ContextIncomplete)?;
-            let inputs = ThresholdSigInputs::Schnorr(
-                ThresholdSchnorrSigInputs::new(
-                    context.request.sender.get_ref(),
-                    &context.derivation_path,
-                    &args.message,
-                    args.taproot_tree_root.as_ref().map(|v| v.as_slice()),
-                    nonce_ref,
-                    matched_data.pre_signature.as_ref(),
-                    matched_data.key_transcript.as_ref(),
-                )
-                .map_err(BuildSignatureInputsError::ThresholdSchnorrSigInputsCreationError)?,
-            );
-            Ok((request_id, inputs))
-        }
-        ThresholdArguments::VetKd(args) => {
-            let request_id = RequestId {
-                callback_id,
-                height: args.height,
-            };
-            debug_assert_eq!(context.derivation_path.len(), 1);
-            const EMPTY_VEC_REF: &Vec<u8> = &vec![];
-            let inputs = ThresholdSigInputs::VetKd(VetKdArgs {
-                context: VetKdDerivationContextRef {
-                    caller: context.request.sender.get_ref(),
-                    context: context.derivation_path.first().unwrap_or(EMPTY_VEC_REF),
-                },
-                ni_dkg_id: &args.ni_dkg_id,
-                input: &args.input,
-                transport_public_key: &args.transport_public_key,
-            });
-            Ok((request_id, inputs))
-        }
-    }
-}
-
 /// Load the given transcripts
 /// Returns None if all the transcripts could be loaded successfully.
 /// Otherwise, returns the complaint change set to be added to the pool
@@ -357,8 +269,8 @@ pub(super) fn transcript_op_summary(op: &IDkgTranscriptOperation) -> String {
 /// Inspect chain_key_initializations field in the CUPContent.
 /// Return key_id and dealings.
 pub fn inspect_idkg_chain_key_initializations(
-    ecdsa_initializations: &[pb::EcdsaInitialization],
-    chain_key_initializations: &[pb::ChainKeyInitialization],
+    ecdsa_initializations: Vec<pb::EcdsaInitialization>,
+    chain_key_initializations: Vec<pb::ChainKeyInitialization>,
 ) -> Result<BTreeMap<IDkgMasterPublicKeyId, InitialIDkgDealings>, String> {
     let mut initial_dealings_per_key_id = BTreeMap::new();
 
@@ -371,14 +283,12 @@ pub fn inspect_idkg_chain_key_initializations(
     for ecdsa_init in ecdsa_initializations {
         let ecdsa_key_id = ecdsa_init
             .key_id
-            .clone()
             .ok_or("Failed to find key_id in ecdsa_initializations")?
             .try_into()
             .map_err(|err| format!("Error reading ECDSA key_id: {err:?}"))?;
 
         let dealings = ecdsa_init
             .dealings
-            .as_ref()
             .ok_or("Failed to find dealings in ecdsa_initializations")?
             .try_into()
             .map_err(|err| format!("Error reading ECDSA dealings: {err:?}"))?;
@@ -392,7 +302,6 @@ pub fn inspect_idkg_chain_key_initializations(
     for chain_key_init in chain_key_initializations {
         let key_id: MasterPublicKeyId = chain_key_init
             .key_id
-            .clone()
             .ok_or("Failed to find key_id in chain_key_initializations")?
             .try_into()
             .map_err(|err| format!("Error reading Master public key_id: {err:?}"))?;
@@ -403,7 +312,7 @@ pub fn inspect_idkg_chain_key_initializations(
             Err(_) => continue,
         };
 
-        let dealings = match &chain_key_init.initialization {
+        let dealings = match chain_key_init.initialization {
             Some(pb::chain_key_initialization::Initialization::Dealings(dealings)) => dealings,
             Some(pb::chain_key_initialization::Initialization::TranscriptRecord(_)) | None => {
                 return Err(
@@ -659,7 +568,7 @@ mod tests {
 
     #[test]
     fn test_inspect_chain_key_initializations_no_keys() {
-        let init = inspect_idkg_chain_key_initializations(&[], &[])
+        let init = inspect_idkg_chain_key_initializations(vec![], vec![])
             .expect("Should successfully get initializations");
 
         assert!(init.is_empty());
@@ -678,7 +587,7 @@ mod tests {
             dealings: Some((&initial_dealings).into()),
         };
 
-        let init = inspect_idkg_chain_key_initializations(&[ecdsa_init], &[])
+        let init = inspect_idkg_chain_key_initializations(vec![ecdsa_init], vec![])
             .expect("Should successfully get initializations");
 
         assert_eq!(
@@ -705,7 +614,7 @@ mod tests {
             )),
         };
 
-        let init = inspect_idkg_chain_key_initializations(&[], &[chain_key_init])
+        let init = inspect_idkg_chain_key_initializations(vec![], vec![chain_key_init])
             .expect("Should successfully get initializations");
 
         assert_eq!(init, BTreeMap::from([(key_id, initial_dealings)]));
@@ -749,8 +658,8 @@ mod tests {
         };
 
         let init = inspect_idkg_chain_key_initializations(
-            &[ecdsa_init.clone(), ecdsa_init_2.clone()],
-            &[],
+            vec![ecdsa_init.clone(), ecdsa_init_2.clone()],
+            vec![],
         )
         .expect("Should successfully inspect initializations");
         assert_eq!(
@@ -768,8 +677,8 @@ mod tests {
         );
 
         let init = inspect_idkg_chain_key_initializations(
-            &[],
-            &[chain_key_init.clone(), chain_key_init_2.clone()],
+            vec![],
+            vec![chain_key_init.clone(), chain_key_init_2.clone()],
         )
         .expect("Should successfully inspect initializations");
         assert_eq!(
@@ -786,11 +695,8 @@ mod tests {
             ])
         );
 
-        inspect_idkg_chain_key_initializations(
-            std::slice::from_ref(&ecdsa_init),
-            std::slice::from_ref(&chain_key_init_2),
-        )
-        .expect_err("Should fail when both arguments are non-empty");
+        inspect_idkg_chain_key_initializations(vec![ecdsa_init], vec![chain_key_init_2])
+            .expect_err("Should fail when both arguments are non-empty");
     }
 
     fn set_up_get_chain_key_config_test(

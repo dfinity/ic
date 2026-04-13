@@ -13,11 +13,9 @@ use ic_artifact_pool::{
 use ic_config::{Config, artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig};
 use ic_consensus::consensus::batch_delivery::deliver_batches;
 use ic_consensus_certification::VerifierImpl;
-use ic_consensus_utils::{
-    crypto_hashable_to_seed, lookup_replica_version, membership::Membership,
-    pool_reader::PoolReader,
-};
+use ic_consensus_utils::{lookup_replica_version, membership::Membership, pool_reader::PoolReader};
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
+use ic_crypto_tree_hash::{Digest, Witness};
 use ic_error_types::UserError;
 use ic_execution_environment::ExecutionServices;
 use ic_interfaces::{
@@ -65,7 +63,7 @@ use ic_types::{
         certification::{Certification, CertificationContent, CertificationShare},
     },
     crypto::{
-        CombinedThresholdSig, CombinedThresholdSigOf, Signed,
+        CombinedThresholdSig, CombinedThresholdSigOf, Signed, randomness_from_crypto_hashable,
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
     },
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -588,15 +586,15 @@ impl Player {
 
         // Get heights and local state hashes without a full certification
         let mut missing_certifications = self.state_manager.list_state_hashes_to_certify();
-        missing_certifications.sort_by_key(|(height, _)| height.get());
+        missing_certifications.sort_by_key(|state_hash_metadata| state_hash_metadata.height.get());
         missing_certifications
             .into_iter()
-            .fold(false, |ret, (height, hash)| {
+            .fold(false, |ret, state_hash_metadata| {
                 ret | is_manual_share_investigation_required(
                     certification_pool,
                     &malicious_nodes,
-                    height,
-                    hash,
+                    state_hash_metadata.height,
+                    state_hash_metadata.hash,
                     f,
                 )
             })
@@ -759,7 +757,7 @@ impl Player {
                 (
                     last_block.context.registry_version,
                     last_block.context.time + Duration::from_nanos(1),
-                    Randomness::from(crypto_hashable_to_seed(&last_block)),
+                    randomness_from_crypto_hashable(&last_block),
                     last_block.version.clone(),
                 )
             }
@@ -845,11 +843,15 @@ impl Player {
     fn certify_state_with_dummy_certification(&self) {
         if self.state_manager.latest_state_height() > self.state_manager.latest_certified_height() {
             let state_hashes = self.state_manager.list_state_hashes_to_certify();
-            let (height, hash) = state_hashes
+            let state_hash_metadata = state_hashes
                 .last()
                 .expect("There should be at least one state hash to certify");
             self.state_manager
-                .deliver_state_certification(Self::certify_hash(self.subnet_id, height, hash));
+                .deliver_state_certification(Self::certify_hash(
+                    self.subnet_id,
+                    &state_hash_metadata.height,
+                    &state_hash_metadata.hash,
+                ));
         }
     }
 
@@ -861,6 +863,7 @@ impl Player {
         let combined_sig = CombinedThresholdSigOf::from(CombinedThresholdSig(vec![]));
         Certification {
             height: *height,
+            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
             signed: Signed {
                 content: CertificationContent { hash: hash.clone() },
                 signature: ThresholdSignature {
@@ -901,6 +904,7 @@ impl Player {
                 user_id: UserId::from(PrincipalId::new_anonymous()),
                 ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
                 nonce: None,
+                sender_info: None,
             },
             receiver: REGISTRY_CANISTER_ID,
             method_name: "get_latest_version".to_string(),
@@ -1245,6 +1249,7 @@ async fn get_changes_since(
             user_id: UserId::from(PrincipalId::new_anonymous()),
             ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
             nonce: None,
+            sender_info: None,
         },
         receiver: REGISTRY_CANISTER_ID,
         method_name: "get_changes_since".to_string(),
@@ -1303,6 +1308,7 @@ impl<PerformQueryImpl: PerformQuery + Sync> GetChunk for GetChunkImpl<'_, Perfor
                 user_id: UserId::from(PrincipalId::new_anonymous()),
                 ingress_expiry: expiry_time_from_now().as_nanos_since_unix_epoch(),
                 nonce: None,
+                sender_info: None,
             },
             receiver: REGISTRY_CANISTER_ID,
             method_name: "get_chunk".to_string(),
@@ -1380,6 +1386,7 @@ where
             user_id: UserId::from(PrincipalId::new_anonymous()),
             ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
             nonce: None,
+            sender_info: None,
         },
         receiver: REGISTRY_CANISTER_ID,
         method_name: "get_value".to_string(),
@@ -1647,6 +1654,7 @@ fn get_state_hash<T>(
 #[cfg(test)]
 mod tests {
     use ic_crypto_sha2::Sha256;
+    use ic_crypto_tree_hash::{Digest, Witness};
     use ic_interfaces_state_manager::TransientStateHashError;
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_logger::replica_logger::no_op_logger;
@@ -1673,6 +1681,7 @@ mod tests {
     fn make_share(height: u64, hash: Vec<u8>, node_id: u64) -> CertificationMessage {
         CertificationMessage::CertificationShare(CertificationShare {
             height: Height::from(height),
+            height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
                 content: CertificationContent::new(CryptoHash(hash).into()),
                 signature: ThresholdSignatureShare::fake(node_test_id(node_id)),
@@ -1990,6 +1999,7 @@ mod tests {
                             user_id: UserId::from(PrincipalId::new_anonymous()),
                             ingress_expiry: observed_ingress_expiry,
                             nonce: None,
+                            sender_info: None,
                         },
                         receiver: REGISTRY_CANISTER_ID,
                         method_name: method_name.to_string(),

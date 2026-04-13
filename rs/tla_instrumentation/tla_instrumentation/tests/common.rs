@@ -2,14 +2,6 @@ use std::path::PathBuf;
 use tla_instrumentation::UpdateTrace;
 use tla_instrumentation::checker::{PredicateDescription, check_tla_code_link};
 
-// Add JAVABASE/bin to PATH to make the Bazel-provided JRE available to scripts
-fn set_java_path() {
-    let current_path = std::env::var("PATH").unwrap();
-    let bazel_java = std::env::var("JAVABASE").unwrap();
-    // TODO: Audit that the environment access only happens in single-threaded code.
-    unsafe { std::env::set_var("PATH", format!("{current_path}:{bazel_java}/bin")) };
-}
-
 /// Returns the path to the TLA module (e.g. `Foo.tla` -> `/home/me/tla/Foo.tla`).
 /// TLA modules are read from $TLA_MODULES (space-separated list)
 /// NOTE: this assumes unique basenames amongst the modules
@@ -40,7 +32,6 @@ pub fn get_apalache_path() -> PathBuf {
 }
 
 pub fn check_tla_trace(trace: &UpdateTrace) {
-    set_java_path();
     let model_name = trace.model_name.clone();
     for pair in &trace.state_pairs {
         let constants = trace.constants.clone();

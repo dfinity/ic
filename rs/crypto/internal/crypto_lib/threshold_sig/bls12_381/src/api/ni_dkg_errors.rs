@@ -6,8 +6,6 @@ use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes};
 use serde::{Deserialize, Serialize};
 
-// These are the base error types used by ni_dkg
-// TODO(CRP-574): Move these up, out of dkg.
 pub use super::dkg_errors::{
     InternalError, InvalidArgumentError, KeyNotFoundError, MalformedDataError, MalformedPopError,
     MalformedPublicKeyError, MalformedSecretKeyError, SizeError,

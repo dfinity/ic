@@ -23,6 +23,7 @@ use ic_agent::AgentError;
 use ic_agent::agent_error::HttpErrorPayload;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::retry_agent_on_transport_errors;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
@@ -73,6 +74,7 @@ fn get_first_node(env: &TestEnv, subnet_type: SubnetType) -> IcNodeSnapshot {
         .expect("Every subnet should have at least one node")
 }
 
+#[derive(Clone, Copy)]
 enum RequestType {
     Query,
     Update,
@@ -130,9 +132,16 @@ fn send_request(
             )
             .await;
 
-            make_ingress_call(&canister, message_size as usize, call)
-                .await
-                .map(|_| ())
+            // Retry on transport errors which can occur intermittently
+            // when sending large payloads through the API boundary node.
+            retry_agent_on_transport_errors!(
+                "send ingress call",
+                &logger,
+                make_ingress_call(&canister, message_size as usize, call)
+            )
+            .await
+            .expect("transport error persisted after retries")
+            .map(|_| ())
         })
 }
 

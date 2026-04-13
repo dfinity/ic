@@ -1,8 +1,10 @@
 use crate::AlgorithmVersion;
 use crate::REWARDS_TABLE_DAYS;
+#[cfg(test)]
+use crate::performance_based_algorithm::results::RewardsCalculatorResults;
 use crate::performance_based_algorithm::results::{
     DailyNodeFailureRate, DailyNodeProviderRewards, DailyNodeRewards, DailyResults,
-    NodeMetricsDaily, NodeTypeRegionBaseRewards, RewardsCalculatorResults, Type3RegionBaseRewards,
+    NodeMetricsDaily, NodeTypeRegionBaseRewards, Type3RegionBaseRewards,
 };
 use crate::types::{NodeMetricsDailyRaw, Region, RewardableNode};
 use chrono::NaiveDate;
@@ -105,43 +107,7 @@ trait PerformanceBasedAlgorithm: AlgorithmVersion {
     /// The maximum rewards reduction for a node.
     const MAX_REWARDS_REDUCTION: Decimal;
 
-    fn calculate_rewards(
-        from_date: NaiveDate,
-        to_date: NaiveDate,
-        input_provider: impl PerformanceBasedAlgorithmInputProvider,
-    ) -> Result<RewardsCalculatorResults, String> {
-        if from_date > to_date {
-            return Err("from_day must be before to_day".to_string());
-        }
-
-        let reward_period = from_date.iter_days().take_while(|d| *d <= to_date);
-        let mut total_rewards_xdr_permyriad = BTreeMap::new();
-        let mut daily_results = BTreeMap::new();
-
-        // Process each day in the reward period
-        for day in reward_period {
-            let result_for_day = Self::calculate_daily_rewards(&input_provider, &day)?;
-
-            // Accumulate total rewards per provider across all days
-            for (provider_id, provider_rewards) in &result_for_day.provider_results {
-                total_rewards_xdr_permyriad
-                    .entry(*provider_id)
-                    .and_modify(|total| {
-                        *total += provider_rewards.total_adjusted_rewards_xdr_permyriad
-                    })
-                    .or_insert(provider_rewards.total_adjusted_rewards_xdr_permyriad);
-            }
-            daily_results.insert(day, result_for_day);
-        }
-
-        Ok(RewardsCalculatorResults {
-            algorithm_version: Self::VERSION,
-            total_rewards_xdr_permyriad,
-            daily_results,
-        })
-    }
-
-    fn calculate_daily_rewards(
+    fn calculate_rewards_for_date(
         data_provider: &impl PerformanceBasedAlgorithmInputProvider,
         date: &NaiveDate,
     ) -> Result<DailyResults, String> {
@@ -169,6 +135,41 @@ trait PerformanceBasedAlgorithm: AlgorithmVersion {
         Ok(DailyResults {
             subnets_failure_rate,
             provider_results: results_per_provider,
+        })
+    }
+
+    #[cfg(test)]
+    fn calculate_rewards(
+        from_day: NaiveDate,
+        to_day: NaiveDate,
+        input_provider: impl PerformanceBasedAlgorithmInputProvider,
+    ) -> Result<RewardsCalculatorResults, String> {
+        if from_day > to_day {
+            return Err("from_day must be before to_day".to_string());
+        }
+
+        let mut total_rewards_xdr_permyriad: BTreeMap<PrincipalId, u64> = BTreeMap::new();
+        let mut daily_results = BTreeMap::new();
+
+        for day in from_day.iter_days().take_while(|d| *d <= to_day) {
+            let result_for_day = Self::calculate_rewards_for_date(&input_provider, &day)?;
+
+            for (provider_id, provider_rewards) in &result_for_day.provider_results {
+                total_rewards_xdr_permyriad
+                    .entry(*provider_id)
+                    .and_modify(|total| {
+                        *total += provider_rewards.total_adjusted_rewards_xdr_permyriad
+                    })
+                    .or_insert(provider_rewards.total_adjusted_rewards_xdr_permyriad);
+            }
+
+            daily_results.insert(day, result_for_day);
+        }
+
+        Ok(RewardsCalculatorResults {
+            algorithm_version: Self::VERSION,
+            total_rewards_xdr_permyriad,
+            daily_results,
         })
     }
 

@@ -69,7 +69,7 @@ fn manifest_builder_bad_file_hash() {
         &FileInfo {
             relative_path: PathBuf::from(SYSTEM_METADATA_FILE),
             size_bytes: 0,
-            hash: [0u8; 32],
+            hash: [0_u8; 32],
         },
         &[],
     );
@@ -331,7 +331,7 @@ fn non_empty_file_and_chunk_infos(path: &str) -> (FileInfo, ChunkInfo) {
             file_index: 13,
             size_bytes: 1234,
             offset: 0,
-            hash: [13u8; 32],
+            hash: [13_u8; 32],
         },
     )
 }
@@ -402,19 +402,19 @@ fn expected_subnet_1_system_metadata() -> (FileInfo, ChunkInfo) {
     (
         FileInfo {
             relative_path: PathBuf::from(SYSTEM_METADATA_FILE),
-            size_bytes: 65,
+            size_bytes: 68,
             hash: [
-                39, 164, 64, 44, 9, 212, 165, 34, 200, 1, 22, 98, 99, 119, 129, 248, 168, 198, 240,
-                112, 49, 44, 231, 89, 60, 205, 99, 69, 54, 196, 180, 153,
+                195, 210, 241, 123, 208, 102, 116, 76, 5, 37, 206, 2, 12, 165, 100, 203, 102, 29,
+                116, 197, 87, 40, 47, 99, 12, 84, 161, 179, 185, 194, 63, 74,
             ],
         },
         ChunkInfo {
             file_index: 13,
-            size_bytes: 65,
+            size_bytes: 68,
             offset: 0,
             hash: [
-                75, 239, 176, 218, 222, 88, 114, 202, 3, 125, 101, 212, 81, 83, 236, 103, 150, 105,
-                15, 108, 238, 49, 193, 88, 80, 236, 163, 15, 212, 49, 214, 74,
+                128, 201, 178, 122, 10, 194, 151, 140, 164, 115, 42, 25, 7, 77, 218, 128, 51, 92,
+                125, 81, 59, 77, 180, 131, 203, 16, 247, 14, 137, 224, 107, 216,
             ],
         },
     )

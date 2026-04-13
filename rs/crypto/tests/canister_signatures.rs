@@ -80,8 +80,6 @@ fn should_fail_to_verify_on_wrong_signature() {
     let rng = &mut reproducible_rng();
     for with_delegation in [false, true] {
         let data = new_valid_sig_and_crypto_component(rng, with_delegation);
-        // TODO Implement `CorruptBytes` (see CRP-1924)
-        // TODO Randomize corruption of canister signature bytes (see CRP-1930)
         let corrupted_sig_bytes = {
             let mut corrupted_sig = data.canister_sig.clone().get().0;
             let len = corrupted_sig.len();

@@ -3,51 +3,24 @@
 //! of malicious nodes.
 use crate::consensus::{ConsensusImpl, add_all_to_validated, block_maker};
 use ic_consensus_utils::pool_reader::PoolReader;
-use ic_interfaces::consensus_pool::{ChangeAction, HeightRange, Mutations};
+use ic_interfaces::consensus_pool::{
+    ChangeAction, HeightRange, Mutations, ValidatedConsensusArtifact,
+};
 use ic_logger::{info, trace};
+use ic_protobuf::log::malicious_behavior_log_entry::v1::{
+    MaliciousBehavior, MaliciousBehaviorLogEntry,
+};
 use ic_types::{
-    Time,
+    Height, Time,
     consensus::{
-        Block, BlockMetadata, BlockProposal, ConsensusMessage, ConsensusMessageHashable,
-        FinalizationContent, FinalizationShare, HasHeight, HashedBlock, NotarizationShare, Rank,
-        hashed,
+        Block, BlockMetadata, BlockProposal, ConsensusMessage, FinalizationContent,
+        FinalizationShare, HasHeight, HashedBlock, NotarizationShare, Rank, hashed,
     },
     malicious_flags::MaliciousFlags,
 };
 use std::time::Duration;
 
 impl ConsensusImpl {
-    /// Return a `Mutations` that moves all block proposals in the range to the
-    /// validated pool.
-    fn maliciously_validate_all_blocks(&self, pool_reader: &PoolReader) -> Mutations {
-        trace!(self.log, "maliciously_validate_all_blocks");
-        let mut change_set = Vec::new();
-
-        let finalized_height = pool_reader.get_finalized_height();
-        let beacon_height = pool_reader.get_random_beacon_height();
-        let max_height = beacon_height.increment();
-        let range = HeightRange::new(finalized_height.increment(), max_height);
-
-        for proposal in pool_reader
-            .pool()
-            .unvalidated()
-            .block_proposal()
-            .get_by_height_range(range)
-        {
-            change_set.push(ChangeAction::MoveToValidated(proposal.into_message()))
-        }
-
-        if !change_set.is_empty() {
-            ic_logger::debug!(
-                self.log,
-                "[MALICIOUS] maliciously validating all {} proposals",
-                change_set.len()
-            );
-        }
-
-        change_set
-    }
-
     /// Maliciously propose blocks irrespective of the rank, based on the flags
     /// received. If maliciously_propose_empty_blocks is set, propose only empty
     /// blocks. If maliciously_equivocation_blockmaker is set, propose
@@ -58,9 +31,6 @@ impl ConsensusImpl {
         maliciously_propose_empty_blocks: bool,
         maliciously_equivocation_blockmaker: bool,
     ) -> Vec<BlockProposal> {
-        use ic_protobuf::log::malicious_behavior_log_entry::v1::{
-            MaliciousBehavior, MaliciousBehaviorLogEntry,
-        };
         trace!(self.log, "maliciously_propose_blocks");
         let number_of_proposals = 5;
 
@@ -137,14 +107,14 @@ impl ConsensusImpl {
                 proposals.push(proposal);
 
                 if maliciously_propose_empty_blocks {
-                    ic_logger::info!(
+                    info!(
                         self.log,
                         "[MALICIOUS] proposing empty blocks";
                         malicious_behavior => MaliciousBehaviorLogEntry { malicious_behavior: MaliciousBehavior::ProposeEmptyBlocks as i32}
                     );
                 }
                 if maliciously_equivocation_blockmaker {
-                    ic_logger::info!(
+                    info!(
                         self.log,
                         "[MALICIOUS] proposing {} equivocation blocks",
                         proposals.len();
@@ -197,23 +167,12 @@ impl ConsensusImpl {
 
     /// Maliciously notarize all unnotarized proposals for the current height.
     fn maliciously_notarize_all(&self, pool: &PoolReader<'_>) -> Vec<NotarizationShare> {
-        use ic_protobuf::log::malicious_behavior_log_entry::v1::{
-            MaliciousBehavior, MaliciousBehaviorLogEntry,
-        };
         trace!(self.log, "maliciously_notarize");
         let mut notarization_shares = Vec::<NotarizationShare>::new();
 
-        let range = HeightRange::new(
-            pool.get_notarized_height().increment(),
-            pool.get_random_beacon_height().increment(),
-        );
-
-        let proposals = pool
-            .pool()
-            .validated()
-            .block_proposal()
-            .get_by_height_range(range);
-        for proposal in proposals {
+        for proposal in
+            self.get_all_blocks_higher_than(pool, pool.get_finalized_height().increment())
+        {
             if !self
                 .notary
                 .is_proposal_already_notarized_by_me(pool, &proposal)
@@ -224,7 +183,7 @@ impl ConsensusImpl {
         }
 
         if !notarization_shares.is_empty() {
-            ic_logger::info!(
+            info!(
                 self.log,
                 "[MALICIOUS] maliciously notarizing all {} proposals",
                 notarization_shares.len();
@@ -238,22 +197,12 @@ impl ConsensusImpl {
     /// Generate finalization shares for each notarized block in the validated
     /// pool.
     fn maliciously_finalize_all(&self, pool: &PoolReader<'_>) -> Vec<FinalizationShare> {
-        use ic_protobuf::log::malicious_behavior_log_entry::v1::{
-            MaliciousBehavior, MaliciousBehaviorLogEntry,
-        };
         trace!(self.log, "maliciously_finalize");
         let mut finalization_shares = Vec::new();
 
-        let min_height = pool.get_finalized_height().increment();
-        let max_height = pool.get_notarized_height();
-
-        let proposals = pool
-            .pool()
-            .validated()
-            .block_proposal()
-            .get_by_height_range(HeightRange::new(min_height, max_height));
-
-        for proposal in proposals {
+        for proposal in
+            self.get_all_blocks_higher_than(pool, pool.get_finalized_height().increment())
+        {
             let block = proposal.as_ref();
 
             // if this replica already created a finalization share for this block, we do
@@ -285,6 +234,40 @@ impl ConsensusImpl {
         }
 
         finalization_shares
+    }
+
+    // Returns both validated and unvalidated blocks.
+    fn get_all_blocks_higher_than(
+        &self,
+        pool: &PoolReader<'_>,
+        min_height: Height,
+    ) -> impl Iterator<Item = BlockProposal> {
+        pool.pool()
+            .validated()
+            .block_proposal()
+            .get_by_height_range(HeightRange {
+                min: min_height,
+                max: pool
+                    .pool()
+                    .validated()
+                    .block_proposal()
+                    .max_height()
+                    .unwrap_or(min_height),
+            })
+            .chain(
+                pool.pool()
+                    .unvalidated()
+                    .block_proposal()
+                    .get_by_height_range(HeightRange {
+                        min: min_height,
+                        max: pool
+                            .pool()
+                            .unvalidated()
+                            .block_proposal()
+                            .max_height()
+                            .unwrap_or(min_height),
+                    }),
+            )
     }
 
     /// Try to create a finalization share for a given block.
@@ -324,11 +307,14 @@ impl ConsensusImpl {
             // block proposals by the honest code from the changeset.
             if malicious_flags.maliciously_propose_empty_blocks {
                 changeset.retain(|change_action| {
-                !matches!(
-                    change_action,
-                    ChangeAction::AddToValidated(x) if matches!(x.msg ,ConsensusMessage::BlockProposal(_))
-                )
-            });
+                    !matches!(
+                        change_action,
+                        ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                            msg: ConsensusMessage::BlockProposal(_),
+                            timestamp: _
+                        }),
+                    )
+                });
             }
 
             changeset.append(&mut add_all_to_validated(
@@ -342,22 +328,19 @@ impl ConsensusImpl {
         }
 
         if malicious_flags.maliciously_notarize_all {
-            // First undo validations and invalidations of block proposals by the honest
-            // code. We would not want the new ChangeActions to contradict or repeat
-            // an existing ChangeAction.
+            // Remove any notarization shares that might have been output by the honest
+            // code, to avoid deduplication.
             changeset.retain(|change_action| {
                 !matches!(
                     change_action,
-                    ChangeAction::RemoveFromUnvalidated(ConsensusMessage::BlockProposal(_))
-                        | ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(_))
-                        | ChangeAction::HandleInvalid(ConsensusMessage::BlockProposal(_), _)
+                    ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                        msg: ConsensusMessage::NotarizationShare(_),
+                        timestamp: _
+                    }),
                 )
             });
 
-            // Validate all block proposals in a range
-            changeset.append(&mut self.maliciously_validate_all_blocks(pool));
-
-            // Notarize all valid block proposals
+            // Notarize all (both validated and not yet validated) block proposals
             changeset.append(&mut add_all_to_validated(
                 timestamp,
                 self.maliciously_notarize_all(pool),
@@ -368,13 +351,16 @@ impl ConsensusImpl {
             // Remove any finalization shares that might have been output by the honest
             // code, to avoid deduplication.
             changeset.retain(|change_action| {
-            !matches!(
-                change_action,
-                ChangeAction::AddToValidated(x) if matches!(x.msg, ConsensusMessage::FinalizationShare(_))
-            )
-        });
+                !matches!(
+                    change_action,
+                    ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                        msg: ConsensusMessage::FinalizationShare(_),
+                        timestamp: _
+                    }),
+                )
+            });
 
-            // Finalize all block proposals
+            // Finalize all (both validated and not yet validated) block proposals
             changeset.append(&mut add_all_to_validated(
                 timestamp,
                 self.maliciously_finalize_all(pool),

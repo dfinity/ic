@@ -1,9 +1,6 @@
 use crate::{
     RecoveryArgs, RecoveryResult,
-    cli::{
-        consent_given, print_height_info, read_optional, read_optional_data_location,
-        read_optional_version,
-    },
+    cli::{consent_given, print_height_info, read_optional, read_optional_data_location},
     error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
@@ -201,12 +198,7 @@ impl NNSRecoverySameNodes {
     ) -> Self {
         let recovery = Recovery::new(
             logger.clone(),
-            RecoveryArgs {
-                // ic-admin is not needed for NNS recovery on same nodes so we force this argument
-                // to true to avoid downloading it.
-                use_local_binaries: true,
-                ..recovery_args.clone()
-            },
+            recovery_args.clone(),
             /*neuron_args=*/ None,
             recovery_args.nns_url.clone(),
             RegistryPollingStrategy::OnlyOnInit,
@@ -290,8 +282,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
 
             StepType::ICReplay => {
                 if self.params.upgrade_version.is_none() {
-                    self.params.upgrade_version =
-                        read_optional_version(&self.logger, "Upgrade version: ");
+                    self.params.upgrade_version = read_optional(&self.logger, "Upgrade version: ");
                 };
                 if self.params.upgrade_version.is_some()
                     && self.params.add_and_bless_upgrade_version.is_none()
@@ -330,7 +321,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                             &format!(
                                 "Would you like to recover the admin node now, i.e. upload the CUP and registry local store to it? ({ip})"
                             ),
-                            ).then_some(ip)
+                        ).then_some(ip)
                     } else {
                         read_optional(
                             &self.logger,
@@ -471,9 +462,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
 
             StepType::UploadState => {
                 if let Some(method) = self.params.admin_access_location {
-                    Ok(Box::new(
-                        self.recovery.get_upload_state_and_restart_step(method),
-                    ))
+                    Ok(Box::new(self.recovery.get_upload_state_and_restart_step(
+                        SshUser::Admin,
+                        method,
+                        self.recovery.admin_key_file.clone(),
+                    )))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }

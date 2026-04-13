@@ -41,7 +41,6 @@ DEPENDENCIES = [
     "@crate_index//:ic-management-canister-types",
     "@crate_index//:lazy_static",
     "@crate_index//:num-bigint",
-    "@crate_index//:prometheus",
     "@crate_index//:rand",
     "@crate_index//:reqwest",
     "@crate_index//:rolling-file",
@@ -90,12 +89,14 @@ DEV_DEPENDENCIES = [
     "@crate_index//:tempfile",
 ]
 
-MACRO_DEV_DEPENDENCIES = []
+MACRO_DEV_DEPENDENCIES = [
+    "@crate_index//:test-strategy",
+]
 
 ALIASES = {
 }
 
-ROSETTA_VERSION = "2.1.8"
+ROSETTA_VERSION = "2.1.9"
 
 rust_library(
     name = "rosetta-api",
@@ -157,12 +158,14 @@ rust_test_suite_with_extra_srcs(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_test_suite_with_extra_srcs(
+rust_test(
     name = "icp_rosetta_system_tests",
     size = "large",
-    srcs = [
-        "tests/system_tests/system_tests.rs",
-    ],
+    srcs = ["tests/system_tests/system_tests.rs"] + glob([
+        "tests/system_tests/common/*.rs",
+        "tests/system_tests/test_cases/*.rs",
+    ]),
+    crate_root = "tests/system_tests/system_tests.rs",
     data = [
         "//rs/canister_sandbox",
         "//rs/canister_sandbox:sandbox_launcher",
@@ -191,12 +194,11 @@ rust_test_suite_with_extra_srcs(
         "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
         "LIFELINE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/lifeline/impl:lifeline_canister)",
     },
-    extra_srcs = glob([
-        "tests/system_tests/common/*.rs",
-        "tests/system_tests/test_cases/*.rs",
-    ]),
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
-    tags = ["cpu:4"],
+    tags = [
+        "cpu:4",
+        "long_test",
+    ],
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )
 

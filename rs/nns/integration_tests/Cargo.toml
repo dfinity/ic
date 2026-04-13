@@ -96,6 +96,7 @@ ic-sns-init = { path = "../../sns/init" }
 ic-sns-wasm = { path = "../sns-wasm" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-test-utilities = { path = "../../test_utilities" }
+ic-types-cycles = { path = "../../types/cycles" }
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 ic-xrc-types = "1.0.0"

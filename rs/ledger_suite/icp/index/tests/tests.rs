@@ -2,7 +2,8 @@ use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icp_index::{
     GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
-    GetAccountIdentifierTransactionsResult, SettledTransaction, SettledTransactionWithId,
+    GetAccountIdentifierTransactionsResult, IndexArg, InitArg, SettledTransaction,
+    SettledTransactionWithId,
 };
 use ic_icrc1_index_ng::GetAccountTransactionsArgs;
 use ic_ledger_canister_core::archive::ArchiveOptions;
@@ -35,7 +36,7 @@ const FEE: u64 = 10_000;
 const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
 const NUM_BLOCKS_TO_ARCHIVE: usize = 5;
 
-const MINTER_PRINCIPAL: PrincipalId = PrincipalId::new(0, [0u8; 29]);
+const MINTER_PRINCIPAL: PrincipalId = PrincipalId::new(0, [0_u8; 29]);
 
 // Metadata-related constants
 const TOKEN_NAME: &str = "Test Token";
@@ -142,9 +143,10 @@ fn install_ledger(
 }
 
 fn install_index(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
-    let args = ic_icp_index::InitArg {
+    let args = IndexArg::Init(InitArg {
         ledger_id: ledger_id.into(),
-    };
+        retrieve_blocks_from_ledger_interval_seconds: None,
+    });
     env.install_canister(index_wasm(), Encode!(&args).unwrap(), None)
         .unwrap()
 }
@@ -215,7 +217,7 @@ fn index_get_blocks_update(
 
 fn call_index_get_blocks(query_or_update: &dyn Fn(Vec<u8>) -> Vec<u8>) -> Vec<icp_ledger::Block> {
     let req = GetBlocksRequest {
-        start: 0u8.into(),
+        start: 0_u8.into(),
         length: u64::MAX.into(),
     };
     let req = Encode!(&req).expect("Failed to encode GetBlocksRequest");
@@ -616,7 +618,7 @@ fn test_ledger_index_icrc1_mint_parity() {
         None,
         Some(setup.memo.clone()),
     );
-    assert_eq!(mint_block_index, Nat::from(1u8));
+    assert_eq!(mint_block_index, Nat::from(1_u8));
     // Create the expected ledger block for the ICRC1 Mint transaction
     let expected_ledger_block = icp_ledger::Block {
         parent_hash: None,
@@ -660,7 +662,7 @@ fn test_ledger_index_icrc1_transfer_parity() {
         None,
         Some(setup.memo.clone()),
     );
-    assert_eq!(tx_block_index, Nat::from(1u8));
+    assert_eq!(tx_block_index, Nat::from(1_u8));
     // Create the expected ledger block for the ICRC1 Transfer transaction
     let expected_ledger_block = icp_ledger::Block {
         parent_hash: None,
@@ -707,7 +709,7 @@ fn test_ledger_index_icrc1_transfer_without_created_at_time_parity() {
         None,
         Some(setup.memo.clone()),
     );
-    assert_eq!(tx_block_index, Nat::from(1u8));
+    assert_eq!(tx_block_index, Nat::from(1_u8));
     // Create the expected ledger block for the ICRC1 Transfer transaction
     let expected_ledger_block = icp_ledger::Block {
         parent_hash: None,
@@ -755,12 +757,12 @@ fn test_ledger_index_icrc1_approve_parity() {
             setup.approve_amount,
         )
         .created_at_time(Some(tx_timestamp.as_nanos_since_unix_epoch()))
-        .fee(Some(Nat::from(10_000u16)))
+        .fee(Some(Nat::from(10_000_u16)))
         .memo(Some(setup.memo.clone()))
-        .expected_allowance(Some(Nat::from(0u8)))
+        .expected_allowance(Some(Nat::from(0_u8)))
         .expires_at(Some(expires_at)),
     );
-    assert_eq!(tx_block_index, Nat::from(1u8));
+    assert_eq!(tx_block_index, Nat::from(1_u8));
     // Create the expected ledger block for the ICRC1 Approve transaction
     let expected_ledger_block = icp_ledger::Block {
         parent_hash: None,
@@ -809,12 +811,12 @@ fn test_ledger_index_icrc1_transfer_from_parity() {
             setup.approve_amount,
         )
         .created_at_time(Some(tx_timestamp.as_nanos_since_unix_epoch()))
-        .fee(Some(Nat::from(10_000u16)))
+        .fee(Some(Nat::from(10_000_u16)))
         .memo(Some(setup.memo.clone()))
-        .expected_allowance(Some(Nat::from(0u8)))
+        .expected_allowance(Some(Nat::from(0_u8)))
         .expires_at(Some(expires_at)),
     );
-    assert_eq!(tx_block_index, Nat::from(1u8));
+    assert_eq!(tx_block_index, Nat::from(1_u8));
     // advance time so that time does not grow implicitly when executing a round
     setup.env.advance_time(Duration::from_secs(1));
     // Create an ICRC2 TransferFrom transaction with all fields set, based on the previously
@@ -831,7 +833,7 @@ fn test_ledger_index_icrc1_transfer_from_parity() {
         Some(setup.fee),
         Some(setup.memo.clone()),
     );
-    assert_eq!(tx_block_index, Nat::from(2u8));
+    assert_eq!(tx_block_index, Nat::from(2_u8));
     // Create the expected ledger block for the ICRC2 TransferFrom transaction
     let expected_ledger_block = icp_ledger::Block {
         parent_hash: None,
@@ -900,7 +902,7 @@ impl ParitySetup {
             from_account_identifier,
             spender_account,
             spender_account_identifier: AccountIdentifier::from(spender_account),
-            memo: vec![1u8, 1u8, 1u8],
+            memo: vec![1_u8, 1_u8, 1_u8],
             mint_amount,
             approve_amount: 1_000_000,
             transfer_amount: 1_000,
@@ -1020,10 +1022,10 @@ fn test_get_account_identifier_transactions() {
     // List of the transactions that the test is going to add. This exists to make
     // the test easier to read. The transactions are executed in separate phases, where the block
     // timestamp is a function of the phase.
-    let mut rounds = 2u32; // ledger is created in 1st round and initialized in 2nd round
-    let mut phase = 0u32;
+    let mut rounds = 2_u32; // ledger is created in 1st round and initialized in 2nd round
+    let mut phase = 0_u32;
     let tx0 = SettledTransactionWithId {
-        id: 0u64,
+        id: 0_u64,
         transaction: SettledTransaction {
             operation: Operation::Mint {
                 to: account(1, 0).into(),
@@ -1038,13 +1040,13 @@ fn test_get_account_identifier_transactions() {
     rounds += 3; // it takes two more rounds to create and initialize index and one more round for the transfer
     phase = 1;
     let tx1 = SettledTransactionWithId {
-        id: 1u64,
+        id: 1_u64,
         transaction: SettledTransaction {
             operation: Operation::Transfer {
                 to: account(2, 0).into(),
                 from: account(1, 0).into(),
                 spender: None,
-                amount: Tokens::from_e8s(1_000_000u64),
+                amount: Tokens::from_e8s(1_000_000_u64),
                 fee: Tokens::from_e8s(10_000),
             },
             memo: Memo(0),
@@ -1056,13 +1058,13 @@ fn test_get_account_identifier_transactions() {
     rounds += 1; // it takes one more round for the transfer
     phase = 2;
     let tx2 = SettledTransactionWithId {
-        id: 2u64,
+        id: 2_u64,
         transaction: SettledTransaction {
             operation: Operation::Transfer {
                 to: account(2, 0).into(),
                 from: account(1, 0).into(),
                 spender: None,
-                amount: Tokens::from_e8s(2_000_000u64),
+                amount: Tokens::from_e8s(2_000_000_u64),
                 fee: Tokens::from_e8s(10_000),
             },
             memo: Memo(0),
@@ -1073,13 +1075,13 @@ fn test_get_account_identifier_transactions() {
     };
     rounds += 1; // it takes one more round for the transfer
     let tx3 = SettledTransactionWithId {
-        id: 3u64,
+        id: 3_u64,
         transaction: SettledTransaction {
             operation: Operation::Transfer {
                 to: account(1, 1).into(),
                 from: account(2, 0).into(),
                 spender: None,
-                amount: Tokens::from_e8s(1_000_000u64),
+                amount: Tokens::from_e8s(1_000_000_u64),
                 fee: Tokens::from_e8s(10_000),
             },
             memo: Memo(0),
@@ -1096,12 +1098,12 @@ fn test_get_account_identifier_transactions() {
         .as_nanos() as u64
         + Duration::from_secs(3600).as_nanos() as u64;
     let tx4 = SettledTransactionWithId {
-        id: 4u64,
+        id: 4_u64,
         transaction: SettledTransaction {
             operation: Operation::Approve {
                 from: account(1, 0).into(),
                 spender: account(4, 4).into(),
-                allowance: Tokens::from_e8s(1_000_000u64),
+                allowance: Tokens::from_e8s(1_000_000_u64),
                 fee: Tokens::from_e8s(10_000),
                 expected_allowance: None,
                 expires_at: Some(TimeStamp::from_nanos_since_unix_epoch(expires_at)),
@@ -1510,7 +1512,7 @@ fn test_approve_args() {
         ledger_id,
         account(1, 0),
         ApproveTestArgs::new(account(1, 0), account(2, 0), 100_000)
-            .expected_allowance(Some(100_000u32.into())),
+            .expected_allowance(Some(100_000_u32.into())),
     );
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -1854,7 +1856,7 @@ fn test_index_sync_with_incorrect_parent_hash() {
     // Create transfer block (block 1) with INCORRECT parent hash
     let transfer_timestamp = TimeStamp::from_nanos_since_unix_epoch(2_000_000_000);
     // Create an incorrect parent hash by hashing dummy data instead of the actual mint block
-    let dummy_encoded = ic_ledger_core::block::EncodedBlock::from_vec(vec![0u8; 100]);
+    let dummy_encoded = ic_ledger_core::block::EncodedBlock::from_vec(vec![0_u8; 100]);
     let incorrect_parent_hash = Some(icp_ledger::Block::block_hash(&dummy_encoded));
     let transfer_block = icp_ledger::Block {
         parent_hash: incorrect_parent_hash,
@@ -1971,7 +1973,7 @@ fn test_index_sync_with_invalid_block() {
     add_block_to_test_ledger(env, test_ledger_id, &mint_block);
 
     // Add invalid block via add_raw_block with all zero bytes
-    let invalid_encoded = ic_ledger_core::block::EncodedBlock::from_vec(vec![0u8; 100]);
+    let invalid_encoded = ic_ledger_core::block::EncodedBlock::from_vec(vec![0_u8; 100]);
     add_raw_block_to_test_ledger(env, test_ledger_id, &invalid_encoded);
 
     // Add a second mint block (block 2) after the invalid block
@@ -2007,7 +2009,7 @@ fn test_index_sync_with_invalid_block() {
     let index_get_block = |block_index: u64| {
         let req = Encode!(&GetBlocksRequest {
             start: block_index.into(),
-            length: 1u64.into(),
+            length: 1_u64.into(),
         })
         .expect("Failed to encode GetBlocksRequest");
         let res = env
@@ -2044,7 +2046,7 @@ fn test_index_sync_with_invalid_block() {
 mod metrics {
     use crate::index_wasm;
     use candid::Principal;
-    use ic_icp_index::InitArg;
+    use ic_icp_index::{IndexArg, InitArg};
 
     #[test]
     fn should_export_heap_memory_usage_bytes_metrics() {
@@ -2054,7 +2056,10 @@ mod metrics {
         );
     }
 
-    fn encode_init_args(ledger_id: Principal) -> InitArg {
-        InitArg { ledger_id }
+    fn encode_init_args(ledger_id: Principal) -> IndexArg {
+        IndexArg::Init(InitArg {
+            ledger_id,
+            retrieve_blocks_from_ledger_interval_seconds: None,
+        })
     }
 }

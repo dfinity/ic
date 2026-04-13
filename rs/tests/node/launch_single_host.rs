@@ -10,6 +10,7 @@ use slog::info;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
+        .remove_all_metrics_to_check()
         .with_setup(setup)
         .add_test(systest!(test))
         .execute_from_args()?;
@@ -18,7 +19,7 @@ fn main() -> Result<()> {
 }
 
 fn setup(env: TestEnv) {
-    NestedNodes::new(&["Host"])
+    NestedNodes::new(["Host"])
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 }

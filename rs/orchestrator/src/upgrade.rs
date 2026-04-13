@@ -12,7 +12,7 @@ use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_image_upgrader::{
-    ImageUpgrader, Rebooting,
+    ImageUpgrader, ManagebootRunner, Rebooting,
     error::{UpgradeError, UpgradeResult},
 };
 use ic_interfaces_registry::RegistryClient;
@@ -32,12 +32,19 @@ use ic_types::{
 };
 use std::{
     collections::{BTreeMap, HashMap},
-    path::PathBuf,
+    ffi::OsString,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
+
+#[cfg(not(test))]
+const TIMEOUT_IGNORE_UP_TO_DATE_REPLICATOR: Duration = Duration::from_secs(1800); // 30 minutes
+// For ease of testing, we reduce this timeout in tests.
+#[cfg(test)]
+const TIMEOUT_IGNORE_UP_TO_DATE_REPLICATOR: Duration = Duration::from_secs(5);
 
 #[must_use = "This may be a `Stop` variant, which should be handled"]
 #[derive(Debug, PartialEq, Eq)]
@@ -54,8 +61,8 @@ pub(crate) enum OrchestratorControlFlow {
 
 pub struct ReplicaProcess {
     version: ReplicaVersion,
-    binary: String,
-    args: Vec<String>,
+    binary: PathBuf,
+    args: Vec<OsString>,
 }
 
 impl Process for ReplicaProcess {
@@ -67,15 +74,15 @@ impl Process for ReplicaProcess {
         &self.version
     }
 
-    fn get_binary(&self) -> &str {
+    fn get_binary(&self) -> &Path {
         &self.binary
     }
 
-    fn get_args(&self) -> &[String] {
+    fn get_args(&self) -> &[OsString] {
         &self.args
     }
 
-    fn get_env(&self) -> HashMap<String, String> {
+    fn get_env(&self) -> HashMap<OsString, OsString> {
         HashMap::new()
     }
 }
@@ -86,6 +93,10 @@ impl Process for ReplicaProcess {
 pub trait RegistryReplicatorForUpgrade: Send + Sync {
     /// Stops polling and sets the local registry data to what is contained in the provided local store.
     async fn stop_polling_and_set_local_registry_data(&self, new_local_store: &dyn LocalStore);
+
+    /// Returns true if the replicator has replicated all versions that were certified before the
+    /// replicator was started.
+    fn has_replicated_all_versions_certified_before_init(&self) -> bool;
 }
 
 #[async_trait]
@@ -93,6 +104,10 @@ impl RegistryReplicatorForUpgrade for RegistryReplicator {
     async fn stop_polling_and_set_local_registry_data(&self, new_local_store: &dyn LocalStore) {
         self.stop_polling_and_set_local_registry_data(new_local_store)
             .await
+    }
+
+    fn has_replicated_all_versions_certified_before_init(&self) -> bool {
+        self.has_replicated_all_versions_certified_before_init()
     }
 }
 
@@ -103,7 +118,8 @@ impl RegistryReplicatorForUpgrade for RegistryReplicator {
 pub(crate) struct Upgrade {
     pub registry: Arc<RegistryHelper>,
     pub metrics: Arc<OrchestratorMetrics>,
-    replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
+    replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
+    manageboot_runner: Box<dyn ManagebootRunner>,
     cup_provider: CatchUpPackageProvider,
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     replica_version: ReplicaVersion,
@@ -111,6 +127,7 @@ pub(crate) struct Upgrade {
     pub ic_binary_dir: PathBuf,
     pub image_path: PathBuf,
     registry_replicator: Arc<dyn RegistryReplicatorForUpgrade>,
+    init_time: Instant,
     pub logger: ReplicaLogger,
     node_id: NodeId,
     disk_encryption_key_exchange_agent: Option<DiskEncryptionKeyExchangeServerAgent>,
@@ -124,7 +141,8 @@ impl Upgrade {
     pub(crate) async fn new(
         registry: Arc<RegistryHelper>,
         metrics: Arc<OrchestratorMetrics>,
-        replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
+        replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
+        manageboot_runner: Box<dyn ManagebootRunner>,
         cup_provider: CatchUpPackageProvider,
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
         replica_version: ReplicaVersion,
@@ -137,10 +155,13 @@ impl Upgrade {
         orchestrator_data_directory: PathBuf,
         disk_encryption_key_exchange_agent: Option<DiskEncryptionKeyExchangeServerAgent>,
     ) -> Self {
+        let init_time = Instant::now();
+
         let value = Self {
             registry,
             metrics,
             replica_process,
+            manageboot_runner,
             cup_provider,
             subnet_assignment,
             node_id,
@@ -149,6 +170,7 @@ impl Upgrade {
             ic_binary_dir,
             image_path: release_content_dir.join("image.bin"),
             registry_replicator,
+            init_time,
             logger: logger.clone(),
             prepared_upgrade_version: None,
             orchestrator_data_directory,
@@ -201,7 +223,7 @@ impl Upgrade {
         // Determine the subnet_id using the local CUP.
         let subnet_id = match (&maybe_local_cup, &maybe_local_cup_proto) {
             (Some(cup), _) => {
-                get_subnet_id(self.registry.registry_client.as_ref(), cup).map_err(|err| {
+                get_subnet_id(self.registry.get_registry_client(), cup).map_err(|err| {
                     OrchestratorError::UpgradeError(format!(
                         "Couldn't determine the subnet id: {err:?}"
                     ))
@@ -323,7 +345,7 @@ impl Upgrade {
         // Now when we have the most recent CUP, we check if we're still assigned.
         // If not, go into unassigned state.
         let flow = match should_node_become_unassigned(
-            self.registry.registry_client.as_ref(),
+            self.registry.get_registry_client(),
             latest_registry_version,
             self.node_id,
             subnet_id,
@@ -352,6 +374,12 @@ impl Upgrade {
             .registry
             .get_replica_version(subnet_id, cup_registry_version)?;
         if new_replica_version != self.replica_version {
+            self.ensure_upgrade_should_be_executed(
+                subnet_id,
+                latest_registry_version,
+                &new_replica_version,
+            )?;
+
             info!(
                 self.logger,
                 "Starting version upgrade at CUP registry version {}: {} -> {}",
@@ -401,7 +429,7 @@ impl Upgrade {
     ) -> OrchestratorResult<()> {
         let Some(registry_store_uri) = self
             .registry
-            .registry_client
+            .get_registry_client()
             .get_cup_contents(subnet_id, registry_version)
             .ok()
             .and_then(|record| record.value)
@@ -533,9 +561,64 @@ impl Upgrade {
         })
     }
 
-    // Stop the replica if the given CUP is unsigned and higher than the given height.
-    // Without restart, consensus would reject the unsigned artifact.
-    // If stopping the replica fails, restart the current process instead.
+    /// Ensure that an upgrade to the given `new_replica_version` should be executed.
+    /// Returns an error if the upgrade should be delayed or blocked, for example due to the new
+    /// replica version being recalled.
+    fn ensure_upgrade_should_be_executed(
+        &self,
+        subnet_id: SubnetId,
+        latest_registry_version: RegistryVersion,
+        new_replica_version: &ReplicaVersion,
+    ) -> OrchestratorResult<()> {
+        if subnet_id == self.registry.get_root_subnet_id(latest_registry_version)? {
+            // Upgrades on the NNS subnet are never blocked or delayed.
+            return Ok(());
+        }
+
+        // Until the replicator has caught up with the registry canister, we cannot be entirely sure
+        // that the latest registry version that we have locally correctly reflects the recalled
+        // replica versions. Thus, we delay the upgrade until then.
+        // An exception is made after some time as a safeguard against staying stuck in this state
+        // forever, for example if the NNS subnet is unreachable for an extended period of time.
+        if !self
+            .registry_replicator
+            .has_replicated_all_versions_certified_before_init()
+            && self.init_time.elapsed() < TIMEOUT_IGNORE_UP_TO_DATE_REPLICATOR
+        {
+            self.metrics
+                .replica_version_upgrade_prevented
+                .with_label_values(&[new_replica_version.as_ref(), "replicator_not_caught_up"])
+                .inc();
+
+            return Err(OrchestratorError::UpgradeError(format!(
+                "Delaying upgrade to {} until registry data is recent enough. Latest registry version: {}",
+                new_replica_version, latest_registry_version
+            )));
+        }
+
+        let recalled_versions = self
+            .registry
+            .get_recalled_replica_versions(subnet_id, latest_registry_version)?;
+
+        if recalled_versions.contains(new_replica_version) {
+            // The new replica version has been recalled. Do not upgrade.
+            self.metrics
+                .replica_version_upgrade_prevented
+                .with_label_values(&[new_replica_version.as_ref(), "version_recalled"])
+                .inc();
+
+            return Err(OrchestratorError::UpgradeError(format!(
+                "Not upgrading to recalled replica version {} at registry version {}",
+                new_replica_version, latest_registry_version
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Stop the replica if the given CUP is unsigned and higher than the given height.
+    /// Without restart, consensus would reject the unsigned artifact.
+    /// If stopping the replica fails, restart the current process instead.
     fn stop_replica_if_new_recovery_cup(
         &self,
         cup: &CatchUpPackage,
@@ -556,7 +639,7 @@ impl Upgrade {
         }
     }
 
-    // Start the replica process if not running already
+    /// Start the replica process if not running already
     fn ensure_replica_is_running(
         &self,
         replica_version: &ReplicaVersion,
@@ -568,20 +651,16 @@ impl Upgrade {
         info!(self.logger, "Starting new replica process");
         self.metrics.replica_process_start_attempts.inc();
         let cup_path = self.cup_provider.get_cup_path();
-        let replica_binary = self
-            .ic_binary_dir
-            .join("replica")
-            .as_path()
-            .display()
-            .to_string();
+        let replica_binary = self.ic_binary_dir.join("replica");
         let cmd = vec![
-            format!("--replica-version={}", replica_version.as_ref()),
+            format!("--replica-version={}", replica_version.as_ref()).into(),
             format!(
                 "--config-file={}",
                 self.replica_config_file.as_path().display()
-            ),
-            format!("--catch-up-package={}", cup_path.as_path().display()),
-            format!("--force-subnet={}", subnet_id),
+            )
+            .into(),
+            format!("--catch-up-package={}", cup_path.as_path().display()).into(),
+            format!("--force-subnet={}", subnet_id).into(),
         ];
 
         self.replica_process
@@ -610,16 +689,16 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
         self.prepared_upgrade_version = version
     }
 
-    fn binary_dir(&self) -> &PathBuf {
-        &self.ic_binary_dir
-    }
-
     fn image_path(&self) -> &PathBuf {
         &self.image_path
     }
 
     fn data_dir(&self) -> Option<&PathBuf> {
         Some(&self.orchestrator_data_directory)
+    }
+
+    fn manageboot_runner(&self) -> &dyn ManagebootRunner {
+        self.manageboot_runner.as_ref()
     }
 
     fn get_release_package_urls_and_hash(
@@ -663,7 +742,7 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
     }
 }
 
-// Returns the subnet id for the given CUP.
+/// Returns the subnet id for the given CUP.
 fn get_subnet_id(registry: &dyn RegistryClient, cup: &CatchUpPackage) -> Result<SubnetId, String> {
     let dkg_summary = &cup
         .content
@@ -728,10 +807,10 @@ enum UnassignmentDecision {
     StayInSubnet,
 }
 
-// Checks if the node still belongs to the subnet it was assigned the last time.
-// We decide this by checking the subnet membership starting from the oldest
-// relevant version of the local CUP and ending with the latest registry
-// version.
+/// Checks if the node still belongs to the subnet it was assigned the last time.
+/// We decide this by checking the subnet membership starting from the oldest
+/// relevant version of the local CUP and ending with the latest registry
+/// version.
 fn should_node_become_unassigned(
     registry: &dyn RegistryClient,
     latest_registry_version: RegistryVersion,
@@ -748,6 +827,12 @@ fn should_node_become_unassigned(
         return UnassignmentDecision::StayInSubnet;
     }
 
+    if let Ok(true) =
+        registry.is_subnet_deleted(subnet_id, RegistryVersion::from(latest_registry_version))
+    {
+        return UnassignmentDecision::Now;
+    }
+
     // If the node is at the latest registry version in a subnet it shouldn't be unassigned.
     if node_is_in_subnet_at_version(registry, node_id, subnet_id, latest_registry_version) {
         return UnassignmentDecision::StayInSubnet;
@@ -762,17 +847,22 @@ fn should_node_become_unassigned(
     UnassignmentDecision::Now
 }
 
-// Checks if the given node belongs to the given subnet at the given registry version, by looking
-// at the corresponding subnet record's membership in the registry.
-// If the record is missing, or there is any error (like a corrupted local store), then this
-// function returns true, to avoid removing the subnet state by mistake, as a conservative
-// approach. This function thus assumes that the caller has verified that the subnet ID exists.
+/// Checks if the given node belongs to the given subnet at the given registry version, by looking
+/// at the corresponding subnet record's membership in the registry.
+/// If the record is missing, or there is any error (like a corrupted local store), then this
+/// function returns true, to avoid removing the subnet state by mistake, as a conservative
+/// approach. This function thus assumes that the caller has verified that the subnet ID exists.
+///
+/// Shortcuts to `false` if the subnet was explicitly deleted.
 fn node_is_in_subnet_at_version(
     registry: &dyn RegistryClient,
     node_id: NodeId,
     subnet_id: SubnetId,
     version: u64,
 ) -> bool {
+    if let Ok(true) = registry.is_subnet_deleted(subnet_id, RegistryVersion::from(version)) {
+        return false;
+    }
     registry
         .get_node_ids_on_subnet(subnet_id, RegistryVersion::from(version))
         .map(|maybe_members| {
@@ -783,7 +873,7 @@ fn node_is_in_subnet_at_version(
         .unwrap_or(true)
 }
 
-// Call `sync` and `fstrim` on the data partition
+/// Call `sync` and `fstrim` on the data partition
 async fn sync_and_trim_fs(logger: &ReplicaLogger) -> Result<(), String> {
     let mut fstrim_script = tokio::process::Command::new("/opt/ic/bin/sync_fstrim.sh");
     info!(logger, "Running command '{:?}'...", fstrim_script);
@@ -803,8 +893,8 @@ async fn sync_and_trim_fs(logger: &ReplicaLogger) -> Result<(), String> {
     }
 }
 
-// Deletes the subnet state consisting of the consensus pool, execution state,
-// the local CUP and the persisted error metric of threshold key changes.
+/// Deletes the subnet state consisting of the consensus pool, execution state,
+/// the local CUP and the persisted error metric of threshold key changes.
 fn remove_node_state(
     replica_config_file: PathBuf,
     cup_path: PathBuf,
@@ -909,7 +999,7 @@ fn remove_node_state(
     Ok(())
 }
 
-// Re-execute the current process, exactly as it was originally called.
+/// Re-execute the current process, exactly as it was originally called.
 fn reexec_current_process(logger: &ReplicaLogger) -> OrchestratorError {
     let args: Vec<String> = std::env::args().collect();
     info!(
@@ -1086,8 +1176,8 @@ mod tests {
     use ic_protobuf::types::v1 as pb;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::{
-        make_catch_up_package_contents_key, make_replica_version_key, make_subnet_record_key,
-        make_unassigned_nodes_config_record_key,
+        ROOT_SUBNET_ID_KEY, make_catch_up_package_contents_key, make_replica_version_key,
+        make_subnet_record_key, make_unassigned_nodes_config_record_key,
     };
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_utilities_consensus::fake::{Fake, FakeContent};
@@ -1095,7 +1185,7 @@ mod tests {
     use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_list_record};
-    use ic_test_utilities_types::ids::{NODE_1, SUBNET_1, node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{NODE_1, SUBNET_1, SUBNET_42, node_test_id, subnet_test_id};
     use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTargetId;
     use ic_types::{
         PrincipalId, Time,
@@ -1115,20 +1205,65 @@ mod tests {
         time::UNIX_EPOCH,
     };
     use mockall::mock;
+    use nix::unistd::Pid;
     use prost::Message;
     use rand::RngCore;
     use rstest::rstest;
     use slog::Level;
-    use std::collections::BTreeSet;
-    use std::io::Write;
-    use std::os::fd::AsRawFd;
-    use std::os::unix::fs::PermissionsExt;
-    use std::{collections::BTreeMap, path::Path};
+    use std::{
+        collections::{BTreeMap, BTreeSet},
+        ffi::OsStr,
+        path::Path,
+        process::Output,
+    };
     use tempfile::{TempDir, tempdir};
 
     impl Upgrade {
         pub fn subnet_assignment(&self) -> SubnetAssignment {
             *self.subnet_assignment.read().unwrap()
+        }
+    }
+
+    pub(crate) struct FakeProcessManager {
+        running: bool,
+    }
+    impl FakeProcessManager {
+        pub(crate) fn new() -> Self {
+            Self { running: false }
+        }
+    }
+    impl<P: Process> ProcessManager<P> for FakeProcessManager {
+        fn start(&mut self, _process: P) -> std::io::Result<()> {
+            self.running = true;
+            Ok(())
+        }
+
+        fn stop(&mut self) -> std::io::Result<()> {
+            self.running = false;
+            Ok(())
+        }
+
+        fn is_running(&self) -> bool {
+            self.running
+        }
+
+        fn get_pid(&self) -> Option<Pid> {
+            // Return a dummy PID if the process is running.
+            self.running.then_some(Pid::from_raw(12345))
+        }
+    }
+
+    pub struct FakeManagebootRunner;
+    #[async_trait]
+    impl ManagebootRunner for FakeManagebootRunner {
+        async fn run(&self, _args: &[&OsStr]) -> std::io::Result<Output> {
+            // Mock implementation that simulates a successful execution of the manageboot command.
+            use std::os::unix::process::ExitStatusExt;
+            Ok(Output {
+                status: std::process::ExitStatus::from_raw(0),
+                stdout: vec![],
+                stderr: vec![],
+            })
         }
     }
 
@@ -1232,6 +1367,20 @@ mod tests {
         make_cup_with_summary(height, summary_payload)
     }
 
+    fn add_root_subnet_id_to_provider(
+        data_provider: &ProtoRegistryDataProvider,
+        registry_version: RegistryVersion,
+        root_subnet_id: SubnetId,
+    ) {
+        data_provider
+            .add(
+                ROOT_SUBNET_ID_KEY,
+                registry_version,
+                Some(ic_types::subnet_id_into_protobuf(root_subnet_id)),
+            )
+            .unwrap();
+    }
+
     fn add_replica_version_to_provider(
         data_provider: &ProtoRegistryDataProvider,
         registry_version: RegistryVersion,
@@ -1275,7 +1424,7 @@ mod tests {
         let membership_vec = membership.into_iter().collect::<Vec<_>>();
 
         let rng = &mut reproducible_rng();
-        let mut target_id_bytes = [0u8; 32];
+        let mut target_id_bytes = [0_u8; 32];
         rng.fill_bytes(&mut target_id_bytes);
         let target_id = NiDkgTargetId::new(target_id_bytes);
 
@@ -1314,10 +1463,12 @@ mod tests {
         subnet_id: SubnetId,
         membership: impl AsRef<[NodeId]>,
         replica_version: &ReplicaVersion,
+        recalled_replica_versions: impl AsRef<[String]>,
     ) {
         let subnet_record = SubnetRecordBuilder::new()
             .with_membership(membership.as_ref())
             .with_replica_version(replica_version.as_ref())
+            .with_recalled_replica_version_ids(recalled_replica_versions.as_ref())
             .build();
 
         data_provider
@@ -1348,29 +1499,6 @@ mod tests {
             .unwrap();
     }
 
-    // Create a fake binary file with the given bash script content
-    fn create_binary(binary_path: &Path, bash_script: &str) {
-        let mut file = std::fs::File::create(binary_path).unwrap();
-        file.write_all(bash_script.as_bytes()).unwrap();
-        file.set_permissions(std::fs::Permissions::from_mode(0o755))
-            .unwrap();
-
-        // The ugly hack below is to work around rstest running the tests in multiple threads but
-        // in the same process. Each of them creates their own binary file and later executes it.
-        // This means a parallel test might still have the file open for writing while the current
-        // one is trying to execute it. This yields ETXTBSY errors on Linux. To avoid this, we use
-        // the below hack, taken from https://github.com/rust-lang/rust/issues/114554, see
-        // "Implementation of the `flock` algorithm"
-        std::thread::sleep(std::time::Duration::from_micros(2));
-
-        unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
-        drop(file);
-
-        let file = std::fs::File::open(binary_path).unwrap();
-        unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_SH) };
-        drop(file);
-    }
-
     async fn create_upgrade_for_test(
         dir: &Path,
         logger: ReplicaLogger,
@@ -1397,10 +1525,8 @@ mod tests {
 
         let ic_binary_dir = dir.join("ic_binary");
         std::fs::create_dir_all(&ic_binary_dir).unwrap();
-        create_binary(&ic_binary_dir.join("replica"), "#!/bin/sh\nsleep 60\n");
-        create_binary(&ic_binary_dir.join("manageboot.sh"), "#!/bin/sh\nexit 0\n");
 
-        let replica_process = Arc::new(Mutex::new(ProcessManager::new(logger.clone())));
+        let replica_process = Arc::new(Mutex::new(FakeProcessManager::new()));
         // Start the replica process if the test scenario indicates so
         if test_scenario.was_replica_process_started_previously() {
             replica_process
@@ -1408,11 +1534,13 @@ mod tests {
                 .unwrap()
                 .start(ReplicaProcess {
                     version: current_replica_version.clone(),
-                    binary: ic_binary_dir.join("replica").display().to_string(),
+                    binary: ic_binary_dir.join("replica"),
                     args: vec![],
                 })
                 .unwrap();
         }
+
+        let manageboot_runner = Box::new(FakeManagebootRunner);
 
         let cup_dir = dir.join("cups");
         std::fs::create_dir_all(&cup_dir).unwrap();
@@ -1422,7 +1550,7 @@ mod tests {
                 local_cup.subnet_id,
                 local_cup.registry_version,
             );
-            let cup_proto = pb::CatchUpPackage::from(&cup);
+            let cup_proto = pb::CatchUpPackage::from(cup);
             let cup_file = cup_dir.join("cup.types.v1.CatchUpPackage.pb");
             std::fs::write(&cup_file, cup_proto.encode_to_vec()).unwrap();
         }
@@ -1439,7 +1567,23 @@ mod tests {
 
         let replica_config_file = dir.join("ic.json5");
 
-        let registry_replicator = Arc::new(MockRegistryReplicatorForUpgrade::new());
+        let mut registry_replicator = MockRegistryReplicatorForUpgrade::new();
+        registry_replicator
+            .expect_has_replicated_all_versions_certified_before_init()
+            .times(
+                if test_scenario.should_call_has_replicated_all_versions_certified_before_init() {
+                    1
+                } else {
+                    0
+                },
+            )
+            .return_const(
+                test_scenario
+                    .upgrade_to
+                    .as_ref()
+                    .map(|upgrade| upgrade.has_replicated_versions_before_init)
+                    .unwrap_or(false),
+            );
 
         let release_content_dir = dir.join("images");
         std::fs::create_dir_all(&release_content_dir).unwrap();
@@ -1447,17 +1591,18 @@ mod tests {
         let orchestrator_data_dir = dir.join("orchestrator");
         std::fs::create_dir_all(&orchestrator_data_dir).unwrap();
 
-        let mut upgrade = Upgrade::new(
+        let mut upgrade_loop = Upgrade::new(
             registry,
             metrics,
             replica_process,
+            manageboot_runner,
             cup_provider,
             subnet_assignment,
             current_replica_version.clone(),
             replica_config_file,
             node_id,
             ic_binary_dir,
-            registry_replicator,
+            Arc::new(registry_replicator),
             release_content_dir,
             logger,
             orchestrator_data_dir,
@@ -1467,12 +1612,12 @@ mod tests {
 
         // If the node is supposed to upgrade, manually create a fake image file
         // and set the prepared version to avoid actually downloading the image.
-        if let Some((upgrade_replica_version, _)) = &test_scenario.upgrade_to {
-            std::fs::write(upgrade.image_path(), b"fake image data").unwrap();
-            upgrade.set_prepared_version(Some(upgrade_replica_version.clone()));
+        if let Some(upgrade) = &test_scenario.upgrade_to {
+            std::fs::write(upgrade_loop.image_path(), b"fake image data").unwrap();
+            upgrade_loop.set_prepared_version(Some(upgrade.replica_version.clone()));
         }
 
-        upgrade
+        upgrade_loop
     }
 
     // Parameters for a local or registry CUP in the test scenario
@@ -1489,6 +1634,47 @@ mod tests {
             match other {
                 Some(other) if other.height > self.height => other,
                 _ => self,
+            }
+        }
+    }
+
+    // Parameters for a replica upgrade in the test scenario
+    #[derive(Clone, Debug)]
+    struct ReplicaUpgradeScenario {
+        // The target replica version of the upgrade
+        replica_version: ReplicaVersion,
+        // The registry version where the upgrade is effective
+        registry_version: RegistryVersion,
+        // Whether the target replica version is recalled at the latest registry version
+        is_recalled: bool,
+        // Whether the replicator has replicated all registry versions that were certified before
+        // the replicator was started
+        has_replicated_versions_before_init: bool,
+    }
+
+    impl ReplicaUpgradeScenario {
+        // Returns the expected control flow of the upgrade loop when when the upgrade is about to
+        // be executed. We should indeed first check if the replica version was recalled.
+        fn should_be_executed(&self) -> OrchestratorResult<OrchestratorControlFlow> {
+            if !self.has_replicated_versions_before_init {
+                // The replicator has not yet replicated all registry versions that
+                // were certified before the replicator was started.
+                // Thus, we cannot be sure whether the replica version was recalled
+                // or not. We should thus wait until the replicator has caught up.
+                Err(OrchestratorError::UpgradeError(format!(
+                    "Delaying upgrade to {} until registry data is recent enough.",
+                    self.replica_version,
+                )))
+            } else if self.is_recalled {
+                // The replica version was recalled, so we should not upgrade
+                Err(OrchestratorError::UpgradeError(format!(
+                    "Not upgrading to recalled replica version {}",
+                    self.replica_version,
+                )))
+            } else {
+                // The replica version was not recalled, so we are expected to stop
+                // and reboot
+                Ok(OrchestratorControlFlow::Stop)
             }
         }
     }
@@ -1521,10 +1707,9 @@ mod tests {
         // Whether there is an upcoming upgrade (<=> different replica version at the CUP's registry
         // version or <=> different replica version for unassigned nodes at the latest registry
         // version)
-        // `Some` includes the registry version where the node is upgraded to the new replica
-        // version.
+        // `Some` includes some parameters for the upgrade.
         // `None` means no upgrade.
-        upgrade_to: Option<(ReplicaVersion, RegistryVersion)>,
+        upgrade_to: Option<ReplicaUpgradeScenario>,
     }
 
     impl UpgradeTestScenario {
@@ -1557,19 +1742,48 @@ mod tests {
                 <= self.has_local_cup.as_ref().map(|cup| cup.height)
         }
 
+        // Returns whether the upgrade loop should call
+        // `has_replicated_all_versions_certified_before_init` based on the test scenario
+        fn should_call_has_replicated_all_versions_certified_before_init(&self) -> bool {
+            let Some(highest_cup) = self.highest_cup() else {
+                return false;
+            };
+
+            let Some(upgrade) = &self.upgrade_to else {
+                return false;
+            };
+
+            if highest_cup.registry_version < upgrade.registry_version {
+                return false;
+            }
+
+            if highest_cup.subnet_id == SUBNET_42 {
+                // We are on the NNS subnet, which should never trigger this check
+                return false;
+            }
+
+            if let Some(leaving_registry_version) = &self.is_leaving {
+                return &highest_cup.registry_version < leaving_registry_version;
+            }
+
+            true
+        }
+
         // Sets up the registry according to the test scenario
         fn setup_registry(&self) -> Arc<ProtoRegistryDataProvider> {
             let data_provider = Arc::new(ProtoRegistryDataProvider::new());
 
-            // Another subnet (to avoid having an empty subnet list)
-            let other_subnet_id = subnet_test_id(12345678);
+            // NNS subnet
+            let nns_subnet_id = SUBNET_42;
+            add_root_subnet_id_to_provider(&data_provider, RegistryVersion::from(1), nns_subnet_id);
+
             // Another node in the subnet (to avoid having an empty subnet in case the current node
             // leaves)
             let other_node_id = node_test_id(87654321);
 
             // Initialize the subnet list
             let mut subnet_list = BTreeSet::new();
-            subnet_list.insert(other_subnet_id);
+            subnet_list.insert(nns_subnet_id);
             if let Some(local_cup) = &self.has_local_cup {
                 subnet_list.insert(local_cup.subnet_id);
             }
@@ -1595,15 +1809,25 @@ mod tests {
                 );
             }
 
-            if let Some((upgrade_replica_version, upgrade_registry_version)) = &self.upgrade_to {
+            if let Some(upgrade) = &self.upgrade_to {
                 // Elect the new replica version
                 add_replica_version_to_provider(
                     &data_provider,
                     // Usually, replica versions are elected before subnets are upgraded to them.
-                    RegistryVersion::from(upgrade_registry_version.get() - 1),
-                    upgrade_replica_version,
+                    RegistryVersion::from(upgrade.registry_version.get() - 1),
+                    &upgrade.replica_version,
                 );
             }
+            // If the upgrade is to a recalled replica version, we should add that version to the
+            // list of recalled versions in the registry at the latest registry version. To make it
+            // easier, we will add it to all following subnet record mutations.
+            let recalled_replica_versions = if let Some(upgrade) = &self.upgrade_to
+                && upgrade.is_recalled
+            {
+                vec![upgrade.replica_version.to_string()]
+            } else {
+                vec![]
+            };
 
             if let Some(local_cup) = &self.has_local_cup {
                 // The node is part of the subnet at the beginning, including the current replica
@@ -1615,20 +1839,22 @@ mod tests {
                     local_cup.subnet_id,
                     vec![self.node_id, other_node_id],
                     &self.current_replica_version,
+                    &recalled_replica_versions,
                 );
 
                 match (&self.is_leaving, &self.upgrade_to) {
                     (None, None) => {
                         // No change, keep the current replica version and membership
                     }
-                    (None, Some((upgrade_replica_version, upgrade_registry_version))) => {
+                    (None, Some(upgrade)) => {
                         // Upgrade the subnet at the specified registry version
                         add_subnet_record_to_provider(
                             &data_provider,
-                            *upgrade_registry_version,
+                            upgrade.registry_version,
                             local_cup.subnet_id,
                             vec![self.node_id, other_node_id],
-                            upgrade_replica_version,
+                            &upgrade.replica_version,
+                            &recalled_replica_versions,
                         );
                     }
                     (Some(leaving_registry_version), None) => {
@@ -1640,12 +1866,12 @@ mod tests {
                             local_cup.subnet_id,
                             vec![other_node_id],
                             &self.current_replica_version,
+                            &recalled_replica_versions,
                         );
                     }
-                    (
-                        Some(leaving_registry_version),
-                        Some((upgrade_replica_version, upgrade_registry_version)),
-                    ) if leaving_registry_version < upgrade_registry_version => {
+                    (Some(leaving_registry_version), Some(upgrade))
+                        if leaving_registry_version < &upgrade.registry_version =>
+                    {
                         // Remove the node from the membership
                         add_subnet_record_to_provider(
                             &data_provider,
@@ -1653,20 +1879,21 @@ mod tests {
                             local_cup.subnet_id,
                             vec![other_node_id],
                             &self.current_replica_version,
+                            &recalled_replica_versions,
                         );
                         // And later upgrade the subnet
                         add_subnet_record_to_provider(
                             &data_provider,
-                            *upgrade_registry_version,
+                            upgrade.registry_version,
                             local_cup.subnet_id,
                             vec![other_node_id],
-                            upgrade_replica_version,
+                            &upgrade.replica_version,
+                            &recalled_replica_versions,
                         );
                     }
-                    (
-                        Some(leaving_registry_version),
-                        Some((upgrade_replica_version, upgrade_registry_version)),
-                    ) if leaving_registry_version == upgrade_registry_version => {
+                    (Some(leaving_registry_version), Some(upgrade))
+                        if leaving_registry_version == &upgrade.registry_version =>
+                    {
                         // The node is leaving the subnet at the same registry version as the
                         // upgrade.
                         add_subnet_record_to_provider(
@@ -1674,20 +1901,19 @@ mod tests {
                             *leaving_registry_version,
                             local_cup.subnet_id,
                             vec![other_node_id],
-                            upgrade_replica_version,
+                            &upgrade.replica_version,
+                            &recalled_replica_versions,
                         );
                     }
-                    (
-                        Some(leaving_registry_version),
-                        Some((upgrade_replica_version, upgrade_registry_version)),
-                    ) => {
+                    (Some(leaving_registry_version), Some(upgrade)) => {
                         // Upgrade the subnet
                         add_subnet_record_to_provider(
                             &data_provider,
-                            *upgrade_registry_version,
+                            upgrade.registry_version,
                             local_cup.subnet_id,
                             vec![self.node_id, other_node_id],
-                            upgrade_replica_version,
+                            &upgrade.replica_version,
+                            &recalled_replica_versions,
                         );
                         // And later remove the node from the membership
                         add_subnet_record_to_provider(
@@ -1695,7 +1921,8 @@ mod tests {
                             *leaving_registry_version,
                             local_cup.subnet_id,
                             vec![other_node_id],
-                            upgrade_replica_version,
+                            &upgrade.replica_version,
+                            &recalled_replica_versions,
                         );
                     }
                 }
@@ -1711,12 +1938,12 @@ mod tests {
                     (None, None) => {
                         // No change, keep the current replica version and membership
                     }
-                    (None, Some((upgrade_replica_version, upgrade_registry_version))) => {
+                    (None, Some(upgrade)) => {
                         // Upgrade unassigned nodes at the specified registry version
                         add_unassigned_nodes_config_record(
                             &data_provider,
-                            *upgrade_registry_version,
-                            upgrade_replica_version,
+                            upgrade.registry_version,
+                            &upgrade.replica_version,
                         );
                     }
                     (Some((registry_cup, registry_cup_registry_version)), None) => {
@@ -1728,12 +1955,12 @@ mod tests {
                             registry_cup.subnet_id,
                             vec![self.node_id, other_node_id],
                             &self.current_replica_version,
+                            &recalled_replica_versions,
                         );
                     }
-                    (
-                        Some((registry_cup, registry_cup_registry_version)),
-                        Some((upgrade_replica_version, upgrade_registry_version)),
-                    ) if registry_cup_registry_version < upgrade_registry_version => {
+                    (Some((registry_cup, registry_cup_registry_version)), Some(upgrade))
+                        if registry_cup_registry_version < &upgrade.registry_version =>
+                    {
                         // Add the node to the subnet
                         add_subnet_record_to_provider(
                             &data_provider,
@@ -1741,37 +1968,36 @@ mod tests {
                             registry_cup.subnet_id,
                             vec![self.node_id, other_node_id],
                             &self.current_replica_version,
+                            &recalled_replica_versions,
                         );
                         // And later upgrade the subnet
                         add_subnet_record_to_provider(
                             &data_provider,
-                            *upgrade_registry_version,
+                            upgrade.registry_version,
                             registry_cup.subnet_id,
                             vec![self.node_id, other_node_id],
-                            upgrade_replica_version,
+                            &upgrade.replica_version,
+                            &recalled_replica_versions,
                         );
                     }
-                    (
-                        Some((registry_cup, registry_cup_registry_version)),
-                        Some((upgrade_replica_version, upgrade_registry_version)),
-                    ) if registry_cup_registry_version == upgrade_registry_version => {
+                    (Some((registry_cup, registry_cup_registry_version)), Some(upgrade))
+                        if registry_cup_registry_version == &upgrade.registry_version =>
+                    {
                         add_subnet_record_to_provider(
                             &data_provider,
                             *registry_cup_registry_version,
                             registry_cup.subnet_id,
                             vec![self.node_id, other_node_id],
-                            upgrade_replica_version,
+                            &upgrade.replica_version,
+                            &recalled_replica_versions,
                         );
                     }
-                    (
-                        Some((registry_cup, registry_cup_registry_version)),
-                        Some((upgrade_replica_version, upgrade_registry_version)),
-                    ) => {
+                    (Some((registry_cup, registry_cup_registry_version)), Some(upgrade)) => {
                         // Upgrade unassigned nodes at the specified registry version
                         add_unassigned_nodes_config_record(
                             &data_provider,
-                            *upgrade_registry_version,
-                            upgrade_replica_version,
+                            upgrade.registry_version,
+                            &upgrade.replica_version,
                         );
                         // And later add the node to the subnet
                         add_subnet_record_to_provider(
@@ -1779,7 +2005,8 @@ mod tests {
                             *registry_cup_registry_version,
                             registry_cup.subnet_id,
                             vec![self.node_id, other_node_id],
-                            upgrade_replica_version,
+                            &upgrade.replica_version,
+                            &recalled_replica_versions,
                         );
                     }
                 }
@@ -1799,7 +2026,7 @@ mod tests {
                 self.is_leaving,
                 self.upgrade_to
                     .as_ref()
-                    .map(|(_, registry_version)| *registry_version),
+                    .map(|upgrade| upgrade.registry_version),
             ]
             .iter()
             .filter_map(|x| *x)
@@ -1879,7 +2106,11 @@ mod tests {
         // Returns the expected control flow after the upgrade loop.
         // Additionally asserts whether the orchestrator has prepared for an upgrade
         // Additionally asserts whether the prepared version and image have been cleared
-        fn expected_flow(&self, logs: Vec<LogEntry>, upgrade: &Upgrade) -> OrchestratorControlFlow {
+        fn expected_flow(
+            &self,
+            logs: Vec<LogEntry>,
+            upgrade_loop: &Upgrade,
+        ) -> OrchestratorResult<OrchestratorControlFlow> {
             let needle_has_prepared_upgrade =
                 "Replica version upgrade detected at registry version";
             let logs_assert = LogEntriesAssert::assert_that(logs);
@@ -1895,12 +2126,15 @@ mod tests {
                 );
             };
             let assert_has_cleared_version_and_image = || {
-                assert_eq!(upgrade.get_prepared_version(), None,);
-                assert!(!upgrade.image_path().exists());
+                assert_eq!(upgrade_loop.get_prepared_version(), None,);
+                assert!(!upgrade_loop.image_path().exists());
             };
-            let assert_has_not_cleared_version_and_image = |upgrade_image_version| {
-                assert_eq!(upgrade.get_prepared_version(), Some(upgrade_image_version));
-                assert!(upgrade.image_path().exists());
+            let assert_has_not_cleared_version_and_image = |upgrade: &ReplicaUpgradeScenario| {
+                assert_eq!(
+                    upgrade_loop.get_prepared_version(),
+                    Some(&upgrade.replica_version)
+                );
+                assert!(upgrade_loop.image_path().exists());
             };
 
             match &self.has_local_cup {
@@ -1912,25 +2146,34 @@ mod tests {
                         (None, None) => {
                             assert_has_not_prepared_upgrade();
                             assert_has_cleared_version_and_image();
-                            OrchestratorControlFlow::Assigned(local_cup.subnet_id)
+                            Ok(OrchestratorControlFlow::Assigned(local_cup.subnet_id))
                         }
-                        (None, Some((upgrade_replica_version, upgrade_registry_version)))
-                            if &highest_height_cup.registry_version < upgrade_registry_version =>
+                        (None, Some(upgrade))
+                            if highest_height_cup.registry_version < upgrade.registry_version =>
                         {
                             // An upgrade is scheduled but the CUP's registry version has not
                             // reached the upgrade registry version yet, so we are expected not to
                             // stop and reboot
                             // Though, we should start to download it in advance
                             assert_has_prepared_upgrade();
-                            assert_has_not_cleared_version_and_image(upgrade_replica_version);
-                            OrchestratorControlFlow::Assigned(local_cup.subnet_id)
+                            assert_has_not_cleared_version_and_image(upgrade);
+                            Ok(OrchestratorControlFlow::Assigned(local_cup.subnet_id))
                         }
-                        (None, Some((_upgrade_replica_version, _upgrade_registry_version))) => {
+                        (None, Some(upgrade)) => {
                             // An upgrade is scheduled and the CUP's registry version has reached
-                            // the upgrade registry version, so we are expected to stop and reboot
+                            // the upgrade registry version.
+                            let expected_flow = upgrade.should_be_executed();
+
                             assert_has_not_prepared_upgrade();
-                            assert_has_cleared_version_and_image();
-                            OrchestratorControlFlow::Stop
+                            if expected_flow.is_ok() {
+                                // The upgrade is going to be executed, so the prepared version and
+                                // image should be cleared
+                                assert_has_cleared_version_and_image();
+                            } else {
+                                assert_has_not_cleared_version_and_image(upgrade);
+                            }
+
+                            expected_flow
                         }
                         (Some(leaving_registry_version), None)
                             if &highest_height_cup.registry_version < leaving_registry_version =>
@@ -1940,7 +2183,7 @@ mod tests {
                             // be `Leaving`
                             assert_has_not_prepared_upgrade();
                             assert_has_cleared_version_and_image();
-                            OrchestratorControlFlow::Leaving(local_cup.subnet_id)
+                            Ok(OrchestratorControlFlow::Leaving(local_cup.subnet_id))
                         }
                         (Some(_leaving_registry_version), None) => {
                             // The node is leaving the subnet and the CUP's registry version has
@@ -1948,44 +2191,49 @@ mod tests {
                             // `Unassigned`
                             assert_has_not_prepared_upgrade();
                             assert_has_cleared_version_and_image();
-                            OrchestratorControlFlow::Unassigned
+                            Ok(OrchestratorControlFlow::Unassigned)
                         }
-                        (
-                            Some(leaving_registry_version),
-                            Some((upgrade_replica_version, upgrade_registry_version)),
-                        ) if &highest_height_cup.registry_version < leaving_registry_version
-                            && &highest_height_cup.registry_version < upgrade_registry_version =>
+                        (Some(leaving_registry_version), Some(upgrade))
+                            if &highest_height_cup.registry_version < leaving_registry_version
+                                && highest_height_cup.registry_version
+                                    < upgrade.registry_version =>
                         {
                             // Both leaving and upgrade are scheduled, but the CUP's registry version
                             // has not reached either of them yet, so we are expected to be `Leaving`
                             // Though, we should start to download the upgrade in advance
                             assert_has_prepared_upgrade();
-                            assert_has_not_cleared_version_and_image(upgrade_replica_version);
-                            OrchestratorControlFlow::Leaving(local_cup.subnet_id)
+                            assert_has_not_cleared_version_and_image(upgrade);
+                            Ok(OrchestratorControlFlow::Leaving(local_cup.subnet_id))
                         }
-                        (
-                            Some(leaving_registry_version),
-                            Some((_upgrade_replica_version, _upgrade_registry_version)),
-                        ) if &highest_height_cup.registry_version < leaving_registry_version => {
+                        (Some(leaving_registry_version), Some(upgrade))
+                            if &highest_height_cup.registry_version < leaving_registry_version =>
+                        {
                             // Both leaving and upgrade are scheduled, but the CUP's registry version
                             // has only reached the upgrade registry version, not the leaving registry
-                            // version, so we are expected to stop and reboot
+                            // version.
+                            // We should now first check if the replica version was recalled.
+                            let expected_flow = upgrade.should_be_executed();
+
                             assert_has_not_prepared_upgrade();
-                            assert_has_cleared_version_and_image();
-                            OrchestratorControlFlow::Stop
+                            if expected_flow.is_ok() {
+                                // The upgrade is going to be executed, so the prepared version and
+                                // image should be cleared
+                                assert_has_cleared_version_and_image();
+                            } else {
+                                assert_has_not_cleared_version_and_image(upgrade);
+                            }
+
+                            expected_flow
                         }
-                        (
-                            Some(_leaving_registry_version),
-                            Some((upgrade_replica_version, _upgrade_registry_version)),
-                        ) => {
+                        (Some(_leaving_registry_version), Some(upgrade)) => {
                             // Both leaving and upgrade are scheduled, and the CUP's registry
                             // version has reached the leaving registry version. Regardless of
                             // whether the upgrade registry version has been reached, leaving the
                             // subnet takes precedence, and we are expected to be `Unassigned`
                             assert_has_not_prepared_upgrade();
                             // In that case, the prepared image will be kept
-                            assert_has_not_cleared_version_and_image(upgrade_replica_version);
-                            OrchestratorControlFlow::Unassigned
+                            assert_has_not_cleared_version_and_image(upgrade);
+                            Ok(OrchestratorControlFlow::Unassigned)
                         }
                     }
                 }
@@ -1993,44 +2241,48 @@ mod tests {
                     (None, None) => {
                         assert_has_not_prepared_upgrade();
                         assert_has_cleared_version_and_image();
-                        OrchestratorControlFlow::Unassigned
+                        Ok(OrchestratorControlFlow::Unassigned)
                     }
-                    (None, Some((_, _upgrade_registry_version))) => {
+                    (None, Some(_upgrade)) => {
                         // An upgrade is scheduled. Unassigned nodes always instantly upgrade so we
                         // are expected to stop and reboot
                         assert_has_not_prepared_upgrade();
                         assert_has_cleared_version_and_image();
-                        OrchestratorControlFlow::Stop
+                        Ok(OrchestratorControlFlow::Stop)
                     }
-                    (Some((registry_cup, _registry_cup_registry_version)), None) => {
+                    (Some((registry_cup, _)), None) => {
                         // The node is joining a subnet, and there is no upgrade scheduled, so we
                         // are expected to turn `Assigned`
                         assert_has_not_prepared_upgrade();
                         assert_has_cleared_version_and_image();
-                        OrchestratorControlFlow::Assigned(registry_cup.subnet_id)
+                        Ok(OrchestratorControlFlow::Assigned(registry_cup.subnet_id))
                     }
-                    (
-                        Some((registry_cup, registry_cup_registry_version)),
-                        Some((upgrade_replica_version, upgrade_registry_version)),
-                    ) if registry_cup_registry_version < upgrade_registry_version => {
+                    (Some((registry_cup, _)), Some(upgrade))
+                        if registry_cup.registry_version < upgrade.registry_version =>
+                    {
                         // An upgrade is scheduled but the CUP's registry version has not
                         // reached the upgrade registry version yet, so we are expected to turn
                         // `Assigned` and not stop and reboot
                         // Though, we should start to download the upgrade in advance
                         assert_has_prepared_upgrade();
-                        assert_has_not_cleared_version_and_image(upgrade_replica_version);
-                        OrchestratorControlFlow::Assigned(registry_cup.subnet_id)
+                        assert_has_not_cleared_version_and_image(upgrade);
+                        Ok(OrchestratorControlFlow::Assigned(registry_cup.subnet_id))
                     }
-                    (
-                        Some((_registry_cup, _registry_cup_registry_version)),
-                        Some((_upgrade_replica_version, _upgrade_registry_version)),
-                    ) => {
+                    (Some((_registry_cup, _)), Some(upgrade)) => {
                         // This scenario can be interpreted as the unassigned node having a
                         // different replica version than the subnet's
-                        // We are expected to stop and reboot
+                        let expected_flow = upgrade.should_be_executed();
+
                         assert_has_not_prepared_upgrade();
-                        assert_has_cleared_version_and_image();
-                        OrchestratorControlFlow::Stop
+                        if expected_flow.is_ok() {
+                            // The upgrade is going to be executed, so the prepared version and
+                            // image should be cleared
+                            assert_has_cleared_version_and_image();
+                        } else {
+                            assert_has_not_cleared_version_and_image(upgrade);
+                        }
+
+                        expected_flow
                     }
                 },
             }
@@ -2176,8 +2428,8 @@ mod tests {
                             assert_has_started_new_process_if_necessary();
                             true
                         }
-                        (None, Some((_, upgrade_registry_version)))
-                            if &highest_height_cup.registry_version < upgrade_registry_version =>
+                        (None, Some(upgrade))
+                            if highest_height_cup.registry_version < upgrade.registry_version =>
                         {
                             // An upgrade is scheduled but the CUP's registry version has not
                             // reached the upgrade registry version yet, so the replica process
@@ -2185,12 +2437,14 @@ mod tests {
                             assert_has_started_new_process_if_necessary();
                             true
                         }
-                        (None, Some((_, _upgrade_registry_version))) => {
+                        (None, Some(_upgrade)) => {
                             // An upgrade is scheduled and the CUP's registry version has reached
-                            // the upgrade registry version, so we are expected to stop and reboot
-                            // Note that the implementation does not stop the replica process, it
-                            // just issues a reboot. Thus, in this unit test, we will assert that
-                            // the replica process is in the same state as before.
+                            // the upgrade registry version.
+                            // Regardless of whether the upgrade version was recalled or not, note
+                            // that the implementation does not stop the replica process, it either
+                            // returns an error (if recalled) or just issues a reboot. Thus, in this
+                            // unit test, we will assert that the replica process is in the same
+                            // state as before.
                             assert_has_not_started_new_process();
                             self.was_replica_process_started_previously()
                         }
@@ -2210,10 +2464,10 @@ mod tests {
                             assert_has_not_started_new_process();
                             false
                         }
-                        (Some(leaving_registry_version), Some((_, upgrade_registry_version)))
+                        (Some(leaving_registry_version), Some(upgrade))
                             if &highest_height_cup.registry_version < leaving_registry_version
-                                && &highest_height_cup.registry_version
-                                    < upgrade_registry_version =>
+                                && highest_height_cup.registry_version
+                                    < upgrade.registry_version =>
                         {
                             // Both leaving and upgrade are scheduled, but the CUP's registry version
                             // has not reached either of them yet, so the replica process should be
@@ -2221,20 +2475,20 @@ mod tests {
                             assert_has_started_new_process_if_necessary();
                             true
                         }
-                        (Some(leaving_registry_version), Some((_, _upgrade_registry_version)))
+                        (Some(leaving_registry_version), Some(_upgrade))
                             if &highest_height_cup.registry_version < leaving_registry_version =>
                         {
-                            // Both leaving and upgrade are scheduled, but the CUP's registry version
-                            // has only reached the upgrade registry version, not the leaving registry
-                            // version, so we are expected to stop and reboot
-                            // Note that the implementation does not stop the replica process, it
-                            // just issues a reboot. Thus, in this unit test, we will assert that
-                            // the replica process is in the same state as before.
+                            // An upgrade is scheduled and the CUP's registry version has reached
+                            // the upgrade registry version.
+                            // Regardless of whether the upgrade version was recalled or not, note
+                            // that the implementation does not stop the replica process, it either
+                            // returns an error (if recalled) or just issues a reboot. Thus, in this
+                            // unit test, we will assert that the replica process is in the same
+                            // state as before.
                             assert_has_not_started_new_process();
-                            // Replica process was started only if initially assigned
                             self.was_replica_process_started_previously()
                         }
-                        (Some(_leaving_registry_version), Some((_, _upgrade_registry_version))) => {
+                        (Some(_leaving_registry_version), Some(_upgrade)) => {
                             // Both leaving and upgrade are scheduled, and the CUP's registry
                             // version has reached the leaving registry version. Regardless of
                             // whether the upgrade registry version has been reached, leaving the
@@ -2252,7 +2506,7 @@ mod tests {
                             assert_has_not_started_new_process();
                             false
                         }
-                        Some((_, registry_cup_registry_version)) => {
+                        Some((registry_cup, _)) => {
                             // There is a registry CUP, so the node is joining the subnet
 
                             // But there could be an upgrade scheduled in the meantime
@@ -2263,8 +2517,8 @@ mod tests {
                                     assert_has_started_new_process();
                                     true
                                 }
-                                Some((_, upgrade_registry_version))
-                                    if registry_cup_registry_version < upgrade_registry_version =>
+                                Some(upgrade)
+                                    if registry_cup.registry_version < upgrade.registry_version =>
                                 {
                                     // An upgrade is scheduled but the CUP's registry version has
                                     // not reached the upgrade registry version yet, so the replica
@@ -2272,11 +2526,11 @@ mod tests {
                                     assert_has_started_new_process();
                                     true
                                 }
-                                Some((_, _upgrade_registry_version)) => {
+                                Some(_upgrade) => {
                                     // This scenario can be interpreted as the unassigned node
                                     // having a different replica version than the subnet's
                                     // We should upgrade before actually starting the replica
-                                    // process
+                                    // process (or return early if the version was recalled).
                                     assert_has_not_started_new_process();
                                     false
                                 }
@@ -2288,9 +2542,144 @@ mod tests {
         }
     }
 
+    async fn test_upgrade(test_scenario: UpgradeTestScenario) {
+        let data_provider = test_scenario.setup_registry();
+
+        let tmp_dir = tempdir().unwrap();
+        let tmp_path = tmp_dir.path();
+        let logger = InMemoryReplicaLogger::new();
+        let mut upgrade_loop = create_upgrade_for_test(
+            tmp_path,
+            ReplicaLogger::from(&logger),
+            test_scenario.clone(),
+            data_provider,
+        )
+        .await;
+
+        let flow_result = upgrade_loop.check().await;
+        let logs = logger.drain_logs();
+
+        // Check orchestrator control flow
+        match (
+            &flow_result,
+            &test_scenario.expected_flow(logs.clone(), &upgrade_loop),
+        ) {
+            (Ok(actual_flow), Ok(expected_flow)) => {
+                assert_eq!(actual_flow, expected_flow);
+            }
+            (
+                Err(OrchestratorError::UpgradeError(actual_error)),
+                Err(OrchestratorError::UpgradeError(expected_error)),
+            ) => {
+                // TODO(CON-1631): introduce distinct enum variants to better compare errors
+                assert!(actual_error.contains(expected_error));
+            }
+            _ => {
+                panic!("Upgrade loop flow result does not match expected flow");
+            }
+        }
+
+        // Check new subnet assignment
+        let new_subnet_assignment = upgrade_loop.subnet_assignment();
+        assert_eq!(
+            new_subnet_assignment,
+            test_scenario.expected_subnet_assignment(logs.clone()),
+        );
+
+        // Check presence/absence of local CUP, including its height, which
+        // tests the recovery case where the recovery CUP would overwrite the
+        // local CUP
+        let cup_file = tmp_path.join("cups").join("cup.types.v1.CatchUpPackage.pb");
+        let local_cup_height = std::fs::read(cup_file)
+            .map(|bytes| {
+                CatchUpPackage::try_from(&pb::CatchUpPackage::decode(&bytes[..]).unwrap())
+                    .unwrap()
+                    .height()
+            })
+            .ok();
+        assert_eq!(
+            local_cup_height,
+            test_scenario.expected_local_cup_height(logs.clone())
+        );
+
+        // Check that the state was removed if necessary
+        test_scenario.assert_removed_state_if_necessary(logs.clone());
+
+        // Check whether the replica process is running or not
+        assert_eq!(
+            upgrade_loop.replica_process.lock().unwrap().is_running(),
+            test_scenario.should_replica_process_be_running(logs),
+        );
+
+        // Asserting further invariants:
+        // - Consistent flow/subnet assignment:
+        match flow_result {
+            Ok(OrchestratorControlFlow::Assigned(flow_subnet_id))
+            | Ok(OrchestratorControlFlow::Leaving(flow_subnet_id)) => {
+                assert_matches!(new_subnet_assignment, SubnetAssignment::Assigned(assigned_subnet_id) if assigned_subnet_id == flow_subnet_id);
+            }
+            Ok(OrchestratorControlFlow::Unassigned) => {
+                assert_matches!(new_subnet_assignment, SubnetAssignment::Unassigned);
+            }
+            Ok(OrchestratorControlFlow::Stop) => {
+                assert_matches!(
+                    new_subnet_assignment,
+                    SubnetAssignment::Assigned(_) | SubnetAssignment::Unassigned
+                )
+            }
+            Err(OrchestratorError::UpgradeError(_)) => {}
+            Err(_) => {
+                panic!("Unexpected error from upgrade loop");
+            }
+        }
+        // - A successful upgrade loop means the subnet assignment cannot be
+        // `Unknown`
+        assert!(!matches!(new_subnet_assignment, SubnetAssignment::Unknown));
+        // - There is a local CUP after the upgrade loop <=> the subnet assignment
+        // must be `Assigned`
+        assert_eq!(
+            local_cup_height.is_some(),
+            matches!(new_subnet_assignment, SubnetAssignment::Assigned(_))
+        );
+        // - The replica process is running <=> the new subnet assignment is
+        // `Assigned` AND (EITHER we are not upgrading OR the replica was
+        // already started beforehand)
+        assert_eq!(
+            upgrade_loop.replica_process.lock().unwrap().is_running(),
+            matches!(new_subnet_assignment, SubnetAssignment::Assigned(_))
+                && (matches!(
+                    flow_result,
+                    Ok(OrchestratorControlFlow::Assigned(_))
+                        | Ok(OrchestratorControlFlow::Leaving(_))
+                ) || test_scenario.was_replica_process_started_previously())
+        );
+        // - As an assigned node:
+        if new_subnet_assignment != SubnetAssignment::Unassigned {
+            // - If the replicator has not yet replicated all versions before init, then we should never
+            // be rebooting
+            assert!(
+                test_scenario
+                    .upgrade_to
+                    .as_ref()
+                    .map(|u| u.has_replicated_versions_before_init)
+                    .is_some_and(|has_replicated| has_replicated)
+                    || !matches!(flow_result, Ok(OrchestratorControlFlow::Stop))
+            );
+            // - If the upgrade version was recalled, then we should never be rebooting
+            assert!(
+                !test_scenario
+                    .upgrade_to
+                    .as_ref()
+                    .map(|u| u.is_recalled)
+                    .is_some_and(|is_recalled| is_recalled)
+                    || !matches!(flow_result, Ok(OrchestratorControlFlow::Stop))
+            );
+        }
+    }
+
     #[rstest]
     #[tokio::test]
-    async fn test_upgrade_scenarios_without_errors(
+    async fn test_upgrade_scenarios(
         #[values(NODE_1)] node_id: NodeId,
         #[values(ReplicaVersion::try_from("replica_version_0.1").unwrap())] current_replica_version: ReplicaVersion,
         #[values(
@@ -2348,18 +2737,28 @@ mod tests {
             Some(RegistryVersion::from(150))
         )]
         is_leaving: Option<RegistryVersion>,
+        #[values(false, true)] does_upgrade: bool,
+        #[values(ReplicaVersion::try_from("replica_version_0.2").unwrap())] upgrade_replica_version: ReplicaVersion,
         #[values(
-            None,
-            Some((ReplicaVersion::try_from("replica_version_0.2").unwrap(), RegistryVersion::from(3))),
-            Some((ReplicaVersion::try_from("replica_version_0.2").unwrap(), RegistryVersion::from(5))),
-            Some((ReplicaVersion::try_from("replica_version_0.2").unwrap(), RegistryVersion::from(10))),
-            Some((ReplicaVersion::try_from("replica_version_0.2").unwrap(), RegistryVersion::from(75))),
-            Some((ReplicaVersion::try_from("replica_version_0.2").unwrap(), RegistryVersion::from(100))),
-            Some((ReplicaVersion::try_from("replica_version_0.2").unwrap(), RegistryVersion::from(150))),
-            Some((ReplicaVersion::try_from("replica_version_0.2").unwrap(), RegistryVersion::from(175))),
+            RegistryVersion::from(3),
+            RegistryVersion::from(5),
+            RegistryVersion::from(10),
+            RegistryVersion::from(75),
+            RegistryVersion::from(100),
+            RegistryVersion::from(150),
+            RegistryVersion::from(175)
         )]
-        upgrade_to: Option<(ReplicaVersion, RegistryVersion)>,
+        upgrade_registry_version: RegistryVersion,
+        #[values(false, true)] upgrade_is_recalled: bool,
+        #[values(false, true)] upgrade_has_replicated_versions_before_init: bool,
     ) {
+        let upgrade_to = does_upgrade.then_some(ReplicaUpgradeScenario {
+            replica_version: upgrade_replica_version,
+            registry_version: upgrade_registry_version,
+            is_recalled: upgrade_is_recalled,
+            has_replicated_versions_before_init: upgrade_has_replicated_versions_before_init,
+        });
+
         let test_scenario = UpgradeTestScenario {
             node_id,
             current_replica_version,
@@ -2401,12 +2800,37 @@ mod tests {
             return;
         }
 
+        test_upgrade(test_scenario).await;
+    }
+
+    #[tokio::test]
+    async fn test_ignore_recalled_versions_if_nns() {
+        let test_scenario = UpgradeTestScenario {
+            node_id: NODE_1,
+            current_replica_version: ReplicaVersion::try_from("replica_version_0.1").unwrap(),
+            has_local_cup: Some(CUPScenario {
+                height: Height::from(100),
+                // Set as the NNS subnet in `setup_registry`
+                subnet_id: SUBNET_42,
+                registry_version: RegistryVersion::from(10),
+            }),
+            has_registry_cup: None,
+            initial_subnet_assignment: SubnetAssignment::Unknown,
+            is_leaving: None,
+            upgrade_to: Some(ReplicaUpgradeScenario {
+                replica_version: ReplicaVersion::try_from("replica_version_0.2").unwrap(),
+                registry_version: RegistryVersion::from(10),
+                is_recalled: true,
+                has_replicated_versions_before_init: false,
+            }),
+        };
+
         let data_provider = test_scenario.setup_registry();
 
         let tmp_dir = tempdir().unwrap();
         let tmp_path = tmp_dir.path();
         let logger = InMemoryReplicaLogger::new();
-        let mut upgrade = create_upgrade_for_test(
+        let mut upgrade_loop = create_upgrade_for_test(
             tmp_path,
             ReplicaLogger::from(&logger),
             test_scenario.clone(),
@@ -2414,82 +2838,55 @@ mod tests {
         )
         .await;
 
-        let flow_result = upgrade.check().await;
-        let logs = logger.drain_logs();
+        let flow_result = upgrade_loop.check().await;
 
-        // Check orchestrator control flow
-        assert_matches!(&flow_result, Ok(flow) if *flow == test_scenario.expected_flow(logs.clone(), &upgrade));
+        // Assert that despite the replicator not having replicated all versions before init,
+        // and the version being recalled, we proceed with upgrading as it is the NNS subnet.
+        assert_matches!(flow_result, Ok(OrchestratorControlFlow::Stop));
+    }
 
-        // Check new subnet assignment
-        let new_subnet_assignment = upgrade.subnet_assignment();
-        assert_eq!(
-            new_subnet_assignment,
-            test_scenario.expected_subnet_assignment(logs.clone()),
-        );
+    #[tokio::test]
+    async fn test_ignore_up_to_date_replicator_after_timeout() {
+        let test_scenario = UpgradeTestScenario {
+            node_id: NODE_1,
+            current_replica_version: ReplicaVersion::try_from("replica_version_0.1").unwrap(),
+            has_local_cup: Some(CUPScenario {
+                height: Height::from(100),
+                subnet_id: SUBNET_1,
+                registry_version: RegistryVersion::from(10),
+            }),
+            has_registry_cup: None,
+            initial_subnet_assignment: SubnetAssignment::Unknown,
+            is_leaving: None,
+            upgrade_to: Some(ReplicaUpgradeScenario {
+                replica_version: ReplicaVersion::try_from("replica_version_0.2").unwrap(),
+                registry_version: RegistryVersion::from(10),
+                is_recalled: true,
+                has_replicated_versions_before_init: false,
+            }),
+        };
 
-        // Check presence/absence of local CUP, including its height, which
-        // tests the recovery case where the recovery CUP would overwrite the
-        // local CUP
-        let cup_file = tmp_path.join("cups").join("cup.types.v1.CatchUpPackage.pb");
-        let local_cup_height = std::fs::read(cup_file)
-            .map(|bytes| {
-                CatchUpPackage::try_from(&pb::CatchUpPackage::decode(&bytes[..]).unwrap())
-                    .unwrap()
-                    .height()
-            })
-            .ok();
-        assert_eq!(
-            local_cup_height,
-            test_scenario.expected_local_cup_height(logs.clone())
-        );
+        let data_provider = test_scenario.setup_registry();
 
-        // Check that the state was removed if necessary
-        test_scenario.assert_removed_state_if_necessary(logs.clone());
+        let tmp_dir = tempdir().unwrap();
+        let tmp_path = tmp_dir.path();
+        let logger = InMemoryReplicaLogger::new();
+        let mut upgrade_loop = create_upgrade_for_test(
+            tmp_path,
+            ReplicaLogger::from(&logger),
+            test_scenario.clone(),
+            data_provider,
+        )
+        .await;
 
-        // Check whether the replica process is running or not
-        assert_eq!(
-            upgrade.replica_process.lock().unwrap().is_running(),
-            test_scenario.should_replica_process_be_running(logs),
-        );
+        // Ensure we hit the timeout
+        tokio::time::sleep(TIMEOUT_IGNORE_UP_TO_DATE_REPLICATOR + Duration::from_secs(2)).await;
 
-        // Asserting further invariants:
-        // - Consistent flow/subnet assignment:
-        match flow_result {
-            Ok(OrchestratorControlFlow::Assigned(flow_subnet_id))
-            | Ok(OrchestratorControlFlow::Leaving(flow_subnet_id)) => {
-                assert_matches!(new_subnet_assignment, SubnetAssignment::Assigned(assigned_subnet_id) if assigned_subnet_id == flow_subnet_id);
-            }
-            Ok(OrchestratorControlFlow::Unassigned) => {
-                assert_matches!(new_subnet_assignment, SubnetAssignment::Unassigned);
-            }
-            Ok(OrchestratorControlFlow::Stop) => {
-                assert_matches!(
-                    new_subnet_assignment,
-                    SubnetAssignment::Assigned(_) | SubnetAssignment::Unassigned
-                )
-            }
-            Err(_) => {
-                panic!("Upgrade loop is supposed to succeed in this test")
-            }
-        }
-        // - A successful upgrade loop means the subnet assignment cannot be
-        // `Unknown`
-        assert_ne!(new_subnet_assignment, SubnetAssignment::Unknown);
-        // - There is a local CUP after the upgrade loop <=> the subnet assignment
-        // must be `Assigned`
-        assert_eq!(
-            local_cup_height.is_some(),
-            matches!(new_subnet_assignment, SubnetAssignment::Assigned(_))
-        );
-        // - The replica process is running <=> the new subnet assignment is
-        // `Assigned` AND (EITHER we are not upgrading OR the replica was
-        // already started beforehand)
-        assert_eq!(
-            upgrade.replica_process.lock().unwrap().is_running(),
-            matches!(new_subnet_assignment, SubnetAssignment::Assigned(_))
-                && (!matches!(flow_result, Ok(OrchestratorControlFlow::Stop))
-                    || test_scenario.was_replica_process_started_previously())
-        );
+        let flow_result = upgrade_loop.check().await;
+
+        // Assert that despite the replicator not having replicated all versions before init,
+        // we proceed with the our own view of the registry after the timeout.
+        assert_matches!(flow_result, Err(OrchestratorError::UpgradeError(err)) if err.contains("Not upgrading to recalled replica version"));
     }
 
     fn make_ecdsa_key_id() -> MasterPublicKeyId {
@@ -2935,7 +3332,66 @@ mod tests {
     }
 
     #[test]
+    fn test_unassignment_now_when_subnet_deleted() {
+        let key_id = make_vetkd_key_id();
+        let node_id = NodeId::new(PrincipalId::new_node_test_id(1));
+        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let latest_registry_version = RegistryVersion::from(10);
+        let oldest_relevant_version = 5;
+
+        let mut registry_client = MockFakeRegistryClient::new();
+
+        let mut setup = Setup::new_with_nidkg_registry_version(Some(oldest_relevant_version));
+        let key_transcript = setup.generate_key_transcript(&key_id);
+        let cup = make_cup_with_key_transcript(Height::from(15), Some(key_transcript));
+
+        // Return a deleted-subnet record: value is None and version > 0.
+        registry_client
+            .expect_get_versioned_value()
+            .once()
+            .return_const(Ok(RegistryVersionedRecord {
+                key: make_subnet_record_key(subnet_id),
+                version: RegistryVersion::new(1),
+                value: None,
+            }));
+
+        let response = should_node_become_unassigned(
+            &registry_client,
+            latest_registry_version,
+            node_id,
+            subnet_id,
+            &cup,
+        );
+
+        assert_eq!(response, UnassignmentDecision::Now);
+    }
+
+    #[test]
     fn test_stay_in_subnet_on_subnet_missing() {
+        let node_id = NodeId::new(PrincipalId::new_node_test_id(1));
+        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let version = 10;
+
+        let mut registry_client = MockFakeRegistryClient::new();
+        registry_client
+            .expect_get_versioned_value()
+            .times(2)
+            .return_const(Ok(RegistryVersionedRecord {
+                key: make_subnet_record_key(subnet_id),
+                version: RegistryVersion::new(0),
+                value: None,
+            }));
+
+        assert!(node_is_in_subnet_at_version(
+            &registry_client,
+            node_id,
+            subnet_id,
+            version
+        ))
+    }
+
+    #[test]
+    fn test_do_not_stay_in_subnet_on_subnet_deleted() {
         let node_id = NodeId::new(PrincipalId::new_node_test_id(1));
         let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
         let version = 10;
@@ -2946,11 +3402,11 @@ mod tests {
             .once()
             .return_const(Ok(RegistryVersionedRecord {
                 key: make_subnet_record_key(subnet_id),
-                version: RegistryVersion::new(0),
+                version: RegistryVersion::new(1),
                 value: None,
             }));
 
-        assert!(node_is_in_subnet_at_version(
+        assert!(!node_is_in_subnet_at_version(
             &registry_client,
             node_id,
             subnet_id,
@@ -2967,7 +3423,7 @@ mod tests {
         let mut registry_client = MockFakeRegistryClient::new();
         registry_client
             .expect_get_versioned_value()
-            .once()
+            .times(2)
             .return_const(Err(RegistryClientError::VersionNotAvailable {
                 version: RegistryVersion::new(version),
             }));

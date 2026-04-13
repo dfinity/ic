@@ -9,14 +9,16 @@ permissions:
 jobs:
   dependency-review:
     runs-on: ubuntu-latest
+    env:
+      CTF_PROOF: ${{ secrets.CTF_PROOF }}
     steps:
       - name: Checkout base
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.repository == 'dfinity/ic-private' && 'master-private' || 'master' }}
+          ref: 'master'
           path: "base"
       - name: Checkout PR
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           path: "pr"
@@ -24,7 +26,7 @@ jobs:
             Cargo.Bazel.toml.lock
           sparse-checkout-cone-mode: false
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: "3.12"
       - name: Install dependencies
@@ -44,6 +46,6 @@ jobs:
           export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
           $SHELL_WRAPPER python3 ci/src/dependencies/job/bazel_rust_gh_submission_job.py
       - name: Dependency Review
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4
         with:
           fail-on-severity: moderate

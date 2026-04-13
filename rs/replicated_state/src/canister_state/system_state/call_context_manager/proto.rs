@@ -1,21 +1,24 @@
 use super::*;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
+use ic_protobuf::state::ingress::v1 as pb_ingress;
 use ic_protobuf::types::v1 as pb_types;
 use ic_types::user_id_try_from_option;
 
 impl From<&CallContext> for pb::CallContext {
     fn from(item: &CallContext) -> Self {
-        let funds = Funds::new(item.available_cycles);
         Self {
             call_origin: Some((&item.call_origin).into()),
             responded: item.responded,
             deleted: item.deleted,
-            available_funds: Some((&funds).into()),
             available_cycles: Some((item.available_cycles).into()),
             time_nanos: item.time.as_nanos_since_unix_epoch(),
             metadata: Some((&item.metadata).into()),
             instructions_executed: item.instructions_executed.get(),
+            sender_info: item
+                .sender_info
+                .as_deref()
+                .map(pb_ingress::SenderInfo::from),
         }
     }
 }
@@ -23,23 +26,14 @@ impl From<&CallContext> for pb::CallContext {
 impl TryFrom<pb::CallContext> for CallContext {
     type Error = ProxyDecodeError;
     fn try_from(value: pb::CallContext) -> Result<Self, Self::Error> {
-        // To maintain backwards compatibility we fall back to reading from `available_funds` if
-        // `available_cycles` is not set.
-        let available_cycles =
-            match try_from_option_field(value.available_cycles, "CallContext::available_cycles") {
-                Ok(available_cycles) => available_cycles,
-                Err(_) => try_from_option_field::<_, Funds, _>(
-                    value.available_funds,
-                    "CallContext::available_funds",
-                )
-                .map(|available_funds| available_funds.cycles())?,
-            };
-
         Ok(Self {
             call_origin: try_from_option_field(value.call_origin, "CallContext::call_origin")?,
             responded: value.responded,
             deleted: value.deleted,
-            available_cycles,
+            available_cycles: try_from_option_field(
+                value.available_cycles,
+                "CallContext::available_cycles",
+            )?,
             time: Time::from_nanos_since_unix_epoch(value.time_nanos),
             metadata: value
                 .metadata
@@ -48,6 +42,12 @@ impl TryFrom<pb::CallContext> for CallContext {
                     Time::from_nanos_since_unix_epoch(0),
                 )),
             instructions_executed: value.instructions_executed.into(),
+            sender_info: value
+                .sender_info
+                .map(SenderInfo::try_from)
+                .transpose()
+                .map_err(|err| ProxyDecodeError::Other(format!("CallContext::sender_info: {err}")))?
+                .map(Arc::new),
         })
     }
 }
@@ -168,11 +168,9 @@ impl From<&CallContextManager> for pb::CallContextManager {
     }
 }
 
-impl TryFrom<(pb::CallContextManager, CanisterId)> for CallContextManager {
+impl TryFrom<pb::CallContextManager> for CallContextManager {
     type Error = ProxyDecodeError;
-    fn try_from(
-        (value, own_canister_id): (pb::CallContextManager, CanisterId),
-    ) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::CallContextManager) -> Result<Self, Self::Error> {
         let mut call_contexts = MutableIntMap::<CallContextId, CallContext>::new();
         let mut callbacks = MutableIntMap::<CallbackId, Arc<Callback>>::new();
         for pb::CallContextEntry {
@@ -193,7 +191,7 @@ impl TryFrom<(pb::CallContextManager, CanisterId)> for CallContextManager {
             callbacks.insert(
                 callback_id.into(),
                 Arc::new(try_from_option_field(
-                    callback.map(|callback| (callback, own_canister_id)),
+                    callback,
                     "CallContextManager::callbacks::V",
                 )?),
             );

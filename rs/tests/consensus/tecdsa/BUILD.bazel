@@ -59,6 +59,7 @@ system_test_nns(
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:anyhow",
@@ -132,7 +133,6 @@ system_test_nns(
 
 system_test_nns(
     name = "tecdsa_signature_fails_without_cycles_test",
-    flaky = True,  # flakiness rate of over 1.05% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "long_test",
     ],
@@ -154,7 +154,6 @@ system_test_nns(
 
 system_test_nns(
     name = "tecdsa_signature_from_nns_without_cycles_test",
-    flaky = True,  # flakiness rate of over 1.67% over the month from 2025-02-11 till 2025-03-11 only for the //rs/tests/consensus/tecdsa:tecdsa_signature_from_nns_without_cycles_test_head_nns variant.
     tags = [
         "long_test",
     ],
@@ -215,7 +214,6 @@ system_test_nns(
 system_test_nns(
     name = "tecdsa_signature_life_cycle_test",
     # Remove when CON-937 is resolved
-    flaky = True,  # flakiness rate of 1.57% over the month from 2025-02-11 till 2025-03-11
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
@@ -232,6 +230,7 @@ system_test_nns(
         "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/management_canister_types",
+        "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:ic-agent",
         "@crate_index//:slog",
@@ -270,6 +269,7 @@ system_test_nns(
         "//rs/rust_canisters/canister_test",
         "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:ic-agent",
     ],

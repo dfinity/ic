@@ -21,7 +21,8 @@ use ic_registry_transport::pb::v1::RegistryMutation;
 use ic_replica_tests::{LocalTestRuntime, canister_test_async};
 pub use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
 use ic_state_machine_tests::StateMachine;
-pub use ic_types::{CanisterId, Cycles, PrincipalId, ingress::WasmResult};
+pub use ic_types::{CanisterId, PrincipalId, ingress::WasmResult};
+pub use ic_types_cycles::Cycles;
 use on_wire::{FromWire, IntoWire, NewType};
 use std::{
     convert::{AsRef, TryFrom},

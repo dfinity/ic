@@ -13,7 +13,8 @@ use ic_types::messages::{
     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES, Payload, RejectContext,
     Request, RequestOrResponse, Response, StreamMessage,
 };
-use ic_types::{CountBytes, Cycles, SubnetId};
+use ic_types::{CountBytes, SubnetId};
+use ic_types_cycles::{CompoundCycles, Cycles};
 #[cfg(test)]
 use mockall::automock;
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
@@ -224,6 +225,7 @@ impl StreamBuilderImpl {
         reject_code: RejectCode,
         reject_message: String,
     ) {
+        let own_cost_schedule = state.get_own_cost_schedule();
         state
             .push_input(
                 Response {
@@ -256,7 +258,10 @@ impl StreamBuilderImpl {
                     response
                 );
                 self.metrics.critical_error_induct_response_failed.inc();
-                state.observe_lost_cycles_due_to_dropped_messages(req.payment);
+                state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                    req.payment,
+                    own_cost_schedule,
+                ));
             });
     }
 
@@ -469,7 +474,7 @@ impl StreamBuilderImpl {
                         && is_at_limit(
                             &dst_stream_entry,
                             network_topology
-                                .subnets
+                                .subnets()
                                 .get(&dst_subnet_id)
                                 .map_or(SubnetType::Application, |topology| topology.subnet_type),
                         )
@@ -679,6 +684,7 @@ impl StreamBuilderImpl {
         streams: &mut BTreeMap<SubnetId, Stream>,
     ) {
         let mut cycles_lost = Cycles::zero();
+        let own_cost_schedule = state.get_own_cost_schedule();
         state.take_refunds(|refund| {
             match network_topology.route(refund.recipient().get()) {
                 Some(dst_subnet_id) => {
@@ -720,7 +726,10 @@ impl StreamBuilderImpl {
                 }
             }
         });
-        state.observe_lost_cycles_due_to_dropped_messages(cycles_lost);
+        state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+            cycles_lost,
+            own_cost_schedule,
+        ));
     }
 }
 

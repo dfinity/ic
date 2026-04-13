@@ -28,7 +28,7 @@ fn format_bn(bn: &BigUint) -> String {
 
     let padding_bytes = 32 - bn_bytes.len();
 
-    hex::encode(vec![0u8; padding_bytes]) + &hex::encode(bn_bytes)
+    hex::encode(vec![0_u8; padding_bytes]) + &hex::encode(bn_bytes)
 }
 
 fn scalar_fuzz_run(curve_type: EccCurveType, data: &[u8]) -> Result<(), CanisterThresholdError> {

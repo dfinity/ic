@@ -8,6 +8,7 @@ use sev_guest::firmware::SevGuestFirmware;
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use std::fs;
 use std::path::Path;
+use tracing::{info, warn};
 
 pub struct SevDiskEncryption<'a> {
     pub sev_firmware: Box<dyn SevGuestFirmware>,
@@ -28,7 +29,7 @@ impl SevDiskEncryption<'_> {
                 self.previous_key_path.display()
             )
         })?;
-        println!("Found previous key for store partition, will use it to unlock the partition");
+        info!("Found previous key for store partition, will use it to unlock the partition");
         let mut crypt_device = activate_crypt_device(
             device_path,
             crypt_name,
@@ -37,13 +38,13 @@ impl SevDiskEncryption<'_> {
         )
         .context("Failed to unlock store partition with previous key")?;
 
-        println!("Adding new SEV key to store partition");
+        info!("Adding new SEV key to store partition");
         crypt_device
             .keyslot_handle()
             .add_by_passphrase(None, &previous_key, new_key)
             .context("Failed to add new key to store partition")?;
 
-        println!("Removing old key slots from store partition");
+        info!("Removing old key slots from store partition");
         // Keep the key slot that was used to unlock the partition with the previous key.
         // Delete all other key slots and add the new key.
         // In the end, the store partition will have two keys:
@@ -53,19 +54,19 @@ impl SevDiskEncryption<'_> {
             // It's not a critical error if we fail to destroy the key slots, but it's a security
             // risk, so we should log it. We panic in debug builds.
             debug_assert!(false, "Failed to destroy key slots: {err:?}");
-            eprintln!("Failed to destroy key slots: {err:?}");
+            warn!("Failed to destroy key slots: {err:?}");
         }
 
         // Clean up the previous key on the first boot after upgrade if own key was added
         // successfully.
         if self.guest_vm_type == GuestVMType::Default {
-            println!(
+            info!(
                 "Removing previous store key file: {}",
                 self.previous_key_path.display()
             );
             if let Err(err) = std::fs::remove_file(self.previous_key_path) {
                 debug_assert!(false, "Failed to remove previous key file: {err:?}");
-                eprintln!("Failed to remove previous key file: {err:?}");
+                warn!("Failed to remove previous key file: {err:?}");
             }
         }
 
@@ -100,7 +101,7 @@ impl DiskEncryption for SevDiskEncryption<'_> {
 
                 // The logic should be kept consistent with can_open_store below
                 if self.previous_key_path.exists() {
-                    println!(
+                    info!(
                         "Unlocking store with existing key from {}",
                         self.previous_key_path.display()
                     );
@@ -111,9 +112,7 @@ impl DiskEncryption for SevDiskEncryption<'_> {
                     ) {
                         Ok(()) => return Ok(()),
                         Err(err) => {
-                            eprintln!(
-                                "Failed to unlock store partition with previous key: {err:?}"
-                            );
+                            warn!("Failed to unlock store partition with previous key: {err:?}");
                             // Fall through and try to open the device with the new key
                         }
                     }

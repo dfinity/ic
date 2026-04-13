@@ -263,7 +263,7 @@ async fn test_to_self_describing_bitcoin_set_config() {
     assert!(
         result
             .type_description
-            .contains("set the configuration of the underlying Bitcoin")
+            .contains("Set the configuration of the underlying Bitcoin Canister")
     );
     assert_eq!(
         SelfDescribingValue::from(result.value.unwrap()),
@@ -301,7 +301,7 @@ async fn test_to_self_describing_subnet_rental_request() {
     assert!(
         result
             .type_description
-            .contains("A proposal to rent a subnet on the Internet Computer")
+            .contains("Rent a subnet on the Internet Computer")
     );
     assert_eq!(
         SelfDescribingValue::from(result.value.unwrap()),

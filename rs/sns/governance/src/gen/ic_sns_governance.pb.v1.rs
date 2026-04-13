@@ -893,6 +893,8 @@ pub struct ManageDappCanisterSettings {
     pub wasm_memory_limit: ::core::option::Option<u64>,
     #[prost(uint64, optional, tag = "8")]
     pub wasm_memory_threshold: ::core::option::Option<u64>,
+    #[prost(enumeration = "SnapshotVisibility", optional, tag = "9")]
+    pub snapshot_visibility: ::core::option::Option<i32>,
 }
 /// Unlike `Governance.Version`, this message has optional fields and is the recommended one
 /// to be used in APIs that can evolve. For example, the SNS Governance could eventually support
@@ -1782,6 +1784,26 @@ pub struct NervousSystemParameters {
     /// by the NNS. If not specified, defaults to false for backward compatibility.
     #[prost(bool, optional, tag = "23")]
     pub automatically_advance_target_version: ::core::option::Option<bool>,
+    /// Custom proposal criticality configuration. Allows specifying additional native function IDs
+    /// that should be treated as critical. If not specified, defaults to None (no custom criticality).
+    #[prost(message, optional, tag = "24")]
+    pub custom_proposal_criticality: ::core::option::Option<CustomProposalCriticality>,
+}
+/// Defines custom proposal criticality settings for the nervous system.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct CustomProposalCriticality {
+    /// List of native function IDs that should be treated as critical.
+    /// These functions will require a higher level of consensus to be executed.
+    /// Only non-critical native function IDs can be added to this list.
+    #[prost(uint64, repeated, tag = "1")]
+    pub additional_critical_native_action_ids: ::prost::alloc::vec::Vec<u64>,
 }
 #[derive(
     candid::CandidType,
@@ -4462,6 +4484,50 @@ impl LogVisibility {
             "LOG_VISIBILITY_UNSPECIFIED" => Some(Self::Unspecified),
             "LOG_VISIBILITY_CONTROLLERS" => Some(Self::Controllers),
             "LOG_VISIBILITY_PUBLIC" => Some(Self::Public),
+            _ => None,
+        }
+    }
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
+#[repr(i32)]
+pub enum SnapshotVisibility {
+    Unspecified = 0,
+    /// Snapshots are visible to the controllers of the dapp canister.
+    Controllers = 1,
+    /// Snapshots are visible to the public.
+    Public = 2,
+}
+impl SnapshotVisibility {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "SNAPSHOT_VISIBILITY_UNSPECIFIED",
+            Self::Controllers => "SNAPSHOT_VISIBILITY_CONTROLLERS",
+            Self::Public => "SNAPSHOT_VISIBILITY_PUBLIC",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SNAPSHOT_VISIBILITY_UNSPECIFIED" => Some(Self::Unspecified),
+            "SNAPSHOT_VISIBILITY_CONTROLLERS" => Some(Self::Controllers),
+            "SNAPSHOT_VISIBILITY_PUBLIC" => Some(Self::Public),
             _ => None,
         }
     }

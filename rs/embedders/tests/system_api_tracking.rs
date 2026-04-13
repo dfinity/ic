@@ -14,6 +14,7 @@ fn call_counters_on_ok_call(wat: &str) -> SystemApiCallCounters {
             vec![0; 1024],
             Some(vec![]),
             0.into(),
+            None,
         ))
         .build();
     instance

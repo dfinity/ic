@@ -15,14 +15,14 @@ impl From<&TaskQueue> for pb::TaskQueue {
     }
 }
 
-impl TryFrom<(pb::TaskQueue, CanisterId)> for TaskQueue {
+impl TryFrom<pb::TaskQueue> for TaskQueue {
     type Error = ProxyDecodeError;
 
-    fn try_from((item, own_canister_id): (pb::TaskQueue, CanisterId)) -> Result<Self, Self::Error> {
+    fn try_from(item: pb::TaskQueue) -> Result<Self, Self::Error> {
         Ok(Self {
             paused_or_aborted_task: item
                 .paused_or_aborted_task
-                .map(|task| (task, own_canister_id).try_into())
+                .map(|task| task.try_into())
                 .transpose()?,
             on_low_wasm_memory_hook_status: pb::OnLowWasmMemoryHookStatus::try_from(
                 item.on_low_wasm_memory_hook_status,
@@ -33,7 +33,7 @@ impl TryFrom<(pb::TaskQueue, CanisterId)> for TaskQueue {
             queue: item
                 .queue
                 .into_iter()
-                .map(|task| (task, own_canister_id).try_into())
+                .map(|task| task.try_into())
                 .collect::<Result<VecDeque<_>, _>>()?,
         })
     }

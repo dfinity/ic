@@ -131,9 +131,8 @@ pub async fn start_rosetta(
             .arg(std::fs::canonicalize(&state_directory).unwrap());
     }
 
-    if arguments.ledger_id.is_some() {
-        cmd.arg("--canister-id")
-            .arg(arguments.ledger_id.unwrap().to_string());
+    if let Some(ledger_id) = arguments.ledger_id {
+        cmd.arg("--canister-id").arg(ledger_id.to_string());
     }
 
     if arguments.offline {

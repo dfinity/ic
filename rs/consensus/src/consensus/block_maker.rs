@@ -21,7 +21,7 @@ use ic_logger::{ReplicaLogger, debug, error, trace, warn};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    CountBytes, Height, NodeId, RegistryVersion, SubnetId,
+    Height, NodeId, RegistryVersion, SubnetId,
     batch::{BatchPayload, ValidationContext},
     consensus::{
         Block, BlockMetadata, BlockPayload, BlockProposal, DataPayload, HasHeight, HasRank,
@@ -34,7 +34,6 @@ use ic_types::{
     time::current_time,
 };
 use num_traits::ops::saturating::SaturatingSub;
-use rayon::ThreadPool;
 use std::{
     sync::{Arc, RwLock},
     time::Duration,
@@ -73,7 +72,6 @@ pub(crate) struct BlockMaker {
     payload_builder: Arc<dyn PayloadBuilder>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
     idkg_pool: Arc<RwLock<dyn IDkgPool>>,
-    thread_pool: Arc<ThreadPool>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     metrics: BlockMakerMetrics,
     idkg_payload_metrics: IDkgPayloadMetrics,
@@ -96,7 +94,6 @@ impl BlockMaker {
         payload_builder: Arc<dyn PayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         idkg_pool: Arc<RwLock<dyn IDkgPool>>,
-        thread_pool: Arc<ThreadPool>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         stable_registry_version_age: Duration,
         metrics_registry: MetricsRegistry,
@@ -111,7 +108,6 @@ impl BlockMaker {
             payload_builder,
             dkg_pool,
             idkg_pool,
-            thread_pool,
             state_manager,
             log,
             metrics: BlockMakerMetrics::new(metrics_registry.clone()),
@@ -368,8 +364,6 @@ impl BlockMaker {
                             let idkg_data = idkg::create_data_payload(
                                 self.replica_config.subnet_id,
                                 &*self.registry_client,
-                                &*self.crypto,
-                                self.thread_pool.as_ref(),
                                 pool,
                                 self.idkg_pool.clone(),
                                 &*self.state_manager,
@@ -390,7 +384,9 @@ impl BlockMaker {
 
                     self.metrics.report_byte_estimate_metrics(
                         batch_payload.xnet.size_bytes(),
-                        batch_payload.ingress.count_bytes(),
+                        (batch_payload.ingress.total_messages_size_estimate()
+                            + batch_payload.ingress.total_ids_size_estimate())
+                        .get() as usize,
                     );
 
                     BlockPayload::Data(DataPayload {
@@ -628,14 +624,13 @@ pub(super) fn is_time_to_make_block(
 
 #[cfg(test)]
 mod tests {
-    use crate::consensus::{MAX_CONSENSUS_THREADS, build_thread_pool};
 
     use super::*;
     use ic_consensus_mocks::{Dependencies, MockPayloadBuilder, dependencies_with_subnet_params};
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities_consensus::{IDkgStatsNoOp, fake::FromParent};
+    use ic_test_utilities_consensus::fake::FromParent;
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
@@ -647,7 +642,7 @@ mod tests {
         *,
     };
     use rstest::rstest;
-    use std::sync::{Arc, RwLock};
+    use std::sync::Arc;
 
     #[test]
     fn test_block_maker() {
@@ -703,7 +698,6 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool.clone(),
                 idkg_pool.clone(),
-                build_thread_pool(MAX_CONSENSUS_THREADS),
                 state_manager.clone(),
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -786,7 +780,6 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool,
                 idkg_pool,
-                build_thread_pool(MAX_CONSENSUS_THREADS),
                 state_manager,
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -921,7 +914,6 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool.clone(),
                 idkg_pool.clone(),
-                build_thread_pool(MAX_CONSENSUS_THREADS),
                 state_manager.clone(),
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -990,6 +982,8 @@ mod tests {
                 time_source,
                 replica_config,
                 state_manager,
+                dkg_pool,
+                idkg_pool,
                 ..
             } = dependencies_with_subnet_params(
                 pool_config.clone(),
@@ -1011,17 +1005,6 @@ mod tests {
                     ),
                 ],
             );
-            let dkg_pool = Arc::new(RwLock::new(ic_artifact_pool::dkg_pool::DkgPoolImpl::new(
-                MetricsRegistry::new(),
-                no_op_logger(),
-            )));
-
-            let idkg_pool = Arc::new(RwLock::new(ic_artifact_pool::idkg_pool::IDkgPoolImpl::new(
-                pool_config,
-                no_op_logger(),
-                MetricsRegistry::new(),
-                Box::new(IDkgStatsNoOp {}),
-            )));
 
             state_manager
                 .get_mut()
@@ -1057,7 +1040,6 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool.clone(),
                 idkg_pool.clone(),
-                build_thread_pool(MAX_CONSENSUS_THREADS),
                 state_manager.clone(),
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -1097,7 +1079,6 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool,
                 idkg_pool,
-                build_thread_pool(MAX_CONSENSUS_THREADS),
                 state_manager,
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -1173,7 +1154,6 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool,
                 idkg_pool,
-                build_thread_pool(MAX_CONSENSUS_THREADS),
                 state_manager,
                 Duration::from_millis(0),
                 MetricsRegistry::new(),

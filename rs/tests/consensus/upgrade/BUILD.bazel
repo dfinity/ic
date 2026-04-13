@@ -21,6 +21,7 @@ rust_library(
         "@crate_index//:candid",
         "@crate_index//:futures",
         "@crate_index//:ic-agent",
+        "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-utils",
         "@crate_index//:regex",
         "@crate_index//:slog",
@@ -101,7 +102,6 @@ rust_binary(
 system_test_nns(
     name = "upgrade_app_subnet_test",
     env = MAINNET_ENV,
-    flaky = True,  # flakiness rate of over 2.27% over the month from 2025-02-11 till 2025-03-11.
     guestos = "mainnet_nns",
     guestos_update = True,
     tags = [
@@ -115,7 +115,6 @@ system_test_nns(
 system_test_nns(
     name = "downgrade_app_subnet_test",
     env = MAINNET_ENV,
-    flaky = True,  # flakiness rate of over 2.97% over the month from 2025-02-11 till 2025-03-11.
     guestos_update = "mainnet_nns",
     tags = [
         "long_test",  # since it takes longer than 5 minutes.

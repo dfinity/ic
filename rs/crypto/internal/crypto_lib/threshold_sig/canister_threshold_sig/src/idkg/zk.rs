@@ -71,7 +71,7 @@ impl ProofOfEqualOpeningsInstance {
     ) -> CanisterThresholdResult<EccPoint> {
         let neg_c = proof.challenge.negate();
         let amb = self.a.sub_points(&self.b)?;
-        EccPoint::mul_2_points(&self.h, &proof.response, &amb, &neg_c)
+        EccPoint::mul_2_points_vartime(&self.h, &proof.response, &amb, &neg_c)
     }
 
     fn hash_to_challenge(
@@ -221,12 +221,17 @@ impl ProofOfProductInstance {
     ) -> CanisterThresholdResult<(EccPoint, EccPoint)> {
         let neg_c = proof.challenge.negate();
 
-        let r1_com = EccPoint::mul_2_points(&self.g, &proof.response1, &self.lhs_com, &neg_c)?;
+        let r1_com =
+            EccPoint::mul_2_points_vartime(&self.g, &proof.response1, &self.lhs_com, &neg_c)?;
 
-        // We could consider using something like NAF here:
-        let r2_com =
-            EccPoint::mul_2_points(&self.rhs_com, &proof.response1, &self.h, &proof.response2)?
-                .add_points(&self.product_com.scalar_mul(&neg_c)?)?;
+        let r2_com = EccPoint::mul_3_points_vartime(
+            &self.rhs_com,
+            &proof.response1,
+            &self.h,
+            &proof.response2,
+            &self.product_com,
+            &neg_c,
+        )?;
 
         Ok((r1_com, r2_com))
     }
@@ -272,7 +277,7 @@ impl ProofOfProduct {
         let r1_com = instance.g.scalar_mul(&r1)?;
 
         let r2 = EccScalar::random(instance.curve_type, rng);
-        let r2_com = EccPoint::mul_2_points(&instance.rhs_com, &r1, &instance.h, &r2)?;
+        let r2_com = EccPoint::mul_2_points_vartime(&instance.rhs_com, &r1, &instance.h, &r2)?;
 
         // Compute the challenge:
         let challenge = instance.hash_to_challenge(alg, &r1_com, &r2_com, associated_data)?;
@@ -369,8 +374,8 @@ impl ProofOfDLogEquivalenceInstance {
     ) -> CanisterThresholdResult<(EccPoint, EccPoint)> {
         let nchallenge = proof.challenge.negate();
 
-        let g_r = EccPoint::mul_2_points(&self.g, &proof.response, &self.g_x, &nchallenge)?;
-        let h_r = EccPoint::mul_2_points(&self.h, &proof.response, &self.h_x, &nchallenge)?;
+        let g_r = EccPoint::mul_2_points_vartime(&self.g, &proof.response, &self.g_x, &nchallenge)?;
+        let h_r = EccPoint::mul_2_points_vartime(&self.h, &proof.response, &self.h_x, &nchallenge)?;
 
         Ok((g_r, h_r))
     }
