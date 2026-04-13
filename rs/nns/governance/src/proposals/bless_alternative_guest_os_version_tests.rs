@@ -1,10 +1,6 @@
 use super::*;
 
 use crate::pb::v1::SelfDescribingValue as SelfDescribingValuePb;
-use crate::{
-    temporarily_disable_bless_alternative_guest_os_version_proposals,
-    temporarily_enable_bless_alternative_guest_os_version_proposals,
-};
 use ic_nervous_system_common_test_utils::assert_contains_all_key_words;
 use ic_nns_governance_api::SelfDescribingValue;
 use maplit::hashmap;
