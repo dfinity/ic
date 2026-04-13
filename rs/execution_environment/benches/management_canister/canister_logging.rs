@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use criterion::{BatchSize, BenchmarkGroup, Criterion, criterion_group, criterion_main};
 use ic_base_types::PrincipalId;
 use ic_management_canister_types_private::{
@@ -82,14 +84,25 @@ fn run_bench_resize_canister_log<M: criterion::measurement::Measurement>(
 
 pub fn canister_logging_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("resize_canister_log");
+    group.sample_size(60);
+    group.warm_up_time(Duration::from_secs(1));
 
+    // Varying sizes to verify linear scaling of resize cost.
+    run_bench_resize_canister_log(
+        &mut group,
+        "from:256KiB/to:-1/msg:100B",
+        256 * KIB,
+        256 * KIB - 1,
+    );
+    run_bench_resize_canister_log(&mut group, "from:1MiB/to:-1/msg:100B", MIB, MIB - 1);
     run_bench_resize_canister_log(&mut group, "from:2MiB/to:-1/msg:100B", 2 * MIB, 2 * MIB - 1);
-    // run_bench_resize_canister_log(
-    //     &mut group,
-    //     "from:2MiB-1/to:2MiB/msg:100B",
-    //     2 * MIB - 1,
-    //     2 * MIB,
-    // );
+    // Resize up to confirm symmetric cost.
+    run_bench_resize_canister_log(
+        &mut group,
+        "from:2MiB-1/to:2MiB/msg:100B",
+        2 * MIB - 1,
+        2 * MIB,
+    );
 }
 
 criterion_group!(benchmarks, canister_logging_benchmark);
