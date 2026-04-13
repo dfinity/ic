@@ -6,7 +6,7 @@ use ic_management_canister_types_private::{
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::StateMachineBuilder;
 use ic_test_utilities_execution_environment::{wat_canister, wat_fn};
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 
 const KIB: u64 = 1024;
 const MIB: u64 = 1024 * KIB;
