@@ -10,10 +10,10 @@ on:
   workflow_dispatch:
     inputs:
       tag-name:
-        description: 'The name of the tag to publish'
+        description: 'Tag Name'
         required: true
       dry-run:
-        description: "If true, run the workflow in dry-run mode (don't actually publish the release)"
+        description: "Run in dry-run mode (don't actually publish the release)"
         required: true
         default: 'true'
         type: boolean
