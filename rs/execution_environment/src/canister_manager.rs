@@ -2248,6 +2248,7 @@ impl CanisterManager {
         resource_saturation: &ResourceSaturation,
         time: Time,
         metrics: &ExecutionEnvironmentMetrics,
+        consumed_cycles: &mut ConsumedCyclesForInstructions,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         let canister_id = canister.canister_id();
         // Check sender is a controller.
@@ -2358,6 +2359,21 @@ impl CanisterManager {
                 cost_schedule,
                 wasm_execution_mode,
                 &self.log,
+            );
+            // Record the net cycle charge (prepay minus refund) so it survives
+            // the canister state rollback if a subsequent step fails.
+            let cycles_to_refund = self
+                .cycles_account_manager
+                .variable_execution_cost(
+                    instructions_to_refund,
+                    subnet_size,
+                    cost_schedule,
+                    wasm_execution_mode,
+                )
+                .min(prepaid_execution_cycles);
+            consumed_cycles.add(
+                prepaid_execution_cycles - cycles_to_refund,
+                instructions_for_execution,
             );
 
             let mut new_execution_state = match new_execution_state {

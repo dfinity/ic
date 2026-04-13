@@ -327,6 +327,10 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
         self.instructions_used += instructions;
     }
 
+    pub(crate) fn cycles(&self) -> Cycles {
+        self.consumed_cycles.real()
+    }
+
     pub(crate) fn apply(
         self,
         canister: &mut CanisterState,
@@ -617,11 +621,19 @@ impl ExecutionEnvironment {
         );
         match state.canister_state_make_mut(&canister_id) {
             Some(canister) => {
+                let balance_before = canister.system_state.balance();
                 let saved_canister = canister.clone();
                 let saved_round_limits = round_limits.clone();
                 match op(canister, round_limits, &mut consumed_cycles, context) {
                     Ok(response) => self.process_canister_manager_result(Ok(response), state, msg),
                     Err(err) => {
+                        debug_assert_eq!(
+                            balance_before - canister.system_state.balance(),
+                            consumed_cycles.cycles(),
+                            "Cycle balance changed by {:?} but only {:?} was recorded in ConsumedCycles",
+                            balance_before - canister.system_state.balance(),
+                            consumed_cycles.cycles(),
+                        );
                         *canister = saved_canister;
                         *round_limits = saved_round_limits;
                         consumed_cycles.apply(
@@ -2868,7 +2880,7 @@ impl ExecutionEnvironment {
         let expected_compiled_wasms = Arc::clone(&state.metadata.expected_compiled_wasms);
         self.execute_mgmt_operation_on_canister(
             canister_id,
-            |canister, round_limits, _consumed_cycles, ()| {
+            |canister, round_limits, consumed_cycles, ()| {
                 self.canister_manager.load_canister_snapshot(
                     registry_settings.subnet_size,
                     cost_schedule,
@@ -2883,6 +2895,7 @@ impl ExecutionEnvironment {
                     &resource_saturation,
                     time,
                     &self.metrics,
+                    consumed_cycles,
                 )
             },
             (),
