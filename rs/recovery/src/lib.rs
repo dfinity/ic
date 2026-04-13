@@ -1148,37 +1148,46 @@ impl Recovery {
 /// implementations use ssh to execute commands on the remote node.
 impl<'a> MaybeRemote<'a> {
     fn path_exists(&self, path: &Path) -> RecoveryResult<bool> {
-        let Some(ssh_helper) = self.ssh_helper else {
-            // Local implementation
-            return path_exists(path);
-        };
-
-        // Remote implementation
-        let command = format!("test -e {} && echo y || echo n", path.display());
-        Ok(ssh_helper
-            .ssh(command.clone())?
-            .ok_or_else(|| {
-                RecoveryError::cmd_error(
-                    &ssh_helper.get_command(command),
-                    None,
-                    "Could not check if path exists remotely".to_string(),
-                )
-            })?
-            .trim()
-            == "y")
+        match self.ssh_helper {
+            None => {
+                // Local implementation
+                path_exists(path)
+            }
+            Some(ssh_helper) => {
+                // Remote implementation
+                let command = format!("test -e {} && echo y || echo n", path.display());
+                Ok(ssh_helper
+                    .ssh(command.clone())?
+                    .ok_or_else(|| {
+                        RecoveryError::cmd_error(
+                            &ssh_helper.get_command(command),
+                            None,
+                            "Could not check if path exists remotely".to_string(),
+                        )
+                    })?
+                    .trim()
+                    == "y")
+            }
+        }
     }
 
     fn get_maybe_latest_checkpoint_name_and_height(
         &self,
         checkpoints_path: &Path,
     ) -> RecoveryResult<Option<(String, Height)>> {
-        let Some(ssh_helper) = self.ssh_helper else {
-            // Local implementation
-            return Recovery::get_maybe_latest_checkpoint_name_and_height(checkpoints_path);
-        };
-
-        // Remote implementation
-        Recovery::get_maybe_latest_checkpoint_name_and_height_remotely(ssh_helper, checkpoints_path)
+        match self.ssh_helper {
+            None => {
+                // Local implementation
+                Recovery::get_maybe_latest_checkpoint_name_and_height(checkpoints_path)
+            }
+            Some(ssh_helper) => {
+                // Remote implementation
+                Recovery::get_maybe_latest_checkpoint_name_and_height_remotely(
+                    ssh_helper,
+                    checkpoints_path,
+                )
+            }
+        }
     }
 }
 
