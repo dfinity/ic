@@ -1014,10 +1014,11 @@ fn test_canister_wasm() -> Vec<u8> {
 
 #[test]
 fn test_schnorr() {
-    // We create a PocketIC instance consisting of the NNS, II, and one application subnet.
+    // We create a PocketIC instance consisting of the NNS, II, test threshold keys, and one application subnet.
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
-        .with_ii_subnet() // this subnet has threshold keys
+        .with_ii_subnet() // this subnet has `key_1`
+        .with_test_threshold_keys_subnet() // this subnet has `test_key_1` and `dfx_test_key`
         .with_application_subnet()
         .build();
 
@@ -1132,10 +1133,11 @@ fn test_schnorr() {
 fn test_ecdsa() {
     use k256::ecdsa::signature::hazmat::PrehashVerifier;
 
-    // We create a PocketIC instance consisting of the NNS, II, and one application subnet.
+    // We create a PocketIC instance consisting of the NNS, II, test threshold keys, and one application subnet.
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
-        .with_ii_subnet() // this subnet has threshold keys
+        .with_ii_subnet() // this subnet has `key_1`
+        .with_test_threshold_keys_subnet() // this subnet has `test_key_1` and `dfx_test_key`
         .with_application_subnet()
         .build();
 
@@ -1259,9 +1261,10 @@ fn test_ecdsa_disabled() {
 fn test_vetkd() {
     use ic_vetkeys::{DerivedPublicKey, EncryptedVetKey, TransportSecretKey};
 
-    // We create a PocketIC instance consisting of the II and one application subnet.
+    // We create a PocketIC instance consisting of the II, test threshold keys, and one application subnet.
     let pic = PocketIcBuilder::new()
-        .with_ii_subnet() // this subnet has threshold keys
+        .with_ii_subnet() // this subnet has `key_1`
+        .with_test_threshold_keys_subnet() // this subnet has `test_key_1` and `dfx_test_key`
         .with_application_subnet()
         .build();
 
