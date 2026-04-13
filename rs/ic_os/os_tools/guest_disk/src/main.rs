@@ -14,6 +14,8 @@ use std::ffi::{CStr, c_char, c_int, c_void};
 use std::path::{Path, PathBuf};
 use tracing::warn;
 
+const METRICS_FILE: &str = "/run/node_exporter/collector_textfile/guest_disk_encryption.prom";
+
 #[derive(clap::Parser)]
 pub enum Args {
     /// Opens an encrypted partition and activates it under /dev/mapper/.
@@ -55,6 +57,7 @@ fn main() -> Result<()> {
         },
         Path::new(DEFAULT_PREVIOUS_SEV_KEY_PATH),
         Path::new(DEFAULT_GENERATED_KEY_PATH),
+        Path::new(METRICS_FILE),
     )
 }
 
@@ -67,6 +70,7 @@ fn run(
     sev_firmware_factory: impl Fn() -> Result<Box<dyn SevGuestFirmware>>,
     previous_key_path: &Path,
     generated_key_path: &Path,
+    metrics_file: &Path,
 ) -> Result<()> {
     libcryptsetup_rs::set_log_callback::<()>(Some(cryptsetup_log), None);
 
@@ -75,10 +79,12 @@ fn run(
             sev_firmware: sev_firmware_factory().context("Failed to open SEV firmware")?,
             guest_vm_type: guestos_config.guest_vm_type,
             previous_key_path,
+            metrics_file,
         })
     } else {
         Box::new(GeneratedKeyDiskEncryption {
             key_path: generated_key_path,
+            metrics_file,
         })
     };
 

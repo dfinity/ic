@@ -6,7 +6,10 @@ use guest_disk::crypt::{
 };
 use guest_disk::sev::can_open_store;
 use ic_device::device_mapping::{Bytes, TempDevice};
-use libcryptsetup_rs::consts::flags::CryptActivate;
+use itertools::Either::Right;
+use libcryptsetup_rs::consts::flags::{CryptActivate, CryptVolumeKey};
+use libcryptsetup_rs::consts::vals::{CryptKdf, EncryptionFormat};
+use libcryptsetup_rs::{CryptInit, CryptParamsLuks2Ref, CryptSettingsHandle};
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use sev_guest_testing::MockSevGuestFirmwareBuilder;
 use std::fs;
@@ -28,6 +31,7 @@ struct TestFixture<'a> {
     guestos_config: GuestOSConfig,
     _temp_dir: TempDir,
     _guard: parking_lot::MutexGuard<'a, ()>,
+    metrics_file: PathBuf,
 }
 
 impl<'a> TestFixture<'a> {
@@ -42,6 +46,7 @@ impl<'a> TestFixture<'a> {
         let guestos_config = Self::create_guestos_config(enable_trusted_execution_environment);
         let sev_firmware_builder =
             MockSevGuestFirmwareBuilder::new().with_derived_key(Some([0; 32]));
+        let metrics_file = temp_dir.path().join("test_metrics.prom");
 
         Self {
             device,
@@ -51,6 +56,7 @@ impl<'a> TestFixture<'a> {
             guestos_config,
             _temp_dir: temp_dir,
             _guard: guard,
+            metrics_file,
         }
     }
 
@@ -83,6 +89,7 @@ impl<'a> TestFixture<'a> {
             || Ok(Box::new(self.sev_firmware_builder.clone())),
             &self.previous_key_path,
             &self.generated_key_path,
+            &self.metrics_file,
         )
     }
 
@@ -257,6 +264,8 @@ fn test_sev_unlock_store_partition_with_previous_key() {
         "store-crypt",
         PREVIOUS_KEY,
         CryptActivate::empty(),
+        false,
+        None,
     )
     .expect("Failed to activate device");
     fs::write("/dev/mapper/store-crypt", "hello world").unwrap();
@@ -478,4 +487,130 @@ fn test_cannot_open_with_generated_key_if_sev_is_enabled() {
             .open(partition)
             .expect_err("opening with generated key should fail when SEV is enabled");
     }
+}
+
+#[test]
+fn test_verification_cipher_tampered() {
+    for enable_trusted_execution_environment in [true, false] {
+        let mut fixture = TestFixture::new(enable_trusted_execution_environment);
+        let device_path = fixture.device.path().unwrap();
+        let sev_key = derive_key_from_sev_measurement(
+            &mut fixture.sev_firmware_builder.clone().build(),
+            Key::DiskEncryptionKey {
+                device_path: &device_path,
+            },
+        )
+        .unwrap();
+
+        // Manually format the device with cipher_null-ecb
+        let mut crypt_device = CryptInit::init(&device_path).unwrap();
+
+        let mut pbkdf_params =
+            CryptSettingsHandle::get_pbkdf_type_params(&CryptKdf::Pbkdf2).unwrap();
+        pbkdf_params.iterations = 1000;
+        crypt_device
+            .settings_handle()
+            .set_pbkdf_type(&pbkdf_params)
+            .unwrap();
+
+        crypt_device
+            .context_handle()
+            .format::<CryptParamsLuks2Ref>(
+                EncryptionFormat::Luks2,
+                ("cipher_null", "ecb"),
+                None,
+                Right(512 / 8),
+                None,
+            )
+            .unwrap();
+
+        crypt_device
+            .keyslot_handle()
+            .add_by_key(None, None, sev_key.as_bytes(), CryptVolumeKey::empty())
+            .unwrap();
+
+        // Drop the handle before opening it again via `check_encryption_key`
+        drop(crypt_device);
+
+        if enable_trusted_execution_environment {
+            let open_err = fixture
+                .open(Partition::Var)
+                .expect_err("Open should fail because cipher != aes");
+            assert!(
+                format!("{open_err:#}").contains("Unexpected cipher"),
+                "Unexpected error message: {open_err:#}"
+            );
+        } else {
+            fixture
+                .open(Partition::Var)
+                .expect("Failed to open var partition");
+        }
+    }
+}
+
+#[test]
+fn test_metrics_export() {
+    let mut fixture = TestFixture::new(false);
+
+    // Format the device
+    fixture
+        .format(Partition::Var)
+        .expect("Failed to format device");
+
+    // Open the device which will export metrics
+    fixture.open(Partition::Var).expect("Failed to open device");
+
+    // Verify the metrics file was created
+    assert!(
+        fixture.metrics_file.exists(),
+        "Metrics file was not created"
+    );
+
+    // Read and verify the metrics content
+    let metrics_content =
+        fs::read_to_string(&fixture.metrics_file).expect("Failed to read metrics file");
+
+    // Check that the metrics file contains expected content
+    assert!(
+        metrics_content.contains("guest_disk_encryption_info"),
+        "Missing encryption info metric: {metrics_content}"
+    );
+    assert!(
+        metrics_content.contains("format=\"Luks2\""),
+        "Missing or incorrect format label: {metrics_content}"
+    );
+    assert!(
+        metrics_content.contains("cipher=\"aes-xts-plain64\""),
+        "Missing or incorrect cipher label: {metrics_content}"
+    );
+    assert!(
+        metrics_content.contains("keyslot_pbkdf_type=\"Pbkdf2\""),
+        "Missing or incorrect keyslot_pbkdf_type label: {metrics_content}"
+    );
+    // TODO: Fix keyslot_pbkdf_iterations to 1000 and replace with
+    // keyslot_pbkdf_iterations=\"1000\"
+    assert!(
+        metrics_content.contains("keyslot_pbkdf_iterations="),
+        "Missing or incorrect keyslot_pbkdf_iterations label: {metrics_content}"
+    );
+    assert!(
+        metrics_content.contains("volume_key_size=\"64\""),
+        "Missing or incorrect volume_key_size label: {metrics_content}"
+    );
+    assert!(
+        metrics_content.contains("num_keyslots=\"1\""),
+        "Missing or incorrect num_keyslots label: {metrics_content}"
+    );
+    assert!(
+        metrics_content.contains("keyslot_cipher=\"aes-xts-plain64\""),
+        "Missing or incorrect keyslot_cipher label: {metrics_content}"
+    );
+    assert!(
+        metrics_content.contains("keyslot_key_size=\"64\""),
+        "Missing or incorrect keyslot_key_size label: {metrics_content}"
+    );
+    assert!(
+        metrics_content.contains("passes_verification=\"true\""),
+        "Missing or incorrect passes_verification label: {metrics_content}"
+    );
 }

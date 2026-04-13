@@ -1,4 +1,5 @@
-use anyhow::{Context, Result, bail};
+use crate::metrics::export_luks_parameters;
+use anyhow::{Context, Result, bail, ensure};
 use itertools::Either::Right;
 use libcryptsetup_rs::consts::flags::{CryptActivate, CryptVolumeKey};
 use libcryptsetup_rs::consts::vals::{CryptKdf, EncryptionFormat, KeyslotInfo};
@@ -8,6 +9,14 @@ use tracing::{info, warn};
 
 /// Number of bytes to use for the LUKS2 volume key
 const VOLUME_KEY_BYTES: usize = 512 / 8; // 512 bits
+const KEYSLOT_KEY_BYTES: usize = 512 / 8; // 512 bits
+const ENCRYPTION_FORMAT: EncryptionFormat = EncryptionFormat::Luks2;
+const CIPHER: &str = "aes";
+const CIPHER_MODE: &str = "xts-plain64";
+const PBKDF_TYPE: CryptKdf = CryptKdf::Pbkdf2;
+const PBKDF_ITERATIONS: u32 = 1000;
+/// Number of key slots supported by LUKS2
+const LUKS2_N_KEY_SLOTS: u32 = 32;
 
 /// Initializes a cryptographic device at the specified path with LUKS2 format and activates it
 /// using the provided name and encryption key.
@@ -16,6 +25,8 @@ pub fn activate_crypt_device(
     name: &str,
     encryption_key: &[u8],
     flags: CryptActivate,
+    verify_luks_params: bool,
+    metrics_file: Option<&Path>,
 ) -> Result<CryptDevice> {
     if !device_path.exists() {
         bail!("Device does not exist: {}", device_path.display());
@@ -26,13 +37,25 @@ pub fn activate_crypt_device(
 
     crypt_device
         .context_handle()
-        .load::<CryptParamsLuks2Ref>(Some(EncryptionFormat::Luks2), None)
+        .load::<CryptParamsLuks2Ref>(Some(ENCRYPTION_FORMAT), None)
         .context("Failed to load cryptographic context")?;
 
-    crypt_device
+    if verify_luks_params {
+        verify_luks_parameters(&mut crypt_device)?;
+    }
+
+    let active_keyslot = crypt_device
         .activate_handle()
         .activate_by_passphrase(Some(name), None, encryption_key, flags)
         .context("Failed to activate cryptographic device")?;
+
+    if let Some(metrics_file) = metrics_file {
+        let log_result = get_luks_parameters(&mut crypt_device, active_keyslot)
+            .and_then(|p| export_luks_parameters(metrics_file, device_path, &p));
+        if let Err(e) = log_result {
+            warn!("Failed to export LUKS parameters: {e:#}");
+        }
+    }
 
     Ok(crypt_device)
 }
@@ -60,12 +83,12 @@ pub fn format_crypt_device(device_path: &Path, encryption_key: &[u8]) -> Result<
         device_path.display()
     );
     // TODO: We should revisit the use of Pbkdf2 and consider using the LUKS2 default KDF, Argon2i
-    let mut pbkdf_params = CryptSettingsHandle::get_pbkdf_type_params(&CryptKdf::Pbkdf2)
+    let mut pbkdf_params = CryptSettingsHandle::get_pbkdf_type_params(&PBKDF_TYPE)
         .context("Failed to get PBKDF2 params")?;
     // Set minimal iteration count -- we already use a random key with
     // maximal entropy, pbkdf doesn't gain anything (besides slowing
     // down boot by a couple seconds which needlessly annoys for testing).
-    pbkdf_params.iterations = 1000;
+    pbkdf_params.iterations = PBKDF_ITERATIONS;
     crypt_device
         .settings_handle()
         .set_pbkdf_type(&pbkdf_params)
@@ -73,8 +96,8 @@ pub fn format_crypt_device(device_path: &Path, encryption_key: &[u8]) -> Result<
     crypt_device
         .context_handle()
         .format::<CryptParamsLuks2Ref>(
-            EncryptionFormat::Luks2,
-            ("aes", "xts-plain64"),
+            ENCRYPTION_FORMAT,
+            (CIPHER, CIPHER_MODE),
             None,
             Right(VOLUME_KEY_BYTES),
             None,
@@ -89,13 +112,17 @@ pub fn format_crypt_device(device_path: &Path, encryption_key: &[u8]) -> Result<
 }
 
 /// Opens a LUKS2 device at the specified path and loads its context.
-fn open_luks2_device(device_path: &Path) -> Result<CryptDevice> {
+fn open_luks2_device(device_path: &Path, verify_luks_params: bool) -> Result<CryptDevice> {
     let mut crypt_device =
         CryptInit::init(device_path).context("Failed to initialize cryptographic device")?;
 
     crypt_device
         .context_handle()
-        .load::<CryptParamsLuks2Ref>(Some(EncryptionFormat::Luks2), None)?;
+        .load::<CryptParamsLuks2Ref>(Some(ENCRYPTION_FORMAT), None)?;
+
+    if verify_luks_params {
+        verify_luks_parameters(&mut crypt_device)?;
+    }
 
     Ok(crypt_device)
 }
@@ -103,12 +130,142 @@ fn open_luks2_device(device_path: &Path) -> Result<CryptDevice> {
 /// Checks if the provided encryption key can activate the cryptographic device at the given path.
 /// Does not activate the device.
 pub fn check_encryption_key(device_path: &Path, encryption_key: &[u8]) -> Result<()> {
-    let mut crypt_device = open_luks2_device(device_path).context("Failed to open LUKS2 device")?;
+    // This method simply checks if the key works, we don't care about LUKS parameters
+    let mut crypt_device = open_luks2_device(device_path, /*verify_luks_params=*/ false)
+        .context("Failed to open LUKS2 device")?;
 
     crypt_device
         .activate_handle()
         .activate_by_passphrase(None, None, encryption_key, CryptActivate::empty())
         .context("Failed to activate device")?;
+
+    Ok(())
+}
+
+#[derive(Debug)]
+pub struct LuksParameters {
+    pub format: String,
+    pub cipher: String,
+    pub cipher_mode: String,
+    pub volume_key_size: usize,
+    pub keyslot_pbkdf_type: String,
+    pub keyslot_pbkdf_iterations: u32,
+    pub keyslot_cipher: String,
+    pub keyslot_key_size: usize,
+    pub num_keyslots: usize,
+    pub passes_verification: bool,
+}
+
+fn get_luks_parameters(
+    crypt_device: &mut CryptDevice,
+    active_keyslot: u32,
+) -> Result<LuksParameters> {
+    let format = crypt_device
+        .format_handle()
+        .get_type()
+        .context("Failed to get encryption format")?;
+
+    let cipher = crypt_device
+        .status_handle()
+        .get_cipher()
+        .context("Failed to get cipher")?;
+
+    let cipher_mode = crypt_device
+        .status_handle()
+        .get_cipher_mode()
+        .context("Failed to get cipher mode")?;
+
+    let volume_key_size = crypt_device.status_handle().get_volume_key_size();
+
+    let num_keyslots = (0..LUKS2_N_KEY_SLOTS)
+        .filter(|&key_slot| {
+            matches!(
+                crypt_device.keyslot_handle().status(key_slot),
+                Ok(KeyslotInfo::Active | KeyslotInfo::ActiveLast)
+            )
+        })
+        .count();
+
+    let mut keyslot_handle = crypt_device.keyslot_handle();
+    let keyslot_pbkdf = keyslot_handle
+        .get_pbkdf(active_keyslot)
+        .context("Failed to get PBKDF type for active keyslot")?;
+
+    let mut keyslot_cipher = String::new();
+    let mut keyslot_key_size = 0;
+    if let Ok(keyslot_encryption) = keyslot_handle.get_encryption(Some(active_keyslot)) {
+        keyslot_cipher = keyslot_encryption.0.to_string();
+        keyslot_key_size = keyslot_encryption.1;
+    }
+
+    Ok(LuksParameters {
+        format: format!("{:?}", format),
+        cipher: cipher.to_string(),
+        cipher_mode: cipher_mode.to_string(),
+        volume_key_size: volume_key_size as usize,
+        keyslot_pbkdf_type: format!("{:?}", keyslot_pbkdf.type_),
+        keyslot_pbkdf_iterations: keyslot_pbkdf.iterations,
+        keyslot_cipher,
+        keyslot_key_size,
+        num_keyslots,
+        passes_verification: verify_luks_parameters(crypt_device).is_ok(),
+    })
+}
+
+/// Verifies that the LUKS parameters match the expected values set in format_crypt_device
+fn verify_luks_parameters(crypt_device: &mut CryptDevice) -> Result<()> {
+    let format = crypt_device
+        .format_handle()
+        .get_type()
+        .context("Failed to get encryption format")?;
+    ensure!(format == ENCRYPTION_FORMAT, "Unexpected encryption format");
+
+    let cipher = crypt_device
+        .status_handle()
+        .get_cipher()
+        .context("Failed to get cipher")?;
+    ensure!(cipher == CIPHER, "Unexpected cipher: {}", cipher);
+
+    let cipher_mode = crypt_device
+        .status_handle()
+        .get_cipher_mode()
+        .context("Failed to get cipher mode")?;
+    ensure!(
+        cipher_mode == CIPHER_MODE,
+        "Unexpected cipher mode: {}",
+        cipher_mode
+    );
+
+    let volume_key_size = crypt_device.status_handle().get_volume_key_size();
+    ensure!(
+        volume_key_size == VOLUME_KEY_BYTES as std::os::raw::c_int,
+        "Unexpected volume key size: {}",
+        volume_key_size
+    );
+
+    for key_slot in 0..LUKS2_N_KEY_SLOTS {
+        if matches!(
+            crypt_device.keyslot_handle().status(key_slot),
+            Ok(KeyslotInfo::Active | KeyslotInfo::ActiveLast)
+        ) {
+            let mut keyslot_handle = crypt_device.keyslot_handle();
+
+            let encryption = keyslot_handle
+                .get_encryption(Some(key_slot))
+                .context("Failed to get keyslot encryption")?;
+
+            ensure!(
+                encryption.0 == format!("{CIPHER}-{CIPHER_MODE}"),
+                "Unexpected keyslot encryption: {}",
+                encryption.0
+            );
+            ensure!(
+                encryption.1 == KEYSLOT_KEY_BYTES,
+                "Unexpected keyslot key size: {}",
+                encryption.1
+            );
+        }
+    }
 
     Ok(())
 }
@@ -119,9 +276,6 @@ pub fn destroy_key_slots_except(
     crypt_device: &mut CryptDevice,
     encryption_keys_to_keep: &[&[u8]],
 ) -> Result<()> {
-    // LUKS2 supports up to 32 key slots.
-    const LUKS2_N_KEY_SLOTS: u32 = 32;
-
     let key_slots_to_keep = encryption_keys_to_keep
         .iter()
         .map(|keep| {
@@ -140,7 +294,7 @@ pub fn destroy_key_slots_except(
         if !key_slots_to_keep.contains(&key_slot)
             && matches!(
                 crypt_device.keyslot_handle().status(key_slot),
-                Ok(KeyslotInfo::Active)
+                Ok(KeyslotInfo::Active | KeyslotInfo::ActiveLast)
             )
         {
             match crypt_device.keyslot_handle().destroy(key_slot) {
