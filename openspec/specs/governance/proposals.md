@@ -101,6 +101,14 @@ These proposals create a new SNS (Service Nervous System) and optionally involve
 - **THEN** its topic is SnsAndCommunityFund
 - **AND** it triggers deployment of a new SNS via the SNS-WASM canister
 
+### Requirement: CreateCanisterAndInstallCode Proposals
+These proposals create a new canister and install code in a single atomic operation. CreateCanisterAndInstallCode proposals are always enabled (no feature flag gating).
+
+#### Scenario: CreateCanisterAndInstallCode proposal
+- **WHEN** a CreateCanisterAndInstallCode proposal is submitted and adopted
+- **THEN** a new canister is created and code is installed in one operation
+- **AND** the result is captured as `CreateCanisterAndInstallCodeOk` in the proposal's `success_value`
+
 ### Requirement: InstallCode Proposals
 These proposals install code (upgrade) on protocol canisters.
 
