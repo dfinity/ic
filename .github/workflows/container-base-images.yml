@@ -55,7 +55,7 @@ jobs:
             BUILD_ARGS: "PACKAGE_FILES=packages.common packages.dev"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Get Current Date
         id: date
@@ -90,7 +90,7 @@ jobs:
             > artifacts/${{ matrix.REFFILE }}
 
       - name: Upload SHA256 Digest Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: sha256-${{ matrix.IMAGE }}
           path: artifacts
@@ -105,14 +105,14 @@ jobs:
     if: ${{ github.ref_name == 'master' }}
     steps:
       - name: Create GitHub App Token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
         id: app-token
         with:
           app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
           private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ steps.app-token.outputs.token }}
 
@@ -121,7 +121,7 @@ jobs:
         run: echo "DATE=$(date '+%Y-%m-%d-%H%M')" >> $GITHUB_ENV
 
       - name: Download SHA256 Digest Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: artifacts
           pattern: sha256-*
@@ -136,7 +136,7 @@ jobs:
           rm -rf artifacts
 
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@6d6857d36972b65feb161a90e484f2984215f83e # v6.0.5
+        uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8.1.0
         with:
           token: ${{ steps.app-token.outputs.token }}
           base: master

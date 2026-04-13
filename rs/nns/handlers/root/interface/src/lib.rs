@@ -1,5 +1,5 @@
 use candid::CandidType;
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_clients::update_settings::CanisterSettings;
 use serde::Deserialize;
 
@@ -93,4 +93,55 @@ pub enum UpdateCanisterSettingsResponse {
 pub struct UpdateCanisterSettingsError {
     pub code: Option<i32>,
     pub description: String,
+}
+
+/// Request to create a new canister on a specified subnet and install code into
+/// it. The canister is created by NNS Root, which becomes a controller.
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
+pub struct CreateCanisterAndInstallCodeRequest {
+    /// The subnet where the canister will be created.
+    pub host_subnet_id: PrincipalId,
+
+    /// Settings for the new canister. If controllers is not specified, Root
+    /// will be the sole controller.
+    pub canister_settings: Option<CanisterSettings>,
+
+    /// The WASM module to install.
+    pub wasm_module: Vec<u8>,
+
+    /// The argument to pass to the canister's install handler.
+    pub install_arg: Vec<u8>,
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
+pub enum CreateCanisterAndInstallCodeResponse {
+    Ok(CreateCanisterAndInstallCodeOk),
+    Err(CreateCanisterAndInstallCodeError),
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
+pub struct CreateCanisterAndInstallCodeOk {
+    /// The ID of the newly created canister.
+    pub canister_id: PrincipalId,
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
+pub struct CreateCanisterAndInstallCodeError {
+    pub code: Option<i32>,
+    pub description: String,
+}
+
+impl From<Result<CanisterId, CreateCanisterAndInstallCodeError>>
+    for CreateCanisterAndInstallCodeResponse
+{
+    fn from(result: Result<CanisterId, CreateCanisterAndInstallCodeError>) -> Self {
+        match result {
+            Ok(canister_id) => {
+                CreateCanisterAndInstallCodeResponse::Ok(CreateCanisterAndInstallCodeOk {
+                    canister_id: canister_id.get(),
+                })
+            }
+            Err(err) => CreateCanisterAndInstallCodeResponse::Err(err),
+        }
+    }
 }

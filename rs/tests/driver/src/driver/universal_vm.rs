@@ -18,6 +18,7 @@ use anyhow::{Result, bail};
 use chrono::Duration;
 use chrono::Utc;
 use slog::info;
+use ssh2::Session;
 use std::fs::{self, File};
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr};
@@ -367,6 +368,16 @@ echo "$ipv4"
 "#;
 
 impl RetrieveIpv4Addr for DeployedUniversalVm {
+    fn block_on_ipv4_from_session(&self, session: &Session) -> Result<Ipv4Addr> {
+        use anyhow::Context;
+        let ipv4_string =
+            self.block_on_bash_script_from_session(session, IPV4_RETRIEVE_SH_SCRIPT)?;
+        ipv4_string
+            .trim()
+            .parse::<Ipv4Addr>()
+            .context("ipv4 retrieval")
+    }
+
     fn block_on_ipv4(&self) -> Result<Ipv4Addr> {
         use anyhow::Context;
         let ipv4_string = self.block_on_bash_script(IPV4_RETRIEVE_SH_SCRIPT)?;

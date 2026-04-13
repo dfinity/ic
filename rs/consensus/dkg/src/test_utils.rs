@@ -140,7 +140,7 @@ pub(super) fn extract_dealings_from_highest_block(pool: &TestConsensusPool) -> D
     }
 }
 
-/// Extract the remote dkg transcripts from the current highest validated block
+/// Extract the remote dkg IDs from the current highest validated block
 pub(super) fn extract_remote_dkg_ids_from_highest_block(
     pool: &TestConsensusPool,
     target_id: NiDkgTargetId,

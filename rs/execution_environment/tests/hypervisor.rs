@@ -35,9 +35,9 @@ use ic_test_utilities_execution_environment::{
 use ic_test_utilities_metrics::{
     HistogramStats, fetch_histogram_vec_stats, fetch_int_counter, metric_vec,
 };
-use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
+use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_types::messages::{
-    CanisterMessage, CanisterTask, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE,
+    CanisterMessage, CanisterTask, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE, SenderInfo,
 };
 use ic_types::time::CoarseTime;
 use ic_types::{
@@ -299,7 +299,7 @@ fn ic0_grow_handles_overflow() {
 #[test]
 fn ic0_grow_can_reach_max_number_of_pages() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(5_880_000_000_000)
+        .with_initial_canister_cycles(7_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -396,7 +396,7 @@ fn ic0_stable64_grow_beyond_max_pages_returns_neg_one() {
 #[test]
 fn ic0_stable_grow_by_0_traps_if_memory_exceeds_4gb() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(5_880_000_000_000)
+        .with_initial_canister_cycles(7_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -432,7 +432,7 @@ fn ic0_stable_grow_by_0_traps_if_memory_exceeds_4gb() {
 #[test]
 fn ic0_stable_size_traps_if_memory_exceeds_4gb() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(5_880_000_000_000)
+        .with_initial_canister_cycles(7_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -461,7 +461,7 @@ fn ic0_stable_size_traps_if_memory_exceeds_4gb() {
 #[test]
 fn ic0_stable_read_traps_if_memory_exceeds_4gb() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(5_880_000_000_000)
+        .with_initial_canister_cycles(7_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -493,7 +493,7 @@ fn ic0_stable_read_traps_if_memory_exceeds_4gb() {
 #[test]
 fn ic0_stable_write_traps_if_memory_exceeds_4gb() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(5_880_000_000_000)
+        .with_initial_canister_cycles(7_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -525,7 +525,7 @@ fn ic0_stable_write_traps_if_memory_exceeds_4gb() {
 #[test]
 fn ic0_stable_grow_traps_if_memory_exceeds_4gb() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(5_880_000_000_000)
+        .with_initial_canister_cycles(7_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -763,7 +763,7 @@ fn ic0_stable_write_traps_if_heap_is_out_of_bounds() {
 #[test]
 fn ic0_stable_write_works_at_max_size() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(5_880_000_000_000)
+        .with_initial_canister_cycles(7_500_000_000_000)
         .with_default_wasm_memory_limit(0)
         .build();
     let wat = r#"
@@ -810,7 +810,7 @@ fn ic0_stable_read_does_not_trap_if_in_bounds() {
 #[test]
 fn ic0_stable_read_works_at_max_size() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(5_880_000_000_000)
+        .with_initial_canister_cycles(7_500_000_000_000)
         .with_default_wasm_memory_limit(0)
         .build();
     let wat = r#"
@@ -995,7 +995,7 @@ fn ic0_stable64_read_does_not_trap_if_in_bounds() {
 #[test]
 fn ic0_stable64_read_and_write_work() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(5_880_000_000_000)
+        .with_initial_canister_cycles(7_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -2072,6 +2072,394 @@ fn ic0_msg_caller_size_and_copy_work_in_query_calls() {
         result,
         WasmResult::Reply(test.user_id().get().as_slice().to_vec())
     );
+}
+
+#[test]
+fn ic0_msg_caller_info_works_in_ingress() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let info = vec![1_u8, 2, 3, 4];
+    let signer = canister_test_id(42);
+    test.set_sender_info(SenderInfo {
+        info: info.clone(),
+        signer,
+    });
+
+    let result = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm().msg_caller_info_data().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(info));
+
+    let result = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm().msg_caller_info_signer().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(
+        result,
+        WasmResult::Reply(signer.get_ref().as_slice().to_vec())
+    );
+}
+
+#[test]
+fn ic0_msg_caller_info_empty_without_sender_info_in_ingress() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let result = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm().msg_caller_info_data().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
+
+    let result = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm().msg_caller_info_signer().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
+}
+
+#[test]
+fn ic0_msg_caller_info_empty_for_inter_canister_calls() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+
+    // Set sender_info so the caller (user → caller_id) sees it.
+    // The callee (caller_id → callee_id) must see empty values.
+    test.set_sender_info(SenderInfo {
+        info: vec![1_u8, 2, 3, 4],
+        signer: canister_test_id(42),
+    });
+
+    let result = test
+        .ingress(
+            caller_id,
+            "update",
+            wasm()
+                .inter_update(
+                    callee_id,
+                    call_args()
+                        .other_side(wasm().msg_caller_info_data().append_and_reply().build()),
+                )
+                .build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
+
+    let result = test
+        .ingress(
+            caller_id,
+            "update",
+            wasm()
+                .inter_update(
+                    callee_id,
+                    call_args()
+                        .other_side(wasm().msg_caller_info_signer().append_and_reply().build()),
+                )
+                .build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
+}
+
+#[test]
+fn ic0_msg_caller_info_works_in_reply_callback() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let info = vec![1_u8, 2, 3, 4];
+    let signer = canister_test_id(42);
+    test.set_sender_info(SenderInfo {
+        info: info.clone(),
+        signer,
+    });
+
+    // Make a dummy self-call; in the reply callback, read back sender_info.
+    let caller = wasm()
+        .inter_update(
+            canister_id,
+            call_args()
+                .other_side(wasm().reply())
+                .on_reply(wasm().msg_caller_info_data().append_and_reply()),
+        )
+        .build();
+    let result = test.ingress(canister_id, "update", caller).unwrap();
+    assert_eq!(result, WasmResult::Reply(info));
+
+    let caller = wasm()
+        .inter_update(
+            canister_id,
+            call_args()
+                .other_side(wasm().reply())
+                .on_reply(wasm().msg_caller_info_signer().append_and_reply()),
+        )
+        .build();
+    let result = test.ingress(canister_id, "update", caller).unwrap();
+    assert_eq!(
+        result,
+        WasmResult::Reply(signer.get_ref().as_slice().to_vec())
+    );
+}
+
+#[test]
+fn ic0_msg_caller_info_works_in_composite_query() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let info = vec![1_u8, 2, 3, 4];
+    let signer = canister_test_id(42);
+    test.set_sender_info(SenderInfo {
+        info: info.clone(),
+        signer,
+    });
+
+    let result = test
+        .non_replicated_query(
+            canister_id,
+            "composite_query",
+            wasm().msg_caller_info_data().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(info));
+
+    let result = test
+        .non_replicated_query(
+            canister_id,
+            "composite_query",
+            wasm().msg_caller_info_signer().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(
+        result,
+        WasmResult::Reply(signer.get_ref().as_slice().to_vec())
+    );
+}
+
+#[test]
+fn ic0_msg_caller_info_works_in_composite_query_reply_callback() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let info = vec![1_u8, 2, 3, 4];
+    let signer = canister_test_id(42);
+    test.set_sender_info(SenderInfo {
+        info: info.clone(),
+        signer,
+    });
+
+    // Make a dummy self-call via composite_query; check sender_info in the reply callback.
+    let caller = wasm()
+        .composite_query(
+            canister_id,
+            call_args()
+                .other_side(wasm().reply())
+                .on_reply(wasm().msg_caller_info_data().append_and_reply()),
+        )
+        .build();
+    let result = test
+        .non_replicated_query(canister_id, "composite_query", caller)
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(info));
+
+    let caller = wasm()
+        .composite_query(
+            canister_id,
+            call_args()
+                .other_side(wasm().reply())
+                .on_reply(wasm().msg_caller_info_signer().append_and_reply()),
+        )
+        .build();
+    let result = test
+        .non_replicated_query(canister_id, "composite_query", caller)
+        .unwrap();
+    assert_eq!(
+        result,
+        WasmResult::Reply(signer.get_ref().as_slice().to_vec())
+    );
+}
+
+#[test]
+fn ic0_msg_caller_info_empty_for_nested_composite_query_calls() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+
+    // Set sender_info so the top-level caller sees it; the callee (nested call)
+    // must see empty values because it is called by a canister, not a user.
+    test.set_sender_info(SenderInfo {
+        info: vec![1_u8, 2, 3, 4],
+        signer: canister_test_id(42),
+    });
+
+    let result = test
+        .non_replicated_query(
+            caller_id,
+            "composite_query",
+            wasm()
+                .composite_query(
+                    callee_id,
+                    call_args()
+                        .other_side(wasm().msg_caller_info_data().append_and_reply().build()),
+                )
+                .build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
+
+    let result = test
+        .non_replicated_query(
+            caller_id,
+            "composite_query",
+            wasm()
+                .composite_query(
+                    callee_id,
+                    call_args()
+                        .other_side(wasm().msg_caller_info_signer().append_and_reply().build()),
+                )
+                .build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
+}
+
+#[test]
+fn ic0_msg_caller_info_works_in_replicated_query() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let info = vec![1_u8, 2, 3, 4];
+    let signer = canister_test_id(42);
+    test.set_sender_info(SenderInfo {
+        info: info.clone(),
+        signer,
+    });
+
+    let result = test
+        .ingress(
+            canister_id,
+            "query",
+            wasm().msg_caller_info_data().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(info));
+
+    let result = test
+        .ingress(
+            canister_id,
+            "query",
+            wasm().msg_caller_info_signer().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(
+        result,
+        WasmResult::Reply(signer.get_ref().as_slice().to_vec())
+    );
+}
+
+#[test]
+fn ic0_msg_caller_info_works_in_non_replicated_query() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let info = vec![1_u8, 2, 3, 4];
+    let signer = canister_test_id(42);
+    test.set_sender_info(SenderInfo {
+        info: info.clone(),
+        signer,
+    });
+
+    let result = test
+        .non_replicated_query(
+            canister_id,
+            "query",
+            wasm().msg_caller_info_data().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(info));
+
+    let result = test
+        .non_replicated_query(
+            canister_id,
+            "query",
+            wasm().msg_caller_info_signer().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(
+        result,
+        WasmResult::Reply(signer.get_ref().as_slice().to_vec())
+    );
+}
+
+#[test]
+fn ic0_msg_caller_info_works_in_inspect_message() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let info = vec![1_u8, 2, 3, 4];
+    let signer = canister_test_id(42);
+    test.set_sender_info(SenderInfo {
+        info: info.clone(),
+        signer,
+    });
+
+    // Set inspect_message to trap iff msg_caller_info_data equals `info`.
+    // Since the correct value IS `info`, the handler will trap.
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .set_inspect_message(
+                wasm()
+                    .msg_caller_info_data()
+                    .trap_if_eq(&info, "info")
+                    .accept_message()
+                    .build(),
+            )
+            .reply()
+            .build(),
+    )
+    .unwrap();
+    let err = test
+        .should_accept_ingress_message(canister_id, "update", vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
+
+    // Set inspect_message to trap iff msg_caller_info_signer equals signer bytes.
+    // Since the correct value IS the signer, the handler will trap.
+    let signer_bytes = signer.get_ref().as_slice().to_vec();
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .set_inspect_message(
+                wasm()
+                    .msg_caller_info_signer()
+                    .trap_if_eq(&signer_bytes, "signer")
+                    .accept_message()
+                    .build(),
+            )
+            .reply()
+            .build(),
+    )
+    .unwrap();
+    let err = test
+        .should_accept_ingress_message(canister_id, "update", vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
 }
 
 #[test]
@@ -3175,7 +3563,10 @@ fn ic0_call_cycles_add_deducts_cycles() {
             .real();
     let transferred_cycles = Cycles::new(10_000_000_000);
     assert_eq!(
-        initial_cycles - messaging_fee - transferred_cycles - test.execution_cost(),
+        initial_cycles
+            - messaging_fee
+            - transferred_cycles
+            - test.canister_execution_cost(canister_id).real(),
         test.canister_state(canister_id).system_state.balance(),
     );
 }
@@ -3219,7 +3610,7 @@ fn ic0_call_cycles_add_has_no_effect_without_ic0_call_perform() {
     assert_eq!(0, test.xnet_messages().len());
     // Cycles deducted by `ic0.call_cycles_add` are refunded.
     assert_eq!(
-        initial_cycles - test.execution_cost(),
+        initial_cycles - test.canister_execution_cost(canister_id).real(),
         test.canister_state(canister_id).system_state.balance(),
     );
 }
@@ -5408,24 +5799,24 @@ fn cycles_cannot_be_accepted_after_response() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b)
-            - test.reply_fee(&b)
+            - test.canister_execution_cost(a_id).real()
+            - test.call_fee("update", &b).real()
+            - test.reply_fee(&b).real()
     );
 
     // Canister B doesn't get the transferred cycles.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(b_id)
-            - test.call_fee("update", &c)
-            - test.reply_fee(&c)
+            - test.canister_execution_cost(b_id).real()
+            - test.call_fee("update", &c).real()
+            - test.reply_fee(&c).real()
     );
 
     // Canister C pays only for execution.
     assert_eq!(
         test.canister_state(c_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(c_id)
+        initial_cycles - test.canister_execution_cost(c_id).real()
     );
 }
 
@@ -5488,9 +5879,9 @@ fn cycles_are_refunded_if_not_accepted() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b)
-            - test.reply_fee(&b)
+            - test.canister_execution_cost(a_id).real()
+            - test.call_fee("update", &b).real()
+            - test.reply_fee(&b).real()
             - a_to_b_accepted,
     );
 
@@ -5499,9 +5890,9 @@ fn cycles_are_refunded_if_not_accepted() {
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(b_id)
-            - test.call_fee("update", &c)
-            - test.reply_fee(&c)
+            - test.canister_execution_cost(b_id).real()
+            - test.call_fee("update", &c).real()
+            - test.reply_fee(&c).real()
             + a_to_b_accepted
             - b_to_c_accepted
     );
@@ -5509,7 +5900,7 @@ fn cycles_are_refunded_if_not_accepted() {
     // Canister C get all cycles it accepted.
     assert_eq!(
         test.canister_state(c_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(c_id) + b_to_c_accepted
+        initial_cycles - test.canister_execution_cost(c_id).real() + b_to_c_accepted
     );
 }
 
@@ -5561,15 +5952,15 @@ fn cycles_are_refunded_if_callee_traps() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b)
-            - test.reject_fee(reject_message)
+            - test.canister_execution_cost(a_id).real()
+            - test.call_fee("update", &b).real()
+            - test.reject_fee(reject_message).real()
     );
 
     // Canister B doesn't get any transferred cycles.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(b_id)
+        initial_cycles - test.canister_execution_cost(b_id).real()
     );
 }
 
@@ -5611,16 +6002,16 @@ fn cycles_are_refunded_even_if_response_callback_traps() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b)
-            - test.reply_fee(&b)
+            - test.canister_execution_cost(a_id).real()
+            - test.call_fee("update", &b).real()
+            - test.reply_fee(&b).real()
             - a_to_b_accepted,
     );
 
     // Canister B gets cycles it accepted.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(b_id) + a_to_b_accepted
+        initial_cycles - test.canister_execution_cost(b_id).real() + a_to_b_accepted
     );
 }
 
@@ -5660,15 +6051,15 @@ fn cycles_are_refunded_if_callee_is_a_query() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
-            - test.call_fee("query", &b)
-            - test.reply_fee(&b)
+            - test.canister_execution_cost(a_id).real()
+            - test.call_fee("query", &b).real()
+            - test.reply_fee(&b).real()
     );
 
     // Canister B doesn't get any transferred cycles.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(b_id)
+        initial_cycles - test.canister_execution_cost(b_id).real()
     );
 }
 
@@ -5713,15 +6104,15 @@ fn cycles_are_refunded_if_callee_is_uninstalled_before_execution() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b)
-            - test.reject_fee(reject_message)
+            - test.canister_execution_cost(a_id).real()
+            - test.call_fee("update", &b).real()
+            - test.reject_fee(reject_message).real()
     );
 
     // Canister B doesn't get any cycles.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(b_id)
+        initial_cycles - test.canister_execution_cost(b_id).real()
     );
 }
 
@@ -5805,9 +6196,9 @@ fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b)
-            - test.reject_fee(reject_message)
+            - test.canister_execution_cost(a_id).real()
+            - test.call_fee("update", &b).real()
+            - test.reject_fee(reject_message).real()
             - a_to_b_accepted,
     );
 
@@ -5816,9 +6207,9 @@ fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(b_id)
-            - test.call_fee("update", &c)
-            - test.reply_fee(&c)
+            - test.canister_execution_cost(b_id).real()
+            - test.call_fee("update", &c).real()
+            - test.reply_fee(&c).real()
             + a_to_b_accepted
             - b_to_c_accepted
     );
@@ -5826,7 +6217,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
     // Canister C gets all cycles it accepted.
     assert_eq!(
         test.canister_state(c_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(c_id) + b_to_c_accepted
+        initial_cycles - test.canister_execution_cost(c_id).real() + b_to_c_accepted
     );
 }
 
@@ -5912,9 +6303,9 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b)
-            - test.reject_fee(reject_message)
+            - test.canister_execution_cost(a_id).real()
+            - test.call_fee("update", &b).real()
+            - test.reject_fee(reject_message).real()
             - a_to_b_accepted,
     );
 
@@ -5923,9 +6314,9 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(b_id)
-            - test.call_fee("update", &c)
-            - test.reply_fee(&c)
+            - test.canister_execution_cost(b_id).real()
+            - test.call_fee("update", &c).real()
+            - test.reply_fee(&c).real()
             + a_to_b_accepted
             - b_to_c_accepted
     );
@@ -5933,7 +6324,7 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
     // Canister C gets all cycles it accepted.
     assert_eq!(
         test.canister_state(c_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(c_id) + b_to_c_accepted
+        initial_cycles - test.canister_execution_cost(c_id).real() + b_to_c_accepted
     );
 }
 
@@ -6058,9 +6449,9 @@ where
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
-            - test.call_fee("update", &b_0)
-            - test.reject_fee(reject_message.clone())
+            - test.canister_execution_cost(a_id).real()
+            - test.call_fee("update", &b_0).real()
+            - test.reject_fee(reject_message.clone()).real()
             - a_to_b_accepted
     );
 
@@ -6078,11 +6469,11 @@ where
         test.canister_state(b_id).system_state.balance(),
         initial_cycles
             - extra_cost
-            - test.canister_execution_cost(b_id)
-            - test.call_fee("update", &b_1)
-            - test.call_fee("update", &b_2)
-            - test.reject_fee(reject_message)
-            - test.reject_fee(reject_message_b_2_to_1)
+            - test.canister_execution_cost(b_id).real()
+            - test.call_fee("update", &b_1).real()
+            - test.call_fee("update", &b_2).real()
+            - test.reject_fee(reject_message).real()
+            - test.reject_fee(reject_message_b_2_to_1).real()
             + a_to_b_accepted
     );
 }
@@ -6484,7 +6875,7 @@ fn dts_abort_works_in_update_call() {
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         original_system_state.balance()
-            - (test.canister_execution_cost(canister_id) - original_execution_cost)
+            - (test.canister_execution_cost(canister_id) - original_execution_cost).real()
     );
     let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
@@ -6740,7 +7131,7 @@ fn cycles_correct_if_update_fails() {
     assert_gt!(execution_cost_after, execution_cost_before);
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(b_id)
+        initial_cycles - test.canister_execution_cost(b_id).real()
     );
 }
 
@@ -7464,7 +7855,7 @@ fn charge_for_dirty_pages() {
 #[test]
 fn stable_grow_checks_freezing_threshold_in_update() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_960_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let canister_id = test.universal_canister().unwrap();
     test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
@@ -7483,7 +7874,7 @@ fn stable_grow_checks_freezing_threshold_in_update() {
 #[test]
 fn stable64_grow_checks_freezing_threshold_in_update() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_960_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let canister_id = test.universal_canister().unwrap();
     test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
@@ -7502,7 +7893,7 @@ fn stable64_grow_checks_freezing_threshold_in_update() {
 #[test]
 fn memory_grow_checks_freezing_threshold_in_update() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_960_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -7527,7 +7918,7 @@ fn memory_grow_checks_freezing_threshold_in_update() {
 #[test]
 fn stable_grow_does_not_check_freezing_threshold_in_query() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_960_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let canister_id = test.universal_canister().unwrap();
     test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
@@ -7540,7 +7931,7 @@ fn stable_grow_does_not_check_freezing_threshold_in_query() {
 #[test]
 fn stable64_grow_does_not_check_freezing_threshold_in_query() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_960_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let canister_id = test.universal_canister().unwrap();
     test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
@@ -7553,7 +7944,7 @@ fn stable64_grow_does_not_check_freezing_threshold_in_query() {
 #[test]
 fn memory_grow_does_not_check_freezing_threshold_in_query() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_960_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -7572,7 +7963,7 @@ fn memory_grow_does_not_check_freezing_threshold_in_query() {
 #[test]
 fn stable_grow_does_not_check_freezing_threshold_in_reply() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_960_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let callee = test.universal_canister().unwrap();
     let canister_id = test.universal_canister().unwrap();
@@ -7597,7 +7988,7 @@ fn stable_grow_does_not_check_freezing_threshold_in_reply() {
 #[test]
 fn stable_grow_does_not_check_freezing_threshold_in_reject() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_960_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let callee = test.universal_canister().unwrap();
     let canister_id = test.universal_canister().unwrap();
@@ -7622,7 +8013,7 @@ fn stable_grow_does_not_check_freezing_threshold_in_reject() {
 #[test]
 fn stable_grow_checks_freezing_threshold_in_pre_upgrade() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_960_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -7655,7 +8046,7 @@ fn stable_grow_checks_freezing_threshold_in_pre_upgrade() {
 #[test]
 fn stable_grow_checks_freezing_threshold_in_post_upgrade() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_960_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -7688,7 +8079,7 @@ fn stable_grow_checks_freezing_threshold_in_post_upgrade() {
 #[test]
 fn stable_grow_checks_freezing_threshold_in_start() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_960_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let empty_wat = "(module)";
     let wat = r#"
@@ -7718,7 +8109,7 @@ fn stable_grow_checks_freezing_threshold_in_start() {
 #[test]
 fn stable_grow_checks_freezing_threshold_in_init() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_960_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -7746,7 +8137,7 @@ fn stable_grow_checks_freezing_threshold_in_init() {
 #[test]
 fn memory_grow_does_not_check_freezing_threshold_in_pre_upgrade() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_960_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -7767,7 +8158,7 @@ fn memory_grow_does_not_check_freezing_threshold_in_pre_upgrade() {
 #[test]
 fn memory_grow_checks_freezing_threshold_in_post_upgrade() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_960_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -7799,7 +8190,7 @@ fn memory_grow_checks_freezing_threshold_in_post_upgrade() {
 #[test]
 fn memory_grow_checks_freezing_threshold_in_start() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_960_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let empty_wat = "(module)";
     let wat = r#"
@@ -7828,7 +8219,7 @@ fn memory_grow_checks_freezing_threshold_in_start() {
 #[test]
 fn memory_grow_checks_freezing_threshold_in_init() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_960_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -7855,7 +8246,7 @@ fn memory_grow_checks_freezing_threshold_in_init() {
 #[test]
 fn call_perform_checks_freezing_threshold_in_update() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_960_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let canister_id = test.universal_canister().unwrap();
     test.update_freezing_threshold(canister_id, NumSeconds::new(1_500_000_000))
@@ -7879,7 +8270,7 @@ fn call_perform_checks_freezing_threshold_in_update() {
 #[test]
 fn call_perform_does_not_check_freezing_threshold_in_reply() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_960_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let callee = test.universal_canister().unwrap();
     let canister_id = test.universal_canister().unwrap();
@@ -7913,7 +8304,7 @@ fn call_perform_does_not_check_freezing_threshold_in_reply() {
 #[test]
 fn call_perform_does_not_check_freezing_threshold_in_reject() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_960_000_000_000)
+        .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let callee = test.universal_canister().unwrap();
     let canister_id = test.universal_canister().unwrap();
@@ -8908,6 +9299,7 @@ fn invoke_cost_call() {
     let res = test.ingress(canister_id, "update", payload);
     let expected_cost = test.cycles_account_manager().xnet_call_total_fee(
         (method_name.len() as u64 + argument.len() as u64).into(),
+        test.subnet_size(),
         WasmExecutionMode::Wasm32,
         CanisterCyclesCostSchedule::Normal,
     );

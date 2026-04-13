@@ -57,3 +57,30 @@ fn test_clamp_debug_len() {
 
     assert_eq!(&clamp_debug_len(&S { i: 42 }, 100), "S {\n    i: 42,\n}");
 }
+
+#[test]
+fn test_clamp_debug_len_truncation() {
+    #[allow(unused)]
+    #[derive(Debug)]
+    struct S {
+        i: i32,
+    }
+
+    // Truncation: the full debug output is "S {\n    i: 42,\n}" (16 chars).
+    // With max_len=10, we get 10 chars with the last 3 replaced by "...".
+    assert_eq!(&clamp_debug_len(&S { i: 42 }, 10), "S {\n   ...");
+
+    // Very small limit.
+    assert_eq!(&clamp_debug_len(&S { i: 42 }, 3), "...");
+}
+
+#[test]
+fn test_clamp_debug_len_large_object() {
+    // Verify that clamp_debug_len doesn't format the entire object
+    // when truncating. We can't easily prove this in a unit test, but
+    // we can verify the output is correct for a large-ish object.
+    let big_vec: Vec<i32> = (0..10_000).collect();
+    let result = clamp_debug_len(&big_vec, 50);
+    assert!(result.len() <= 50, "result len: {}", result.len());
+    assert!(result.ends_with("..."), "result: {result}");
+}

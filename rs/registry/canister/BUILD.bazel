@@ -61,6 +61,7 @@ DEPENDENCIES = [
     "@crate_index//:maplit",
     "@crate_index//:prost",
     "@crate_index//:serde",
+    "@crate_index//:strum",
     "@crate_index//:url",
 ]
 

@@ -256,6 +256,7 @@ mod tests {
             Cycles::zero(),
             PrincipalId::try_from([0].as_ref()).unwrap(),
             CallContextId::from(0),
+            None,
         );
         let caller = api_type.caller();
         let call_context_id = api_type.call_context_id();
@@ -288,6 +289,7 @@ mod tests {
             incoming_payload.to_vec(),
             PrincipalId::try_from([0].as_ref()).unwrap(),
             CallContextId::from(0),
+            None,
         );
         let caller = api_type.caller();
         let call_context_id = api_type.call_context_id();

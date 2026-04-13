@@ -4,6 +4,7 @@ use crate::{
     cycles_use_case::{CyclesUseCase, CyclesUseCaseKind},
     nominal_cycles::NominalCycles,
 };
+use ic_protobuf::{proxy::ProxyDecodeError, state::queues::v1::CompoundCycles as PbCompoundCycles};
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
@@ -186,5 +187,34 @@ impl<T: CyclesUseCaseKind> Div<u128> for CompoundCycles<T> {
             nominal: self.nominal / rhs,
             _cycles_use_case_marker: self._cycles_use_case_marker,
         }
+    }
+}
+
+impl<T: CyclesUseCaseKind> From<CompoundCycles<T>> for PbCompoundCycles {
+    fn from(item: CompoundCycles<T>) -> Self {
+        Self {
+            real: Some(item.real().into()),
+            nominal: Some((&item.nominal()).into()),
+        }
+    }
+}
+
+impl<T: CyclesUseCaseKind> TryFrom<PbCompoundCycles> for CompoundCycles<T> {
+    type Error = ProxyDecodeError;
+
+    fn try_from(compound_cycles: PbCompoundCycles) -> Result<Self, Self::Error> {
+        let real = compound_cycles
+            .real
+            .ok_or(ProxyDecodeError::MissingField("CompoundCycles::real"))?;
+        let nominal = NominalCycles::try_from(
+            compound_cycles
+                .nominal
+                .ok_or(ProxyDecodeError::MissingField("CompoundCycles::nominal"))?,
+        )?;
+        Ok(CompoundCycles {
+            real: Cycles::from(real),
+            nominal,
+            _cycles_use_case_marker: PhantomData,
+        })
     }
 }

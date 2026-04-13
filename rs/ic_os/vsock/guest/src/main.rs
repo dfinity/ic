@@ -1,13 +1,23 @@
 #![cfg(target_os = "linux")]
 
 use clap::{Args, Parser};
+use std::fs::OpenOptions;
+use std::io::Write;
 use vsock_lib::protocol::{Command, NotifyData, Payload, UpgradeData};
 use vsock_lib::{LinuxVSockClient, VSockClient};
+
 fn main() -> Result<(), String> {
     let cli = Cli::parse();
 
     let port = cli.port;
     let command = get_command(cli)?;
+
+    // Echo notify messages to the local GuestOS console so they are visible
+    // in cloud environments where the host console is not accessible.
+    if let Command::Notify(NotifyData { ref message, .. }) = command {
+        write_to_guest_console(message);
+    }
+
     let payload = LinuxVSockClient::with_port(port).send_command(command)?;
 
     // Output the values directly
@@ -18,6 +28,14 @@ fn main() -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn write_to_guest_console(message: &str) {
+    for path in ["/dev/tty1", "/dev/ttyS0"] {
+        if let Ok(mut tty) = OpenOptions::new().write(true).open(path) {
+            let _ = writeln!(tty, "\n{message}");
+        }
+    }
 }
 
 #[derive(Debug, Parser)]

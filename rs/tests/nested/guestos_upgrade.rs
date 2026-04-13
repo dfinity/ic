@@ -1,20 +1,23 @@
+use std::time::Duration;
+
 use anyhow::Result;
 use reqwest::Client;
 use slog::info;
-use std::time::Duration;
 
 use ic_system_test_driver::{
     driver::{group::SystemTestGroup, nested::HasNestedVms, test_env::TestEnv, test_env_api::*},
     systest,
     util::block_on,
 };
+use ic_types::RegistryVersion;
 
-use nested::{HOST_VM_NAME, registration};
-
-use nested::util::{
-    NODE_UPGRADE_BACKOFF, NODE_UPGRADE_TIMEOUT, elect_guestos_version,
-    get_blessed_guestos_versions, get_unassigned_nodes_config, try_logging_guestos_diagnostics,
-    update_unassigned_nodes, wait_for_expected_guest_version,
+use nested::{
+    HOST_VM_NAME, registration,
+    util::{
+        NODE_UPGRADE_BACKOFF, NODE_UPGRADE_TIMEOUT, elect_guestos_version,
+        get_elected_guestos_versions, get_unassigned_nodes_config, try_logging_guestos_diagnostics,
+        update_unassigned_nodes, wait_for_expected_guest_version,
+    },
 };
 
 fn main() -> Result<()> {
@@ -47,6 +50,8 @@ pub fn upgrade_guestos(env: TestEnv) {
 
     registration(env.clone());
 
+    let topology = env.topology_snapshot();
+
     let host = env
         .get_nested_vm(HOST_VM_NAME)
         .expect("Unable to find HostOS node.");
@@ -57,19 +62,14 @@ pub fn upgrade_guestos(env: TestEnv) {
         .guest_ip;
 
     // choose a node from the NNS subnet to submit the proposals to
-    let nns_node = env
-        .topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .unwrap();
+    let nns_node = topology.root_subnet().nodes().next().unwrap();
     nns_node.await_status_is_healthy().unwrap();
 
     block_on(async {
         info!(
             logger,
-            "Initial blessed versions: {:?}",
-            get_blessed_guestos_versions(&nns_node).await
+            "Initial replica versions: {:?}",
+            get_elected_guestos_versions(&topology).await
         );
 
         info!(
@@ -95,6 +95,10 @@ pub fn upgrade_guestos(env: TestEnv) {
         .await
         .expect("guest didn't come up as expected");
 
+        // Check the version now, so we can wait for it to change after we
+        // elect the new version
+        let registry_version = topology.get_registry_version();
+
         // elect the target GuestOS version
         elect_guestos_version(
             &nns_node,
@@ -105,10 +109,16 @@ pub fn upgrade_guestos(env: TestEnv) {
         )
         .await;
 
+        let new_topology = env
+            .topology_snapshot()
+            .block_for_min_registry_version(registry_version + RegistryVersion::from(1))
+            .await
+            .unwrap();
+
         info!(
             logger,
-            "Updated blessed versions: {:?}",
-            get_blessed_guestos_versions(&nns_node).await
+            "Updated replica versions: {:?}",
+            get_elected_guestos_versions(&new_topology).await
         );
 
         update_unassigned_nodes(&nns_node, &target_version).await;

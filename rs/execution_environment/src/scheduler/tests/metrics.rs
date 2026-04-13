@@ -1099,13 +1099,13 @@ fn consumed_cycles_are_updated_from_valid_canisters() {
         None,
     );
 
-    let removed_cycles = CompoundCycles::<Instructions>::new(
+    let consumed_cycles = CompoundCycles::<Instructions>::new(
         Cycles::from(1000_u128),
         CanisterCyclesCostSchedule::Normal,
     );
     test.canister_state_mut(canister_id)
         .system_state
-        .remove_cycles(removed_cycles);
+        .consume_cycles(consumed_cycles);
 
     test.scheduler().state_metrics.observe(
         test.scheduler().own_subnet_id,
@@ -1121,7 +1121,7 @@ fn consumed_cycles_are_updated_from_valid_canisters() {
         ),
         metric_vec(&[(
             &[("use_case", "Instructions")],
-            removed_cycles.nominal().get() as f64
+            consumed_cycles.nominal().get() as f64
         ),]),
     );
 }
@@ -1139,13 +1139,13 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
         Some(CanisterStatusType::Stopped),
     );
 
-    let removed_cycles = CompoundCycles::<Instructions>::new(
+    let consumed_cycles = CompoundCycles::<Instructions>::new(
         Cycles::from(1000_u128),
         CanisterCyclesCostSchedule::Normal,
     );
     test.canister_state_mut(canister_id)
         .system_state
-        .remove_cycles(removed_cycles);
+        .consume_cycles(consumed_cycles);
 
     test.inject_call_to_ic00(
         Method::DeleteCanister,
@@ -1171,11 +1171,11 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
         metric_vec(&[
             (
                 &[("use_case", "Instructions")],
-                removed_cycles.nominal().get() as f64
+                consumed_cycles.nominal().get() as f64
             ),
             (
                 &[("use_case", "DeletedCanisters")],
-                (initial_balance.get() - removed_cycles.nominal().get()) as f64
+                (initial_balance.get() - consumed_cycles.nominal().get()) as f64
             )
         ]),
     );
