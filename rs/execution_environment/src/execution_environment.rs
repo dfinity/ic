@@ -3659,15 +3659,15 @@ impl ExecutionEnvironment {
             ));
         }
 
-        let mut pseudo_random_id = [0_u8; 32];
-        rng.fill_bytes(&mut pseudo_random_id);
+        let mut deprecated_pseudo_random_id = [0_u8; 32];
+        rng.fill_bytes(&mut deprecated_pseudo_random_id);
 
         state.metadata.subnet_call_context_manager.push_context(
             SubnetCallContext::SignWithThreshold(SignWithThresholdContext {
                 request,
                 args,
                 derivation_path: Arc::new(derivation_path),
-                pseudo_random_id,
+                deprecated_pseudo_random_id: Some(deprecated_pseudo_random_id),
                 batch_time: state.metadata.batch_time,
                 nonce: None,
             }),
