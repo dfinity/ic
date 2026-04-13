@@ -1351,7 +1351,6 @@ fn get_member_node_ids_and_ips(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::GracefulExpect;
     use assert_matches::assert_matches;
     use ic_test_utilities_tmpdir::tmpdir;
 
@@ -1425,7 +1424,7 @@ mod tests {
 
         let (name, height) =
             Recovery::get_latest_checkpoint_name_and_height(checkpoints_dir.path())
-                .expect_graceful("Failed getting the latest checkpoint name and height");
+                .expect("Failed getting the latest checkpoint name and height");
 
         assert_eq!(name, "000000000000fd84");
         assert_eq!(height, Height::from(64900));
@@ -1457,7 +1456,7 @@ mod tests {
         assert!(
             MaybeRemote::local()
                 .get_maybe_latest_checkpoint_name_and_height(checkpoints_dir.path())
-                .expect_graceful("Failed getting the latest checkpoint name and height")
+                .expect("Failed getting the latest checkpoint name and height")
                 .is_none()
         );
         assert!(Recovery::get_latest_checkpoint_name_and_height(checkpoints_dir.path()).is_err());
