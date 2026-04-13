@@ -166,6 +166,10 @@ async fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
     let initial_subnet_list_record =
         decode_registry_value::<SubnetListRecordPb>(&pocket_ic, make_subnet_list_record_key())
             .await;
+    assert!(
+        !initial_subnet_list_record.subnets.is_empty(),
+        "expected the registry to already contain at least one subnet before create_subnet"
+    );
 
     let payload = make_create_subnet_payload(node_ids.clone());
 
