@@ -23,6 +23,9 @@ use tempfile::{TempDir, tempdir};
 // the tests sequentially.
 static TEST_MUTEX: parking_lot::Mutex<()> = parking_lot::const_mutex(());
 
+const TEST_VOLUME_KEY_BYTES: usize = 512 / 8;
+const TEST_PBKDF_ITERATIONS: u32 = 1000;
+
 struct TestFixture<'a> {
     device: TempDevice,
     previous_key_path: PathBuf,
@@ -140,6 +143,41 @@ fn get_crypt_device(partition: Partition) -> &'static Path {
         Partition::Store => Path::new("/dev/mapper/store-crypt"),
         Partition::Var => Path::new("/dev/mapper/var_crypt"),
     }
+}
+
+fn create_crypt_device_luks_parameters(
+    device_path: &Path,
+    passphrase: &[u8],
+    cipher: &str,
+    cipher_mode: &str,
+    volume_key_size: usize,
+    pbkdf_type: CryptKdf,
+    pbkdf_iterations: u32,
+) {
+    let mut crypt_device = CryptInit::init(device_path).unwrap();
+
+    let mut pbkdf_params = CryptSettingsHandle::get_pbkdf_type_params(&pbkdf_type).unwrap();
+    pbkdf_params.iterations = pbkdf_iterations;
+    crypt_device
+        .settings_handle()
+        .set_pbkdf_type(&pbkdf_params)
+        .unwrap();
+
+    crypt_device
+        .context_handle()
+        .format::<CryptParamsLuks2Ref>(
+            EncryptionFormat::Luks2,
+            (cipher, cipher_mode),
+            None,
+            Right(volume_key_size),
+            None,
+        )
+        .unwrap();
+
+    crypt_device
+        .keyslot_handle()
+        .add_by_key(None, None, passphrase, CryptVolumeKey::empty())
+        .unwrap();
 }
 
 fn cleanup() {
@@ -489,62 +527,106 @@ fn test_cannot_open_with_generated_key_if_sev_is_enabled() {
     }
 }
 
-#[test]
-fn test_verification_cipher_tampered() {
-    for enable_trusted_execution_environment in [true, false] {
-        let mut fixture = TestFixture::new(enable_trusted_execution_environment);
-        let device_path = fixture.device.path().unwrap();
-        let sev_key = derive_key_from_sev_measurement(
-            &mut fixture.sev_firmware_builder.clone().build(),
+fn assert_verification_result_with_tampered_luks_parameters(
+    enable_trusted_execution_environment: bool,
+    cipher: &str,
+    cipher_mode: &str,
+    volume_key_size: usize,
+    pbkdf_type: CryptKdf,
+    pbkdf_iterations: u32,
+    expected_error: &str,
+) {
+    let mut fixture = TestFixture::new(enable_trusted_execution_environment);
+    let device_path = fixture.device.path().unwrap().to_path_buf();
+    // Reuse the same key material the implementation would use to open the device.
+    // In the TEE case the key is derived from the SEV measurement and never persisted,
+    // while in the non-TEE case we first let the implementation format the device so it
+    // can generate and store the key file that this tampering setup must reuse.
+    let passphrase = if enable_trusted_execution_environment {
+        let mut sev_firmware = fixture.sev_firmware_builder.build();
+        derive_key_from_sev_measurement(
+            &mut sev_firmware,
             Key::DiskEncryptionKey {
                 device_path: &device_path,
             },
         )
-        .unwrap();
+        .unwrap()
+        .as_bytes()
+        .to_vec()
+    } else {
+        fixture
+            .format(Partition::Var)
+            .expect("Failed to format var partition to generate key");
+        fs::read(&fixture.generated_key_path).expect("Failed to read generated key")
+    };
 
-        // Manually format the device with cipher_null-ecb
-        let mut crypt_device = CryptInit::init(&device_path).unwrap();
+    create_crypt_device_luks_parameters(
+        &device_path,
+        &passphrase,
+        cipher,
+        cipher_mode,
+        volume_key_size,
+        pbkdf_type,
+        pbkdf_iterations,
+    );
 
-        let mut pbkdf_params =
-            CryptSettingsHandle::get_pbkdf_type_params(&CryptKdf::Pbkdf2).unwrap();
-        pbkdf_params.iterations = 1000;
-        crypt_device
-            .settings_handle()
-            .set_pbkdf_type(&pbkdf_params)
-            .unwrap();
+    if enable_trusted_execution_environment {
+        let open_err = fixture
+            .open(Partition::Var)
+            .expect_err("Open should fail because LUKS parameters are invalid");
+        assert!(
+            format!("{open_err:#}").contains(expected_error),
+            "Unexpected error message: {open_err:#}"
+        );
+    } else {
+        fixture
+            .open(Partition::Var)
+            .expect("Failed to open var partition");
+    }
+}
 
-        crypt_device
-            .context_handle()
-            .format::<CryptParamsLuks2Ref>(
-                EncryptionFormat::Luks2,
-                ("cipher_null", "ecb"),
-                None,
-                Right(512 / 8),
-                None,
-            )
-            .unwrap();
+#[test]
+fn test_verification_cipher_tampered() {
+    for enable_trusted_execution_environment in [true, false] {
+        assert_verification_result_with_tampered_luks_parameters(
+            enable_trusted_execution_environment,
+            "cipher_null",
+            "ecb",
+            TEST_VOLUME_KEY_BYTES,
+            CryptKdf::Pbkdf2,
+            TEST_PBKDF_ITERATIONS,
+            "Unexpected cipher",
+        );
+    }
+}
 
-        crypt_device
-            .keyslot_handle()
-            .add_by_key(None, None, sev_key.as_bytes(), CryptVolumeKey::empty())
-            .unwrap();
+#[test]
+fn test_verification_volume_key_size_tampered() {
+    for enable_trusted_execution_environment in [true, false] {
+        assert_verification_result_with_tampered_luks_parameters(
+            enable_trusted_execution_environment,
+            "aes",
+            "xts-plain64",
+            256 / 8,
+            CryptKdf::Pbkdf2,
+            TEST_PBKDF_ITERATIONS,
+            "Unexpected volume key size",
+        );
+    }
+}
 
-        // Drop the handle before opening it again via `check_encryption_key`
-        drop(crypt_device);
-
-        if enable_trusted_execution_environment {
-            let open_err = fixture
-                .open(Partition::Var)
-                .expect_err("Open should fail because cipher != aes");
-            assert!(
-                format!("{open_err:#}").contains("Unexpected cipher"),
-                "Unexpected error message: {open_err:#}"
-            );
-        } else {
-            fixture
-                .open(Partition::Var)
-                .expect("Failed to open var partition");
-        }
+#[test]
+fn test_verification_pbkdf_type_tampered() {
+    for enable_trusted_execution_environment in [true, false] {
+        assert_verification_result_with_tampered_luks_parameters(
+            enable_trusted_execution_environment,
+            "aes",
+            "xts-plain64",
+            TEST_VOLUME_KEY_BYTES,
+            CryptKdf::Argon2I,
+            TEST_PBKDF_ITERATIONS,
+            "Unexpected keyslot PBKDF type",
+        );
     }
 }
 

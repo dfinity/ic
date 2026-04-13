@@ -40,9 +40,7 @@ pub fn activate_crypt_device(
         .load::<CryptParamsLuks2Ref>(Some(ENCRYPTION_FORMAT), None)
         .context("Failed to load cryptographic context")?;
 
-    if verify_luks_params {
-        verify_luks_parameters(&mut crypt_device)?;
-    }
+    maybe_verify_luks_parameters(&mut crypt_device, device_path, verify_luks_params)?;
 
     let active_keyslot = crypt_device
         .activate_handle()
@@ -50,8 +48,8 @@ pub fn activate_crypt_device(
         .context("Failed to activate cryptographic device")?;
 
     if let Some(metrics_file) = metrics_file {
-        let log_result = get_luks_parameters(&mut crypt_device, active_keyslot)
-            .and_then(|p| export_luks_parameters(metrics_file, device_path, &p));
+        let log_result =
+            export_luks_parameters(metrics_file, &mut crypt_device, device_path, active_keyslot);
         if let Err(e) = log_result {
             warn!("Failed to export LUKS parameters: {e:#}");
         }
@@ -120,9 +118,7 @@ fn open_luks2_device(device_path: &Path, verify_luks_params: bool) -> Result<Cry
         .context_handle()
         .load::<CryptParamsLuks2Ref>(Some(ENCRYPTION_FORMAT), None)?;
 
-    if verify_luks_params {
-        verify_luks_parameters(&mut crypt_device)?;
-    }
+    maybe_verify_luks_parameters(&mut crypt_device, device_path, verify_luks_params)?;
 
     Ok(crypt_device)
 }
@@ -142,92 +138,44 @@ pub fn check_encryption_key(device_path: &Path, encryption_key: &[u8]) -> Result
     Ok(())
 }
 
-#[derive(Debug)]
-pub struct LuksParameters {
-    pub format: String,
-    pub cipher: String,
-    pub cipher_mode: String,
-    pub volume_key_size: usize,
-    pub keyslot_pbkdf_type: String,
-    pub keyslot_pbkdf_iterations: u32,
-    pub keyslot_cipher: String,
-    pub keyslot_key_size: usize,
-    pub num_keyslots: usize,
-    pub passes_verification: bool,
-}
-
-fn get_luks_parameters(
+fn maybe_verify_luks_parameters(
     crypt_device: &mut CryptDevice,
-    active_keyslot: u32,
-) -> Result<LuksParameters> {
-    let format = crypt_device
-        .format_handle()
-        .get_type()
-        .context("Failed to get encryption format")?;
+    device_path: &Path,
+    verify_luks_params: bool,
+) -> Result<()> {
+    if let Err(e) = verify_luks_parameters(crypt_device) {
+        if verify_luks_params {
+            return Err(e);
+        }
 
-    let cipher = crypt_device
-        .status_handle()
-        .get_cipher()
-        .context("Failed to get cipher")?;
-
-    let cipher_mode = crypt_device
-        .status_handle()
-        .get_cipher_mode()
-        .context("Failed to get cipher mode")?;
-
-    let volume_key_size = crypt_device.status_handle().get_volume_key_size();
-
-    let num_keyslots = (0..LUKS2_N_KEY_SLOTS)
-        .filter(|&key_slot| {
-            matches!(
-                crypt_device.keyslot_handle().status(key_slot),
-                Ok(KeyslotInfo::Active | KeyslotInfo::ActiveLast)
-            )
-        })
-        .count();
-
-    let mut keyslot_handle = crypt_device.keyslot_handle();
-    let keyslot_pbkdf = keyslot_handle
-        .get_pbkdf(active_keyslot)
-        .context("Failed to get PBKDF type for active keyslot")?;
-
-    let mut keyslot_cipher = String::new();
-    let mut keyslot_key_size = 0;
-    if let Ok(keyslot_encryption) = keyslot_handle.get_encryption(Some(active_keyslot)) {
-        keyslot_cipher = keyslot_encryption.0.to_string();
-        keyslot_key_size = keyslot_encryption.1;
+        warn!(
+            "LUKS parameters verification failed for device {} but verification is not \
+            enforced: {e:#}",
+            device_path.display()
+        );
+    } else {
+        info!(
+            "LUKS parameters verification succeeded for device {}",
+            device_path.display()
+        );
     }
 
-    Ok(LuksParameters {
-        format: format!("{:?}", format),
-        cipher: cipher.to_string(),
-        cipher_mode: cipher_mode.to_string(),
-        volume_key_size: volume_key_size as usize,
-        keyslot_pbkdf_type: format!("{:?}", keyslot_pbkdf.type_),
-        keyslot_pbkdf_iterations: keyslot_pbkdf.iterations,
-        keyslot_cipher,
-        keyslot_key_size,
-        num_keyslots,
-        passes_verification: verify_luks_parameters(crypt_device).is_ok(),
-    })
+    Ok(())
 }
 
 /// Verifies that the LUKS parameters match the expected values set in format_crypt_device
-fn verify_luks_parameters(crypt_device: &mut CryptDevice) -> Result<()> {
+pub(crate) fn verify_luks_parameters(crypt_device: &mut CryptDevice) -> Result<()> {
     let format = crypt_device
         .format_handle()
         .get_type()
         .context("Failed to get encryption format")?;
     ensure!(format == ENCRYPTION_FORMAT, "Unexpected encryption format");
 
-    let cipher = crypt_device
-        .status_handle()
-        .get_cipher()
-        .context("Failed to get cipher")?;
+    let mut status_handle = crypt_device.status_handle();
+    let cipher = status_handle.get_cipher().context("Failed to get cipher")?;
     ensure!(cipher == CIPHER, "Unexpected cipher: {}", cipher);
 
-    let cipher_mode = crypt_device
-        .status_handle()
+    let cipher_mode = status_handle
         .get_cipher_mode()
         .context("Failed to get cipher mode")?;
     ensure!(
@@ -236,36 +184,56 @@ fn verify_luks_parameters(crypt_device: &mut CryptDevice) -> Result<()> {
         cipher_mode
     );
 
-    let volume_key_size = crypt_device.status_handle().get_volume_key_size();
+    let volume_key_size = status_handle.get_volume_key_size();
     ensure!(
         volume_key_size == VOLUME_KEY_BYTES as std::os::raw::c_int,
         "Unexpected volume key size: {}",
         volume_key_size
     );
 
+    let mut active_keyslots = 0;
+    let mut keyslot_handle = crypt_device.keyslot_handle();
     for key_slot in 0..LUKS2_N_KEY_SLOTS {
-        if matches!(
-            crypt_device.keyslot_handle().status(key_slot),
-            Ok(KeyslotInfo::Active | KeyslotInfo::ActiveLast)
-        ) {
-            let mut keyslot_handle = crypt_device.keyslot_handle();
+        let status = keyslot_handle
+            .status(key_slot)
+            .with_context(|| format!("Failed to get status for keyslot {key_slot}"))?;
 
-            let encryption = keyslot_handle
-                .get_encryption(Some(key_slot))
-                .context("Failed to get keyslot encryption")?;
+        match status {
+            KeyslotInfo::Active | KeyslotInfo::ActiveLast => {
+                active_keyslots += 1;
 
-            ensure!(
-                encryption.0 == format!("{CIPHER}-{CIPHER_MODE}"),
-                "Unexpected keyslot encryption: {}",
-                encryption.0
-            );
-            ensure!(
-                encryption.1 == KEYSLOT_KEY_BYTES,
-                "Unexpected keyslot key size: {}",
-                encryption.1
-            );
+                let pbkdf = keyslot_handle
+                    .get_pbkdf(key_slot)
+                    .with_context(|| format!("Failed to get PBKDF type for keyslot {key_slot}"))?;
+                ensure!(
+                    pbkdf.type_ == PBKDF_TYPE,
+                    "Unexpected keyslot PBKDF type: {:?}",
+                    pbkdf.type_
+                );
+
+                let encryption = keyslot_handle
+                    .get_encryption(Some(key_slot))
+                    .with_context(|| format!("Failed to get encryption for keyslot {key_slot}"))?;
+
+                ensure!(
+                    encryption.0 == format!("{CIPHER}-{CIPHER_MODE}"),
+                    "Unexpected keyslot encryption: {}",
+                    encryption.0
+                );
+                ensure!(
+                    encryption.1 == KEYSLOT_KEY_BYTES,
+                    "Unexpected keyslot key size: {}",
+                    encryption.1
+                );
+            }
+            KeyslotInfo::Invalid | KeyslotInfo::Unbound => {
+                bail!("Unexpected keyslot status for slot {key_slot}: {status:?}");
+            }
+            KeyslotInfo::Inactive => {}
         }
     }
+
+    ensure!(active_keyslots > 0, "No active keyslots found");
 
     Ok(())
 }
