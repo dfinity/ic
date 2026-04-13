@@ -133,7 +133,7 @@ impl NeuronStore {
         let mut total_potential_voting_power: u128 = 0;
 
         let default_min_dissolve_delay = if is_mission_70_voting_rewards_enabled() {
-            14 * ic_nervous_system_common::ONE_DAY_SECONDS
+            VotingPowerEconomics::MISSION_70_DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS
         } else {
             VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS
         };

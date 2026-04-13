@@ -276,6 +276,11 @@ impl VotingPowerEconomics {
     /// for that proposal. Thus, such neurons cannot vote on the proposal.
     pub const DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
 
+    /// The default value for `neuron_minimum_dissolve_delay_to_vote_seconds` once the mission 70
+    /// voting rewards feature is enabled. Two weeks instead of six months.
+    pub const MISSION_70_DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS: u64 =
+        14 * ONE_DAY_SECONDS;
+
     /// A proposal to set `VotingPowerEconomics.min_dissolve_delay_seconds` must specify a value
     /// for this field that falls within this range. Changing the lower bound of this parameter
     /// requires manually checking how it might interact with other aspects of the NNS.

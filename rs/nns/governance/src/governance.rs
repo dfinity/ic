@@ -4787,7 +4787,7 @@ impl Governance {
 
     pub fn neuron_minimum_dissolve_delay_to_vote_seconds(&self) -> u64 {
         let default = if is_mission_70_voting_rewards_enabled() {
-            14 * ONE_DAY_SECONDS
+            VotingPowerEconomics::MISSION_70_DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS
         } else {
             VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS
         };
@@ -4806,7 +4806,8 @@ impl Governance {
             return;
         }
 
-        let two_weeks_seconds = 14 * ONE_DAY_SECONDS;
+        let two_weeks_seconds =
+            VotingPowerEconomics::MISSION_70_DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
 
         let Some(voting_power_economics) = heap_data
             .economics
