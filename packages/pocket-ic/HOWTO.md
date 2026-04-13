@@ -546,7 +546,7 @@ Now we create a PocketIC instance:
     };
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
-        .with_test_threshold_keys_subnet() // to have tECDSA keys with test_ prefix available
+        .with_test_threshold_keys_subnet() // to have tECDSA keys with names `test_key_1` and `dfx_test_key` available
         .with_bitcoin_subnet()
         .with_application_subnet() // to deploy the test dapp
         .with_bitcoind_addr(bitcoind.p2p_socket().unwrap().into())
@@ -631,7 +631,7 @@ Now we create a PocketIC instance:
     };
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
-        .with_test_threshold_keys_subnet() // to have tECDSA keys with test_ prefix available
+        .with_test_threshold_keys_subnet() // to have tECDSA keys with names `test_key_1` and `dfx_test_key` available
         .with_bitcoin_subnet()
         .with_application_subnet() // to deploy the test dapp
         .with_dogecoind_addrs(vec![dogecoind.p2p_socket().unwrap().into()])
@@ -698,18 +698,17 @@ To use `key_1`, add an II or fiduciary subnet to your PocketIC instance:
 ```rust
     // We create a PocketIC instance consisting of the II and one application subnet.
     let pic = PocketIcBuilder::new()
-        .with_ii_subnet()          // this subnet has threshold key key_1
+        .with_ii_subnet()          // this subnet has threshold key `key_1`
         .with_application_subnet() // we deploy the dapp canister here
         .build();
 ```
 
-To use a threshold key with `test_` prefix (such as `test_key_1` or `dfx_test_key`) in tests,
-add a test threshold keys subnet to your PocketIC instance:
+To use `test_key_1` or `dfx_test_key`, add a test threshold keys subnet to your PocketIC instance:
 
 ```rust
     // We create a PocketIC instance consisting of the test threshold keys and one application subnet.
     let pic = PocketIcBuilder::new()
-        .with_test_threshold_keys_subnet() // this subnet has threshold keys with test_ prefix
+        .with_test_threshold_keys_subnet() // to have threshold keys with names `test_key_1` and `dfx_test_key` available
         .with_application_subnet()         // we deploy the dapp canister here
         .build();
 ```

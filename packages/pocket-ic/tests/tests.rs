@@ -1017,8 +1017,8 @@ fn test_schnorr() {
     // We create a PocketIC instance consisting of the NNS, II, test threshold keys, and one application subnet.
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
-        .with_ii_subnet() // this subnet has key_1
-        .with_test_threshold_keys_subnet() // this subnet has test_key_1 and dfx_test_key
+        .with_ii_subnet() // this subnet has `key_1`
+        .with_test_threshold_keys_subnet() // this subnet has `test_key_1` and `dfx_test_key`
         .with_application_subnet()
         .build();
 
@@ -1136,8 +1136,8 @@ fn test_ecdsa() {
     // We create a PocketIC instance consisting of the NNS, II, test threshold keys, and one application subnet.
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
-        .with_ii_subnet() // this subnet has key_1
-        .with_test_threshold_keys_subnet() // this subnet has test_key_1 and dfx_test_key
+        .with_ii_subnet() // this subnet has `key_1`
+        .with_test_threshold_keys_subnet() // this subnet has `test_key_1` and `dfx_test_key`
         .with_application_subnet()
         .build();
 
@@ -1263,8 +1263,8 @@ fn test_vetkd() {
 
     // We create a PocketIC instance consisting of the II, test threshold keys, and one application subnet.
     let pic = PocketIcBuilder::new()
-        .with_ii_subnet() // this subnet has key_1
-        .with_test_threshold_keys_subnet() // this subnet has test_key_1 and dfx_test_key
+        .with_ii_subnet() // this subnet has `key_1`
+        .with_test_threshold_keys_subnet() // this subnet has `test_key_1` and `dfx_test_key`
         .with_application_subnet()
         .build();
 
