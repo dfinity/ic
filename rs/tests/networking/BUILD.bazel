@@ -331,6 +331,7 @@ system_test_nns(
     deps = COMMON_DEPS + [
         "//rs/tests/consensus/utils",
         "//rs/types/types",
+        "@crate_index//:ic-agent",
         "@crate_index//:tokio",
         "@crate_index//:tokio-util",
     ],

@@ -14,6 +14,8 @@ Runbook::
 end::catalog[] */
 
 use anyhow::Result;
+use ic_agent::Agent;
+use ic_limits::MAX_INGRESS_TTL;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
@@ -24,11 +26,14 @@ use ic_system_test_driver::{
             HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationBuilder,
         },
     },
-    systest,
-    util::{MessageCanister, assert_create_agent, block_on},
+    retry_with_msg_async, systest,
+    util::{
+        AGENT_REQUEST_TIMEOUT, MAX_CONCURRENT_REQUESTS, MessageCanister, assert_create_agent,
+        block_on, get_identity,
+    },
 };
 use ic_types::Height;
-use slog::info;
+use slog::{Logger, info};
 use std::time::Duration;
 
 // Timeout parameters
@@ -45,6 +50,53 @@ const FAULTY: usize = 16;
 const NODES: usize = 3 * FAULTY + 1; // 49
 
 const IDLE_DURATION: Duration = Duration::from_secs(10 * 60);
+
+// Under degraded conditions (f faulty nodes), consensus is slow and ingress messages
+// may expire before execution. Use a shorter polling time so each attempt fails fast,
+// then retry with a fresh ingress message.
+const DEGRADED_MAX_POLLING_TIME: Duration = Duration::from_secs(60);
+const DEGRADED_RETRY_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+const DEGRADED_RETRY_BACKOFF: Duration = Duration::from_secs(5);
+
+/// Creates an agent with a shorter `max_polling_time`, suitable for making
+/// update calls when the subnet is running at the minimum consensus threshold.
+async fn create_agent_with_short_polling_time(url: &str) -> Agent {
+    let client = reqwest::Client::builder()
+        .timeout(AGENT_REQUEST_TIMEOUT)
+        .http2_prior_knowledge()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .expect("Failed to build HTTP client");
+    let agent = Agent::builder()
+        .with_url(url)
+        .with_http_client(client)
+        .with_identity(get_identity())
+        .with_max_polling_time(DEGRADED_MAX_POLLING_TIME)
+        .with_max_concurrent_requests(MAX_CONCURRENT_REQUESTS)
+        .with_ingress_expiry(MAX_INGRESS_TTL - Duration::from_secs(30))
+        .build()
+        .unwrap();
+    agent.fetch_root_key().await.unwrap();
+    agent
+}
+
+/// Retries `try_store_msg` with backoff, creating a fresh ingress message each attempt.
+fn store_msg_with_retries(log: &Logger, canister: &MessageCanister<'_>, msg: &str) {
+    let msg = msg.to_string();
+    block_on(retry_with_msg_async!(
+        format!("store_msg('{msg}')"),
+        log,
+        DEGRADED_RETRY_TIMEOUT,
+        DEGRADED_RETRY_BACKOFF,
+        || async {
+            canister
+                .try_store_msg(msg.clone())
+                .await
+                .map_err(|e| anyhow::anyhow!(e))
+        }
+    ))
+    .expect("Update canister call failed after retries");
+}
 
 pub fn setup(env: TestEnv) {
     InternetComputer::new()
@@ -133,11 +185,20 @@ pub fn test(env: TestEnv) {
             .expect("Node still healthy");
     }
 
+    // Create an agent with a shorter polling time for degraded-subnet operations.
+    // With f faulty nodes, consensus is slow and ingress messages may expire before
+    // execution. A short polling time + retry gives each attempt a fresh ingress message.
+    let degraded_agent = block_on(create_agent_with_short_polling_time(
+        node.get_public_url().as_str(),
+    ));
+    let degraded_canister =
+        MessageCanister::from_canister_id(&degraded_agent, message_canister.canister_id());
+
     info!(
         log,
         "Step 6: Assert that update call succeeds in presence of {} faulty nodes", FAULTY
     );
-    block_on(message_canister.try_store_msg(UPDATE_MSG_3)).expect("Update canister call failed.");
+    store_msg_with_retries(&log, &degraded_canister, UPDATE_MSG_3);
     assert_eq!(
         block_on(message_canister.try_read_msg()),
         Ok(Some(UPDATE_MSG_3.to_string()))
@@ -176,7 +237,7 @@ pub fn test(env: TestEnv) {
     );
 
     info!(log, "Storing message '{}' ...", UPDATE_MSG_5);
-    block_on(message_canister.try_store_msg(UPDATE_MSG_5)).expect("Update canister call failed.");
+    store_msg_with_retries(&log, &degraded_canister, UPDATE_MSG_5);
     info!(log, "Reading message '{}' ...", UPDATE_MSG_5);
     assert_eq!(
         block_on(message_canister.try_read_msg()),
@@ -188,7 +249,7 @@ pub fn test(env: TestEnv) {
         "Step 9: Run idle for a few min on faulty node boundary"
     );
     block_on(async { tokio::time::sleep(IDLE_DURATION).await });
-    block_on(message_canister.try_store_msg(UPDATE_MSG_6)).expect("Update canister call failed.");
+    store_msg_with_retries(&log, &degraded_canister, UPDATE_MSG_6);
     assert_eq!(
         block_on(message_canister.try_read_msg()),
         Ok(Some(UPDATE_MSG_6.to_string()))
