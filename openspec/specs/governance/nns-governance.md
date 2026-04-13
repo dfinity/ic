@@ -49,12 +49,20 @@ Proposals follow a lifecycle: Open -> (Adopted | Rejected) -> (Executed | Failed
 - **WHEN** an adopted proposal's system function executes successfully
 - **THEN** the proposal status becomes Executed
 - **AND** the executed_timestamp_seconds is set
+- **AND** the `success_value` field is populated with the decoded execution result (e.g., `CreateCanisterAndInstallCodeOk` for canister creation proposals)
+- **AND** the success_value is accessible via `ProposalInfo` queries as a counterpart to `failure_reason`
 
 #### Scenario: Proposal execution fails
 - **WHEN** an adopted proposal's system function fails
 - **THEN** the proposal status becomes Failed
 - **AND** the failed_timestamp_seconds is set
-- **AND** the failure reason is recorded
+- **AND** the failure reason is recorded in `failure_reason`
+
+#### Scenario: Proposal execution result types
+- **WHEN** a proposal executes successfully and produces a result
+- **THEN** the reply payload is decoded according to the proposal action type
+- **AND** each proposal type may produce a different `SuccessfulProposalExecutionValue` variant
+- **AND** proposals that don't produce a decodable result have `success_value` set to None
 
 ### Requirement: Wait For Quiet
 The NNS uses a "Wait For Quiet" algorithm to dynamically extend voting deadlines when votes flip. This allows decisions without a quorum while preventing last-minute vote manipulation.
