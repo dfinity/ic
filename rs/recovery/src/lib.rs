@@ -638,46 +638,13 @@ impl Recovery {
         Ok(res)
     }
 
-    /// Get the name of the latest checkpoint currently on the remote node, if any.
-    pub fn get_maybe_latest_checkpoint_name_and_height_remotely(
-        ssh_helper: &SshHelper,
-        checkpoints_path: &Path,
-    ) -> RecoveryResult<Option<(String, Height)>> {
-        let maybe_output = ssh_helper.ssh(format!(
-            "ls -1 {} | sort | tail -n 1",
-            checkpoints_path.display()
-        ))?;
-
-        let Some(output) = maybe_output else {
-            return Ok(None);
-        };
-
-        let name = output.trim();
-        let height = parse_hex_str(name)?;
-
-        Ok(Some((name.to_string(), Height::from(height))))
-    }
-
-    /// Get the name and the height of the latest checkpoint currently on disk, if any.
-    pub fn get_maybe_latest_checkpoint_name_and_height(
-        checkpoints_path: &Path,
-    ) -> RecoveryResult<Option<(String, Height)>> {
-        let checkpoints = Self::get_checkpoint_names(checkpoints_path)?
-            .into_iter()
-            .map(|name| parse_hex_str(&name).map(|height| (name, Height::from(height))))
-            .collect::<RecoveryResult<Vec<_>>>()?;
-
-        Ok(checkpoints
-            .into_iter()
-            .max_by_key(|(_name, height)| *height))
-    }
-
     /// Get the name and the height of the latest checkpoint currently on disk
     /// Returns an error when there are no checkpoints.
     pub fn get_latest_checkpoint_name_and_height(
         checkpoints_path: &Path,
     ) -> RecoveryResult<(String, Height)> {
-        Self::get_maybe_latest_checkpoint_name_and_height(checkpoints_path)?
+        MaybeRemote::local()
+            .get_maybe_latest_checkpoint_name_and_height(checkpoints_path)?
             .ok_or_else(|| RecoveryError::invalid_output_error("No checkpoints"))
     }
 
@@ -1147,6 +1114,16 @@ impl Recovery {
 /// the filesystem of the node. Local implementations use the standard library, while remote
 /// implementations use ssh to execute commands on the remote node.
 impl<'a> MaybeRemote<'a> {
+    fn local() -> Self {
+        Self { ssh_helper: None }
+    }
+
+    fn remote(ssh_helper: &'a SshHelper) -> Self {
+        Self {
+            ssh_helper: Some(ssh_helper),
+        }
+    }
+
     fn path_exists(&self, path: &Path) -> RecoveryResult<bool> {
         match self.ssh_helper {
             None => {
@@ -1178,14 +1155,30 @@ impl<'a> MaybeRemote<'a> {
         match self.ssh_helper {
             None => {
                 // Local implementation
-                Recovery::get_maybe_latest_checkpoint_name_and_height(checkpoints_path)
+                let checkpoints = Recovery::get_checkpoint_names(checkpoints_path)?
+                    .into_iter()
+                    .map(|name| parse_hex_str(&name).map(|height| (name, Height::from(height))))
+                    .collect::<RecoveryResult<Vec<_>>>()?;
+
+                Ok(checkpoints
+                    .into_iter()
+                    .max_by_key(|(_name, height)| *height))
             }
             Some(ssh_helper) => {
                 // Remote implementation
-                Recovery::get_maybe_latest_checkpoint_name_and_height_remotely(
-                    ssh_helper,
-                    checkpoints_path,
-                )
+                let maybe_output = ssh_helper.ssh(format!(
+                    "ls -1 {} | sort | tail -n 1",
+                    checkpoints_path.display()
+                ))?;
+
+                let Some(output) = maybe_output else {
+                    return Ok(None);
+                };
+
+                let name = output.trim();
+                let height = parse_hex_str(name)?;
+
+                Ok(Some((name.to_string(), Height::from(height))))
             }
         }
     }
@@ -1392,7 +1385,9 @@ mod tests {
         );
 
         assert!(
-            Recovery::get_maybe_latest_checkpoint_name_and_height(checkpoints_dir.path()).is_err()
+            MaybeRemote::local()
+                .get_maybe_latest_checkpoint_name_and_height(checkpoints_dir.path())
+                .is_err()
         );
     }
 
@@ -1401,7 +1396,8 @@ mod tests {
         let checkpoints_dir = tmpdir("checkpoints");
 
         assert!(
-            Recovery::get_maybe_latest_checkpoint_name_and_height(checkpoints_dir.path())
+            MaybeRemote::local()
+                .get_maybe_latest_checkpoint_name_and_height(checkpoints_dir.path())
                 .expect_graceful("Failed getting the latest checkpoint name and height")
                 .is_none()
         );
