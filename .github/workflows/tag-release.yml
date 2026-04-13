@@ -19,7 +19,6 @@ on:
         type: boolean
 
 env:
-  CI_COMMIT_SHA: ${{ github.event.inputs.tag-name || github.sha }}
   RELEASE_TAG: ${{ github.event.inputs.tag-name || github.ref_name }}
 
 jobs:
@@ -30,12 +29,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ env.CI_COMMIT_SHA }}
+          ref: ${{ github.event.inputs.tag-name || github.ref }}
 
       - name: Collect Release Artifacts
         run: |
           set -euxo pipefail
 
+          CI_COMMIT_SHA=$(git rev-parse HEAD)
           DOWNLOAD_PREFIX="https://download.dfinity.systems/ic/${CI_COMMIT_SHA}"
 
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/setup-os/disk-img/disk-img.tar.zst" -o setup-os-img.tar.zst
