@@ -671,7 +671,7 @@ impl PocketIc {
         .await
     }
 
-    async fn submit_call_with_effective_principal_inner(
+    async fn submit_call_with_effective_principal_and_sender_info_inner(
         &self,
         canister_id: CanisterId,
         effective_principal: RawEffectivePrincipal,
@@ -701,7 +701,7 @@ impl PocketIc {
         method: &str,
         payload: Vec<u8>,
     ) -> Result<RawMessageId, RejectResponse> {
-        self.submit_call_with_effective_principal_inner(
+        self.submit_call_with_effective_principal_and_sender_info_inner(
             canister_id,
             effective_principal,
             sender,
@@ -722,7 +722,7 @@ impl PocketIc {
         payload: Vec<u8>,
         sender_info: RawSenderInfo,
     ) -> Result<RawMessageId, RejectResponse> {
-        self.submit_call_with_effective_principal_inner(
+        self.submit_call_with_effective_principal_and_sender_info_inner(
             canister_id,
             effective_principal,
             sender,
@@ -855,7 +855,7 @@ impl PocketIc {
         .await
     }
 
-    async fn update_call_with_effective_principal_inner(
+    async fn update_call_with_effective_principal_and_sender_info_inner(
         &self,
         canister_id: CanisterId,
         effective_principal: RawEffectivePrincipal,
@@ -865,7 +865,7 @@ impl PocketIc {
         sender_info: Option<RawSenderInfo>,
     ) -> Result<Vec<u8>, RejectResponse> {
         let message_id = self
-            .submit_call_with_effective_principal_inner(
+            .submit_call_with_effective_principal_and_sender_info_inner(
                 canister_id,
                 effective_principal,
                 sender,
@@ -887,7 +887,7 @@ impl PocketIc {
         payload: Vec<u8>,
         sender_info: RawSenderInfo,
     ) -> Result<Vec<u8>, RejectResponse> {
-        self.update_call_with_effective_principal_inner(
+        self.update_call_with_effective_principal_and_sender_info_inner(
             canister_id,
             effective_principal,
             sender,
@@ -1833,7 +1833,7 @@ impl PocketIc {
         method: &str,
         payload: Vec<u8>,
     ) -> Result<Vec<u8>, RejectResponse> {
-        self.update_call_with_effective_principal_inner(
+        self.update_call_with_effective_principal_and_sender_info_inner(
             canister_id,
             effective_principal,
             sender,
