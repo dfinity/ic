@@ -214,7 +214,7 @@ thread_local! {
         = const { Cell::new(true) };
 
     static ENABLE_CREATE_CANISTER_AND_INSTALL_CODE_PROPOSALS: Cell<bool>
-        = const { Cell::new(cfg!(feature = "test")) };
+        = const { Cell::new(true) };
 
     static ENABLE_SUBNET_SPLITTING_PROPOSALS: Cell<bool>
         = const { Cell::new(false) };
