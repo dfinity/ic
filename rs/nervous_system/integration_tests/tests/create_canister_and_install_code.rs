@@ -17,9 +17,12 @@ use pocket_ic::PocketIcBuilder;
 async fn test_create_canister_and_install_code() {
     // Step 1: Prepare the world.
 
-    // Step 1.1: Set up PocketIC with NNS + SNS (required by NnsInstaller) + system subnet.
+    // Step 1.1: Set up PocketIC with NNS + SNS (required by NnsInstaller) +
+    // system subnet.
     let pocket_ic = PocketIcBuilder::new()
         .with_nns_subnet()
+        // Even though this test has nothing to do with SNS, we do this, because
+        // NnsInstaller panics without an SNS subnet.
         .with_sns_subnet()
         .with_system_subnet()
         .build_async()
@@ -68,8 +71,9 @@ async fn test_create_canister_and_install_code() {
     // Step 3: Verify results.
 
     // Step 3.1: Inspect timestamp fields.
-    assert!(
-        proposal_info.failure_reason.is_none(),
+    assert_eq!(
+        proposal_info.failure_reason,
+        None,
         "Proposal failed: {:?}",
         proposal_info.failure_reason
     );

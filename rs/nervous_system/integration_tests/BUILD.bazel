@@ -348,22 +348,6 @@ rust_test(
 )
 
 rust_test(
-    name = "create_canister_and_install_code",
-    timeout = "long",
-    srcs = [
-        "tests/create_canister_and_install_code.rs",
-    ],
-    aliases = ALIASES,
-    data = DEV_DATA,
-    env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "cpu:4",
-    ],
-    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
-)
-
-rust_test(
     name = "custom_proposal_criticality",
     timeout = "long",
     srcs = [
