@@ -187,6 +187,16 @@ pub(crate) fn shortened_pids_string(pids: &[PrincipalId]) -> String {
     pids_string
 }
 
+/// Shortens a long hash so it is easier to display in titles.
+pub(crate) fn shortened_hash_string(hash: &str) -> &str {
+    const SHORT_HASH_LEN: usize = 7;
+
+    // Get first SHORT_HASH_LEN chars or the whole string if it's shorter
+    hash.char_indices()
+        .nth(SHORT_HASH_LEN)
+        .map_or(hash, |(i, _)| &hash[..i])
+}
+
 pub(crate) fn read_from_json_file<R>(path: &Path) -> R
 where
     R: serde::de::DeserializeOwned,

@@ -1209,6 +1209,15 @@ struct ProposeToReviseElectedGuestsOsVersionsCmd {
     pub guest_launch_measurements_path: Option<PathBuf>,
 }
 
+impl ProposeToReviseElectedGuestsOsVersionsCmd {
+    /// Reads and returns the GuestLaunchMeasurements from the input file.
+    fn read_guest_launch_measurements(&self) -> Option<GuestLaunchMeasurements> {
+        self.guest_launch_measurements_path
+            .as_ref()
+            .map(|path| read_from_json_file::<GuestLaunchMeasurements>(path))
+    }
+}
+
 impl ProposalTitle for ProposeToReviseElectedGuestsOsVersionsCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
@@ -1226,16 +1235,11 @@ impl ProposalPayload<ReviseElectedGuestosVersionsPayload>
     for ProposeToReviseElectedGuestsOsVersionsCmd
 {
     async fn payload(&self, _: &Agent) -> ReviseElectedGuestosVersionsPayload {
-        let guest_launch_measurements = self
-            .guest_launch_measurements_path
-            .as_ref()
-            .map(|path| read_from_json_file::<GuestLaunchMeasurements>(path));
-
         let payload = ReviseElectedGuestosVersionsPayload {
             replica_version_to_elect: self.guestos_version_to_elect.clone(),
             release_package_sha256_hex: self.release_package_sha256_hex.clone(),
             release_package_urls: self.release_package_urls.clone(),
-            guest_launch_measurements,
+            guest_launch_measurements: self.read_guest_launch_measurements(),
             replica_versions_to_unelect: self.guestos_versions_to_unelect.clone(),
         };
         payload.validate().expect("Failed to validate payload");
@@ -1693,14 +1697,14 @@ impl ProposalTitle for ProposeToBlessAlternativeGuestOsVersionCmd {
         if let Some(subnet) = self.subnet {
             return format!(
                 "Bless alternative Guest OS with rootfs hash {} on subnet {}",
-                self.rootfs_hash,
+                shortened_hash_string(&self.rootfs_hash),
                 shortened_subnet_string(&subnet)
             );
         }
 
         format!(
             "Bless alternative Guest OS with rootfs hash {} for {} nodes",
-            self.rootfs_hash,
+            shortened_hash_string(&self.rootfs_hash),
             self.node_ids.len() + self.chip_ids.len()
         )
     }
@@ -1734,6 +1738,7 @@ impl ProposeToBlessAlternativeGuestOsVersionCmd {
 
         // Select node IDs: validate membership, then fetch their chip IDs.
         if !select_node_ids.is_empty() {
+            // Assert that select_node_ids is a(n improper) subset of subnet_node_ids.
             let subnet_node_id_set: HashSet<&NodeId> = subnet_node_ids.iter().collect();
             let select_node_id_set: HashSet<&NodeId> = select_node_ids.iter().collect();
             let extra: Vec<_> = select_node_id_set.difference(&subnet_node_id_set).collect();
@@ -1756,7 +1761,8 @@ impl ProposeToBlessAlternativeGuestOsVersionCmd {
 
         // Select chip IDs directly: validate against the subnet's actual chip IDs.
         if !select_chip_ids.is_empty() {
-            // Fetch all subnet chip IDs for validation; non-SEV nodes are skipped (false).
+            // Fetch all subnet chip IDs for validation; non-SEV nodes are skipped. Then verify
+            // that the selected chip IDs are a subset of the subnet's chip IDs.
             let all_subnet_chip_ids: HashSet<Vec<u8>> =
                 Self::get_chip_ids_from_node_ids(registry_canister, &subnet_node_ids, false)
                     .await
@@ -1887,6 +1893,7 @@ impl ProposeToBlessAlternativeGuestOsVersionCmd {
         futures::future::join_all(futures)
             .await
             .into_iter()
+            // Input elements are Option. This basically unwraps the Some values.
             .flatten()
             .collect()
     }
