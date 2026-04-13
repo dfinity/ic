@@ -297,6 +297,69 @@ impl RoundLimits {
     }
 }
 
+pub(crate) struct ConsumedCyclesForInstructions<'a> {
+    consumed_cycles: CompoundCycles<Instructions>,
+    instructions_used: NumInstructions,
+    cycles_account_manager: &'a CyclesAccountManager,
+    log: &'a ReplicaLogger,
+}
+
+impl<'a> ConsumedCyclesForInstructions<'a> {
+    fn new(
+        cycles_account_manager: &'a CyclesAccountManager,
+        cost_schedule: CanisterCyclesCostSchedule,
+        log: &'a ReplicaLogger,
+    ) -> Self {
+        Self {
+            consumed_cycles: CompoundCycles::new(Cycles::zero(), cost_schedule),
+            instructions_used: NumInstructions::new(0),
+            cycles_account_manager,
+            log,
+        }
+    }
+
+    pub(crate) fn add(
+        &mut self,
+        cycles: CompoundCycles<Instructions>,
+        instructions: NumInstructions,
+    ) {
+        self.consumed_cycles += cycles;
+        self.instructions_used += instructions;
+    }
+
+    pub(crate) fn apply(
+        self,
+        canister: &mut CanisterState,
+        round_limits: &mut RoundLimits,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+        failed_charge: &IntCounter,
+    ) {
+        let memory_usage = canister.memory_usage();
+        let message_memory_usage = canister.message_memory_usage();
+        let res = self.cycles_account_manager.consume_cycles(
+        &mut canister.system_state,
+        memory_usage,
+        message_memory_usage,
+        self.consumed_cycles,
+        subnet_size,
+        cost_schedule,
+        true, /* we only log the error, but do not return it to the user => do reveal top up balance */
+      );
+        if let Err(err) = res {
+            failed_charge.inc();
+            error!(
+                self.log,
+                "[EXC-BUG]: Failed to charge {:?} cycles on canister {}: {}",
+                self.consumed_cycles,
+                canister.canister_id(),
+                err
+            );
+        }
+        round_limits.instructions -= as_round_instructions(self.instructions_used);
+    }
+}
+
 /// Represent a paused execution that can be resumed or aborted.
 pub trait PausedExecution: std::fmt::Debug + Send {
     /// Resumes a paused execution.
@@ -512,6 +575,82 @@ impl ExecutionEnvironment {
         self.config
             .subnet_callback_soft_limit
             .saturating_sub(state.callback_count()) as i64
+    }
+
+    /// Executes a (mgmt canister) operation on the canister state
+    /// for a given canister ID.
+    /// Changes to the canister state and round limits
+    /// are discarded if the operation fails with an error.
+    ///
+    /// If the operation fails with an error, the amount of cycles
+    /// recorded in the mutable argument of type `ConsumedCyclesForInstructions`
+    /// is charged and the charge is expected to succeed.
+    /// An example is charging for uploading an existing WASM chunk
+    /// which fails with a corresponding error, but cycles are still
+    /// charged for the work of hashing the uploaded WASM chunk.
+    /// In particular, this means that a dedicated "out of cycles"
+    /// error and no charge should be recorded if the canister is
+    /// completely out of cycles.
+    fn execute_mgmt_operation_on_canister<F, C>(
+        &self,
+        canister_id: CanisterId,
+        op: F,
+        context: C,
+        state: &mut ReplicatedState,
+        msg: &mut CanisterCall,
+        round_limits: &mut RoundLimits,
+        registry_settings: &RegistryExecutionSettings,
+    ) -> ExecuteSubnetMessageResult
+    where
+        F: for<'a, 'b> FnOnce(
+            CanisterState,
+            RoundLimits,
+            &'b mut ConsumedCyclesForInstructions<'a>,
+            C,
+        ) -> Result<CanisterManagerResponse, CanisterManagerError>,
+    {
+        let cost_schedule = state.get_own_cost_schedule();
+        let mut consumed_cycles = ConsumedCyclesForInstructions::new(
+            &self.cycles_account_manager,
+            cost_schedule,
+            &self.log,
+        );
+        match state.canister_state_make_mut(&canister_id) {
+            Some(clean_canister) => {
+                let new_canister: CanisterState = clean_canister.clone();
+                match op(
+                    clean_canister.clone(),
+                    round_limits.clone(),
+                    &mut consumed_cycles,
+                    context,
+                ) {
+                    Ok(response) => {
+                        *clean_canister = new_canister;
+                        self.process_canister_manager_result(Ok(response), state, msg)
+                    }
+                    Err(err) => {
+                        consumed_cycles.apply(
+                            clean_canister,
+                            round_limits,
+                            registry_settings.subnet_size,
+                            cost_schedule,
+                            &self.metrics.failed_subnet_message_charge,
+                        );
+                        self.process_canister_manager_result(Err(err), state, msg)
+                    }
+                }
+            }
+            None => {
+                let err = UserError::new(
+                    ErrorCode::CanisterNotFound,
+                    format!("Canister {} not found.", &canister_id),
+                );
+                ExecuteSubnetMessageResult::Finished {
+                    response: Err(err),
+                    refund: msg.take_cycles(),
+                }
+            }
+        }
     }
 
     /// Executes a replicated message sent to a subnet.

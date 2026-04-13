@@ -60,6 +60,9 @@ pub(crate) struct ExecutionEnvironmentMetrics {
     /// Critical error for attempting to execute new message
     /// while already in progress a long-running message.
     pub(crate) long_execution_already_in_progress: IntCounter,
+    /// Critical error cycles for instructions used by
+    /// a failed subnet message (management canister operation) cannot be charged.
+    pub(crate) failed_subnet_message_charge: IntCounter,
 
     /// Metrics for HTTP outcalls costs.
     /// This is
@@ -127,6 +130,7 @@ impl ExecutionEnvironmentMetrics {
                 "Total number of intra-subnet messages that exceed the 2 MiB limit for inter-subnet messages."
             ),
             long_execution_already_in_progress: metrics_registry.error_counter("execution_environment_long_execution_already_in_progress"),
+            failed_subnet_message_charge: metrics_registry.error_counter("execution_environment_failed_subnet_message_charge"),
             // The minimum price of an outcall is ~50 million cycles, while the maximum price is ~30 billion.
             http_outcalls_metrics: HttpOutcallMetrics {
                 old_price: metrics_registry.histogram(
