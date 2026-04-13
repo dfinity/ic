@@ -11,7 +11,7 @@ use ic_types::{MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions};
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
 use std::{
     cmp,
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet}, num::NonZero,
 };
 
 use crate::wasmtime_embedder::{
@@ -1706,6 +1706,7 @@ pub fn wasmtime_validation_config(_embedders_config: &EmbeddersConfig) -> wasmti
     // The signal handler uses Posix signals, not Mach ports on MacOS.
     config.macos_use_mach_ports(false);
     config.wasm_backtrace(true);
+    config.wasm_backtrace_max_frames(NonZero::new(20_usize));
     config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Disable);
     config.wasm_bulk_memory(true);
     config.wasm_function_references(false);
