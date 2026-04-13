@@ -288,7 +288,7 @@ impl SubnetCallContextManager {
                         info!(
                             logger,
                             "Received the response for SignWithThreshold request with id {:?} from {:?}",
-                            context.pseudo_random_id,
+                            callback_id,
                             context.request.sender
                         );
                         SubnetCallContext::SignWithThreshold(context)
@@ -549,7 +549,7 @@ pub struct SignWithThresholdContext {
     pub request: Request,
     pub args: ThresholdArguments,
     pub derivation_path: Arc<Vec<Vec<u8>>>,
-    pub pseudo_random_id: [u8; PSEUDO_RANDOM_ID_SIZE],
+    pub deprecated_pseudo_random_id: Option<[u8; PSEUDO_RANDOM_ID_SIZE]>,
     pub batch_time: Time,
     pub nonce: Option<[u8; NONCE_SIZE]>,
 }

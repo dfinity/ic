@@ -37,16 +37,15 @@ use crate::{
             ArchivedMonthlyNodeProviderRewards, Ballot, BlessAlternativeGuestOsVersion,
             CreateServiceNervousSystem, Followees, GetNeuronsFundAuditInfoRequest,
             GetNeuronsFundAuditInfoResponse, Governance as GovernanceProto, GovernanceError,
-            InstallCode, KnownNeuron, ListKnownNeuronsResponse, ManageNeuron,
-            MonthlyNodeProviderRewards, Motion, NetworkEconomics, NeuronState,
-            NeuronsFundAuditInfo, NeuronsFundData,
+            KnownNeuron, ListKnownNeuronsResponse, ManageNeuron, MonthlyNodeProviderRewards,
+            Motion, NetworkEconomics, NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
             NeuronsFundParticipation as NeuronsFundParticipationPb,
             NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
             ProposalData, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary, RewardEvent,
             RewardNodeProvider, RewardNodeProviders, SettleNeuronsFundParticipationRequest,
-            SettleNeuronsFundParticipationResponse, StopOrStartCanister, TakeCanisterSnapshot,
-            Tally, Topic, UpdateCanisterSettings, UpdateNodeProvider, Vote, VotingPowerEconomics,
-            WaitForQuietState, archived_monthly_node_provider_rewards,
+            SettleNeuronsFundParticipationResponse, SuccessfulProposalExecutionValue, Tally, Topic,
+            UpdateNodeProvider, Vote, VotingPowerEconomics, WaitForQuietState,
+            archived_monthly_node_provider_rewards,
             create_service_nervous_system::LedgerParameters,
             get_neurons_fund_audit_info_response,
             governance::{
@@ -73,7 +72,7 @@ use crate::{
     },
     proposals::{
         ValidProposalAction,
-        call_canister::CallCanister,
+        call_canister::{CallCanister, CallCanisterReply},
         execute_nns_function::{ValidExecuteNnsFunction, ValidNnsFunction},
         fulfill_subnet_rental_request::ValidFulfillSubnetRentalRequest,
         sum_weighted_voting_power,
@@ -101,6 +100,7 @@ use ic_nervous_system_proto::pb::v1::{GlobalTimeOfDay, Principals};
 use ic_nervous_system_rate_limits::{
     InMemoryRateLimiter, RateLimiter, RateLimiterConfig, RateLimiterError,
 };
+use ic_nervous_system_string::humanize_blob;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
@@ -3167,66 +3167,102 @@ impl Governance {
         Ok(())
     }
 
-    /// Set the status of a proposal that is 'being executed' to
-    /// 'executed' or 'failed' depending on the value of 'success'.
+    /// Records the outcome of executing a proposal. Decodes the raw reply
+    /// bytes via `Reply::try_decode`, then updates `ProposalData` fields:
     ///
-    /// The proposal ID 'pid' is taken as a raw integer to avoid
-    /// lifetime issues.
-    pub fn set_proposal_execution_status(&mut self, pid: u64, result: Result<(), GovernanceError>) {
-        match self.heap_data.proposals.get_mut(&pid) {
-            Some(proposal_data) => {
-                // The proposal has to be adopted before it is executed.
-                assert_eq!(proposal_data.status(), ProposalStatus::Adopted);
-                match result {
-                    Ok(_) => {
-                        println!(
-                            "{}Execution of proposal: {} succeeded. (Proposal title: {:?})",
-                            LOG_PREFIX,
-                            pid,
-                            proposal_data
-                                .proposal
-                                .as_ref()
-                                .and_then(|proposal| proposal.title.clone())
-                        );
-                        // The proposal was executed 'now'.
-                        proposal_data.executed_timestamp_seconds = self.env.now();
-                        // If the proposal previously failed to be
-                        // executed, it is no longer that case that the
-                        // proposal failed to be executed.
-                        proposal_data.failed_timestamp_seconds = 0;
-                        proposal_data.failure_reason = None;
-                    }
-                    Err(error) => {
-                        println!(
-                            "{}Execution of proposal: {} failed. Reason: {:?} (Proposal title: {:?})",
-                            LOG_PREFIX,
-                            pid,
-                            error,
-                            proposal_data
-                                .proposal
-                                .as_ref()
-                                .and_then(|proposal| proposal.title.clone())
-                        );
-                        // Only update the failure timestamp is there is
-                        // not yet any report of success in executing this
-                        // proposal. If success already has been reported,
-                        // it may be that the failure is reported after
-                        // the success, e.g., due to a retry.
-                        if proposal_data.executed_timestamp_seconds == 0 {
-                            proposal_data.failed_timestamp_seconds = self.env.now();
-                            proposal_data.failure_reason = Some(error);
-                        }
-                    }
-                }
-            }
-            None => {
-                // The proposal ID was not found. Something is wrong:
-                // just log this information to aid debugging.
+    /// On success:
+    ///   - `success_value`: set to the decoded reply (if the reply type
+    ///     produces one; `()` does not).
+    ///   - `executed_timestamp_seconds`: set to now.
+    ///
+    /// On failure:
+    ///   - `failure_reason`: set to the error (unless already executed).
+    ///   - `failed_timestamp_seconds`: set to now (unless already executed).
+    pub(crate) fn set_proposal_execution_status<Reply>(
+        &mut self,
+        proposal_id: u64,
+        result: Result</* reply: */ Vec<u8>, GovernanceError>,
+    ) where
+        Reply: CallCanisterReply,
+        SuccessfulProposalExecutionValue: From<Reply>,
+    {
+        let now_timestamp_seconds = self.env.now();
+
+        // Fetch the ProposalData.
+        let Some(proposal_data) = self.heap_data.proposals.get_mut(&proposal_id) else {
+            // The proposal ID was not found. Something is wrong:
+            // just log this information to aid debugging.
+            println!(
+                "{}Proposal {:?} not found when attempting to set execution result at {}.",
+                LOG_PREFIX, proposal_id, now_timestamp_seconds,
+            );
+            return;
+        };
+        // The proposal has to be adopted before it is executed.
+        debug_assert_eq!(proposal_data.status(), ProposalStatus::Adopted);
+
+        // For later logging.
+        let title = proposal_data
+            .proposal
+            .as_ref()
+            .and_then(|proposal| proposal.title.clone())
+            .unwrap_or("???".to_string());
+
+        // If already marked as successful (from an earlier attempt??),
+        // leave proposal_data alone.
+        if proposal_data.executed_timestamp_seconds != 0 {
+            println!(
+                "{}Proposal {} (title: {}) already marked as executed. Ignoring new result.",
+                LOG_PREFIX, proposal_id, title,
+            );
+            return;
+        }
+
+        // Handle fail.
+        let encoded_reply: Vec<u8> = match result {
+            Ok(ok) => ok,
+            Err(error) => {
                 println!(
-                    "{}Proposal {:?} not found when attempt to set execution result to {:?}",
-                    LOG_PREFIX, pid, result
+                    "{}Failed to execute proposal {} (title: {}). Reason: {:?}",
+                    LOG_PREFIX, proposal_id, title, error,
                 );
+
+                proposal_data.failed_timestamp_seconds = now_timestamp_seconds;
+                proposal_data.failure_reason = Some(error);
+                return;
             }
+        };
+
+        // Handle success.
+
+        println!(
+            "{}Successfully executed proposal {} (title: {}).",
+            LOG_PREFIX, proposal_id, title,
+        );
+        proposal_data.executed_timestamp_seconds = now_timestamp_seconds;
+
+        // Set success_value.
+        let reply = match Reply::try_decode(&encoded_reply) {
+            Ok(ok) => ok,
+            Err(err) => {
+                println!(
+                    "{}Failed to decode reply of successfully executed proposal: {} (title: {}). Error: {:?} reply: {}",
+                    LOG_PREFIX,
+                    proposal_id,
+                    title,
+                    err,
+                    humanize_blob(&encoded_reply, 200),
+                );
+
+                return;
+            }
+        };
+        proposal_data.success_value = reply.map(SuccessfulProposalExecutionValue::from);
+        if proposal_data.success_value.is_some() {
+            println!(
+                "{}Proposal {} (title: {}): success_value set to {:?}.",
+                LOG_PREFIX, proposal_id, title, proposal_data.success_value,
+            );
         }
     }
 
@@ -3741,7 +3777,7 @@ impl Governance {
                 // This should not happen as the proposal was validated when it was created. The
                 // only way it can happen is that some validation is added after the proposal was
                 // created.
-                self.set_proposal_execution_status(
+                self.set_proposal_execution_status::<()>(
                     proposal_id,
                     Err(GovernanceError::new_with_message(
                         ErrorType::PreconditionFailed,
@@ -3952,7 +3988,7 @@ impl Governance {
     /// Rewards a node provider.
     async fn reward_node_provider(&mut self, pid: u64, reward: &RewardNodeProvider) {
         let result = self.reward_node_provider_helper(reward).await;
-        self.set_proposal_execution_status(pid, result);
+        self.set_proposal_execution_status::<()>(pid, result.map(|()| vec![]));
     }
 
     /// Mint and transfer the specified Node Provider rewards
@@ -3989,7 +4025,7 @@ impl Governance {
             self.reward_node_providers(&reward_nps.rewards).await
         };
 
-        self.set_proposal_execution_status(pid, result);
+        self.set_proposal_execution_status::<()>(pid, result.map(|()| vec![]));
     }
 
     /// Return `true` if `NODE_PROVIDER_REWARD_PERIOD_SECONDS` has passed since the last monthly
@@ -4141,12 +4177,12 @@ impl Governance {
                             match result.command {
                                 Some(manage_neuron_response::Command::Error(err)) => {
                                     let err = GovernanceError::from(err);
-                                    self.set_proposal_execution_status(pid, Err(err))
+                                    self.set_proposal_execution_status::<()>(pid, Err(err))
                                 }
-                                _ => self.set_proposal_execution_status(pid, Ok(())),
+                                _ => self.set_proposal_execution_status::<()>(pid, Ok(vec![])),
                             };
                         } else {
-                            self.set_proposal_execution_status(
+                            self.set_proposal_execution_status::<()>(
                                 pid,
                                 Err(GovernanceError::new_with_message(
                                     ErrorType::NotAuthorized,
@@ -4157,7 +4193,7 @@ impl Governance {
                         }
                     }
                     Ok(None) => {
-                        self.set_proposal_execution_status(
+                        self.set_proposal_execution_status::<()>(
                             pid,
                             Err(GovernanceError::new_with_message(
                                 ErrorType::NotFound,
@@ -4166,7 +4202,7 @@ impl Governance {
                             )),
                         );
                     }
-                    Err(e) => self.set_proposal_execution_status(pid, Err(e)),
+                    Err(e) => self.set_proposal_execution_status::<()>(pid, Err(e)),
                 }
             }
             ValidProposalAction::ManageNetworkEconomics(network_economics) => {
@@ -4174,7 +4210,7 @@ impl Governance {
             }
             // A motion is not executed, just recorded for posterity.
             ValidProposalAction::Motion(_) => {
-                self.set_proposal_execution_status(pid, Ok(()));
+                self.set_proposal_execution_status::<()>(pid, Ok(vec![]));
             }
             ValidProposalAction::ExecuteNnsFunction(m) => {
                 // This will eventually set the proposal execution
@@ -4185,7 +4221,7 @@ impl Governance {
                         // call. We don't set it now.
                     }
                     Err(_) => {
-                        self.set_proposal_execution_status(
+                        self.set_proposal_execution_status::<()>(
                             pid,
                             Err(GovernanceError::new_with_message(
                                 ErrorType::External,
@@ -4197,12 +4233,12 @@ impl Governance {
             }
             ValidProposalAction::ApproveGenesisKyc(proposal) => {
                 let result = self.approve_genesis_kyc(&proposal.principals);
-                self.set_proposal_execution_status(pid, result);
+                self.set_proposal_execution_status::<()>(pid, result.map(|()| vec![]));
             }
             ValidProposalAction::AddOrRemoveNodeProvider(add_or_remove_node_provider) => {
                 let result =
                     add_or_remove_node_provider.execute(&mut self.heap_data.node_providers);
-                self.set_proposal_execution_status(pid, result);
+                self.set_proposal_execution_status::<()>(pid, result.map(|()| vec![]));
             }
             ValidProposalAction::RewardNodeProvider(ref reward) => {
                 self.reward_node_provider(pid, reward).await;
@@ -4213,26 +4249,24 @@ impl Governance {
             }
             ValidProposalAction::RegisterKnownNeuron(register_request) => {
                 let result = register_request.execute(&mut self.neuron_store);
-                self.set_proposal_execution_status(pid, result);
+                self.set_proposal_execution_status::<()>(pid, result.map(|()| vec![]));
             }
             ValidProposalAction::DeregisterKnownNeuron(deregister_request) => {
                 let result = deregister_request.execute(&mut self.neuron_store);
-                self.set_proposal_execution_status(pid, result);
+                self.set_proposal_execution_status::<()>(pid, result.map(|()| vec![]));
             }
             ValidProposalAction::CreateServiceNervousSystem(ref create_service_nervous_system) => {
                 self.create_service_nervous_system(pid, create_service_nervous_system)
                     .await;
             }
             ValidProposalAction::InstallCode(install_code) => {
-                self.perform_install_code(pid, install_code).await;
+                self.perform_call_canister(pid, install_code).await;
             }
             ValidProposalAction::StopOrStartCanister(stop_or_start) => {
-                self.perform_stop_or_start_canister(pid, stop_or_start)
-                    .await;
+                self.perform_call_canister(pid, stop_or_start).await;
             }
             ValidProposalAction::UpdateCanisterSettings(update_settings) => {
-                self.perform_update_canister_settings(pid, update_settings)
-                    .await;
+                self.perform_call_canister(pid, update_settings).await;
             }
             ValidProposalAction::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => {
                 self.perform_fulfill_subnet_rental_request(pid, fulfill_subnet_rental_request)
@@ -4245,19 +4279,16 @@ impl Governance {
                 bless_alternative_guest_os_version,
             ),
             ValidProposalAction::TakeCanisterSnapshot(take_canister_snapshot) => {
-                self.perform_take_canister_snapshot(pid, take_canister_snapshot)
+                self.perform_call_canister(pid, take_canister_snapshot)
                     .await;
             }
             ValidProposalAction::LoadCanisterSnapshot(load_canister_snapshot) => {
-                self.perform_load_canister_snapshot(pid, load_canister_snapshot)
+                self.perform_call_canister(pid, load_canister_snapshot)
                     .await;
             }
             ValidProposalAction::CreateCanisterAndInstallCode(create_canister_and_install_code) => {
-                self.perform_create_canister_and_install_code(
-                    pid,
-                    create_canister_and_install_code,
-                )
-                .await;
+                self.perform_call_canister(pid, create_canister_and_install_code)
+                    .await;
             }
         }
     }
@@ -4268,7 +4299,7 @@ impl Governance {
         proposed_network_economics: NetworkEconomics,
     ) {
         let result = self.perform_manage_network_economics_impl(proposed_network_economics);
-        self.set_proposal_execution_status(proposal_id, result);
+        self.set_proposal_execution_status::<()>(proposal_id, result.map(|()| vec![]));
     }
 
     /// Only call this from perform_manage_network_economics.
@@ -4294,31 +4325,6 @@ impl Governance {
         Ok(())
     }
 
-    async fn perform_install_code(&mut self, proposal_id: u64, install_code: InstallCode) {
-        let result = self.perform_call_canister(proposal_id, install_code).await;
-        self.set_proposal_execution_status(proposal_id, result);
-    }
-
-    async fn perform_stop_or_start_canister(
-        &mut self,
-        proposal_id: u64,
-        stop_or_start: StopOrStartCanister,
-    ) {
-        let result = self.perform_call_canister(proposal_id, stop_or_start).await;
-        self.set_proposal_execution_status(proposal_id, result);
-    }
-
-    async fn perform_update_canister_settings(
-        &mut self,
-        proposal_id: u64,
-        update_settings: UpdateCanisterSettings,
-    ) {
-        let result = self
-            .perform_call_canister(proposal_id, update_settings)
-            .await;
-        self.set_proposal_execution_status(proposal_id, result);
-    }
-
     async fn perform_fulfill_subnet_rental_request(
         &mut self,
         proposal_id: u64,
@@ -4327,29 +4333,7 @@ impl Governance {
         let result = fulfill_subnet_rental_request
             .execute(ProposalId { id: proposal_id }, &self.env)
             .await;
-        self.set_proposal_execution_status(proposal_id, result);
-    }
-
-    async fn perform_load_canister_snapshot(
-        &mut self,
-        proposal_id: u64,
-        load_canister_snapshot: pb::v1::LoadCanisterSnapshot,
-    ) {
-        let result = self
-            .perform_call_canister(proposal_id, load_canister_snapshot)
-            .await;
-        self.set_proposal_execution_status(proposal_id, result);
-    }
-
-    async fn perform_create_canister_and_install_code(
-        &mut self,
-        proposal_id: u64,
-        create_canister_and_install_code: pb::v1::CreateCanisterAndInstallCode,
-    ) {
-        let result = self
-            .perform_call_canister(proposal_id, create_canister_and_install_code)
-            .await;
-        self.set_proposal_execution_status(proposal_id, result);
+        self.set_proposal_execution_status::<()>(proposal_id, result.map(|()| vec![]));
     }
 
     fn perform_bless_alternative_guest_os_version(
@@ -4358,42 +4342,36 @@ impl Governance {
         bless_alternative_guest_os_version: BlessAlternativeGuestOsVersion,
     ) {
         let result = bless_alternative_guest_os_version.execute();
-        self.set_proposal_execution_status(proposal_id, result);
+        self.set_proposal_execution_status::<()>(proposal_id, result.map(|()| vec![]));
     }
 
-    async fn perform_take_canister_snapshot(
-        &mut self,
-        proposal_id: u64,
-        take_canister_snapshot: TakeCanisterSnapshot,
-    ) {
-        let result = self
-            .perform_call_canister(proposal_id, take_canister_snapshot)
-            .await;
-        self.set_proposal_execution_status(proposal_id, result);
-    }
+    /// Sends request, decodes reply, and sets proposal execution status (this last part was
+    /// added later in Mar, 2026).
+    async fn perform_call_canister<Request>(&mut self, proposal_id: u64, request: Request)
+    where
+        Request: CallCanister,
+        SuccessfulProposalExecutionValue: From<Request::Reply>,
+    {
+        let result: Result<Vec<u8>, GovernanceError> = async {
+            let (canister_id, function) = request.canister_and_function()?;
+            let payload = request.payload()?;
 
-    async fn perform_call_canister(
-        &mut self,
-        proposal_id: u64,
-        call_canister: impl CallCanister,
-    ) -> Result<(), GovernanceError> {
-        let (canister_id, function) = call_canister.canister_and_function()?;
-        let payload = call_canister.payload()?;
-
-        let response = self
-            .env
-            .call_canister_method(canister_id, function, payload)
-            .await;
-
-        match response {
-            Ok(_) => Ok(()),
-            Err((code, message)) => Err(GovernanceError::new_with_message(
-                ErrorType::External,
-                format!(
-                    "Error calling external canister for proposal {proposal_id}. Rejection code: {code:?} message: {message}"
-                ),
-            )),
+            self.env
+                .call_canister_method(canister_id, function, payload)
+                .await
+                .map_err(|(code, message)| {
+                    GovernanceError::new_with_message(
+                        ErrorType::External,
+                        format!(
+                            "Error calling external canister for proposal {proposal_id}. \
+                            Rejection code: {code:?} message: {message}"
+                        ),
+                    )
+                })
         }
+        .await;
+
+        self.set_proposal_execution_status::<Request::Reply>(proposal_id, result);
     }
 
     fn set_sns_token_swap_lifecycle_to_open(proposal_data: &mut ProposalData) {
@@ -4425,7 +4403,7 @@ impl Governance {
         let result = self
             .do_create_service_nervous_system(proposal_id, create_service_nervous_system)
             .await;
-        self.set_proposal_execution_status(proposal_id, result);
+        self.set_proposal_execution_status::<()>(proposal_id, result.map(|()| vec![]));
     }
 
     async fn do_create_service_nervous_system(

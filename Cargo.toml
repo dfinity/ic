@@ -914,11 +914,11 @@ uuid = { version = "=1.12.1", features = ["v4", "serde"] }
 virt = "0.4"
 walkdir = "2.3.3"
 walrus = "0.23.3"
-wasm-encoder = { version = "0.244.0", features = ["wasmparser"] }
-wasmparser = "0.244.0"
-wasmprinter = "0.244.0"
-wast = "244.0.0"
-wat = "~1.244.0"
+wasm-encoder = { version = "0.245.0", features = ["wasmparser"] }
+wasmparser = "0.245.0"
+wasmprinter = "0.245.0"
+wast = "245.0.0"
+wat = "~1.245.0"
 webpki-roots = "1.0.6"
 which = "6.0.3"
 wirm = { version = "2.1.0", features = ["parallel"] }

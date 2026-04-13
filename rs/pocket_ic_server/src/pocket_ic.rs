@@ -112,7 +112,9 @@ use ic_state_machine_tests::{
 use ic_state_manager::StateManagerImpl;
 use ic_types::batch::BlockmakerMetrics;
 use ic_types::ingress::{IngressState, IngressStatus};
-use ic_types::messages::{CertificateDelegationFormat, CertificateDelegationMetadata};
+use ic_types::messages::{
+    CertificateDelegationFormat, CertificateDelegationMetadata, SignedSenderInfo,
+};
 use ic_types::{
     CanisterId, Height, NumInstructions, PrincipalId, RegistryVersion, SnapshotId, SubnetId,
     artifact::UnvalidatedArtifactMutation,
@@ -140,8 +142,8 @@ use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
     CanisterHttpResponse, ExtendedSubnetConfigSet, IcpConfig, IcpConfigFlag, IcpFeatures,
     IcpFeaturesConfig, IncompleteStateFlag, MockCanisterHttpResponse, RawAddCycles,
-    RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
-    SubnetInstructionConfig, SubnetKind, Topology,
+    RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSenderInfo,
+    RawSetStableMemory, SubnetInstructionConfig, SubnetKind, Topology,
 };
 use pocket_ic::{ErrorCode, RejectCode, RejectResponse, copy_dir};
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
@@ -190,6 +192,8 @@ const MAINNET_FIDUCIARY_SUBNET_ID: &str =
     "pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae";
 const MAINNET_SNS_SUBNET_ID: &str =
     "x33ed-h457x-bsgyx-oqxqf-6pzwv-wkhzr-rm2j3-npodi-purzm-n66cg-gae";
+const MAINNET_TEST_THRESHOLD_KEYS_SUBNET_ID: &str =
+    "fuqsr-in2lc-zbcjj-ydmcw-pzq7h-4xm2z-pto4i-dcyee-5z4rz-x63ji-nae";
 
 const REGISTRY_CANISTER_WASM: &[u8] = include_bytes!(env!("REGISTRY_CANISTER_WASM_PATH"));
 const CYCLES_MINTING_CANISTER_WASM: &[u8] =
@@ -895,7 +899,28 @@ impl PocketIcSubnets {
         let mut subnet_chain_keys = vec![];
         if subnet_kind == SubnetKind::II || subnet_kind == SubnetKind::Fiduciary {
             for algorithm in [SchnorrAlgorithm::Bip340Secp256k1, SchnorrAlgorithm::Ed25519] {
-                for name in ["key_1", "test_key_1", "dfx_test_key"] {
+                let key_id = SchnorrKeyId {
+                    algorithm,
+                    name: "key_1".to_string(),
+                };
+                subnet_chain_keys.push(MasterPublicKeyId::Schnorr(key_id));
+            }
+
+            let key_id = EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: "key_1".to_string(),
+            };
+            subnet_chain_keys.push(MasterPublicKeyId::Ecdsa(key_id));
+
+            let key_id = VetKdKeyId {
+                curve: VetKdCurve::Bls12_381_G2,
+                name: "key_1".to_string(),
+            };
+            subnet_chain_keys.push(MasterPublicKeyId::VetKd(key_id));
+        }
+        if subnet_kind == SubnetKind::TestThresholdKeys {
+            for algorithm in [SchnorrAlgorithm::Bip340Secp256k1, SchnorrAlgorithm::Ed25519] {
+                for name in ["test_key_1", "dfx_test_key"] {
                     let key_id = SchnorrKeyId {
                         algorithm,
                         name: name.to_string(),
@@ -904,7 +929,7 @@ impl PocketIcSubnets {
                 }
             }
 
-            for name in ["key_1", "test_key_1", "dfx_test_key"] {
+            for name in ["test_key_1", "dfx_test_key"] {
                 let key_id = EcdsaKeyId {
                     curve: EcdsaCurve::Secp256k1,
                     name: name.to_string(),
@@ -912,7 +937,7 @@ impl PocketIcSubnets {
                 subnet_chain_keys.push(MasterPublicKeyId::Ecdsa(key_id));
             }
 
-            for name in ["key_1", "test_key_1", "dfx_test_key"] {
+            for name in ["test_key_1", "dfx_test_key"] {
                 let key_id = VetKdKeyId {
                     curve: VetKdCurve::Bls12_381_G2,
                     name: name.to_string(),
@@ -3218,7 +3243,7 @@ impl HasStateLabel for PocketIc {
 fn conv_type(inp: rest::SubnetKind) -> SubnetType {
     use rest::SubnetKind::*;
     match inp {
-        Application | Fiduciary | SNS => SubnetType::Application,
+        Application | Fiduciary | SNS | TestThresholdKeys => SubnetType::Application,
         CloudEngine => SubnetType::CloudEngine,
         Bitcoin | II | NNS | System => SubnetType::System,
         VerifiedApplication => SubnetType::VerifiedApplication,
@@ -3231,6 +3256,7 @@ fn subnet_size(subnet: SubnetKind) -> u64 {
         Application => 13,
         CloudEngine => 13,
         VerifiedApplication => 13,
+        TestThresholdKeys => 13,
         Fiduciary => 34,
         SNS => 34,
         Bitcoin => 13,
@@ -3264,6 +3290,11 @@ fn subnet_kind_subnet_id(subnet_kind: SubnetKind) -> Option<SubnetId> {
                 .into(),
         ),
         SNS => Some(PrincipalId::from_str(MAINNET_SNS_SUBNET_ID).unwrap().into()),
+        TestThresholdKeys => Some(
+            PrincipalId::from_str(MAINNET_TEST_THRESHOLD_KEYS_SUBNET_ID)
+                .unwrap()
+                .into(),
+        ),
     }
 }
 
@@ -4291,11 +4322,12 @@ impl Operation for SubmitIngressMessage {
         let subnet = route_call(pic, canister_call);
         match subnet {
             Ok(subnet) => {
-                match subnet.submit_ingress_as(
+                match subnet.submit_ingress_as_with_sender_info(
                     self.0.sender,
                     self.0.canister_id,
                     self.0.method.clone(),
                     self.0.payload.clone(),
+                    self.0.sender_info.clone(),
                 ) {
                     Err(SubmitIngressError::HttpError(e)) => {
                         eprintln!("Failed to submit ingress message: {e}");
@@ -4462,12 +4494,13 @@ impl Operation for Query {
                             },
                         )
                     });
-                match subnet.query_as_with_delegation(
+                match subnet.query_as_with_delegation_and_sender_info(
                     self.0.sender,
                     self.0.canister_id,
                     self.0.method.clone(),
                     self.0.payload.clone(),
                     delegation,
+                    self.0.sender_info.clone(),
                 ) {
                     Ok(result) => {
                         OpOut::CanisterResult(wasm_result_to_canister_result(result, false))
@@ -5066,6 +5099,7 @@ pub struct CanisterCall {
     pub canister_id: CanisterId,
     pub method: String,
     pub payload: Vec<u8>,
+    pub sender_info: Option<SignedSenderInfo>,
 }
 
 impl TryFrom<RawCanisterCall> for CanisterCall {
@@ -5077,6 +5111,7 @@ impl TryFrom<RawCanisterCall> for CanisterCall {
             method,
             payload,
             effective_principal,
+            sender_info,
         }: RawCanisterCall,
     ) -> Result<Self, Self::Error> {
         let effective_principal = effective_principal.try_into()?;
@@ -5096,6 +5131,23 @@ impl TryFrom<RawCanisterCall> for CanisterCall {
                 });
             }
         };
+        let sender_info = if let Some(RawSenderInfo { info, signer }) = sender_info {
+            let signer = match CanisterId::try_from(signer) {
+                Ok(signer) => signer,
+                Err(_) => {
+                    return Err(ConversionError {
+                        message: "Invalid sender info signer".to_string(),
+                    });
+                }
+            };
+            Some(SignedSenderInfo {
+                info,
+                signer,
+                sig: vec![],
+            })
+        } else {
+            None
+        };
 
         Ok(CanisterCall {
             effective_principal,
@@ -5103,6 +5155,7 @@ impl TryFrom<RawCanisterCall> for CanisterCall {
             canister_id,
             method,
             payload,
+            sender_info,
         })
     }
 }
@@ -5111,10 +5164,25 @@ impl CanisterCall {
     fn id(&self) -> OpId {
         let mut hasher = Sha256::new();
         hasher.write(&self.payload);
-        let hash = Digest(hasher.finish());
+        let payload_hash = Digest(hasher.finish());
+        let mut hasher = Sha256::new();
+        if let Some(sender_info) = &self.sender_info {
+            let signer_bytes: &[u8] = sender_info.signer.as_ref();
+            // We prepend the length of the canister principal encoding
+            // so that the sender info serialization is unique.
+            hasher.write(&signer_bytes.len().to_le_bytes());
+            hasher.write(signer_bytes);
+            hasher.write(&sender_info.info);
+        }
+        let sender_info_hash = Digest(hasher.finish());
         OpId(format!(
-            "call({:?},{},{},{},{})",
-            self.effective_principal, self.sender, self.canister_id, self.method, hash
+            "call({:?},{},{},{},{},{})",
+            self.effective_principal,
+            self.sender,
+            self.canister_id,
+            self.method,
+            payload_hash,
+            sender_info_hash
         ))
     }
 }

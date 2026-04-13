@@ -247,6 +247,14 @@ type CreateCanisterAndInstallCodeRequest = record {
   install_arg : opt blob;
 };
 
+type CreateCanisterAndInstallCodeOk = record {
+  canister_id : opt principal;
+};
+
+type SuccessfulProposalExecutionValue = variant {
+  CreateCanisterAndInstallCode : CreateCanisterAndInstallCodeOk;
+};
+
 type CreateServiceNervousSystem = record {
   url : opt text;
   governance_parameters : opt GovernanceParameters;
@@ -1163,6 +1171,7 @@ type ProposalData = record {
   original_total_community_fund_maturity_e8s_equivalent : opt nat64;
   total_potential_voting_power : opt nat64;
   topic: opt int32;
+  success_value : opt SuccessfulProposalExecutionValue;
 };
 
 type ProposalInfo = record {
@@ -1184,6 +1193,7 @@ type ProposalInfo = record {
   proposer : opt NeuronId;
   executed_timestamp_seconds : nat64;
   total_potential_voting_power : opt nat64;
+  success_value : opt SuccessfulProposalExecutionValue;
 };
 
 type RegisterVote = record {
