@@ -72,6 +72,12 @@ PocketIC supports standard canister lifecycle and interaction operations.
 - **WHEN** a client submits an ingress message via the `/submit_ingress_message` endpoint
 - **THEN** the message is queued for processing in the target canister
 
+#### Scenario: Submit ingress message with sender info
+- **WHEN** a client submits an ingress message with an optional `sender_info` field
+- **AND** `sender_info` contains `RawSenderInfo` with base64-encoded `info` bytes and a `signer` principal
+- **THEN** the sender info is attached to the ingress message
+- **AND** the target canister can access it via `ic0.msg_caller_info_*` system API functions
+
 #### Scenario: Await ingress message
 - **WHEN** a client calls `/await_ingress_message` after submitting a message
 - **THEN** the server processes ticks until the message is completed
@@ -81,6 +87,15 @@ PocketIC supports standard canister lifecycle and interaction operations.
 - **WHEN** a client sends a query via the `/query` endpoint (JSON format)
 - **THEN** the query is executed without modifying state
 - **AND** the result is returned
+
+#### Scenario: Query a canister with sender info
+- **WHEN** a client sends a query with an optional `sender_info` field containing `RawSenderInfo`
+- **THEN** the sender info is available to the canister during query execution
+- **AND** `ic0.msg_caller_info_data_size` returns the size of the info bytes
+
+#### Scenario: Update call with sender info
+- **WHEN** a client makes an update call via the PocketIC Rust library with `_with_sender_info` variant
+- **THEN** the `SenderInfo` is propagated through the ingress message to the canister execution context
 
 #### Scenario: Get cycles balance
 - **WHEN** a client sends a request to `/get_cycles` with a canister ID
