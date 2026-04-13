@@ -1,4 +1,3 @@
-/* tag::catalog[]
 Title:: NNS Delegation Tests
 
 Goal:: Test the behavior NNS Delegations.
