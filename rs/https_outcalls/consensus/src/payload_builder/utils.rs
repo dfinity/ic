@@ -422,7 +422,7 @@ pub(crate) fn find_flexible_result(
 
     // 3. Even the smallest OK responses exceed the absolute payload limit?
     if all_ok_shares_sorted_asc.len() >= min_responses {
-        let num_unseen = committee.len() - seen_signers.len();
+        let num_unseen = committee.len().saturating_sub(seen_signers.len());
         // Unseen responses could still submit small OK responses, so we account for them.
         let min_minus_unseen = min_responses.saturating_sub(num_unseen);
 
