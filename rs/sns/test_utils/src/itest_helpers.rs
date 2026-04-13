@@ -355,7 +355,7 @@ pub fn populate_canister_ids(
 
     // Index
     {
-        if let Some(IndexArg::Init(ref mut init_arg)) = sns_canister_init_payloads.index_ng {
+        if let Some(IndexArg::Init(init_arg)) = sns_canister_init_payloads.index_ng.as_mut() {
             init_arg.ledger_id = ledger_canister_id.0;
         }
     }
