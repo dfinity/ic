@@ -18,7 +18,7 @@ use futures::{
 use ic_agent::{
     Agent, AgentError, Identity, Signature,
     agent::{
-        CallResponse, EnvelopeContent, RejectCode, RejectResponse,
+        AgentBuilder, CallResponse, EnvelopeContent, RejectCode, RejectResponse,
         http_transport::reqwest_transport::reqwest,
     },
     agent_error::TransportError,
@@ -968,13 +968,27 @@ pub async fn agent_with_client_identity(
     client: reqwest::Client,
     identity: impl Identity + 'static,
 ) -> Result<Agent, AgentError> {
-    let a = Agent::builder()
+    let a = agent_builder(url, client, identity).build().unwrap();
+    a.fetch_root_key().await?;
+    Ok(a)
+}
+
+/// Returns an [`AgentBuilder`] pre-configured with the standard IC system test
+/// settings (HTTP client, identity, max concurrent requests, polling time, and
+/// ingress expiry). Callers can override any setting by chaining additional
+/// builder methods before `.build()`.
+pub fn agent_builder(
+    url: &str,
+    client: reqwest::Client,
+    identity: impl Identity + 'static,
+) -> AgentBuilder {
+    Agent::builder()
         .with_url(url)
         .with_http_client(client)
         .with_identity(identity)
+        .with_max_concurrent_requests(MAX_CONCURRENT_REQUESTS)
         // Setting a large polling time for the sake of long-running update calls.
         .with_max_polling_time(Duration::from_secs(600))
-        .with_max_concurrent_requests(MAX_CONCURRENT_REQUESTS)
         // Ingresses are created with the system time but are checked against the consensus time.
         // Consensus time is the time that is in the last finalized block. Consensus time might lag
         // behind, for example when the subnet has many modes and the progress of consensus is
@@ -988,10 +1002,6 @@ pub async fn agent_with_client_identity(
         // the delays in the progress of consensus, we reduce 30sn from MAX_INGRESS_TTL and set the
         // expiry_time of ingresses accordingly.
         .with_ingress_expiry(MAX_INGRESS_TTL - std::time::Duration::from_secs(30))
-        .build()
-        .unwrap();
-    a.fetch_root_key().await?;
-    Ok(a)
 }
 
 // Creates an identity to be used with `Agent`.

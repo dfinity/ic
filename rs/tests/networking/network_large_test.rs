@@ -15,7 +15,6 @@ end::catalog[] */
 
 use anyhow::Result;
 use ic_agent::Agent;
-use ic_limits::MAX_INGRESS_TTL;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
@@ -28,8 +27,8 @@ use ic_system_test_driver::{
     },
     retry_with_msg_async, systest,
     util::{
-        AGENT_REQUEST_TIMEOUT, MAX_CONCURRENT_REQUESTS, MessageCanister, assert_create_agent,
-        block_on, get_identity,
+        AGENT_REQUEST_TIMEOUT, MessageCanister, agent_builder, assert_create_agent, block_on,
+        get_identity,
     },
 };
 use ic_types::Height;
@@ -67,15 +66,10 @@ async fn create_agent_with_short_polling_time(url: &str) -> Agent {
         .danger_accept_invalid_certs(true)
         .build()
         .expect("Failed to build HTTP client");
-    let agent = Agent::builder()
-        .with_url(url)
-        .with_http_client(client)
-        .with_identity(get_identity())
+    let agent = agent_builder(url, client, get_identity())
         .with_max_polling_time(DEGRADED_MAX_POLLING_TIME)
-        .with_max_concurrent_requests(MAX_CONCURRENT_REQUESTS)
-        .with_ingress_expiry(MAX_INGRESS_TTL - Duration::from_secs(30))
         .build()
-        .unwrap();
+        .expect("Failed to build agent with short polling time");
     agent.fetch_root_key().await.unwrap();
     agent
 }
