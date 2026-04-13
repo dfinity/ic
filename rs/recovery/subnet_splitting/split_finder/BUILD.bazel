@@ -14,7 +14,7 @@ py_binary(
         "//rs/recovery/subnet_splitting:__subpackages__",
     ],
     deps = [
+        requirement("pandas"),
         requirement("pulp"),
-        requirement("seaborn"),
     ],
 )
