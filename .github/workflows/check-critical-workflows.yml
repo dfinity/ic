@@ -1,0 +1,59 @@
+name: Check Critical Workflows
+
+on:
+  schedule:
+    - cron: '0 12 * * *' # every day at 12:00 UTC
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  check-workflows:
+    name: Check Critical Workflows
+    runs-on: ubuntu-latest
+    matrix:
+      include:
+        - name: schedule-daily.yml
+        - name: release-testing.yml
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Check if ${{ matrix.name }} ran in last 24 hours
+        id: check-workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          
+          # Calculate timestamp for 24 hours ago
+          CUTOFF_TIME=$(date -u -d '24 hours ago' '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date -u -v-24H '+%Y-%m-%dT%H:%M:%SZ')
+          echo "Checking for workflow runs since: $CUTOFF_TIME"
+          
+          # Get the most recent run for this workflow (just need created_at)
+          LATEST_RUN_TIME=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${{ github.repository }}/actions/workflows/${{ matrix.name }}/runs?per_page=1" \
+            --jq '.workflow_runs[0].created_at // empty')
+            
+          if [ -z "$LATEST_RUN_TIME" ]; then
+            echo "❌ No runs found for ${{ matrix.name }}"
+            exit 1
+          fi
+            
+          # Compare timestamps (both in ISO 8601 format, can compare as strings)
+          if [[ "$LATEST_RUN_TIME" < "$CUTOFF_TIME" ]]; then
+            echo "❌ No runs in the last 24 hours for ${{ matrix.name }}"
+            echo "run_exists=false" >> $GITHUB_OUTPUT
+          else
+            echo "✅ Workflow ran within last 24 hours for ${{ matrix.name }}"
+            echo "run_exists=true" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Post Slack Notification
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
+        if: ${{ steps.check-workflow.outputs.run_exists == 'false' }}
+        with:
+          channel-id: "eng-idx-alerts"
+          slack-message: "❌ No runs in the last 24 hours for ${{ matrix.name }}"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
