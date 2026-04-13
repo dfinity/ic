@@ -15,6 +15,7 @@ filegroup(
         "docker-base.prod",
         "packages.common",
         "packages.dev",
+        "thp-fix.patch",
     ],
     tags = ["manual"],
 )
