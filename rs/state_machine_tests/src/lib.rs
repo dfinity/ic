@@ -2518,8 +2518,7 @@ impl StateMachine {
         method: impl ToString,
         payload: Vec<u8>,
     ) -> Result<MessageId, SubmitIngressError> {
-        let msg = self.ingress_message(sender, canister_id, method, payload, None);
-        self.submit_signed_ingress(msg)
+        self.submit_ingress_as_with_sender_info(sender, canister_id, method, payload, None)
     }
 
     /// Submit an ingress message with sender info into the ingress pool used by `PayloadBuilderImpl`
