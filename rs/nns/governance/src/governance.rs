@@ -8,6 +8,7 @@ use crate::{
             validate_merge_neurons_before_commit,
         },
         split_neuron::{SplitNeuronEffect, calculate_split_neuron_effect},
+        voting_power_snapshots::VotingPowerSnapshots,
     },
     heap_governance_data::{
         HeapGovernanceData, XdrConversionRate, initialize_governance, reassemble_governance_proto,
@@ -1355,6 +1356,8 @@ impl Governance {
             governance.heap_data.neuron_id_to_pre_clamp_dissolve_state = governance
                 .neuron_store
                 .clamp_dissolve_delay_for_all_neurons_or_panic(now);
+
+            VOTING_POWER_SNAPSHOTS.with_borrow_mut(VotingPowerSnapshots::clear);
         }
 
         governance

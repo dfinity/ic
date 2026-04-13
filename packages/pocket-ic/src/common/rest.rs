@@ -141,6 +141,16 @@ pub struct RawIngressStatusArgs {
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawSenderInfo {
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub info: Vec<u8>,
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub signer: Vec<u8>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
 pub struct RawCanisterCall {
     #[serde(deserialize_with = "base64::deserialize")]
     #[serde(serialize_with = "base64::serialize")]
@@ -153,6 +163,8 @@ pub struct RawCanisterCall {
     #[serde(deserialize_with = "base64::deserialize")]
     #[serde(serialize_with = "base64::serialize")]
     pub payload: Vec<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sender_info: Option<RawSenderInfo>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
