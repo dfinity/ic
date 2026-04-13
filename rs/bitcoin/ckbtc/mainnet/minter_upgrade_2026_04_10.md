@@ -16,7 +16,7 @@ Previous ckBTC minter proposal: https://dashboard.internetcomputer.org/proposal/
 
 ## Motivation
 
-* Add an additional measure to prevent and alert double-minting of cached UTXOs.
+* Add an additional measure to protect against and alert about double-minting of cached UTXOs.
 
 
 ## Release Notes
