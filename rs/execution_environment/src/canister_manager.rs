@@ -357,7 +357,7 @@ impl CanisterManager {
         cost_schedule: CanisterCyclesCostSchedule,
         canister_reserved_balance: Cycles,
         canister_reserved_balance_limit: Option<Cycles>,
-        canister_log_memory_usage: NumBytes,
+        canister_log_bytes_used: NumBytes,
     ) -> Result<ValidatedCanisterSettings, CanisterManagerError> {
         self.validate_environment_variables(&settings)?;
 
@@ -516,14 +516,14 @@ impl CanisterManager {
                     limit: max_limit,
                 });
             }
-            // Resizing the log memory store requires reading the entire buffer to
-            // heap, re-wrapping it into a new-capacity ring buffer, and writing it
-            // back. Charge cycles proportional to the current log memory usage to
-            // prevent abuse via repeated resize calls.
+            // Resizing the log memory store reads all existing log records from
+            // the old ring buffer and rewrites them into a new one. The cost is
+            // proportional to `bytes_used` (actual stored data), not the allocated
+            // capacity, since only live records are migrated during resize.
             // TODO: determine the real cost_per_byte from benchmarks.
             let cost_per_byte: u128 = 1;
             let canister_log_resize_cost =
-                Cycles::new(canister_log_memory_usage.get() as u128 * cost_per_byte);
+                Cycles::new(canister_log_bytes_used.get() as u128 * cost_per_byte);
             if canister_cycles_balance < canister_log_resize_cost {
                 return Err(CanisterManagerError::InsufficientCyclesInMemoryAllocation {
                     memory_allocation: new_memory_allocation,
@@ -669,7 +669,7 @@ impl CanisterManager {
             cost_schedule,
             canister.system_state.reserved_balance(),
             canister.system_state.reserved_balance_limit(),
-            canister.log_memory_store_memory_usage(),
+            NumBytes::new(canister.system_state.log_memory_store.bytes_used() as u64),
         )?;
 
         let old_usage = canister.memory_usage();
