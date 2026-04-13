@@ -199,7 +199,6 @@ jobs:
             ${{ runner.temp }}/build-targets
             ${{ runner.temp }}/test-targets
 
-
   bazel-test-all:
     name: Bazel Test All
     needs: [config, infer-bazel-targets]
