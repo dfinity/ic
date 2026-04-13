@@ -22,8 +22,8 @@
 //   $ ./ci/container/container-run.sh
 //   $ ict testnet create baremetal_app_subnet --verbose --output-dir=./test_tmpdir -- \
 //       --test_tmpdir=./test_tmpdir \
-//       --test_env=BARE_METAL_HOST_SECRETS="$(realpath /path/to/host.ini)" \
-//       --test_env=TRUSTED_EXECUTION_ENVIRONMENT=true   # omit for non-SEV
+//       --test_env BARE_METAL_HOST_SECRETS="$(realpath /path/to/host.ini)" \
+//       --test_env TRUSTED_EXECUTION_ENVIRONMENT=true   # omit for non-SEV
 //
 // The bare-metal guest IPv6 appears in the driver log after registration; SSH uses the
 // same admin key layout as other testnets under `test_tmpdir`.
