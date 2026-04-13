@@ -61,7 +61,10 @@ pub mod steps;
 pub mod util;
 
 pub const RECOVERY_DIRECTORY_NAME: &str = "recovery";
+#[cfg(not(test))]
 pub const IC_DATA_PATH: &str = "/var/lib/ic/data";
+#[cfg(test)]
+pub const IC_DATA_PATH: &str = "/tmp/var/lib/ic/data";
 pub const IC_STATE_DIR: &str = "data/ic_state";
 pub const CUPS_DIR: &str = "cups";
 pub const IC_CHECKPOINTS_PATH: &str = "ic_state/checkpoints";
@@ -1349,9 +1352,65 @@ fn get_member_node_ids_and_ips(
 mod tests {
     use super::*;
     use crate::error::GracefulExpect;
+    use assert_matches::assert_matches;
     use ic_test_utilities_tmpdir::tmpdir;
 
-    // TODO: add tests
+    #[test]
+    fn get_ic_state_includes_test() {
+        let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
+        create_dir(&ic_checkpoints_path).unwrap();
+        assert!(
+            read_dir(&ic_checkpoints_path).unwrap().next().is_none(),
+            "Test checkpoints directory {} is not empty. Clear it first before running the test.",
+            ic_checkpoints_path.display()
+        );
+
+        // Test: without any checkpoints, should not be an error, should return nothing
+        let includes =
+            Recovery::get_ic_state_includes(None, None).expect("Failed getting ic state includes");
+        assert!(includes.is_empty());
+
+        // Create some checkpoints
+        create_fake_checkpoint_dirs(
+            &ic_checkpoints_path,
+            &[
+                /*height=64800*/ "000000000000fd20",
+                /*height=64900*/ "000000000000fd84",
+            ],
+        );
+
+        // Test: without download height, should include the latest checkpoint
+        let includes =
+            Recovery::get_ic_state_includes(None, None).expect("Failed getting ic state includes");
+        assert_eq!(
+            includes,
+            vec![
+                PathBuf::from(IC_STATE).join(STATES_METADATA),
+                PathBuf::from(IC_STATE)
+                    .join(CHECKPOINTS)
+                    .join("000000000000fd84")
+            ]
+        );
+
+        // Test: with download height, should include the checkpoint at the download height
+        let includes = Recovery::get_ic_state_includes(None, Some(64800))
+            .expect("Failed getting ic state includes");
+        assert_eq!(
+            includes,
+            vec![
+                PathBuf::from(IC_STATE).join(STATES_METADATA),
+                PathBuf::from(IC_STATE)
+                    .join(CHECKPOINTS)
+                    .join("000000000000fd20")
+            ]
+        );
+
+        // Test: with download height but no checkpoint at that height, should return an error
+        let result = Recovery::get_ic_state_includes(None, Some(64700));
+        assert_matches!(result, Err(RecoveryError::OutputError(e)) if e.contains("does not exist"));
+
+        remove_dir(&ic_checkpoints_path).unwrap();
+    }
 
     #[test]
     fn get_latest_checkpoint_name_and_height_test() {
