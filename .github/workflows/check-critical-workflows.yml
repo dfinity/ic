@@ -46,7 +46,7 @@ jobs:
             echo "❌ No runs in the last 24 hours for ${{ matrix.name }}"
             echo "run_exists=false" >> $GITHUB_OUTPUT
           else
-            echo "✅ Workflow ran within last 24 hours for ${{ matrix.name }}"
+            echo "✅ Workflow ran within last 24 hours for ${{ matrix.name }} at $LATEST_RUN_TIME"
             echo "run_exists=true" >> $GITHUB_OUTPUT
           fi
           
