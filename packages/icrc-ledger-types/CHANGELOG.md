@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add ICRC-107 fee collector transaction type and schema.
 
 ### Changed
-- Add a `no_storable` feature flag to disable the implementation of `Storable` trait for `Account`, making the dependency on `ic-stable-structures` crate optional.
+- The implementation of the `Storable` trait for `Account` and the dependency on the `ic-stable-structures` crate are now disabled by default. Enable the `storable` feature flag to opt in.
 
 ## 0.1.12
 

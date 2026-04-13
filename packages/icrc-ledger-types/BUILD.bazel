@@ -37,16 +37,16 @@ alias(
     )
     for (name_suffix, features, extra_deps) in [
         (
-            "_no_storable",
-            ["no_storable"],
-            [],
-        ),
-        (
             "",
-            [""],
+            ["storable"],
             [
                 "@crate_index//:ic-stable-structures",
             ],
+        ),
+        (
+            "_no_storable",
+            [],
+            [],
         ),
     ]
 ]
@@ -66,16 +66,16 @@ alias(
     )
     for (name_suffix, features, extra_deps) in [
         (
-            "_no_storable",
-            ["no_storable"],
-            [],
-        ),
-        (
             "",
-            [""],
+            ["storable"],
             [
                 "@crate_index//:ic-stable-structures",
             ],
+        ),
+        (
+            "_no_storable",
+            [],
+            [],
         ),
     ]
 ]

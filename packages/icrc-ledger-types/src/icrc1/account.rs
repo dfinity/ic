@@ -9,9 +9,9 @@ use candid::{CandidType, Deserialize, Principal, types::principal::PrincipalErro
 use minicbor::{Decode, Encode};
 use serde::Serialize;
 
-#[cfg(any(feature = "storable", not(feature = "no_storable")))]
+#[cfg(feature = "storable")]
 use ic_stable_structures::{Storable, storable::Bound};
-#[cfg(any(feature = "storable", not(feature = "no_storable")))]
+#[cfg(feature = "storable")]
 use std::borrow::Cow;
 
 pub type Subaccount = [u8; 32];
@@ -178,7 +178,7 @@ impl FromStr for Account {
     }
 }
 
-#[cfg(any(feature = "storable", not(feature = "no_storable")))]
+#[cfg(feature = "storable")]
 impl Storable for Account {
     fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
@@ -248,7 +248,7 @@ mod tests {
     use proptest::strategy::Strategy;
     use std::str::FromStr;
 
-    #[cfg(any(feature = "storable", not(feature = "no_storable")))]
+    #[cfg(feature = "storable")]
     use ic_stable_structures::Storable;
 
     use crate::icrc1::account::{
@@ -269,7 +269,6 @@ mod tests {
             subaccount: bytes.map(|x| x.as_slice().try_into().unwrap()),
         })
     }
-
 
     #[test]
     fn test_account_display_default_subaccount() {
@@ -407,7 +406,7 @@ mod tests {
         );
     }
 
-    #[cfg(any(feature = "storable", not(feature = "no_storable")))]
+    #[cfg(feature = "storable")]
     #[test]
     fn test_account_serialization() {
         use proptest::{prop_assert_eq, proptest};
@@ -471,7 +470,7 @@ mod tests {
         subaccount_to_principal(index_out_of_range_subaccount);
     }
 
-    #[cfg(any(feature = "storable", not(feature = "no_storable")))]
+    #[cfg(feature = "storable")]
     #[test]
     fn test_account_serialization_stability() {
         let owner =

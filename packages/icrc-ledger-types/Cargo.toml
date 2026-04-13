@@ -33,6 +33,5 @@ hex = { workspace = true }
 proptest = { workspace = true }
 
 [features]
-default = ["dep:ic-stable-structures"]
+default = []
 storable = ["dep:ic-stable-structures"]
-no_storable = []
