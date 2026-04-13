@@ -67,6 +67,7 @@ use ic_nns_governance_api::{
     stop_or_start_canister::CanisterAction as GovernanceCanisterAction,
     subnet_rental::{RentalConditionId, SubnetRentalRequest},
 };
+use ic_nns_governance_conversions::convert_guest_launch_measurements_from_pb_to_api;
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_init::make_hsm_sender;
 use ic_nns_test_utils::governance::{HardResetNnsRootToVersionPayload, UpgradeRootProposal};
@@ -405,6 +406,9 @@ enum SubCommand {
     /// propose-to-take-subnet-offline-for-repairs. This generally rolls back
     /// the changes made by that command.
     ProposeToBringSubnetBackOnlineAfterRepairs(ProposeToBringSubnetBackOnlineAfterRepairsCmd),
+
+    /// Submits a proposal to bless an alternative GuestOS version for disaster recovery.
+    ProposeToBlessAlternativeGuestOsVersion(ProposeToBlessAlternativeGuestOsVersionCmd),
 
     /// Submits a proposal to change an existing canister on NNS.
     ProposeToChangeNnsCanister(ProposeToChangeNnsCanisterCmd),
@@ -958,6 +962,13 @@ impl From<NodeSshAccessFlagValue> for NodeSshAccess {
     }
 }
 
+/// Parse a NodeId from a string by first parsing as PrincipalId, then converting to NodeId.
+fn parse_node_id(s: &str) -> Result<NodeId, String> {
+    PrincipalId::from_str(s)
+        .map(NodeId::from)
+        .map_err(|err| format!("Invalid NodeId: {err}"))
+}
+
 /// Sub-command to submit a proposal to bring a subnet back online after repairs.
 #[derive_common_proposal_fields]
 #[derive(Parser, ProposalMetadata)]
@@ -1118,7 +1129,7 @@ impl ProposalPayload<StopOrStartCanisterRequest> for StartCanisterCmd {
 
 #[async_trait]
 impl ProposalAction for StartCanisterCmd {
-    async fn action(&self) -> ProposalActionRequest {
+    async fn action(&self, _: &Agent) -> ProposalActionRequest {
         let canister_id = Some(self.canister_id.get());
         let action = Some(GovernanceCanisterAction::Start as i32);
         let start_canister = StopOrStartCanister {
@@ -1158,7 +1169,7 @@ impl ProposalPayload<StopOrStartCanisterRequest> for StopCanisterCmd {
 
 #[async_trait]
 impl ProposalAction for StopCanisterCmd {
-    async fn action(&self) -> ProposalActionRequest {
+    async fn action(&self, _: &Agent) -> ProposalActionRequest {
         let canister_id = Some(self.canister_id.get());
         let action = Some(GovernanceCanisterAction::Stop as i32);
         let stop_canister = StopOrStartCanister {
@@ -1199,14 +1210,11 @@ struct ProposeToReviseElectedGuestsOsVersionsCmd {
 }
 
 impl ProposeToReviseElectedGuestsOsVersionsCmd {
-    /// Reads and returns the SEV-SNP measurements from the input file.
+    /// Reads and returns the GuestLaunchMeasurements from the input file.
     fn read_guest_launch_measurements(&self) -> Option<GuestLaunchMeasurements> {
-        self.guest_launch_measurements_path.as_ref().map(|path| {
-            let guest_launch_measurements_json =
-                std::fs::read(path).unwrap_or_else(|_| panic!("Failed to read {}", path.display()));
-            serde_json::from_slice::<GuestLaunchMeasurements>(&guest_launch_measurements_json)
-                .expect("Could not decode GuestLaunchMeasurements")
-        })
+        self.guest_launch_measurements_path
+            .as_ref()
+            .map(|path| read_from_json_file::<GuestLaunchMeasurements>(path))
     }
 }
 
@@ -1334,7 +1342,7 @@ impl ProposalPayload<ChangeCanisterRequest> for ProposeToChangeNnsCanisterCmd {
 
 #[async_trait]
 impl ProposalAction for ProposeToChangeNnsCanisterCmd {
-    async fn action(&self) -> ProposalActionRequest {
+    async fn action(&self, _: &Agent) -> ProposalActionRequest {
         let canister_id = Some(self.canister_id.get());
         let wasm_module = Some(
             read_wasm_module(
@@ -1508,7 +1516,7 @@ impl ProposalTitle for ProposeToFulfillSubnetRentalRequestCmd {
 
 #[async_trait]
 impl ProposalAction for ProposeToFulfillSubnetRentalRequestCmd {
-    async fn action(&self) -> ProposalActionRequest {
+    async fn action(&self, _: &Agent) -> ProposalActionRequest {
         ProposalActionRequest::FulfillSubnetRentalRequest(
             ic_nns_governance_api::FulfillSubnetRentalRequest {
                 user: Some(self.user),
@@ -1569,7 +1577,7 @@ impl ProposalTitle for ProposeToUpdateCanisterSettingsCmd {
 
 #[async_trait]
 impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
-    async fn action(&self) -> ProposalActionRequest {
+    async fn action(&self, _: &Agent) -> ProposalActionRequest {
         let canister_id = Some(self.canister_id.get());
 
         let controllers = if self.remove_all_controllers {
@@ -1614,6 +1622,401 @@ impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
         };
 
         ProposalActionRequest::UpdateCanisterSettings(update_settings)
+    }
+}
+
+/// Sub-command to submit a proposal to bless an alternative GuestOS version.
+///
+/// Three ingredients are required:
+///   1. Chip IDs of the targeted nodes (identify which nodes can run the alternative GuestOS).
+///   2. Base launch measurements of the GuestOS currently running on those nodes (identify "what"
+///      is currently running).
+///   3. Rootfs hash of the Recovery-GuestOS that is allowed to run (identify "what" will run).
+///
+/// --rootfs-hash provides (3).
+///
+/// For (1) and (2), there are two modes:
+///   a) --subnet: Fetches both chip IDs and base launch measurements from the registry.
+///      --node-ids and/or --chip-ids can additionally filter which nodes are targeted (union is
+///      taken if both are specified); by default all SEV nodes in the subnet are included.
+///   b) --base-launch-measurements + (--node-ids and/or --chip-ids): Reads measurements from a
+///      JSON file and uses the nodes identified by --node-ids and/or --chip-ids.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToBlessAlternativeGuestOsVersionCmd {
+    /// Subnet to query for chip IDs and launch measurements.
+    /// If specified, base launch measurements are automatically fetched from the registry.
+    /// If --node-ids and/or --chip-ids are also provided, they act as filters (must be part of
+    /// the subnet); otherwise chip IDs for all SEV nodes in the subnet are used.
+    #[clap(
+        long,
+        conflicts_with = "base_launch_measurements",
+        required_unless_present_any = &["chip_ids", "node_ids"]
+    )]
+    subnet: Option<SubnetDescriptor>,
+
+    /// Node IDs of nodes to bless the alternative Guest OS version on.
+    /// If --subnet is provided, all the node IDs in this list must be part of that subnet.
+    #[clap(long, num_args(1..), value_parser = parse_node_id)]
+    node_ids: Vec<NodeId>,
+
+    /// Hex-encoded chip IDs (AMD Secure Processor chip IDs). Each must be exactly 64 bytes.
+    /// Multiple distinct values can be passed.
+    /// If --subnet is provided, all the chip IDs must belong to nodes in that subnet.
+    #[clap(long, num_args(1..))]
+    chip_ids: Vec<String>,
+
+    /// Hexadecimal fingerprint of the Recovery-GuestOS rootfs that is allowed to run on the nodes
+    /// if the proposal is accepted.
+    /// Together with base_guest_launch_measurements (derived from --subnet or
+    /// --base-launch-measurements), these two fields fully constrain which OS is allowed to run on
+    /// the targeted nodes.
+    #[clap(long, required = true)]
+    rootfs_hash: String,
+
+    /// Path to a JSON file containing GuestLaunchMeasurements for the base GuestOS that needs to
+    /// be recovered. These measurements identify which OS is currently running and authorize it to
+    /// boot the Recovery-GuestOS. The file must be a JSON-serialized GuestLaunchMeasurements
+    /// struct, e.g.:
+    ///   {"guest_launch_measurements":[{"measurement":[1,2,3,...],"metadata":{"kernel_cmdline":"..."}}]}
+    ///
+    /// In practice, this file is extracted from the registry: fetch the ReplicaVersionRecord of
+    /// the broken GuestOS version and serialize its guest_launch_measurements field to JSON using
+    /// serde_json. Recovery coordinators typically obtain this from the registry rather than
+    /// generating it from scratch.
+    #[clap(long, conflicts_with = "subnet", required_unless_present = "subnet")]
+    base_launch_measurements: Option<PathBuf>,
+}
+
+impl ProposalTitle for ProposeToBlessAlternativeGuestOsVersionCmd {
+    fn title(&self) -> String {
+        if let Some(title) = &self.proposal_title {
+            return title.clone();
+        }
+
+        if let Some(subnet) = self.subnet {
+            return format!(
+                "Bless alternative Guest OS with rootfs hash {} on subnet {}",
+                shortened_hash_string(&self.rootfs_hash),
+                shortened_subnet_string(&subnet)
+            );
+        }
+
+        format!(
+            "Bless alternative Guest OS with rootfs hash {} for {} nodes",
+            shortened_hash_string(&self.rootfs_hash),
+            self.node_ids.len() + self.chip_ids.len()
+        )
+    }
+}
+
+impl ProposeToBlessAlternativeGuestOsVersionCmd {
+    /// Returns chip IDs for a subnet, optionally filtered by --node-ids and/or --chip-ids.
+    ///
+    /// If both `select_node_ids` and `select_chip_ids` are provided, their results are unioned.
+    /// Both must refer to nodes that are members of the subnet.
+    async fn get_chip_ids_from_subnet(
+        subnet_descriptor: &SubnetDescriptor,
+        subnet_record: &SubnetRecord,
+        select_node_ids: &[NodeId],
+        select_chip_ids: &[String],
+        registry_canister: &RegistryCanister,
+    ) -> Vec<Vec<u8>> {
+        let subnet_node_ids = Self::get_subnet_node_ids(subnet_record);
+
+        // No selection: use all SEV nodes in the subnet (non-SEV nodes are skipped).
+        if select_node_ids.is_empty() && select_chip_ids.is_empty() {
+            return Self::get_chip_ids_from_node_ids(
+                registry_canister,
+                &subnet_node_ids,
+                false, // Subnets may contain non-SEV nodes; skip them rather than panic.
+            )
+            .await;
+        }
+
+        let mut result: HashSet<Vec<u8>> = HashSet::new();
+
+        // Select node IDs: validate membership, then fetch their chip IDs.
+        if !select_node_ids.is_empty() {
+            // Assert that select_node_ids is a(n improper) subset of subnet_node_ids.
+            let subnet_node_id_set: HashSet<&NodeId> = subnet_node_ids.iter().collect();
+            let select_node_id_set: HashSet<&NodeId> = select_node_ids.iter().collect();
+            let extra: Vec<_> = select_node_id_set.difference(&subnet_node_id_set).collect();
+
+            assert!(
+                extra.is_empty(),
+                "Node IDs [{}] are not members of subnet {}",
+                extra
+                    .iter()
+                    .map(|id| id.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                shortened_subnet_string(subnet_descriptor),
+            );
+
+            result.extend(
+                Self::get_chip_ids_from_node_ids(registry_canister, select_node_ids, true).await,
+            );
+        }
+
+        // Select chip IDs directly: validate against the subnet's actual chip IDs.
+        if !select_chip_ids.is_empty() {
+            // Fetch all subnet chip IDs for validation; non-SEV nodes are skipped. Then verify
+            // that the selected chip IDs are a subset of the subnet's chip IDs.
+            let all_subnet_chip_ids: HashSet<Vec<u8>> =
+                Self::get_chip_ids_from_node_ids(registry_canister, &subnet_node_ids, false)
+                    .await
+                    .into_iter()
+                    .collect();
+            let decoded: HashSet<Vec<u8>> =
+                Self::decode_chip_ids(select_chip_ids).into_iter().collect();
+
+            let extra: Vec<_> = decoded.difference(&all_subnet_chip_ids).collect();
+
+            assert!(
+                extra.is_empty(),
+                "Chip IDs [{}] do not belong to any node in subnet {}",
+                extra.iter().map(hex::encode).collect::<Vec<_>>().join(", "),
+                shortened_subnet_string(subnet_descriptor),
+            );
+
+            result.extend(decoded);
+        }
+
+        result.into_iter().collect()
+    }
+
+    fn get_subnet_node_ids(subnet_record: &SubnetRecord) -> Vec<NodeId> {
+        subnet_record
+            .membership
+            .iter()
+            .map(|id| {
+                let principal_id = PrincipalId::from_str(id).expect("Failed to parse PrincipalID");
+                NodeId::from(principal_id)
+            })
+            .collect()
+    }
+
+    async fn fetch_subnet_record(
+        registry_canister: &RegistryCanister,
+        subnet: &SubnetDescriptor,
+    ) -> SubnetRecord {
+        let subnet_id = subnet.get_id(registry_canister).await;
+
+        // Query the SubnetRecord
+        let subnet_record_key = make_subnet_record_key(subnet_id);
+        let (subnet_record_bytes, _version) = registry_canister
+            .get_value_with_update(subnet_record_key.as_bytes().to_vec(), None)
+            .await
+            .unwrap_or_else(|err| {
+                panic!(
+                    "Failed to fetch SubnetRecord for subnet {}: {}",
+                    subnet_id, err
+                )
+            });
+        SubnetRecord::from(
+            &SubnetRecordProto::decode(&subnet_record_bytes[..]).unwrap_or_else(|err| {
+                panic!(
+                    "Failed to decode SubnetRecord for subnet {}: {}",
+                    subnet_id, err
+                )
+            }),
+        )
+    }
+
+    fn decode_chip_ids(chip_ids: &[String]) -> Vec<Vec<u8>> {
+        chip_ids
+            .iter()
+            .map(|chip_id_hex| {
+                let decoded = hex::decode(chip_id_hex).unwrap_or_else(|err| {
+                    panic!("Invalid hex string for chip ID '{}': {}", chip_id_hex, err)
+                });
+                if decoded.len() != 64 {
+                    panic!(
+                        "Chip ID must be exactly 64 bytes, got {} bytes for '{}'",
+                        decoded.len(),
+                        chip_id_hex
+                    );
+                }
+                decoded
+            })
+            .collect()
+    }
+
+    /// Extracts chip IDs from all nodes in a subnet.
+    /// Returns the chip IDs as a vector of 64-byte blobs.
+    /// If `panic_on_missing_chip_id` is true, panics if any node does not have a chip ID, otherwise
+    /// the missing chip IDs are skipped.
+    async fn get_chip_ids_from_node_ids(
+        registry_canister: &RegistryCanister,
+        node_ids: &[NodeId],
+        panic_on_missing_chip_id: bool,
+    ) -> Vec<Vec<u8>> {
+        // Create futures for all node queries in parallel
+        let futures = node_ids.iter().map(|node_id| {
+            async move {
+                // Query the NodeRecord
+                let node_record_key = make_node_record_key(*node_id);
+                let (node_record_bytes, _version) = registry_canister
+                    .get_value_with_update(node_record_key.as_bytes().to_vec(), None)
+                    .await
+                    .unwrap_or_else(|err| {
+                        panic!("Failed to fetch NodeRecord for node {node_id}: {err}",)
+                    });
+                let node_record =
+                    NodeRecord::decode(&node_record_bytes[..]).unwrap_or_else(|err| {
+                        panic!("Failed to decode NodeRecord for node {node_id}: {err}",)
+                    });
+
+                // Extract chip_id
+                let Some(chip_id) = node_record.chip_id else {
+                    if panic_on_missing_chip_id {
+                        panic!("Node {node_id} does not have a chip_id in the registry");
+                    }
+
+                    println!("Node {node_id} does not have a chip_id in the registry, will skip");
+                    return None;
+                };
+
+                if chip_id.len() != 64 {
+                    panic!(
+                        "Chip ID for node {node_id} must be exactly 64 bytes, got {} bytes",
+                        chip_id.len()
+                    );
+                }
+
+                Some(chip_id)
+            }
+        });
+
+        // Execute all futures in parallel and collect results
+        futures::future::join_all(futures)
+            .await
+            .into_iter()
+            // Input elements are Option. This basically unwraps the Some values.
+            .flatten()
+            .collect()
+    }
+
+    /// Queries the ReplicaVersionRecord and extracts GuestLaunchMeasurements.
+    async fn get_guest_launch_measurements_from_replica_version(
+        registry_canister: &RegistryCanister,
+        replica_version_id: &str,
+    ) -> ic_nns_governance_api::GuestLaunchMeasurements {
+        // Query the ReplicaVersionRecord
+        let replica_version_key = make_replica_version_key(replica_version_id);
+        let (replica_version_bytes, _version) = registry_canister
+            .get_value_with_update(replica_version_key.as_bytes().to_vec(), None)
+            .await
+            .unwrap_or_else(|err| {
+                panic!(
+                    "Failed to fetch ReplicaVersionRecord for version {}: {}",
+                    replica_version_id, err
+                )
+            });
+        let replica_version_record = ReplicaVersionRecord::decode(&replica_version_bytes[..])
+            .unwrap_or_else(|err| {
+                panic!(
+                    "Failed to decode ReplicaVersionRecord for version {}: {}",
+                    replica_version_id, err
+                )
+            });
+
+        // Extract guest_launch_measurements (protobuf version)
+        let guest_launch_measurements_proto = replica_version_record
+            .guest_launch_measurements
+            .unwrap_or_else(|| {
+                panic!(
+                    "ReplicaVersionRecord for version {} does not have guest_launch_measurements",
+                    replica_version_id
+                )
+            });
+
+        convert_guest_launch_measurements_from_pb_to_api(guest_launch_measurements_proto)
+    }
+
+    /// Determines chip IDs and launch measurements when `--subnet` is provided.
+    /// Fetches the subnet's replica version from the registry to derive measurements,
+    /// then collects chip IDs from all (or a filtered subset of) nodes in the subnet.
+    async fn chip_ids_and_measurements_for_subnet(
+        &self,
+        registry_canister: &RegistryCanister,
+    ) -> (Vec<Vec<u8>>, ic_nns_governance_api::GuestLaunchMeasurements) {
+        let subnet = self.subnet.as_ref().expect("subnet must be set");
+        let subnet_record = Self::fetch_subnet_record(registry_canister, subnet).await;
+
+        let measurements = Self::get_guest_launch_measurements_from_replica_version(
+            registry_canister,
+            &subnet_record.replica_version_id,
+        )
+        .await;
+
+        let chip_ids = Self::get_chip_ids_from_subnet(
+            subnet,
+            &subnet_record,
+            &self.node_ids,
+            &self.chip_ids,
+            registry_canister,
+        )
+        .await;
+
+        assert!(
+            !chip_ids.is_empty(),
+            "No SEV nodes with chip IDs found in subnet {}",
+            shortened_subnet_string(subnet)
+        );
+
+        (chip_ids, measurements)
+    }
+
+    /// Determines chip IDs and launch measurements when `--subnet` is not provided.
+    /// Reads measurements from `--base-launch-measurements` and chip IDs from
+    /// `--chip-ids` and/or `--node-ids` (union of both if both are specified).
+    async fn chip_ids_and_measurements_from_flags(
+        &self,
+        registry_canister: &RegistryCanister,
+    ) -> (Vec<Vec<u8>>, ic_nns_governance_api::GuestLaunchMeasurements) {
+        let measurements = read_from_json_file::<ic_nns_governance_api::GuestLaunchMeasurements>(
+            self.base_launch_measurements
+                .as_ref()
+                .expect("--base-launch-measurements must be provided if --subnet is not provided"),
+        );
+
+        let mut chip_id_set: HashSet<Vec<u8>> = HashSet::new();
+        if !self.chip_ids.is_empty() {
+            chip_id_set.extend(Self::decode_chip_ids(&self.chip_ids));
+        }
+        if !self.node_ids.is_empty() {
+            chip_id_set.extend(
+                Self::get_chip_ids_from_node_ids(registry_canister, &self.node_ids, true).await,
+            );
+        }
+        let chip_ids: Vec<Vec<u8>> = chip_id_set.into_iter().collect();
+
+        (chip_ids, measurements)
+    }
+}
+
+#[async_trait]
+impl ProposalAction for ProposeToBlessAlternativeGuestOsVersionCmd {
+    async fn action(&self, agent: &Agent) -> ProposalActionRequest {
+        let registry_canister = RegistryCanister::new_with_agent(agent.clone());
+
+        let (chip_ids, measurements) = if self.subnet.is_some() {
+            self.chip_ids_and_measurements_for_subnet(&registry_canister)
+                .await
+        } else {
+            self.chip_ids_and_measurements_from_flags(&registry_canister)
+                .await
+        };
+
+        ProposalActionRequest::BlessAlternativeGuestOsVersion(
+            ic_nns_governance_api::BlessAlternativeGuestOsVersion {
+                chip_ids: Some(chip_ids),
+                rootfs_hash: Some(self.rootfs_hash.clone()),
+                base_guest_launch_measurements: Some(measurements),
+            },
+        )
     }
 }
 
@@ -5356,6 +5759,16 @@ async fn main() {
             )
             .await;
         }
+        SubCommand::ProposeToBlessAlternativeGuestOsVersion(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            propose_action_from_command(cmd, canister_client, proposer).await;
+        }
     }
 }
 
@@ -5629,13 +6042,13 @@ async fn propose_action_from_command<Command>(cmd: Command, agent: Agent, propos
 where
     Command: ProposalMetadata + ProposalTitle + ProposalAction,
 {
+    let action = cmd.action(&agent).await;
+
     let canister_client = GovernanceCanisterClient(NnsCanisterClient::new(
         agent,
         GOVERNANCE_CANISTER_ID,
         Some(proposer),
     ));
-
-    let action = cmd.action().await;
 
     print_proposal(&action, &cmd);
 

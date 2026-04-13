@@ -785,6 +785,17 @@ mod test {
     ///         d. Neuron 7 does not have a ballot for proposal 1. All the other
     ///            neurons do have ballots.
     #[test]
+    fn test_cast_vote_and_cascade_works_pre_mission_70() {
+        let _restore_on_drop = temporarily_disable_mission_70_voting_rewards();
+        test_cast_vote_and_cascade_works();
+    }
+
+    #[test]
+    fn test_cast_vote_and_cascade_works_with_mission_70() {
+        let _restore_on_drop = temporarily_enable_mission_70_voting_rewards();
+        test_cast_vote_and_cascade_works();
+    }
+
     fn test_cast_vote_and_cascade_works() {
         // Step 1: Prepare the world.
 
