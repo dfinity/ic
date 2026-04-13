@@ -92,3 +92,11 @@ system_test(
     name = "ic_crypto_csp_start_order_test",
     deps = DEPENDENCIES,
 )
+
+system_test(
+    name = "cloud_engine_canister_sig_test",
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | {
+        "II_BACKEND_WASM_PATH": "@mainnet_canisters//:internet_identity_backend.wasm.gz",
+    },
+    deps = DEPENDENCIES,
+)

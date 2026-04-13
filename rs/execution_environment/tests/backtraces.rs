@@ -28,7 +28,6 @@ Canister Backtrace:.*
 _wasm_backtrace_canister::ic0_trap::inner_2
 _wasm_backtrace_canister::ic0_trap::inner
 _wasm_backtrace_canister::ic0_trap::outer
-_wasm_backtrace_canister::ic0_trap
 "#;
 
 fn env_with_backtrace_canister_and_visibility(
@@ -94,9 +93,7 @@ fn assert_error(
     );
 }
 
-// TODO(DSM): Re-enable when backtraces are enabled again.
 #[test]
-#[ignore]
 fn unreachable_instr_backtrace() {
     let (env, canister_id) = env_with_backtrace_canister();
     assert_error(
@@ -109,9 +106,7 @@ fn unreachable_instr_backtrace() {
     );
 }
 
-// TODO(DSM): Re-enable when backtraces are enabled again.
 #[test]
-#[ignore]
 fn no_backtrace_without_name_section() {
     let (env, canister_id) = env_with_backtrace_canister_and_visibility(
         LogVisibilityV2::Controllers,
@@ -144,9 +139,7 @@ fn no_backtrace_without_name_section() {
     }
 }
 
-// TODO(DSM): Re-enable when backtraces are enabled again.
 #[test]
-#[ignore]
 fn oob_backtrace() {
     let (env, canister_id) = env_with_backtrace_canister();
     assert_error(
@@ -164,9 +157,7 @@ _wasm_backtrace_canister::oob::outer
     )
 }
 
-// TODO(DSM): Re-enable when backtraces are enabled again.
 #[test]
-#[ignore]
 fn backtrace_test_ic0_trap() {
     let (env, canister_id) = env_with_backtrace_canister();
     assert_error(
@@ -181,9 +172,7 @@ fn backtrace_test_ic0_trap() {
     );
 }
 
-// TODO(DSM): Re-enable when backtraces are enabled again.
 #[test]
-#[ignore]
 fn backtrace_test_stable_oob() {
     let (env, canister_id) = env_with_backtrace_canister();
     assert_error(
@@ -256,9 +245,7 @@ mod visibility {
         );
     }
 
-    // TODO(DSM): Re-enable when backtraces are enabled again.
     #[test]
-    #[ignore]
     fn unreachable_non_controller_and_private() {
         check_visibility(
             OTHER1,
@@ -270,9 +257,7 @@ mod visibility {
         );
     }
 
-    // TODO(DSM): Re-enable when backtraces are enabled again.
     #[test]
-    #[ignore]
     fn unreachable_not_in_viewer_list() {
         check_visibility(
             OTHER1,
@@ -284,9 +269,7 @@ mod visibility {
         );
     }
 
-    // TODO(DSM): Re-enable when backtraces are enabled again.
     #[test]
-    #[ignore]
     fn unreachable_in_viewer_list() {
         check_visibility(
             OTHER2,
@@ -298,9 +281,7 @@ mod visibility {
         );
     }
 
-    // TODO(DSM): Re-enable when backtraces are enabled again.
     #[test]
-    #[ignore]
     fn unreachale_public() {
         check_visibility(
             OTHER1,
@@ -312,9 +293,7 @@ mod visibility {
         );
     }
 
-    // TODO(DSM): Re-enable when backtraces are enabled again.
     #[test]
-    #[ignore]
     fn ic0_non_controller_and_private() {
         check_visibility(
             OTHER1,
@@ -326,9 +305,7 @@ mod visibility {
         );
     }
 
-    // TODO(DSM): Re-enable when backtraces are enabled again.
     #[test]
-    #[ignore]
     fn ic0_not_in_viewer_list() {
         check_visibility(
             OTHER1,
@@ -340,9 +317,7 @@ mod visibility {
         );
     }
 
-    // TODO(DSM): Re-enable when backtraces are enabled again.
     #[test]
-    #[ignore]
     fn ic0_in_viewer_list() {
         check_visibility(
             OTHER2,
@@ -354,9 +329,7 @@ mod visibility {
         );
     }
 
-    // TODO(DSM): Re-enable when backtraces are enabled again.
     #[test]
-    #[ignore]
     fn ic0_public() {
         check_visibility(
             OTHER1,

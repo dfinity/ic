@@ -662,6 +662,18 @@ impl PayloadBuilder {
         self
     }
 
+    /// Pushes the caller info data blob onto the stack.
+    pub fn msg_caller_info_data(mut self) -> Self {
+        self.0.push(Ops::MsgCallerInfoData as u8);
+        self
+    }
+
+    /// Pushes the caller info signer blob onto the stack.
+    pub fn msg_caller_info_signer(mut self) -> Self {
+        self.0.push(Ops::MsgCallerInfoSigner as u8);
+        self
+    }
+
     /// Pushes the size of the reject message onto the stack.
     pub fn msg_reject_msg_size(mut self) -> Self {
         self.0.push(Ops::MsgRejectMsgSize as u8);

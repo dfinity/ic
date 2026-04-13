@@ -988,17 +988,12 @@ impl CanisterManager {
     pub(crate) fn uninstall_code(
         &self,
         origin: CanisterChangeOrigin,
-        canister_id: CanisterId,
-        state: &mut ReplicatedState,
+        canister: &mut CanisterState,
         round_limits: &mut RoundLimits,
         subnet_admins: Option<BTreeSet<PrincipalId>>,
         time: Time,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         let sender = origin.origin();
-        let canister = match state.canister_state(&canister_id) {
-            Some(canister) => canister,
-            None => return Err(CanisterManagerError::CanisterNotFound(canister_id)),
-        };
 
         // Skip the controller or subnet admins validation if the sender is the
         // governance canister. The governance canister can forcefully
@@ -1007,7 +1002,6 @@ impl CanisterManager {
             validate_controller_or_subnet_admin(canister, subnet_admins, &sender)?;
         }
 
-        let canister = state.canister_state_make_mut(&canister_id).unwrap();
         let rejects = uninstall_canister(
             &self.log,
             canister,
@@ -1026,7 +1020,7 @@ impl CanisterManager {
             .update_execution_memory_unchecked(available_execution_memory_change);
 
         Ok(CanisterManagerResponse {
-            canister_id,
+            canister_id: canister.canister_id(),
             reply: Some(EmptyBlob.encode()),
             heap_delta_increase: NumBytes::new(0),
             unflushed_checkpoint_op: None,
@@ -1052,22 +1046,12 @@ impl CanisterManager {
     /// If the canister is already stopped, then this function is a no-op.
     pub(crate) fn stop_canister(
         &self,
-        canister_id: CanisterId,
         msg: &mut CanisterCall,
         call_id: StopCanisterCallId,
-        state: &mut ReplicatedState,
+        canister: &mut CanisterState,
         subnet_admins: Option<BTreeSet<PrincipalId>>,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
-        let canister = match state.canister_state(&canister_id) {
-            None => {
-                return Err(CanisterManagerError::CanisterNotFound(canister_id));
-            }
-            Some(canister) => canister,
-        };
-
         validate_controller_or_subnet_admin(canister, subnet_admins, msg.sender())?;
-
-        let canister = state.canister_state_make_mut(&canister_id).unwrap();
 
         // If the canister did not begin stopping, i.e., if the canister is already stopped,
         // then we produce a reply immediately and return the `call_id` to be closed.
@@ -1080,7 +1064,7 @@ impl CanisterManager {
         canister.system_state.bump_canister_version();
 
         Ok(CanisterManagerResponse {
-            canister_id,
+            canister_id: canister.canister_id(),
             reply,
             heap_delta_increase: NumBytes::new(0),
             unflushed_checkpoint_op: None,
@@ -1776,10 +1760,6 @@ impl CanisterManager {
             validated_cycles_and_memory_usage,
         );
 
-        if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
-            canister.scheduler_state.heap_delta_debit += chunk_bytes;
-        }
-
         let hash = validated_chunk.hash().to_vec();
         canister
             .system_state
@@ -2158,12 +2138,6 @@ impl CanisterManager {
         round_limits.instructions -= as_round_instructions(instructions);
 
         let heap_delta = new_snapshot.heap_delta();
-        if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
-            canister.scheduler_state.heap_delta_debit = canister
-                .scheduler_state
-                .heap_delta_debit
-                .saturating_add(&heap_delta);
-        }
 
         let canister_id = canister.canister_id();
         let snapshot_id = SnapshotId::from((canister_id, canister.new_local_snapshot_id()));
@@ -2538,12 +2512,6 @@ impl CanisterManager {
             .update_execution_memory_unchecked(available_execution_memory_change);
 
         let heap_delta = new_canister.heap_delta();
-        if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
-            new_canister.scheduler_state.heap_delta_debit = new_canister
-                .scheduler_state
-                .heap_delta_debit
-                .saturating_add(&heap_delta);
-        }
 
         *canister = new_canister;
         Ok(CanisterManagerResponse {
@@ -2882,12 +2850,6 @@ impl CanisterManager {
         round_limits.instructions -= as_round_instructions(instructions);
 
         let heap_delta = new_snapshot.heap_delta();
-        if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
-            canister.scheduler_state.heap_delta_debit = canister
-                .scheduler_state
-                .heap_delta_debit
-                .saturating_add(&heap_delta);
-        }
 
         let canister_id = canister.canister_id();
         let snapshot_id = SnapshotId::from((canister_id, canister.new_local_snapshot_id()));
@@ -3061,14 +3023,11 @@ impl CanisterManager {
                 }
             }
         };
-        if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
-            canister.scheduler_state.heap_delta_debit += NumBytes::new(bytes_written);
-        }
 
         Ok(CanisterManagerResponse {
             canister_id: canister.canister_id(),
             reply: Some(EmptyBlob.encode()),
-            heap_delta_increase: NumBytes::new(0),
+            heap_delta_increase: NumBytes::new(bytes_written),
             unflushed_checkpoint_op: None,
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,

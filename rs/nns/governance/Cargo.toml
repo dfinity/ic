@@ -43,6 +43,7 @@ ic-metrics-encoder = "1"
 ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
+ic-nervous-system-string = { path = "../../nervous_system/string" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nervous-system-common-validation = { path = "../../nervous_system/common/validation" }
 ic-nervous-system-governance = { path = "../../nervous_system/governance" }

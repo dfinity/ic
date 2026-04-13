@@ -37,7 +37,7 @@ wasmparser = { workspace = true }
 wasmprinter = { workspace = true }
 libfuzzer-sys = "0.4"
 wasm-smith = { version = "0.243.0", features = ["wasmparser"] }
-wasmtime = { version = "42.0.1", default-features = false, features = [
+wasmtime = { version = "43.0.1", default-features = false, features = [
     'cranelift',
     'gc',
     'gc-null',

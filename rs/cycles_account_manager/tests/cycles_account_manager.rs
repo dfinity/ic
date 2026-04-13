@@ -42,6 +42,7 @@ fn xnet_call_total_fee_free() {
         Cycles::new(0),
         cam.xnet_call_total_fee(
             NumBytes::new(9999),
+            SMALL_APP_SUBNET_MAX_SIZE,
             WasmExecutionMode::Wasm32,
             cost_schedule
         ),

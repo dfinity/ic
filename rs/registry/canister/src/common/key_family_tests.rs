@@ -1,5 +1,10 @@
 use super::*;
-use ic_registry_transport::{pb::v1::LargeValueChunkKeys, upsert};
+
+use ic_registry_transport::{
+    pb::v1::{LargeValueChunkKeys, RegistryMutation},
+    upsert,
+};
+use prost::Message;
 
 fn new_upsert(key: &str, value: &str) -> RegistryMutation {
     let value = LargeValueChunkKeys {

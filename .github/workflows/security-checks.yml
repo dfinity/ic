@@ -13,12 +13,12 @@ jobs:
       CTF_PROOF: ${{ secrets.CTF_PROOF }}
     steps:
       - name: Checkout base
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: 'master'
           path: "base"
       - name: Checkout PR
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           path: "pr"
@@ -46,6 +46,6 @@ jobs:
           export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
           $SHELL_WRAPPER python3 ci/src/dependencies/job/bazel_rust_gh_submission_job.py
       - name: Dependency Review
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4
         with:
           fail-on-severity: moderate
