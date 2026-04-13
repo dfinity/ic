@@ -355,8 +355,11 @@ pub fn populate_canister_ids(
 
     // Index
     {
-        if let Some(IndexArg::Init(init_arg)) = sns_canister_init_payloads.index_ng.as_mut() {
-            init_arg.ledger_id = ledger_canister_id.0;
+        match sns_canister_init_payloads.index_ng.as_mut() {
+            Some(IndexArg::Init(init_arg)) => {
+                init_arg.ledger_id = ledger_canister_id.0;
+            }
+            other => panic!("bug: expected Some(IndexArg::Init(...)), got {other:?}"),
         }
     }
 }
