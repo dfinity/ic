@@ -2,7 +2,7 @@ use super::*;
 use crate::{
     governance::max_dissolve_delay_seconds,
     is_mission_70_voting_rewards_enabled,
-    neuron::{DissolveStateAndAge, NeuronBuilder},
+    neuron::{DissolveStateAndAge, NeuronBuilder, dissolve_delay_bonus_multiplier},
     pb::v1::{KnownNeuronData, MaturityDisbursement, NeuronType},
 };
 use ic_base_types::PrincipalId;
@@ -11,6 +11,7 @@ use ic_nns_common::pb::v1::NeuronId;
 use icp_ledger::Subaccount;
 use maplit::{btreemap, hashmap};
 use pretty_assertions::assert_eq;
+use rust_decimal::prelude::ToPrimitive;
 use std::{collections::BTreeMap, str::FromStr};
 
 #[test]
@@ -441,9 +442,8 @@ fn test_compute_neuron_metrics_non_self_authenticating() {
         NeuronId { id: 1 },
         Subaccount::try_from([1_u8; 32].as_ref()).unwrap(),
         controller_of_neuron_1,
-        // Total voting power bonus: 2x * 1.125x = 2.25x
         DissolveStateAndAge::NotDissolving {
-            dissolve_delay_seconds: max_dissolve_delay_seconds(), // 100% (equivalently, 2x) dissolve delay bonus
+            dissolve_delay_seconds: max_dissolve_delay_seconds(),
             aging_since_timestamp_seconds: now_seconds - 2 * ONE_YEAR_SECONDS, // 12.5% (equivalently 1.125x) age bonus
         },
         now_seconds,
@@ -502,7 +502,17 @@ fn test_compute_neuron_metrics_non_self_authenticating() {
 
     let voting_power_1 = neuron_1.potential_voting_power(now_seconds);
     let voting_power_3 = neuron_3.potential_voting_power(now_seconds);
-    assert_eq!(voting_power_1, (2.250 * (100.0 + 101.0)) as u64);
+    assert_eq!(
+        voting_power_1,
+        // TODO(NNS1-4323): Once Mission 70 is fully deployed, replace the big
+        // dissolve delay bonus expression with 3.0, the maximum dissolve delay
+        // bonus.
+        (dissolve_delay_bonus_multiplier(max_dissolve_delay_seconds())
+         .to_f64()
+         .unwrap()
+         * 1.125 // age bonus
+         * (100.0 + 101.0)) as u64,
+    );
     assert_eq!(
         voting_power_3,
         (1.875 * (300.0 + 303.0) * 1_000_000.0) as u64
@@ -616,7 +626,7 @@ fn test_compute_neuron_metrics_public_neurons() {
         PrincipalId::new_user_test_id(1),
         // Total voting power bonus: 2x * 1.125x = 2.25x
         DissolveStateAndAge::NotDissolving {
-            dissolve_delay_seconds: max_dissolve_delay_seconds(), // 100% (equivalently, 2x) dissolve delay bonus
+            dissolve_delay_seconds: max_dissolve_delay_seconds(),
             aging_since_timestamp_seconds: now_seconds - 2 * ONE_YEAR_SECONDS, // 12.5% (equivalently 1.125x) age bonus
         },
         now_seconds - 10 * ONE_YEAR_SECONDS,
@@ -671,7 +681,17 @@ fn test_compute_neuron_metrics_public_neurons() {
 
     let voting_power_1 = neuron_1.potential_voting_power(now_seconds);
     let voting_power_3 = neuron_3.potential_voting_power(now_seconds);
-    assert_eq!(voting_power_1, (2.250 * (100.0 + 101.0)) as u64);
+    assert_eq!(
+        voting_power_1,
+        // TODO(NNS1-4323): Once Mission 70 is fully deployed, replace the big
+        // dissolve delay bonus expression with 3.0, the maximum dissolve delay
+        // bonus.
+        (dissolve_delay_bonus_multiplier(max_dissolve_delay_seconds())
+         .to_f64()
+         .unwrap()
+         * 1.125 // age bonus
+         * (100.0 + 101.0)) as u64,
+    );
     assert_eq!(
         voting_power_3,
         (1.875 * (300.0 + 303.0) * 1_000_000.0) as u64
@@ -787,12 +807,17 @@ fn test_compute_neuron_metrics_stale_and_expired_voting_power_neurons() {
 
     // Step 1.1: Construct neurons (as described in the docstring).
 
-    // Total voting power bonus: 2x * 1.125x = 2.25x
     let dissolve_state_and_age = DissolveStateAndAge::NotDissolving {
-        dissolve_delay_seconds: max_dissolve_delay_seconds(), // 100% (equivalently, 2x) dissolve delay bonus
+        dissolve_delay_seconds: max_dissolve_delay_seconds(),
         aging_since_timestamp_seconds: now_seconds - 2 * ONE_YEAR_SECONDS, // 12.5% (equivalently 1.125x) age bonus
     };
-    let total_bonus_multiplier = 2.25;
+    // TODO(NNS1-4323): Once Mission 70 is fully deployed, replace the big
+    // dissolve delay bonus expression with 3.0, the maximum dissolve delay
+    // bonus.
+    let total_bonus_multiplier = dissolve_delay_bonus_multiplier(max_dissolve_delay_seconds())
+        .to_f64()
+        .unwrap()
+        * 1.125; // age bonus.
 
     let fresh_neuron = NeuronBuilder::new(
         NeuronId { id: 1 },

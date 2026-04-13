@@ -1,4 +1,4 @@
-use crate::mutations::node_management::common::get_key_family_iter_at_version;
+use crate::common::key_family::get_key_family_iter_at_version;
 use crate::{pb::v1::NodeProvidersMonthlyXdrRewards, registry::Registry};
 use ic_protobuf::registry::{
     dc::v1::DataCenterRecord, node_operator::v1::NodeOperatorRecord,

@@ -14,6 +14,7 @@ use crate::{
     },
 };
 use ic_error_types::{ErrorCode, UserError};
+use ic_heap_bytes::DeterministicHeapBytes;
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, CanisterMetadataRequest, ClearChunkStoreArgs,
     DeleteCanisterSnapshotArgs, IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2,
@@ -142,6 +143,16 @@ impl HttpRequestContent for SignedIngressContent {
 
     fn sender_info(&self) -> Option<&SignedSenderInfo> {
         self.sender_info.as_ref()
+    }
+}
+
+impl SignedIngressContent {
+    /// Returns the sender info as a validated `SenderInfo` (without the signature).
+    pub fn as_sender_info(&self) -> Option<SenderInfo> {
+        self.sender_info.as_ref().map(|si| SenderInfo {
+            info: si.info.clone(),
+            signer: si.signer,
+        })
     }
 }
 
@@ -387,6 +398,12 @@ pub struct SenderInfo {
     #[serde(with = "serde_bytes")]
     pub info: Vec<u8>,
     pub signer: CanisterId,
+}
+
+impl DeterministicHeapBytes for SenderInfo {
+    fn deterministic_heap_bytes(&self) -> usize {
+        self.info.len()
+    }
 }
 
 impl From<&SenderInfo> for pb_ingress::SenderInfo {

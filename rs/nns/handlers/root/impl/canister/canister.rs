@@ -30,6 +30,7 @@ use ic_nns_handler_root::{
 };
 use ic_nns_handler_root_interface::{
     ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
+    CreateCanisterAndInstallCodeRequest, CreateCanisterAndInstallCodeResponse,
     LoadCanisterSnapshotRequest, LoadCanisterSnapshotResponse, TakeCanisterSnapshotRequest,
     TakeCanisterSnapshotResponse, UpdateCanisterSettingsRequest, UpdateCanisterSettingsResponse,
 };
@@ -226,6 +227,16 @@ async fn update_canister_settings(
         &mut new_management_canister_client(),
     )
     .await
+}
+
+/// Creates a new canister on the specified subnet and installs code into it.
+/// Only callable by NNS Governance.
+#[update]
+async fn create_canister_and_install_code(
+    request: CreateCanisterAndInstallCodeRequest,
+) -> CreateCanisterAndInstallCodeResponse {
+    check_caller_is_governance();
+    canister_management::create_canister_and_install_code(request).await
 }
 
 /// Takes a snapshot of a canister controlled by NNS Root. Only callable by NNS

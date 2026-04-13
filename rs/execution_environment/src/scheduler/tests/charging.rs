@@ -14,7 +14,6 @@ use ic_replicated_state::canister_state::system_state::PausedExecutionId;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_types::messages::{CanisterMessageOrTask, CanisterTask};
 use ic_types::time::UNIX_EPOCH;
-use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, NonConsumed};
 use ic_types_test_utils::ids::canister_test_id;
 use std::time::Duration;
 
@@ -372,7 +371,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     let mut test = SchedulerTestBuilder::new().build();
 
     let canister_id = test.create_canister_with_controller(
-        Cycles::new(24_892_000),
+        Cycles::new(31_750_000),
         ComputeAllocation::zero(),
         MemoryAllocation::from(NumBytes::from(1 << 30)),
         None,
@@ -403,10 +402,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
         .canister_state_make_mut(&canister_id)
         .unwrap()
         .system_state
-        .add_cycles(CompoundCycles::<NonConsumed>::new(
-            expected_charge,
-            CanisterCyclesCostSchedule::Normal,
-        ));
+        .add_cycles(expected_charge);
 
     // Take a snapshot of the canister.
     let args: TakeCanisterSnapshotArgs =
@@ -486,7 +482,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     let mut test = SchedulerTestBuilder::new().build();
 
     let canister_id = test.create_canister_with_controller(
-        Cycles::new(24_892_000),
+        Cycles::new(31_750_000),
         ComputeAllocation::zero(),
         MemoryAllocation::from(NumBytes::from(1 << 30)),
         None,
@@ -524,10 +520,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
         .canister_state_make_mut(&canister_id)
         .unwrap()
         .system_state
-        .add_cycles(CompoundCycles::<NonConsumed>::new(
-            expected_charge,
-            CanisterCyclesCostSchedule::Normal,
-        ));
+        .add_cycles(expected_charge);
 
     // Take a snapshot of the canister.
     let args: TakeCanisterSnapshotArgs =

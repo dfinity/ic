@@ -170,17 +170,16 @@ use ic_types::{
     messages::{
         Blob, CallbackId, Certificate, CertificateDelegation, CertificateDelegationMetadata,
         EXPECTED_MESSAGE_ID_LENGTH, HttpCallContent, HttpCanisterUpdate, HttpRequestContent,
-        HttpRequestEnvelope, MessageId, Payload as MsgPayload, Query, QuerySource, RejectContext,
-        RequestOrResponse, Response, SignedIngress, extract_effective_canister_id,
+        HttpRequestEnvelope, MessageId, Payload as MsgPayload, Query, QuerySource,
+        RawSignedSenderInfo, RejectContext, RequestOrResponse, Response, SignedIngress,
+        SignedSenderInfo, extract_effective_canister_id,
     },
     signature::ThresholdSignature,
     state_manager::StateManagerResult,
     time::{GENESIS, Time},
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
 };
-use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, NominalCycles, NonConsumed,
-};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_xnet_payload_builder::{
     RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics, XNetSlicePoolImpl,
     certified_slice_pool::CertifiedSlicePool, refill_stream_slice_indices,
@@ -2519,7 +2518,20 @@ impl StateMachine {
         method: impl ToString,
         payload: Vec<u8>,
     ) -> Result<MessageId, SubmitIngressError> {
-        let msg = self.ingress_message(sender, canister_id, method, payload);
+        self.submit_ingress_as_with_sender_info(sender, canister_id, method, payload, None)
+    }
+
+    /// Submit an ingress message with sender info into the ingress pool used by `PayloadBuilderImpl`
+    /// in `Self::execute_round`.
+    pub fn submit_ingress_as_with_sender_info(
+        &self,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+        method: impl ToString,
+        payload: Vec<u8>,
+        sender_info: Option<SignedSenderInfo>,
+    ) -> Result<MessageId, SubmitIngressError> {
+        let msg = self.ingress_message(sender, canister_id, method, payload, sender_info);
         self.submit_signed_ingress(msg)
     }
 
@@ -2585,7 +2597,6 @@ impl StateMachine {
     pub fn mock_canister_http_response(
         &self,
         request_id: u64,
-        timeout: Time,
         canister_id: CanisterId,
         contents: Vec<CanisterHttpResponseContent>,
     ) {
@@ -2594,13 +2605,11 @@ impl StateMachine {
             let registry_version = self.registry_client.get_latest_version();
             let response = CanisterHttpResponse {
                 id: CanisterHttpRequestId::from(request_id),
-                timeout,
                 canister_id,
                 content: content.clone(),
             };
             let response_metadata = CanisterHttpResponseMetadata {
                 id: CallbackId::from(request_id),
-                timeout,
                 registry_version,
                 content_hash: ic_types::crypto::crypto_hash(&response),
                 content_size: content.count_bytes() as u32,
@@ -4354,17 +4363,26 @@ impl StateMachine {
         method: impl ToString,
         method_payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
-        self.query_as_with_delegation(sender, receiver, method, method_payload, None)
+        self.query_as_with_delegation_and_sender_info(
+            sender,
+            receiver,
+            method,
+            method_payload,
+            None,
+            None,
+        )
     }
 
-    /// Queries the canister with the specified ID and with an optional subnet delegation from the NNS.
-    pub fn query_as_with_delegation(
+    /// Queries the canister with the specified ID and with an optional subnet delegation from the NNS
+    /// and sender info.
+    pub fn query_as_with_delegation_and_sender_info(
         &self,
         sender: PrincipalId,
         receiver: CanisterId,
         method: impl ToString,
         method_payload: Vec<u8>,
         delegation: Option<(CertificateDelegation, CertificateDelegationMetadata)>,
+        sender_info: Option<SignedSenderInfo>,
     ) -> Result<WasmResult, UserError> {
         self.certify_latest_state();
         let user_query = Query {
@@ -4372,7 +4390,7 @@ impl StateMachine {
                 user_id: UserId::from(sender),
                 ingress_expiry: 0,
                 nonce: None,
-                sender_info: None,
+                sender_info,
             },
             receiver,
             method_name: method.to_string(),
@@ -4442,12 +4460,18 @@ impl StateMachine {
         canister_id: CanisterId,
         method: impl ToString,
         payload: Vec<u8>,
+        sender_info: Option<SignedSenderInfo>,
     ) -> SignedIngress {
         // Build `SignedIngress` with maximum ingress expiry and unique nonce,
         // omitting delegations and signatures.
         let ingress_expiry = (self.get_time() + MAX_INGRESS_TTL).as_nanos_since_unix_epoch();
         let nonce = self.nonce.fetch_add(1, Ordering::Relaxed);
         let nonce_blob = Some(nonce.to_le_bytes().into());
+        let raw_sender_info = sender_info.map(|si| RawSignedSenderInfo {
+            info: Blob(si.info),
+            signer: Blob(si.signer.get().into_vec()),
+            sig: Blob(si.sig),
+        });
         SignedIngress::try_from(HttpRequestEnvelope::<HttpCallContent> {
             content: HttpCallContent::Call {
                 update: HttpCanisterUpdate {
@@ -4457,7 +4481,7 @@ impl StateMachine {
                     sender: sender.into(),
                     ingress_expiry,
                     nonce: nonce_blob,
-                    sender_info: None,
+                    sender_info: raw_sender_info,
                 },
             },
             sender_pubkey: None,
@@ -4474,7 +4498,7 @@ impl StateMachine {
         method: impl ToString,
         payload: Vec<u8>,
     ) -> IngressInductionCost {
-        let msg = self.ingress_message(sender, canister_id, method, payload);
+        let msg = self.ingress_message(sender, canister_id, method, payload, None);
         let effective_canister_id = extract_effective_canister_id(msg.content()).unwrap();
         let subnet_size = self.nodes.len();
         self.cycles_account_manager.ingress_induction_cost(
@@ -4499,7 +4523,7 @@ impl StateMachine {
         // Make sure the latest state is certified for the ingress filter to work.
         self.certify_latest_state();
 
-        let msg = self.ingress_message(sender, canister_id, method, payload);
+        let msg = self.ingress_message(sender, canister_id, method, payload, None);
 
         // Fetch ingress validation settings from the registry.
         let registry_version = self.registry_client.get_latest_version();
@@ -4911,12 +4935,7 @@ impl StateMachine {
         let canister_state = state
             .canister_state_make_mut(&canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} not found"));
-        canister_state
-            .system_state
-            .add_cycles(CompoundCycles::<NonConsumed>::new(
-                Cycles::from(amount),
-                self.cost_schedule,
-            ));
+        canister_state.system_state.add_cycles(Cycles::from(amount));
         let balance = canister_state.system_state.balance().get();
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);

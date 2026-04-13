@@ -1505,10 +1505,9 @@ fn credit_refund() {
     let initial_balance = fixture.canister_balance(&CANISTER_ID).unwrap();
 
     // Refund 10 cycles to `CANISTER_ID`.
-    let credited = fixture.state.credit_refund(
-        &Refund::anonymous(CANISTER_ID, Cycles::new(10)),
-        CanisterCyclesCostSchedule::Normal,
-    );
+    let credited = fixture
+        .state
+        .credit_refund(&Refund::anonymous(CANISTER_ID, Cycles::new(10)));
     assert!(credited);
     assert_eq!(
         Some(initial_balance + Cycles::new(10)),
@@ -1516,10 +1515,9 @@ fn credit_refund() {
     );
 
     // Refunding to a non-existent canister is a no-op.
-    let credited = fixture.state.credit_refund(
-        &Refund::anonymous(OTHER_CANISTER_ID, Cycles::new(11)),
-        CanisterCyclesCostSchedule::Normal,
-    );
+    let credited = fixture
+        .state
+        .credit_refund(&Refund::anonymous(OTHER_CANISTER_ID, Cycles::new(11)));
     assert!(!credited);
     assert_eq!(
         Some(initial_balance + Cycles::new(10)),

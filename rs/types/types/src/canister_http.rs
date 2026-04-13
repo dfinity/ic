@@ -784,8 +784,6 @@ impl From<CanisterHttpRequestContextError> for UserError {
 /// client to make a request
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct CanisterHttpRequest {
-    /// Timestamp indicating when this request will be considered timed out.
-    pub timeout: Time,
     /// This requests unique identifier
     pub id: CanisterHttpRequestId,
     /// The context of the request which captures all the metadata about this request
@@ -801,23 +799,25 @@ pub struct CanisterHttpRequest {
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponse {
     pub id: CanisterHttpRequestId,
-    pub timeout: Time,
     pub canister_id: CanisterId,
     pub content: CanisterHttpResponseContent,
+}
+
+impl CanisterHttpResponse {
+    /// Same calculation as `Self::count_bytes` but from decomposed parts.
+    pub fn count_bytes_from_parts(canister_id: &CanisterId, content_size: usize) -> usize {
+        size_of::<CanisterHttpRequestId>() + canister_id.get_ref().data_size() + content_size
+    }
 }
 
 impl CountBytes for CanisterHttpResponse {
     fn count_bytes(&self) -> usize {
         let CanisterHttpResponse {
-            id,
-            timeout,
+            id: _,
             canister_id,
             content,
         } = &self;
-        size_of_val(id)
-            + size_of_val(timeout)
-            + canister_id.get_ref().data_size()
-            + content.count_bytes()
+        Self::count_bytes_from_parts(canister_id, content.count_bytes())
     }
 }
 
@@ -985,7 +985,6 @@ impl CountBytes for CanisterHttpResponseDivergence {
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponseMetadata {
     pub id: CallbackId,
-    pub timeout: Time,
     pub content_hash: CryptoHashOf<CanisterHttpResponse>,
     pub content_size: u32,
     pub registry_version: RegistryVersion,
@@ -994,7 +993,18 @@ pub struct CanisterHttpResponseMetadata {
 
 impl CountBytes for CanisterHttpResponseMetadata {
     fn count_bytes(&self) -> usize {
-        size_of::<CanisterHttpResponseMetadata>()
+        let Self {
+            id,
+            content_hash,
+            content_size,
+            registry_version,
+            replica_version,
+        } = self;
+        size_of_val(id)
+            + content_hash.get_ref().0.len()
+            + size_of_val(content_size)
+            + size_of_val(registry_version)
+            + replica_version.as_ref().len()
     }
 }
 

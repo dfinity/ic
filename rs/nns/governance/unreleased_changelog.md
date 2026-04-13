@@ -9,7 +9,7 @@ on the process that this file is part of, see
 
 ## Added
 
-- Proposal type `DeleteSubnet`, currently limited to CloudEngine subnets.
+* Enabled CreateCanisterAndInstallCode proposals.
 
 ## Changed
 

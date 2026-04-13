@@ -348,7 +348,7 @@ impl CyclesAccountManager {
             cost_schedule,
             canister.system_state.reserved_balance(),
         );
-        if canister.has_paused_execution() || canister.has_paused_install_code() {
+        if canister.has_paused_execution_or_install_code() {
             if canister.system_state.debited_balance() < cycles + threshold {
                 return Err(CanisterOutOfCyclesError {
                     canister_id: canister.canister_id(),
@@ -563,7 +563,7 @@ impl CyclesAccountManager {
                 cost_schedule,
             )
             .min(prepaid_execution_cycles);
-        system_state.add_cycles(cycles_to_refund);
+        system_state.refund_cycles(prepaid_execution_cycles, cycles_to_refund);
     }
 
     /// Returns the cost of compute allocation for the given duration.
@@ -846,10 +846,10 @@ impl CyclesAccountManager {
     pub fn xnet_call_total_fee(
         &self,
         payload_size: NumBytes,
+        subnet_size: usize,
         execution_mode: WasmExecutionMode,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Cycles {
-        let subnet_size = self.config.reference_subnet_size;
         let prepayment_for_response_transmission =
             self.prepayment_for_response_transmission(subnet_size, cost_schedule);
         // response execution might be free depending on cost_schedule
@@ -1018,7 +1018,7 @@ impl CyclesAccountManager {
         )?;
 
         debug_assert_ne!(use_case, CyclesUseCase::NonConsumed);
-        system_state.remove_cycles(cycles);
+        system_state.consume_cycles(cycles);
         Ok(())
     }
 
