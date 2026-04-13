@@ -1,5 +1,5 @@
 use crate::{
-    CountBytes, ReplicaVersion,
+    CanisterId, CountBytes, ReplicaVersion,
     canister_http::{
         CanisterHttpReject, CanisterHttpRequestId, CanisterHttpResponse,
         CanisterHttpResponseArtifact, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
@@ -83,10 +83,57 @@ pub struct FlexibleCanisterHttpResponseWithProof {
     pub proof: CanisterHttpResponseShare,
 }
 
+impl FlexibleCanisterHttpResponseWithProof {
+    pub fn count_bytes(
+        response: &CanisterHttpResponse,
+        proof: &CanisterHttpResponseShare,
+    ) -> usize {
+        Self::count_bytes_from_parts(&response.canister_id, response.content.count_bytes(), proof)
+    }
+
+    /// Same calculation as [`Self::count_bytes`] but from decomposed parts.
+    pub fn count_bytes_from_parts(
+        canister_id: &CanisterId,
+        content_size: usize,
+        proof: &CanisterHttpResponseShare,
+    ) -> usize {
+        let response_size = CanisterHttpResponse::count_bytes_from_parts(canister_id, content_size);
+        response_size + proof.count_bytes()
+    }
+}
+
 impl CountBytes for FlexibleCanisterHttpResponseWithProof {
     fn count_bytes(&self) -> usize {
         let Self { response, proof } = self;
-        response.count_bytes() + proof.count_bytes()
+        Self::count_bytes(response, proof)
+    }
+}
+
+impl CountBytes for FlexibleCanisterHttpError {
+    fn count_bytes(&self) -> usize {
+        match self {
+            Self::Timeout { callback_id } => callback_id.count_bytes(),
+            Self::ResponsesTooLarge {
+                callback_id,
+                metadata_shares,
+            } => {
+                callback_id.count_bytes()
+                    + metadata_shares
+                        .iter()
+                        .map(|s| s.count_bytes())
+                        .sum::<usize>()
+            }
+            Self::TooManyRequestErrors {
+                callback_id,
+                reject_responses,
+            } => {
+                callback_id.count_bytes()
+                    + reject_responses
+                        .iter()
+                        .map(|r| r.count_bytes())
+                        .sum::<usize>()
+            }
+        }
     }
 }
 
