@@ -1,6 +1,6 @@
 // Set up a testnet containing:
-//   one 4-node System/NNS subnet, one 4-node CloudEngine subnet (1 node per DC in 4 datacenters),
-//   4 unassigned nodes (1 per DC), one API boundary node, one ic-gateway, and a p8s (with grafana) VM.
+//   one 1-node System/NNS subnet, 60 unassigned nodes (2 per DC in 30 datacenters),
+//   one API boundary node, one ic-gateway, and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 6 vCPUs, 24GiB of RAM, and 50 GiB disk.
 //
 // You can setup this testnet by executing the following commands:
@@ -102,6 +102,188 @@ const DATA_CENTERS: &[DcConfig] = &[
         latitude: 39.004,
         longitude: -77.408,
     },
+    DcConfig {
+        id: "Tokyo",
+        region: "Asia,JP,Tokyo",
+        owner: "Equinix",
+        latitude: 35.682,
+        longitude: 139.692,
+    },
+    DcConfig {
+        id: "London",
+        region: "Europe,GB,London",
+        owner: "Telehouse",
+        latitude: 51.508,
+        longitude: -0.076,
+    },
+    DcConfig {
+        id: "Frankfurt",
+        region: "Europe,DE,Hessen",
+        owner: "Interxion",
+        latitude: 50.110,
+        longitude: 8.682,
+    },
+    DcConfig {
+        id: "Singapore",
+        region: "Asia,SG,Singapore",
+        owner: "Equinix",
+        latitude: 1.290,
+        longitude: 103.851,
+    },
+    DcConfig {
+        id: "Sao Paulo",
+        region: "South America,BR,Sao Paulo",
+        owner: "Ascenty",
+        latitude: -23.550,
+        longitude: -46.633,
+    },
+    DcConfig {
+        id: "Sydney",
+        region: "Oceania,AU,New South Wales",
+        owner: "Equinix",
+        latitude: -33.868,
+        longitude: 151.207,
+    },
+    DcConfig {
+        id: "Toronto",
+        region: "North America,CA,Ontario",
+        owner: "eStruxture",
+        latitude: 43.651,
+        longitude: -79.347,
+    },
+    DcConfig {
+        id: "Mumbai",
+        region: "Asia,IN,Maharashtra",
+        owner: "Nxtra",
+        latitude: 19.076,
+        longitude: 72.878,
+    },
+    DcConfig {
+        id: "Seoul",
+        region: "Asia,KR,Seoul",
+        owner: "KINX",
+        latitude: 37.566,
+        longitude: 126.978,
+    },
+    DcConfig {
+        id: "Amsterdam",
+        region: "Europe,NL,North Holland",
+        owner: "Equinix",
+        latitude: 52.370,
+        longitude: 4.895,
+    },
+    DcConfig {
+        id: "Paris",
+        region: "Europe,FR,Ile-de-France",
+        owner: "Interxion",
+        latitude: 48.864,
+        longitude: 2.349,
+    },
+    DcConfig {
+        id: "Stockholm",
+        region: "Europe,SE,Stockholm",
+        owner: "Interxion",
+        latitude: 59.330,
+        longitude: 18.069,
+    },
+    DcConfig {
+        id: "Zurich",
+        region: "Europe,CH,Zurich",
+        owner: "Green",
+        latitude: 47.376,
+        longitude: 8.540,
+    },
+    DcConfig {
+        id: "Dublin",
+        region: "Europe,IE,Dublin",
+        owner: "Equinix",
+        latitude: 53.350,
+        longitude: -6.260,
+    },
+    DcConfig {
+        id: "Chicago",
+        region: "North America,US,Illinois",
+        owner: "Equinix",
+        latitude: 41.878,
+        longitude: -87.630,
+    },
+    DcConfig {
+        id: "Dallas",
+        region: "North America,US,Texas",
+        owner: "DataBank",
+        latitude: 32.777,
+        longitude: -96.797,
+    },
+    DcConfig {
+        id: "Los Angeles",
+        region: "North America,US,California",
+        owner: "CoreSite",
+        latitude: 34.052,
+        longitude: -118.244,
+    },
+    DcConfig {
+        id: "Miami",
+        region: "North America,US,Florida",
+        owner: "Equinix",
+        latitude: 25.762,
+        longitude: -80.192,
+    },
+    DcConfig {
+        id: "Bogota",
+        region: "South America,CO,Bogota",
+        owner: "Equinix",
+        latitude: 4.711,
+        longitude: -74.072,
+    },
+    DcConfig {
+        id: "Cape Town",
+        region: "Africa,ZA,Western Cape",
+        owner: "Teraco",
+        latitude: -33.925,
+        longitude: 18.424,
+    },
+    DcConfig {
+        id: "Nairobi",
+        region: "Africa,KE,Nairobi",
+        owner: "PAIX",
+        latitude: -1.286,
+        longitude: 36.817,
+    },
+    DcConfig {
+        id: "Warsaw",
+        region: "Europe,PL,Masovia",
+        owner: "Equinix",
+        latitude: 52.230,
+        longitude: 21.012,
+    },
+    DcConfig {
+        id: "Madrid",
+        region: "Europe,ES,Madrid",
+        owner: "Interxion",
+        latitude: 40.417,
+        longitude: -3.704,
+    },
+    DcConfig {
+        id: "Milan",
+        region: "Europe,IT,Lombardy",
+        owner: "Equinix",
+        latitude: 45.464,
+        longitude: 9.190,
+    },
+    DcConfig {
+        id: "Osaka",
+        region: "Asia,JP,Osaka",
+        owner: "Equinix",
+        latitude: 34.694,
+        longitude: 135.502,
+    },
+    DcConfig {
+        id: "Jakarta",
+        region: "Asia,ID,Jakarta",
+        owner: "DCI",
+        latitude: -6.175,
+        longitude: 106.845,
+    },
 ];
 
 fn main() -> Result<()> {
@@ -123,8 +305,8 @@ pub fn setup(env: TestEnv) {
                 .with_dkg_interval_length(Height::from(10)),
         );
 
-    // Build CloudEngine subnet and unassigned nodes distributed across 4 datacenters.
-    // Each datacenter gets its own node operator with 1 CloudEngine node + 1 unassigned node.
+    // Build unassigned nodes distributed across 30 datacenters.
+    // Each datacenter gets its own node operator with 2 unassigned nodes.
     // let mut cloud_engine_subnet = Subnet::new(SubnetType::CloudEngine);
     for (i, dc) in DATA_CENTERS.iter().enumerate() {
         let operator_principal = PrincipalId::new_user_test_id(1000 + i as u64);
