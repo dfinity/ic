@@ -4,7 +4,6 @@ on:
   schedule:
     - cron: '0 12 * * *' # every day at 12:00 UTC
   workflow_dispatch:
-  pull_request:
 
 jobs:
   check-workflows:
