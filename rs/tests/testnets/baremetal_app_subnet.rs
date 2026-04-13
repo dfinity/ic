@@ -43,8 +43,7 @@ use ic_system_test_driver::nns::{
 };
 use ic_system_test_driver::util::{block_on, runtime_from_url};
 use nested::{
-    create_bare_metal_node, create_bare_metal_session, registration,
-    util::setup_ic_infrastructure,
+    create_bare_metal_node, create_bare_metal_session, registration, util::setup_ic_infrastructure,
 };
 use nns_dapp::set_authorized_subnets;
 use slog::info;
@@ -73,8 +72,7 @@ fn setup(env: TestEnv) {
     let enable_tee = std::env::var_os("TRUSTED_EXECUTION_ENVIRONMENT").is_some();
     info!(
         logger,
-        "Bare-metal nested node: trusted_execution_environment (SEV-SNP path) = {}",
-        enable_tee
+        "Bare-metal nested node: trusted_execution_environment (SEV-SNP path) = {}", enable_tee
     );
 
     let bare_metal = create_bare_metal_session(&env);
