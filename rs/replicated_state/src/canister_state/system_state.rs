@@ -36,7 +36,7 @@ use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask,
     Ingress, NO_DEADLINE, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse,
-    Response, StopCanisterCallId, StopCanisterContext,
+    Response, SenderInfo, StopCanisterCallId, StopCanisterContext,
 };
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
@@ -935,10 +935,11 @@ impl SystemState {
         cycles: Cycles,
         time: Time,
         metadata: RequestMetadata,
+        sender_info: Option<SenderInfo>,
     ) -> Result<CallContextId, StateError> {
         Ok(call_context_manager_mut(&mut self.status)
             .ok_or(StateError::CanisterStopped(self.canister_id))?
-            .new_call_context(call_origin, cycles, time, metadata))
+            .new_call_context(call_origin, cycles, time, metadata, sender_info))
     }
 
     /// Withdraws cycles from the call context with the given ID.
@@ -2397,6 +2398,7 @@ pub mod testing {
                 Cycles::zero(),
                 time,
                 RequestMetadata::new(0, time),
+                None,
             );
 
             let callback = Callback::new(

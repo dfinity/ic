@@ -826,6 +826,7 @@ fn dts_replicated_execution_resume_fails_due_to_call_context_change() {
                 Cycles::new(0),
                 time,
                 RequestMetadata::for_new_call_tree(time),
+                None,
             )
             .unwrap();
 

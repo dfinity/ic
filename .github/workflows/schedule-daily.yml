@@ -52,6 +52,21 @@ jobs:
               --keep_going --test_timeout=43200
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
+  bazel-build-all-no-cache:
+    name: Bazel Build All No Cache
+    needs: [config]
+    runs-on: *dind-large-setup
+    container: *container-setup
+    timeout-minutes: 90
+    steps:
+      - *checkout
+      - uses: ./.github/actions/netrc
+      - name: Run Bazel Build All No Cache
+        uses: ./.github/actions/bazel
+        with:
+          run: bazel build --config=stamped --config=local //...
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
   bazel-test-bare-metal:
     name: Bazel Test Bare Metal
     runs-on: *dind-large-setup

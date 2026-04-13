@@ -18,9 +18,10 @@ use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use rstest::rstest;
 
 use crate::{
-    CertificateValidationError, validate_subnet_delegation_certificate,
+    CertificateValidationError, DelegationSubnetInfo, validate_subnet_delegation_certificate,
     validate_subnet_delegation_certificate_with_cache, verify_certified_data,
-    verify_certified_data_with_cache, verify_delegation_certificate,
+    verify_certified_data_with_cache, verify_certified_data_with_cache_for_canister_sig,
+    verify_delegation_certificate,
 };
 
 fn verify_certified_data_with_and_without_cache(
@@ -66,7 +67,7 @@ fn verify_subnet_delegation_certificate_with_and_without_cache(
     subnet_id: &SubnetId,
     canister_id: &CanisterId,
     root_pk: &ThresholdSigPublicKey,
-) -> Result<ThresholdSigPublicKey, CertificateValidationError> {
+) -> Result<(ThresholdSigPublicKey, DelegationSubnetInfo), CertificateValidationError> {
     let verification_result_without_cache =
         verify_delegation_certificate(certificate, subnet_id, root_pk, Some(canister_id), false);
     let verification_result_with_cache =
@@ -1031,6 +1032,153 @@ fn should_fail_to_validate_delegation_cert_if_subnet_new_canister_ranges_malform
         verify_subnet_delegation_certificate_with_and_without_cache(&delegation.certificate, &subnet_id, &canister_id, &root_pk),
         Err(CertificateValidationError::DeserError(e))
         if e.contains("failed to unpack canister range")
+    );
+}
+
+#[test]
+fn should_accept_delegation_from_cloud_engine_subnet_in_generic_path() {
+    let rng = &mut reproducible_rng();
+    let subnet_id = subnet_id(42);
+    let cid = canister_id(1);
+
+    let (cert, root_pk, _cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: cid,
+            certified_data: random_certified_data(),
+        },
+        rng,
+    )
+    .with_delegation(
+        CertificateBuilder::new_with_rng(
+            SubnetData {
+                subnet_id,
+                canister_id_ranges: vec![(canister_id(0), canister_id(10))],
+            },
+            rng,
+        )
+        .with_subnet_type("cloud_engine"),
+    )
+    .build();
+    let delegation = cert.delegation.expect("missing delegation");
+
+    assert!(
+        validate_subnet_delegation_certificate_with_and_without_cache(
+            &delegation.certificate,
+            &subnet_id,
+            &root_pk,
+        )
+        .is_ok()
+    );
+}
+
+#[test]
+fn should_accept_cloud_engine_delegation_via_verify_certified_data() {
+    let rng = &mut reproducible_rng();
+    let subnet_id = subnet_id(42);
+    let cid = canister_id(1);
+    let certified_data = random_certified_data();
+
+    let (_cert, root_pk, cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: cid,
+            certified_data: certified_data.clone(),
+        },
+        rng,
+    )
+    .with_delegation(
+        CertificateBuilder::new_with_rng(
+            SubnetData {
+                subnet_id,
+                canister_id_ranges: vec![(canister_id(0), canister_id(10))],
+            },
+            rng,
+        )
+        .with_subnet_type("cloud_engine"),
+    )
+    .build();
+
+    // The generic verify_certified_data path should accept cloud engine delegations
+    assert!(
+        verify_certified_data_with_and_without_cache(
+            &cbor,
+            &cid,
+            &root_pk,
+            certified_data.as_bytes(),
+        )
+        .is_ok()
+    );
+}
+
+#[test]
+fn should_reject_cloud_engine_delegation_via_canister_sig_path() {
+    let rng = &mut reproducible_rng();
+    let subnet_id = subnet_id(42);
+    let cid = canister_id(1);
+    let certified_data = random_certified_data();
+
+    let (_cert, root_pk, cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: cid,
+            certified_data: certified_data.clone(),
+        },
+        rng,
+    )
+    .with_delegation(
+        CertificateBuilder::new_with_rng(
+            SubnetData {
+                subnet_id,
+                canister_id_ranges: vec![(canister_id(0), canister_id(10))],
+            },
+            rng,
+        )
+        .with_subnet_type("cloud_engine"),
+    )
+    .build();
+
+    assert_matches!(
+        verify_certified_data_with_cache_for_canister_sig(
+            &cbor,
+            &cid,
+            &root_pk,
+            certified_data.as_bytes(),
+        ),
+        Err(CertificateValidationError::UntrustedDelegationSubnet(_))
+    );
+}
+
+#[test]
+fn should_accept_delegation_with_non_cloud_engine_type() {
+    let rng = &mut reproducible_rng();
+    let subnet_id = subnet_id(42);
+    let cid = canister_id(1);
+
+    let (cert, root_pk, _cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: cid,
+            certified_data: random_certified_data(),
+        },
+        rng,
+    )
+    .with_delegation(
+        CertificateBuilder::new_with_rng(
+            SubnetData {
+                subnet_id,
+                canister_id_ranges: vec![(canister_id(0), canister_id(10))],
+            },
+            rng,
+        )
+        .with_subnet_type("application"),
+    )
+    .build();
+    let delegation = cert.delegation.expect("missing delegation");
+
+    assert!(
+        validate_subnet_delegation_certificate_with_and_without_cache(
+            &delegation.certificate,
+            &subnet_id,
+            &root_pk,
+        )
+        .is_ok()
     );
 }
 

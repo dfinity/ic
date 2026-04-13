@@ -218,15 +218,15 @@ pub mod root_of_trust {
             }
         }
 
-        pub fn new_for_testing(
+        pub fn new_with_additional_root_of_trust(
             registry_client: Arc<dyn RegistryClient>,
             registry_version: RegistryVersion,
-            additional_root_of_trust: Option<IcRootOfTrust>,
+            additional_root_of_trust: IcRootOfTrust,
         ) -> Self {
             Self {
                 registry_client,
                 registry_version,
-                additional_root_of_trust,
+                additional_root_of_trust: Some(additional_root_of_trust),
             }
         }
     }
