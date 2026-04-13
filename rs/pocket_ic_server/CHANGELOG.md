@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Its canister range matches the mainnet subnet `fuqsr-in2lc-zbcjj-ydmcw-pzq7h-4xm2z-pto4i-dcyee-5z4rz-x63ji-nae` (`z474k-xiaaa-aaaao-qaaaa-cai` to `fxzgb-eaaaa-aaaao-7777q-cai`).
 
 ### Changed
+- The endpoints `/instances/<instance_id>/update/submit_ingress_message` and `/instances/<instance_id>/read/query`
+  accept an additional optional field `sender_info` in the request body specifying additional information provided
+  by the canister with which the sender principal is associated.
 - The II and fiduciary subnets no longer hold threshold keys with `test_` prefix (`test_key_1` and `dfx_test_key`); these keys are now exclusively held by the `TestThresholdKeys` subnet.
 
 
