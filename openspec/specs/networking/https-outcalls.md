@@ -106,8 +106,30 @@ The consensus component manages the agreement on HTTP outcall responses across s
 
 #### Scenario: Timeout handling
 - **WHEN** a canister HTTP request has been pending longer than `CANISTER_HTTP_TIMEOUT_INTERVAL`
+- **AND** the request is a non-flexible (traditional) request
 - **THEN** a timeout response is generated for that callback
 - **AND** the timeout response includes a rejection with appropriate error code
+
+#### Scenario: Flexible request timeout error
+- **WHEN** a flexible HTTP request has been pending longer than `CANISTER_HTTP_TIMEOUT_INTERVAL`
+- **THEN** a `FlexibleCanisterHttpError::Timeout` error is generated
+- **AND** the error is included in the payload's `flexible_errors` field
+- **AND** the error is encoded as `FlexibleHttpRequestResult::Err` in the Candid response
+
+#### Scenario: Flexible responses too large error
+- **WHEN** flexible HTTP response shares exceed the available payload capacity
+- **AND** metadata shares are included but full responses cannot fit
+- **THEN** a `FlexibleCanisterHttpError::ResponsesTooLarge` error is generated for the affected callbacks
+
+#### Scenario: Flexible too many request errors
+- **WHEN** multiple replicas return rejections for a flexible HTTP request
+- **THEN** a `FlexibleCanisterHttpError::TooManyRequestErrors` error is generated
+- **AND** the error includes the rejection details from the replicas
+
+#### Scenario: Flexible response with proof
+- **WHEN** a flexible HTTP request receives a valid response from a single signer
+- **THEN** a `FlexibleCanisterHttpResponseWithProof` is created with the response and single-signer proof
+- **AND** the proof is validated using the signer's individual signature (not threshold aggregation)
 
 #### Scenario: Divergence detection
 - **WHEN** different replicas return different responses for the same HTTP request
@@ -120,9 +142,15 @@ The consensus component manages the agreement on HTTP outcall responses across s
 - **THEN** a single signature from any replica is sufficient
 - **AND** no threshold signature aggregation is needed
 
+#### Scenario: Payload composition with flexible fields
+- **WHEN** the canister HTTP payload is constructed
+- **THEN** it may contain `responses` (threshold-signed), `flexible_responses` (single-signer), and `flexible_errors`
+- **AND** each field contributes to the total payload size budget
+
 #### Scenario: Payload validation
 - **WHEN** a proposed canister HTTP payload is validated
 - **THEN** all included response proofs are verified cryptographically
+- **AND** flexible response proofs are validated against individual signer keys
 - **AND** the responses are checked against the current request contexts in state
 - **AND** the payload size is verified against the maximum allowed size
 
