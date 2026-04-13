@@ -9,6 +9,8 @@ on the process that this file is part of, see
 
 ## Added
 
+* Enabled CreateCanisterAndInstallCode proposals.
+
 ## Changed
 
 ## Deprecated
