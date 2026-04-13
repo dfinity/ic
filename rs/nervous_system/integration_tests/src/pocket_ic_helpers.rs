@@ -1294,6 +1294,11 @@ pub mod nns {
         }
 
         /// Fetch a registry value by key and decode it as a protobuf message.
+        ///
+        /// # Panics
+        ///
+        /// Panics if the registry response contains chunked large value keys
+        /// instead of a direct value.
         pub async fn decode_registry_value<T: Message + Default>(
             pocket_ic: &PocketIc,
             key: impl AsRef<str>,
