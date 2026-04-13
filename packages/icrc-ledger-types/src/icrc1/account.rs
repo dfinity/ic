@@ -412,7 +412,7 @@ mod tests {
         use proptest::{prop_assert_eq, proptest};
 
         fn account_strategy() -> impl Strategy<Value = Account> {
-            let bytes_strategy = prop::option::of(prop::collection::vec(0..=255u8, 32));
+            let bytes_strategy = prop::option::of(prop::collection::vec(0..=255_u8, 32));
             let principal_strategy = principal_strategy();
             (bytes_strategy, principal_strategy).prop_map(|(bytes, principal)| Account {
                 owner: principal,
