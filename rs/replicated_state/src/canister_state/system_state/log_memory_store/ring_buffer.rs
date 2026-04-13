@@ -123,7 +123,7 @@ impl RingBuffer {
         }
         let mut index_table = self.io.load_index_table();
         let mut h = self.io.load_header();
-        let mut total_added_size = 0;
+        //let mut total_added_size = 0;
         for record in iter.map(LogRecord::from) {
             // Check that records are added in order, otherwise it breaks the index.
             if record.idx < h.next_idx {
@@ -148,7 +148,7 @@ impl RingBuffer {
                 debug_assert!(false, "Log record size exceeds ring buffer capacity");
                 continue;
             }
-            total_added_size += added_size.get();
+            //total_added_size += added_size.get();
             self.evict_for_size(&mut h, added_size);
 
             // Save the record at the tail position.

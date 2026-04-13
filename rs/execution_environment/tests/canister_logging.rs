@@ -2244,3 +2244,136 @@ fn test_canister_resize_down_preserves_logs() {
     assert_eq!(logs_before.len(), logs_after.len());
     assert_eq!(logs_before, logs_after);
 }
+
+#[test]
+fn test_canister_log_resize_deducts_cycles() {
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    let log_memory_limit = 256 * KIB;
+    let log_records_per_call = 10_000;
+    const LOG_MESSAGE_LEN: usize = 100;
+
+    let env = setup_env();
+    let controller = PrincipalId::new_anonymous();
+    let canister_id = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![controller])
+            .with_log_memory_limit(log_memory_limit)
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
+        wat_canister()
+            .update(
+                "fill_logs",
+                wat_fn().repeat(
+                    log_records_per_call as u32,
+                    wat_fn().debug_print(&[b'a'; LOG_MESSAGE_LEN]),
+                ),
+            )
+            .build_wasm(),
+    );
+
+    // Fill the log memory store.
+    let record_size = LogMemoryStore::estimate_record_size(LOG_MESSAGE_LEN);
+    let calls = 1 + log_memory_limit as usize / (log_records_per_call * record_size);
+    for _ in 0..calls {
+        let _ = env.execute_ingress(canister_id, "fill_logs", vec![]);
+    }
+
+    // Resize and check that cycles were deducted.
+    let balance_before = env.cycle_balance(canister_id);
+    let result = env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(log_memory_limit - 1)
+            .build(),
+    );
+    assert!(result.is_ok());
+    let balance_after = env.cycle_balance(canister_id);
+
+    // The resize cost should be proportional to bytes_used (at 32 cycles/byte
+    // on application subnets with 1 cycle per instruction).
+    // With a full 256 KiB buffer of 100B messages, bytes_used is close to 256 KiB.
+    // Expected cost: ~256 * 1024 * 32 = ~8.4M cycles.
+    let cycles_deducted = balance_before - balance_after;
+    let min_expected = 200 * KIB * 32; // Allow some slack for partially full buffer.
+    assert_gt!(
+        cycles_deducted,
+        min_expected as u128,
+        "Expected at least {} cycles deducted for log resize, got {}",
+        min_expected,
+        cycles_deducted
+    );
+}
+
+#[test]
+fn test_canister_log_resize_rejected_insufficient_cycles() {
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    let log_memory_limit = 256 * KIB;
+    let log_records_per_call = 10_000;
+    const LOG_MESSAGE_LEN: usize = 100;
+
+    let env = setup_env();
+    let controller = PrincipalId::new_anonymous();
+
+    // Create canister with very few cycles — just enough to create and install.
+    let canister_id = env.create_canister_with_cycles(
+        None,
+        Cycles::new(1_000_000_000_000),
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![controller])
+                .with_log_memory_limit(log_memory_limit)
+                .with_log_visibility(LogVisibilityV2::Public)
+                .build(),
+        ),
+    );
+    env.install_wasm_in_mode(
+        canister_id,
+        CanisterInstallMode::Install,
+        wat_canister()
+            .update(
+                "fill_logs",
+                wat_fn().repeat(
+                    log_records_per_call as u32,
+                    wat_fn().debug_print(&[b'a'; LOG_MESSAGE_LEN]),
+                ),
+            )
+            .build_wasm(),
+        vec![],
+    )
+    .unwrap();
+
+    // Fill the log memory store.
+    let record_size = LogMemoryStore::estimate_record_size(LOG_MESSAGE_LEN);
+    let calls = 1 + log_memory_limit as usize / (log_records_per_call * record_size);
+    for _ in 0..calls {
+        let _ = env.execute_ingress(canister_id, "fill_logs", vec![]);
+    }
+
+    // Drain cycles to leave very few remaining (less than resize cost).
+    // Resize cost for ~256 KiB at 32 cycles/byte ≈ 8.4M cycles.
+    // The freezing threshold also reserves some cycles, so we need to
+    // account for that. Set a high freezing threshold to consume most cycles.
+    let _ = env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(u64::MAX)
+            .build(),
+    );
+
+    // Attempt resize — should be rejected due to insufficient cycles.
+    let result = env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(log_memory_limit - 1)
+            .build(),
+    );
+    assert!(
+        result.is_err(),
+        "Expected log resize to be rejected due to insufficient cycles"
+    );
+}
