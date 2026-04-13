@@ -229,19 +229,18 @@ def filter_columns(columns_metadata, columns_list):
     Filter and reorder columns based on user specification.
 
     Args:
-        columns_metadata: List of 3-tuples (column_name, header, alignment)
+        columns_metadata: List of tuples where the first element is the column name
         columns_list: List of column names like ["label", "total", "non_success"] or ["-owners", "-timeout"]
 
     Returns:
-        Filtered/reordered colalignments list of 3-tuples (dataframe_column, header, alignment)
+        Filtered/reordered list of tuples from columns_metadata
 
     """
     if not columns_list:
-        # Return colalignments (without user_facing_name)
-        return [(column_name, header, align) for column_name, header, align in columns_metadata]
+        return list(columns_metadata)
 
     # Build mappings
-    available_columns = {column_name: (column_name, header, align) for column_name, header, align in columns_metadata}
+    available_columns = {col[0]: col for col in columns_metadata}
 
     # Check if all columns start with '-' (exclusion mode)
     if all(col.startswith("-") for col in columns_list):
@@ -256,11 +255,7 @@ def filter_columns(columns_metadata, columns_list):
                 f"Available columns: {', '.join(sorted(available_columns.keys()))}"
             )
 
-        return [
-            (column_name, header, align)
-            for column_name, header, align in columns_metadata
-            if column_name not in exclude_set
-        ]
+        return [col for col in columns_metadata if col[0] not in exclude_set]
 
     # Check if any columns start with '-' (mixed mode - not allowed)
     if any(col.startswith("-") for col in columns_list):
@@ -892,36 +887,36 @@ def process_elasticsearch_hits_from_queue(
 
 # fmt: off
 TOP_COLUMNS = [
-    # (column_name,         header,                  alignment)
-    ("label",               "label",                 "left"),
-    ("total",               "total",                 "decimal"),
-    ("last_non_success_at", "last non success at",   "right"),
-    ("non_success",         "non_success",           "decimal"),
-    ("last_flaky_at",       "last flaky at",         "right"),
-    ("flaky",               "flaky",                 "decimal"),
-    ("timeout",             "timeout",               "decimal"),
-    ("fail",                "fail",                  "decimal"),
-    ("non_success%",        "non_success%",          "decimal"),
-    ("flaky%",              "flaky%",                "decimal"),
-    ("timeout%",            "timeout%",              "decimal"),
-    ("fail%",               "fail%",                 "decimal"),
-    ("impact",              "impact",                "right"),
-    ("total_duration",      "total duration",        "right"),
-    ("duration_p90",        "duration_p90",          "right"),
-    ("owners",              "owners",                "left"),
+    # (column_name,         header,                  alignment,  summary_fn(df) -> value | None)
+    ("label",               "label",                 "left",     lambda df: "TOTAL"),
+    ("total",               "total",                 "decimal",  lambda df: df["total"].sum()),
+    ("last_non_success_at", "last non success at",   "right",    None),
+    ("non_success",         "non_success",           "decimal",  lambda df: df["non_success"].sum()),
+    ("last_flaky_at",       "last flaky at",         "right",    None),
+    ("flaky",               "flaky",                 "decimal",  lambda df: df["flaky"].sum()),
+    ("timeout",             "timeout",               "decimal",  lambda df: df["timeout"].sum()),
+    ("fail",                "fail",                  "decimal",  lambda df: df["fail"].sum()),
+    ("non_success%",        "non_success%",          "decimal",  lambda df: round(df["non_success"].sum() * 100.0 / df["total"].sum(), 1) if df["total"].sum() > 0 else 0),
+    ("flaky%",              "flaky%",                "decimal",  lambda df: round(df["flaky"].sum() * 100.0 / df["total"].sum(), 1) if df["total"].sum() > 0 else 0),
+    ("timeout%",            "timeout%",              "decimal",  lambda df: round(df["timeout"].sum() * 100.0 / df["total"].sum(), 1) if df["total"].sum() > 0 else 0),
+    ("fail%",               "fail%",                 "decimal",  lambda df: round(df["fail"].sum() * 100.0 / df["total"].sum(), 1) if df["total"].sum() > 0 else 0),
+    ("impact",              "impact",                "right",    lambda df: normalize_duration(df["impact"].sum())),
+    ("total_duration",      "total duration",        "right",    lambda df: normalize_duration(df["total_duration"].sum())),
+    ("duration_p90",        "duration_p90",          "right",    None),
+    ("owners",              "owners",                "left",     None),
 ]
 
 LAST_COLUMNS = [
-    # (column_name,         header,                  alignment)
-    ("last_started_at",     "last started at (UTC)", "right"),
-    ("label",               "label",                 "left"),
-    ("duration",            "duration",              "right"),
-    ("status",              "status",                "left"),
-    ("branch",              "branch",                "left"),
-    ("PR",                  "PR",                    "left"),
-    ("commit",              "commit",                "left"),
-    ("buildbuddy",          "buildbuddy",            "left"),
-    ("errors",              "errors per attempt",    "left")
+    # (column_name,         header,                  alignment,  summary_fn(df) -> value | None)
+    ("last_started_at",     "last started at (UTC)", "right",    None),
+    ("label",               "label",                 "left",     lambda df: f"TOTAL ({len(df)} runs)"),
+    ("duration",            "duration",              "right",    lambda df: normalize_duration(df["duration"].sum())),
+    ("status",              "status",                "left",     None),
+    ("branch",              "branch",                "left",     None),
+    ("PR",                  "PR",                    "left",     None),
+    ("commit",              "commit",                "left",     None),
+    ("buildbuddy",          "buildbuddy",            "left",     None),
+    ("errors",              "errors per attempt",    "left",     None)
 ]
 # fmt: on
 
@@ -1060,12 +1055,6 @@ def top(args):
         headers = [desc[0] for desc in cursor.description]
         df = pd.DataFrame(cursor, columns=headers)
 
-    df["last_non_success_at"] = df["last_non_success_at"].apply(fmt_time)
-    df["last_flaky_at"] = df["last_flaky_at"].apply(fmt_time)
-    df["impact"] = df["impact"].apply(normalize_duration)
-    df["total_duration"] = df["total_duration"].apply(normalize_duration)
-    df["duration_p90"] = df["duration_p90"].apply(normalize_duration)
-
     # Find the CODEOWNERS for each test target:
     owners = codeowners.CodeOwners(Path(os.environ["CODEOWNERS_PATH"]).read_text())
     df["owners"] = df["label"].apply(lambda label: owners.of(label.rsplit(":")[0].replace("//", "") + "/"))
@@ -1076,6 +1065,23 @@ def top(args):
             df["owners"].apply(lambda owners: any(re.search(args.owner, owner[1], re.IGNORECASE) for owner in owners))
         ]
 
+    # Compute summary row before display formatting
+    # (summary functions need raw numeric/timedelta values).
+    colalignments = filter_columns(TOP_COLUMNS, args.columns)
+    columns, headers, alignments, summary_fns = zip(*colalignments)
+    summary_row = None
+    if args.total and not df.empty and any(fn is not None for fn in summary_fns):
+        summary_row = pd.DataFrame(
+            [{col: (fn(df) if fn else "") for col, fn in zip(columns, summary_fns)}],
+            index=[""],
+        )
+
+    df["last_non_success_at"] = df["last_non_success_at"].apply(fmt_time)
+    df["last_flaky_at"] = df["last_flaky_at"].apply(fmt_time)
+    df["impact"] = df["impact"].apply(normalize_duration)
+    df["total_duration"] = df["total_duration"].apply(normalize_duration)
+    df["duration_p90"] = df["duration_p90"].apply(normalize_duration)
+
     # Turn the owners into terminal hyperlinks to their GitHub user/team page:
     df["owners"] = df["owners"].apply(
         lambda owners: ", ".join([terminal_hyperlink(shorten_owner(owner[1]), owner_link(owner)) for owner in owners])
@@ -1084,11 +1090,11 @@ def top(args):
     # Turn the Bazel labels into terminal hyperlinks to a SourceGraph search for the test target:
     df["label"] = df["label"].apply(lambda label: terminal_hyperlink(label, sourcegraph_url(label)))
 
-    # Apply column filtering if --columns is specified, otherwise use all columns
-    colalignments = filter_columns(TOP_COLUMNS, args.columns)
-    columns, headers, alignments = zip(*colalignments)
     kwargs = {} if df.empty else {"colalign": ["decimal"] + list(alignments)}
-    print(tabulate(df[list(columns)], headers=list(headers), tablefmt=args.tablefmt, **kwargs))
+    table_data = df[list(columns)]
+    if summary_row is not None:
+        table_data = pd.concat([table_data, summary_row])
+    print(tabulate(table_data, headers=list(headers), tablefmt=args.tablefmt, **kwargs))
 
 
 def last(args):
@@ -1156,29 +1162,39 @@ def last(args):
         lambda pr: terminal_hyperlink(f"#{pr}", f"https://github.com/{ORG}/{REPO}/pull/{pr}") if pr else ""
     )
 
+    # Determine columns metadata and compute summary row before display formatting
+    # (summary functions need raw timedelta values from the "duration" column).
+    columns_metadata = LAST_COLUMNS
+    if args.skip_download:
+        columns_metadata = [col for col in columns_metadata if col[0] != "errors"]
+    if df["label"].nunique() == 1:
+        columns_metadata = [col for col in columns_metadata if col[0] != "label"]
+
+    colalignments = filter_columns(columns_metadata, args.columns)
+    columns, headers, alignments, summary_fns = zip(*colalignments)
+    summary_row = None
+    if args.total and not df.empty and any(fn is not None for fn in summary_fns):
+        summary_row = pd.DataFrame(
+            [{col: (fn(df) if fn else "") for col, fn in zip(columns, summary_fns)}],
+            index=[""],
+        )
+
     df["duration"] = df["duration"].apply(normalize_duration)
 
     if not args.skip_download:
         download_and_process_logs(args.logs_base_dir, args.download_console_logs, args.download_ic_logs, df)
 
-    columns_metadata = LAST_COLUMNS
-    # When downlods are skipped we don't have any error information so skip the "errors" column.
-    if args.skip_download:
-        columns_metadata = [col for col in columns_metadata if col[0] != "errors"]
-
     # When a specific test target is queried, the "label" column doesn't add any value
     # because all rows have the same label, so we can skip it to save space.
-    if df["label"].nunique() == 1:
-        columns_metadata = [col for col in columns_metadata if col[0] != "label"]
-    else:
+    if df["label"].nunique() != 1:
         # Turn the Bazel labels into terminal hyperlinks to a SourceGraph search for the test target:
         df["label"] = df["label"].apply(lambda label: terminal_hyperlink(label, sourcegraph_url(label)))
 
-    # Apply column filtering if --columns is specified, otherwise use all columns
-    colalignments = filter_columns(columns_metadata, args.columns)
-    columns, headers, alignments = zip(*colalignments)
     kwargs = {} if df.empty else {"colalign": ["decimal"] + list(alignments)}
-    print(tabulate(df[list(columns)], headers=list(headers), tablefmt=args.tablefmt, **kwargs))
+    table_data = df[list(columns)]
+    if summary_row is not None:
+        table_data = pd.concat([table_data, summary_row])
+    print(tabulate(table_data, headers=list(headers), tablefmt=args.tablefmt, **kwargs))
 
 
 # argparse formatter to allow newlines in --help.
@@ -1192,7 +1208,7 @@ def add_columns_argument(parser, columns_metadata):
         metavar="COLS",
         type=lambda s: [col.strip() for col in s.split(",")],
         help=f"""Comma-separated list of columns to display in order or hide if preceded by '-'. Available columns:
-{",".join([column_name.replace("%", "%%") for column_name, _, _ in columns_metadata])}""",
+{",".join([col[0].replace("%", "%%") for col in columns_metadata])}""",
     )
 
 
@@ -1247,6 +1263,7 @@ Mutually exclusive with --day/--week/--month""",
         default=[],
         help="Exclude workflow runs on this PR number (can be repeated)",
     )
+    filter_parser.add_argument("--total", action="store_true", help="Include a summary/total row at the bottom")
 
     subparsers = parser.add_subparsers(required=True)
 
