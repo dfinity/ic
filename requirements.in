@@ -46,7 +46,4 @@ protobuf>=5.29.0
 dacite
 
 # For //rs/recovery/subnet_splitting:split_finder
-matplotlib
-networkx
 pulp
-seaborn
