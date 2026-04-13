@@ -520,8 +520,16 @@ impl CanisterManager {
             // the old ring buffer and rewrites them into a new one. The cost is
             // proportional to `bytes_used` (actual stored data), not the allocated
             // capacity, since only live records are migrated during resize.
-            // TODO: determine the real cost_per_byte from benchmarks.
-            let cost_per_byte: u128 = 1;
+            //
+            // At 32 instructions per byte: log resize is more expensive per byte
+            // than snapshot operations (1 instr/byte) because it involves
+            // deserializing records from the old ring buffer, re-encoding them,
+            // and writing into a new one — not a simple memory copy.
+            //
+            // TODO(DSM-11): 32 instr/byte is a preliminary estimate based on
+            // devenv benchmarks (~12-13 ns/byte at ~2B instr/sec). This needs to
+            // be validated on representative replica hardware and adjusted.
+            let cost_per_byte: u128 = 32;
             let canister_log_resize_cost =
                 Cycles::new(canister_log_bytes_used.get() as u128 * cost_per_byte);
             if canister_cycles_balance < canister_log_resize_cost {

@@ -193,7 +193,7 @@ impl LogMemoryStore {
     /// effective capacity has not changed.
     pub fn resize(&mut self, limit: usize, fd_factory: Arc<dyn PageAllocatorFileDescriptor>) {
         //println!("\nABC size before: {}", self.byte_capacity());
-        let start = std::time::Instant::now();
+        //let start = std::time::Instant::now();
         self.resize_impl(limit, || PageMap::new(fd_factory));
         //println!("ABC size after: {}", self.byte_capacity());
         //println!("ABC Resize duration: {:?}", start.elapsed());
