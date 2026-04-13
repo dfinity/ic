@@ -284,12 +284,12 @@ impl Player {
             }
             err => panic!("Failed to extract subnet type of {subnet_id:?} from registry: {err:?}"),
         };
-        let is_sev_enabled = registry
-            .get_features(subnet_id, registry_version)
-            .ok()
-            .flatten()
-            .map(|f| f.sev_enabled)
-            .unwrap_or(false);
+        let is_sev_enabled = match registry.get_features(subnet_id, registry_version) {
+            Ok(Some(features)) => features.sev_enabled,
+            err => {
+                panic!("Failed to get subnet features for {subnet_id:?} from registry: {err:?}.");
+            }
+        };
 
         let metrics_registry = MetricsRegistry::new();
         let subnet_config = SubnetConfig::new(subnet_type, is_sev_enabled);
