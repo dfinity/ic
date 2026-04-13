@@ -344,11 +344,6 @@ pub fn setup(env: TestEnv) {
                 .with_node_operator_principal_id(operator_principal)
                 .with_node_reward_type(NodeRewardType::Type4),
         );
-        ic = ic.with_unassigned_node(
-            Node::new()
-                .with_node_operator_principal_id(operator_principal)
-                .with_node_reward_type(NodeRewardType::Type4),
-        );
     }
 
     ic = ic
