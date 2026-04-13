@@ -212,7 +212,7 @@ fn select_dealings_for_payload(
             }
         });
 
-    prioritized.iter_mut().map(|msg| msg.clone()).collect()
+    prioritized.iter().map(|&msg| msg.clone()).collect()
 }
 
 /// Creates a summary payload for the given parent and registry_version.
