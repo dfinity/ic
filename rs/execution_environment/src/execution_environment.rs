@@ -603,8 +603,8 @@ impl ExecutionEnvironment {
     ) -> ExecuteSubnetMessageResult
     where
         F: for<'a, 'b> FnOnce(
-            CanisterState,
-            RoundLimits,
+            &mut CanisterState,
+            &mut RoundLimits,
             &'b mut ConsumedCyclesForInstructions<'a>,
             C,
         ) -> Result<CanisterManagerResponse, CanisterManagerError>,
@@ -616,21 +616,16 @@ impl ExecutionEnvironment {
             &self.log,
         );
         match state.canister_state_make_mut(&canister_id) {
-            Some(clean_canister) => {
-                let new_canister: CanisterState = clean_canister.clone();
-                match op(
-                    clean_canister.clone(),
-                    round_limits.clone(),
-                    &mut consumed_cycles,
-                    context,
-                ) {
-                    Ok(response) => {
-                        *clean_canister = new_canister;
-                        self.process_canister_manager_result(Ok(response), state, msg)
-                    }
+            Some(canister) => {
+                let saved_canister = canister.clone();
+                let saved_round_limits = round_limits.clone();
+                match op(canister, round_limits, &mut consumed_cycles, context) {
+                    Ok(response) => self.process_canister_manager_result(Ok(response), state, msg),
                     Err(err) => {
+                        *canister = saved_canister;
+                        *round_limits = saved_round_limits;
                         consumed_cycles.apply(
-                            clean_canister,
+                            canister,
                             round_limits,
                             registry_settings.subnet_size,
                             cost_schedule,
@@ -998,7 +993,7 @@ impl ExecutionEnvironment {
                                 &mut state,
                                 &mut msg,
                                 round_limits,
-                                registry_settings.subnet_size,
+                                registry_settings,
                             ),
                         };
                         // The induction cost of `UpdateSettings` is charged
@@ -2453,33 +2448,34 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         msg: &mut CanisterCall,
         round_limits: &mut RoundLimits,
-        subnet_size: usize,
+        registry_settings: &RegistryExecutionSettings,
     ) -> ExecuteSubnetMessageResult {
         let cost_schedule = state.get_own_cost_schedule();
         let saturation = self.subnet_memory_saturation(
             &round_limits.subnet_available_memory,
             state.resource_limits(),
         );
-        let canister = match canister_make_mut(canister_id, state) {
-            Ok(canister) => canister,
-            Err(err) => {
-                return ExecuteSubnetMessageResult::Finished {
-                    response: Err(err),
-                    refund: msg.take_cycles(),
-                };
-            }
-        };
-        let result = self.canister_manager.update_settings(
-            timestamp_nanos,
-            origin,
-            settings,
-            canister,
+        let subnet_size = registry_settings.subnet_size;
+        self.execute_mgmt_operation_on_canister(
+            canister_id,
+            |canister, round_limits, _consumed_cycles, ()| {
+                self.canister_manager.update_settings(
+                    timestamp_nanos,
+                    origin,
+                    settings,
+                    canister,
+                    round_limits,
+                    saturation,
+                    subnet_size,
+                    cost_schedule,
+                )
+            },
+            (),
+            state,
+            msg,
             round_limits,
-            saturation,
-            subnet_size,
-            cost_schedule,
-        );
-        self.process_canister_manager_result(result, state, msg)
+            registry_settings,
+        )
     }
 
     fn uninstall_code(
