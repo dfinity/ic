@@ -107,7 +107,7 @@ async fn test_create_canister_and_install_code() {
     // Step 3.4: Verify the canister has specified code.
     let root_principal = Principal::from(PrincipalId::from(ROOT_CANISTER_ID));
     let status = pocket_ic
-        .canister_status(canister_id.0.into(), Some(root_principal))
+        .canister_status(Principal::from(canister_id), Some(root_principal))
         .await
         .unwrap();
 
