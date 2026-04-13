@@ -16,10 +16,11 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_transport::pb::v1::RegistryGetLatestVersionResponse;
 use ic_types::ReplicaVersion;
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use maplit::btreemap;
 use pocket_ic::common::rest::{
     CreateInstanceResponse, ExtendedSubnetConfigSet, IcpFeatures, IcpFeaturesConfig,
-    IncompleteStateFlag, InstanceConfig, InstanceHttpGatewayConfig,
+    IncompleteStateFlag, InstanceConfig, InstanceHttpGatewayConfig, RawSenderInfo,
 };
 use pocket_ic::nonblocking::PocketIc as PocketIcAsync;
 use pocket_ic::{
@@ -757,4 +758,89 @@ fn create_subnet_in_registry_canister() {
     .unwrap()
     .0
     .unwrap();
+}
+
+fn deploy_universal_canister(pic: &PocketIc) -> Principal {
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None);
+    canister_id
+}
+
+#[test]
+fn test_sender_info_in_update_call() {
+    let pic = PocketIc::new();
+    let canister_id = deploy_universal_canister(&pic);
+
+    let info = vec![1_u8, 2, 3, 4];
+    // Use the canister itself as the signer: sender info signature is not required by PocketIC
+    // when using PocketIC JSON API.
+    let signer = canister_id.as_slice().to_vec();
+    let sender_info = RawSenderInfo {
+        info: info.clone(),
+        signer: signer.clone(),
+    };
+
+    // msg_caller_info_data returns the info blob.
+    let result = pic
+        .update_call_with_sender_info(
+            canister_id,
+            Principal::anonymous(),
+            "update",
+            wasm().msg_caller_info_data().append_and_reply().build(),
+            sender_info.clone(),
+        )
+        .expect("update call failed");
+    assert_eq!(result, info);
+
+    // msg_caller_info_signer returns the signer principal bytes.
+    let result = pic
+        .update_call_with_sender_info(
+            canister_id,
+            Principal::anonymous(),
+            "update",
+            wasm().msg_caller_info_signer().append_and_reply().build(),
+            sender_info,
+        )
+        .expect("update call failed");
+    assert_eq!(result, signer);
+}
+
+#[test]
+fn test_sender_info_in_query_call() {
+    let pic = PocketIc::new();
+    let canister_id = deploy_universal_canister(&pic);
+
+    let info = vec![5_u8, 6, 7, 8];
+    // Use the canister itself as the signer: sender info signature is not required by PocketIC
+    // when using PocketIC JSON API.
+    let signer = canister_id.as_slice().to_vec();
+    let sender_info = RawSenderInfo {
+        info: info.clone(),
+        signer: signer.clone(),
+    };
+
+    // msg_caller_info_data returns the info blob.
+    let result = pic
+        .query_call_with_sender_info(
+            canister_id,
+            Principal::anonymous(),
+            "query",
+            wasm().msg_caller_info_data().append_and_reply().build(),
+            sender_info.clone(),
+        )
+        .expect("query call failed");
+    assert_eq!(result, info);
+
+    // msg_caller_info_signer returns the signer principal bytes.
+    let result = pic
+        .query_call_with_sender_info(
+            canister_id,
+            Principal::anonymous(),
+            "query",
+            wasm().msg_caller_info_signer().append_and_reply().build(),
+            sender_info,
+        )
+        .expect("query call failed");
+    assert_eq!(result, signer);
 }

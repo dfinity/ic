@@ -19869,6 +19869,7 @@ dependencies = [
  "ic-sns-wasm",
  "ic-transport-types",
  "ic-types",
+ "ic-universal-canister",
  "ic-utils 0.45.0",
  "ic-vetkeys",
  "icrc-ledger-types",
