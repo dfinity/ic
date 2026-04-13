@@ -72,8 +72,7 @@ async fn test_create_canister_and_install_code() {
 
     // Step 3.1: Inspect timestamp fields.
     assert_eq!(
-        proposal_info.failure_reason,
-        None,
+        proposal_info.failure_reason, None,
         "Proposal failed: {:?}",
         proposal_info.failure_reason
     );
