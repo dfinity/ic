@@ -113,7 +113,13 @@ The `NetworkEconomics` type provides default and mainnet economic parameters.
 - **WHEN** `VotingPowerEconomics::with_default_values()` is called
 - **THEN** `start_reducing_voting_power_after_seconds` is 6 months
 - **AND** `clear_following_after_seconds` is 1 month
-- **AND** `neuron_minimum_dissolve_delay_to_vote_seconds` is 6 months
+- **AND** `neuron_minimum_dissolve_delay_to_vote_seconds` defaults to 6 months (pre-Mission 70) or 2 weeks (post-Mission 70)
+
+#### Scenario: Mission 70 dissolve delay migration
+- **WHEN** the governance canister upgrades with Mission 70 voting rewards enabled
+- **AND** `neuron_minimum_dissolve_delay_to_vote_seconds` is currently higher than 2 weeks
+- **THEN** the parameter is automatically reduced to 2 weeks (1,209,600 seconds)
+- **AND** this is a one-time migration applied during post_upgrade
 
 ### Requirement: Neurons Fund Economics Defaults
 
