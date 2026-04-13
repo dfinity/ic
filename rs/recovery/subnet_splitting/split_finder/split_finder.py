@@ -100,7 +100,6 @@ def parse_args():
         type=str,
         help="Type of load to optimize for",
         choices=LOAD_TYPES,
-        default="instructions_executed",
         required=True,
     )
     parser.add_argument(
