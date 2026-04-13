@@ -10,6 +10,7 @@ use seeding::SeedingTask;
 use snapshot_voting_power::SnapshotVotingPowerTask;
 use std::cell::RefCell;
 use unstake_maturity_of_dissolved_neurons::UnstakeMaturityOfDissolvedNeuronsTask;
+use update_icp_xdr_rate_related_data::UpdateIcpXdrRateRelatedData;
 
 use crate::{canister_state::GOVERNANCE, storage::VOTING_POWER_SNAPSHOTS};
 
@@ -21,6 +22,7 @@ mod prune_following;
 mod seeding;
 mod snapshot_voting_power;
 mod unstake_maturity_of_dissolved_neurons;
+mod update_icp_xdr_rate_related_data;
 
 thread_local! {
     static METRICS_REGISTRY: RefCell<TimerTaskMetricsRegistry> = RefCell::new(TimerTaskMetricsRegistry::default());
@@ -34,6 +36,11 @@ pub fn schedule_tasks() {
     FinalizeMaturityDisbursementsTask::new(&GOVERNANCE).schedule(&METRICS_REGISTRY);
     UnstakeMaturityOfDissolvedNeuronsTask::new(&GOVERNANCE).schedule(&METRICS_REGISTRY);
     NeuronDataValidationTask::new(&GOVERNANCE).schedule(&METRICS_REGISTRY);
+    // Only schedule on wasm32: UpdateIcpXdrRateRelatedData makes inter-canister calls to XRC
+    // which require the IC runtime. Tests that need this task use new_for_test with a mock client.
+    if cfg!(target_arch = "wasm32") {
+        UpdateIcpXdrRateRelatedData::new(&GOVERNANCE).schedule(&METRICS_REGISTRY);
+    }
 
     run_distribute_rewards_periodic_task();
 }
