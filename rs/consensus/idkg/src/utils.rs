@@ -18,13 +18,12 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_types::{
     Height, RegistryVersion, SubnetId,
-    batch::{AvailablePreSignatures, ConsensusResponse},
+    batch::AvailablePreSignatures,
     consensus::{
         Block, HasHeight,
         idkg::{
-            CompletedSignature, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId,
-            IDkgMessage, IDkgPayload, IDkgTranscriptParamsRef, PreSigId, TranscriptLookupError,
-            TranscriptRef,
+            HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId, IDkgMessage,
+            IDkgPayload, IDkgTranscriptParamsRef, PreSigId, TranscriptLookupError, TranscriptRef,
         },
     },
     crypto::canister_threshold_sig::{
@@ -361,20 +360,6 @@ pub fn get_idkg_chain_key_config_if_enabled(
     } else {
         Ok(None)
     }
-}
-
-/// Creates responses to `SignWithECDSA` and `SignWithSchnorr` system calls with the computed
-/// signature.
-pub fn generate_responses_to_signature_request_contexts(
-    idkg_payload: &IDkgPayload,
-) -> Vec<ConsensusResponse> {
-    let mut consensus_responses = Vec::new();
-    for completed in idkg_payload.signature_agreements.values() {
-        if let CompletedSignature::Unreported(response) = completed {
-            consensus_responses.push(response.clone());
-        }
-    }
-    consensus_responses
 }
 
 /// This function returns the subnet master public keys to be added to the batch, if required.
