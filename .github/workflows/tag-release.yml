@@ -18,6 +18,10 @@ on:
         default: 'true'
         type: boolean
 
+env:
+  CI_COMMIT_SHA: ${{ github.event.inputs.tag-name || github.sha }}
+  RELEASE_TAG: ${{ github.event.inputs.tag-name || github.ref_name }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -26,13 +30,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.event.inputs.tag-name || github.ref }}
+          ref: ${{ env.CI_COMMIT_SHA }}
 
       - name: Collect Release Artifacts
         run: |
           set -euxo pipefail
 
-          DOWNLOAD_PREFIX="https://download.dfinity.systems/ic/$GITHUB_SHA"
+          DOWNLOAD_PREFIX="https://download.dfinity.systems/ic/${CI_COMMIT_SHA}"
 
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/setup-os/disk-img/disk-img.tar.zst" -o setup-os-img.tar.zst
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/guest-os/update-img/update-img.tar.zst" -o update-os-img.tar.zst
@@ -92,7 +96,7 @@ jobs:
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
         if: ${{ github.event_name == 'push' || github.event.inputs.dry-run == 'false' }}
         with:
-          body: "IC ${{github.ref_name}}"
+          body: "IC ${{ env.RELEASE_TAG }}"
           files: |
             canisters.tar
             setup-os-img.tar.gz
