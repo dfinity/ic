@@ -38,6 +38,7 @@ rust_binary(
     compile_data = [
         "templates/upgrade.md",
         "templates/install.md",
+        "templates/reinstall.md",
         "templates/submit_with_ic_admin.shx",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -50,6 +51,7 @@ rust_test(
     data = [
         "//rs/bitcoin/checker:btc_checker_canister.did",
         "//rs/bitcoin/ckbtc/minter:ckbtc_minter.did",
+        "//rs/dogecoin/ckdoge/minter:ckdoge_minter.did",
         "//rs/ethereum/cketh/minter:cketh_minter.did",
         "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator.did",
         "//rs/ledger_suite/icp:ledger.did",

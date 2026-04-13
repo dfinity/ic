@@ -1,11 +1,13 @@
+use crate::units::GIB as ONE_GIB;
 use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_btc_interface::NetworkInRequest;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
+use ic_limits::MAX_PAIRED_PRE_SIGNATURES;
 use ic_management_canister_types_private::{
     self as ic00, BitcoinGetUtxosArgs, BoundedHttpHeaders, CanisterChange, CanisterHttpRequestArgs,
     CanisterIdRecord, CanisterMetadataRequest, CanisterMetadataResponse, CanisterStatusResultV2,
-    CanisterStatusType, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob,
+    CanisterStatusType, CreateCanisterArgs, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob,
     FetchCanisterLogsRequest, HttpMethod, IC_00, LogVisibilityV2, MasterPublicKeyId, Method,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs, TransformContext, TransformFunc,
@@ -15,33 +17,37 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable, canister_id_into_
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterStatus, ReplicatedState, SystemState,
-    canister_state::{
-        DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES, system_state::CyclesUseCase,
-    },
+    canister_state::{DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES},
+    metadata_state::subnet_call_context_manager::PreSignatureStash,
+    metadata_state::testing::NetworkTopologyTesting,
     testing::{CanisterQueuesTesting, SystemStateTesting},
 };
 use ic_test_utilities::assert_utils::assert_balance_equals;
+use ic_test_utilities_consensus::idkg::{key_transcript_for_tests, pre_signature_for_tests};
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, check_ingress_status, expect_canister_did_not_reply,
     get_reject, get_reply,
 };
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
 use ic_types::{
-    CanisterId, CountBytes, Cycles, PrincipalId, RegistryVersion,
-    batch::CanisterCyclesCostSchedule,
+    CanisterId, CountBytes, PrincipalId, RegistryVersion,
     canister_http::{CanisterHttpMethod, Transform},
+    consensus::idkg::{IDkgMasterPublicKeyId, PreSigId},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
         CallbackId, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload, RejectContext,
         RequestOrResponse, Response,
     },
-    nominal_cycles::NominalCycles,
     time::UNIX_EPOCH,
+};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting,
 };
 use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
-use more_asserts::assert_gt;
+use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
+use std::collections::{BTreeMap, BTreeSet};
 use std::mem::size_of;
 use std::sync::Arc;
 
@@ -54,7 +60,6 @@ mod canister_snapshots;
 mod compilation;
 
 const BALANCE_EPSILON: Cycles = Cycles::new(12_000_000);
-const ONE_GIB: u64 = 1 << 30;
 
 // A Wasm module calling call_perform
 const CALL_SIMPLE_WAT: &str = r#"(module
@@ -722,7 +727,11 @@ fn stopping_a_canister_with_incorrect_controller_fails() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
     let canister_id = test.universal_canister().unwrap();
     let controller = test.user_id();
-    test.set_user_id(user_test_id(13));
+    let test_user = user_test_id(13);
+    // Set a user that is a non-controller.
+    test.set_user_id(test_user);
+    assert_ne!(controller, test_user);
+
     let ingress_id = test.stop_canister(canister_id);
     let ingress_status = test.ingress_status(&ingress_id);
     let IngressStatus::Known {
@@ -735,7 +744,7 @@ fn stopping_a_canister_with_incorrect_controller_fails() {
         panic!("Unexpected ingress status {ingress_status:?}")
     };
     assert_eq!(receiver, ic00::IC_00.get());
-    assert_eq!(user_id, user_test_id(13));
+    assert_eq!(user_id, test_user);
     assert_eq!(time, test.time());
     error.assert_contains(
         ErrorCode::CanisterInvalidController,
@@ -781,6 +790,9 @@ fn get_running_canister_status_from_another_canister() {
             + test
                 .canister_state(canister)
                 .canister_history_memory_usage()
+            + test
+                .canister_state(canister)
+                .log_memory_store_memory_usage()
     );
     assert_eq!(
         Cycles::new(csr.idle_cycles_burned_per_day()),
@@ -818,6 +830,7 @@ fn get_canister_status_from_another_canister_when_memory_low() {
             * test
                 .cycles_account_manager()
                 .gib_storage_per_second_fee(test.subnet_size(), CanisterCyclesCostSchedule::Normal)
+                .real()
                 .get())
             / one_gib
     );
@@ -890,12 +903,14 @@ fn get_canister_status_memory_metrics() {
     let stable_memory_size = csr.stable_memory_size();
     let global_memory_size = csr.global_memory_size();
     let wasm_binary_size = csr.wasm_binary_size();
+    let log_memory_store_size = csr.log_memory_store_size();
     let custom_sections_size = csr.custom_sections_size();
 
     let execution_memory_size = wasm_memory_size
         + stable_memory_size
         + global_memory_size
         + wasm_binary_size
+        + log_memory_store_size
         + custom_sections_size;
 
     let canister_history_size = csr.canister_history_size();
@@ -1218,8 +1233,8 @@ fn deposit_cycles_to_non_existing_canister_fails() {
         result
     );
     let controller_balance = test.canister_state(controller).system_state.balance().get();
-    assert!(controller_balance <= 1_u128 << 62);
-    assert!(controller_balance >= (1_u128 << 62) - 100_000_000_000);
+    assert_le!(controller_balance, 1_u128 << 62);
+    assert_ge!(controller_balance, (1_u128 << 62) - 100_000_000_000);
 }
 
 #[test]
@@ -1631,12 +1646,18 @@ fn subnet_split_cleans_in_progress_stop_canister_calls() {
 
     let own_subnet_id = test.state().metadata.own_subnet_id;
     let other_subnet_id = subnet_test_id(13);
-    assert!(own_subnet_id != other_subnet_id);
+    assert_ne!(own_subnet_id, other_subnet_id);
 
     // A no-op subnet split (no canisters migrated).
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id_1, own_subnet_id);
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id_2, own_subnet_id);
     test.online_split_state(own_subnet_id, other_subnet_id);
 
@@ -1651,7 +1672,10 @@ fn subnet_split_cleans_in_progress_stop_canister_calls() {
     assert!(!test.state().subnet_queues().has_output());
 
     // Simulate a subnet split that migrates canister 1 to another subnet.
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id_1, other_subnet_id);
     test.online_split_state(own_subnet_id, other_subnet_id);
 
@@ -1706,7 +1730,10 @@ fn subnet_split_cleans_in_progress_stop_canister_calls() {
     );
 
     // Simulate a subnet split that migrates canister 2 to another subnet.
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id_2, other_subnet_id);
     test.online_split_state(own_subnet_id, other_subnet_id);
 
@@ -1848,15 +1875,17 @@ fn canister_snapshots_after_split() {
     // The snapshots do not exist in the replicated state before the requests.
     assert_eq!(
         test.state()
+            .canister_state(&canister_id_1)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_1)
             .len(),
         0
     );
     assert_eq!(
         test.state()
+            .canister_state(&canister_id_2)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_2)
             .len(),
         0
     );
@@ -1883,15 +1912,17 @@ fn canister_snapshots_after_split() {
     // Verify the snapshots exist in the replicated state.
     assert_eq!(
         test.state()
+            .canister_state(&canister_id_1)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_1)
             .len(),
         1
     );
     assert_eq!(
         test.state()
+            .canister_state(&canister_id_2)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_2)
             .len(),
         1
     );
@@ -1901,7 +1932,7 @@ fn canister_snapshots_after_split() {
     // expected_compiled_wasms cache (a subnet split assumes it happens after a
     // checkpoint round where these two happen among other things).
     test.state_mut().metadata.heap_delta_estimate = NumBytes::from(0);
-    test.state_mut().metadata.expected_compiled_wasms.clear();
+    test.state_mut().metadata.expected_compiled_wasms = Arc::new(BTreeSet::new());
 
     // Retain canister 1 on subnet A, migrate canister 2 to subnet B.
     let routing_table = RoutingTable::try_from(btreemap! {
@@ -1935,32 +1966,20 @@ fn canister_snapshots_after_split() {
 
     assert_eq!(
         state_a
+            .canister_state(&canister_id_1)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_1)
             .len(),
         1
-    );
-    assert_eq!(
-        state_a
-            .canister_snapshots
-            .list_snapshots(canister_id_2)
-            .len(),
-        0
     );
 
     assert_eq!(
         state_b
+            .canister_state(&canister_id_2)
+            .unwrap()
             .canister_snapshots
-            .list_snapshots(canister_id_2)
             .len(),
         1
-    );
-    assert_eq!(
-        state_b
-            .canister_snapshots
-            .list_snapshots(canister_id_1)
-            .len(),
-        0
     );
 }
 
@@ -1970,8 +1989,7 @@ fn canister_snapshots_after_split() {
 fn assert_consistent_stop_canister_calls(state: &ReplicatedState, expected_calls: usize) {
     // Collect all `StopCanisterContexts` from all stopping canisters.
     let canister_stop_canister_contexts: Vec<_> = state
-        .canister_states
-        .values()
+        .canisters_iter()
         .filter_map(|canister| {
             if let CanisterStatus::Stopping {
                 call_context_manager: _,
@@ -2103,13 +2121,13 @@ fn management_canister_xnet_to_nns_called_from_non_nns() {
     test.inject_call_to_ic00(
         Method::CreateCanister,
         EmptyBlob.encode(),
-        test.canister_creation_fee(),
+        test.canister_creation_fee().real(),
     );
     test.inject_call_to_ic00(Method::RawRand, EmptyBlob.encode(), Cycles::from(0_u64));
     test.inject_call_to_ic00(
         Method::HttpRequest,
         EmptyBlob.encode(),
-        test.http_request_fee(NumBytes::from(0), None),
+        test.http_request_fee(NumBytes::from(0), None).real(),
     );
     test.execute_all();
     for response in test.xnet_messages().clone() {
@@ -2136,7 +2154,7 @@ fn http_request_bound_holds() {
 
     // Create payload of the request.
     let url = "https://".to_string();
-    let response_size_limit = 1000u64;
+    let response_size_limit = 1000_u64;
     let transform_method_name = "transform".to_string();
     let transform_context = vec![0, 1, 2];
     let args = CanisterHttpRequestArgs {
@@ -2202,13 +2220,13 @@ fn management_canister_xnet_called_from_non_nns() {
     test.inject_call_to_ic00(
         Method::CreateCanister,
         EmptyBlob.encode(),
-        test.canister_creation_fee(),
+        test.canister_creation_fee().real(),
     );
     test.inject_call_to_ic00(Method::RawRand, EmptyBlob.encode(), Cycles::from(0_u64));
     test.inject_call_to_ic00(
         Method::HttpRequest,
         EmptyBlob.encode(),
-        test.http_request_fee(NumBytes::from(0), None),
+        test.http_request_fee(NumBytes::from(0), None).real(),
     );
     test.execute_all();
     for response in test.xnet_messages().clone() {
@@ -2236,7 +2254,7 @@ fn create_canister_xnet_called_from_nns() {
     test.inject_call_to_ic00(
         Method::CreateCanister,
         EmptyBlob.encode(),
-        test.canister_creation_fee(),
+        test.canister_creation_fee().real(),
     );
     test.execute_all();
     let response = test.xnet_messages()[0].clone();
@@ -2267,7 +2285,7 @@ fn setup_initial_dkg_sender_on_nns() {
     test.inject_call_to_ic00(
         Method::SetupInitialDKG,
         args.encode(),
-        test.canister_creation_fee(),
+        test.canister_creation_fee().real(),
     );
     test.execute_all();
     assert_eq!(0, test.xnet_messages().len());
@@ -2289,7 +2307,7 @@ fn setup_initial_dkg_sender_not_on_nns() {
     test.inject_call_to_ic00(
         Method::SetupInitialDKG,
         args.encode(),
-        test.canister_creation_fee(),
+        test.canister_creation_fee().real(),
     );
     test.execute_all();
     let response = test.xnet_messages()[0].clone();
@@ -2299,7 +2317,7 @@ fn setup_initial_dkg_sender_not_on_nns() {
             originator: other_canister,
             respondent: CanisterId::from(own_subnet),
             originator_reply_callback: CallbackId::new(0),
-            refund: test.canister_creation_fee(),
+            refund: test.canister_creation_fee().real(),
             response_payload: Payload::Reject(RejectContext::new(
                 RejectCode::CanisterError,
                 format!(
@@ -2408,11 +2426,14 @@ fn ingress_deducts_execution_cost_from_canister_balance() {
     let execution_cost_after = test.canister_execution_cost(canister);
     assert_eq!(
         balance_before - balance_after,
-        execution_cost_after - execution_cost_before
+        (execution_cost_after - execution_cost_before).real()
     );
     // Ensure that we charged some cycles. The actual value is unknown to us at
     // this point but it is definitely larger that 1000.
-    assert!(execution_cost_after - execution_cost_before > Cycles::new(1_000));
+    assert_gt!(
+        (execution_cost_after - execution_cost_before).real(),
+        Cycles::new(1_000)
+    );
 }
 
 #[test]
@@ -2421,7 +2442,7 @@ fn can_reject_a_request_when_canister_is_out_of_cycles() {
     let a_id = test.universal_canister().unwrap();
     let b_id = test.universal_canister().unwrap();
     let b = wasm()
-        .accept_cycles(Cycles::from(1_000_000u128))
+        .accept_cycles(Cycles::from(1_000_000_u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -2432,7 +2453,7 @@ fn can_reject_a_request_when_canister_is_out_of_cycles() {
             call_args()
                 .other_side(b)
                 .on_reject(wasm().reject_message().append_and_reply()),
-            Cycles::from(1_000_000u128),
+            Cycles::from(1_000_000_u128),
         )
         .build();
     test.canister_state_mut(b_id).system_state.freeze_threshold = NumSeconds::from(0);
@@ -2791,6 +2812,7 @@ fn management_message_with_forbidden_method_is_not_accepted() {
     let mut test = ExecutionTestBuilder::new().build();
 
     for forbidden_method in [
+        "create_canister",
         "raw_rand",
         "http_request",
         "ecdsa_public_key",
@@ -2801,11 +2823,18 @@ fn management_message_with_forbidden_method_is_not_accepted() {
             .should_accept_ingress_message(IC_00, forbidden_method, vec![])
             .unwrap_err();
         assert_eq!(ErrorCode::CanisterRejectedMessage, err.code());
+        assert!(
+            err.description()
+                .contains("Only canisters can call ic00 method")
+                || err
+                    .description()
+                    .contains("can not be called via ingress messages")
+        );
     }
 }
 
 #[test]
-fn management_message_with_invalid_sender_is_not_accepted() {
+fn management_message_with_invalid_sender_is_not_accepted_without_subnet_admins() {
     let mut test = ExecutionTestBuilder::new().build();
     test.set_user_id(user_test_id(0));
     let canister = test.universal_canister().unwrap();
@@ -2815,6 +2844,53 @@ fn management_message_with_invalid_sender_is_not_accepted() {
         .should_accept_ingress_message(IC_00, "canister_status", Encode!(&arg).unwrap())
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterInvalidController, err.code());
+}
+
+#[test]
+fn management_message_with_invalid_sender_is_not_accepted_with_subnet_admins() {
+    let subnet_admin = user_test_id(1);
+    let controller = user_test_id(2);
+    let test_user = user_test_id(3);
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![subnet_admin.get()])
+        .build();
+    test.set_user_id(controller);
+    let canister = test.universal_canister().unwrap();
+
+    test.set_user_id(test_user);
+    let arg: CanisterIdRecord = canister.into();
+    let err = test
+        .should_accept_ingress_message(IC_00, "canister_status", Encode!(&arg).unwrap())
+        .unwrap_err();
+    assert_eq!(
+        ErrorCode::CanisterInvalidControllerOrSubnetAdmin,
+        err.code()
+    );
+}
+
+#[test]
+fn management_message_to_create_canister_with_subnet_admins() {
+    let subnet_admin = user_test_id(1);
+    let test_user = user_test_id(2);
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![subnet_admin.get()])
+        .build();
+
+    test.set_user_id(test_user);
+    let arg: CreateCanisterArgs = CreateCanisterArgs {
+        settings: None,
+        sender_canister_version: None,
+    };
+    let err = test
+        .should_accept_ingress_message(IC_00, "create_canister", Encode!(&arg).unwrap())
+        .unwrap_err();
+    assert_eq!(ErrorCode::InvalidSubnetAdmin, err.code());
+
+    test.set_user_id(subnet_admin);
+    test.should_accept_ingress_message(IC_00, "create_canister", Encode!(&arg).unwrap())
+        .unwrap();
 }
 
 // A Wasm module that allocates 10 wasm pages of heap memory and 10 wasm
@@ -2918,7 +2994,7 @@ fn execute_canister_http_request() {
 
     // Create payload of the request.
     let url = "https://".to_string();
-    let response_size_limit = 1000u64;
+    let response_size_limit = 1000_u64;
     let transform_method_name = "transform".to_string();
     let transform_context = vec![0, 1, 2];
     let args = CanisterHttpRequestArgs {
@@ -2968,18 +3044,18 @@ fn execute_canister_http_request() {
         http_request_context.variable_parts_size(),
         Some(NumBytes::from(response_size_limit)),
     );
-    assert_eq!(http_request_context.request.payment, payment - fee);
+    assert_eq!(http_request_context.request.payment, payment - fee.real());
 
     assert_eq!(
-        NominalCycles::from(fee),
+        fee.nominal(),
         test.state()
             .metadata
             .subnet_metrics
-            .consumed_cycles_http_outcalls
+            .get_consumed_cycles_http_outcalls()
     );
 
     assert_eq!(
-        NominalCycles::from(fee),
+        fee.nominal(),
         *test
             .state()
             .metadata
@@ -3239,7 +3315,7 @@ fn can_refund_cycles_after_successful_provisional_create_canister() {
         .with_provisional_whitelist_all()
         .build();
     let canister = test.universal_canister().unwrap();
-    let payment = 10_000_000_000u128;
+    let payment = 10_000_000_000_u128;
     let args = Encode!(&ProvisionalCreateCanisterWithCyclesArgs::new(None, None)).unwrap();
     let create_canister = wasm()
         .call_with_cycles(
@@ -3286,7 +3362,7 @@ fn create_canister_with_specified_id(
             ic00::IC_00,
             Method::ProvisionalCreateCanisterWithCycles,
             call_args().other_side(args),
-            Cycles::from(10_000_000_000u128),
+            Cycles::from(10_000_000_000_u128),
         )
         .build();
 
@@ -3452,7 +3528,7 @@ fn can_refund_cycles_after_successful_provisional_topup_canister() {
         .build();
     let canister_1 = test.universal_canister().unwrap();
     let canister_2 = test.universal_canister().unwrap();
-    let payment = 10_000_000_000u128;
+    let payment = 10_000_000_000_u128;
     let top_up = 1_000_000_000;
     let args = Encode!(&ProvisionalTopUpCanisterArgs::new(canister_2, top_up)).unwrap();
     let top_up_canister = wasm()
@@ -3509,7 +3585,7 @@ fn replicated_query_refunds_all_sent_cycles() {
     let initial_cycles = Cycles::new(1_000_000_000_000);
     let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
-    let transferred_cycles = Cycles::from(1_000_000u128);
+    let transferred_cycles = Cycles::from(1_000_000_u128);
 
     let b_callback = wasm().message_payload().append_and_reply().build();
 
@@ -3566,15 +3642,15 @@ fn replicated_query_refunds_all_sent_cycles() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
-            - test.call_fee("query", &b_callback)
-            - test.reply_fee(&b_callback)
+            - test.canister_execution_cost(a_id).real()
+            - test.call_fee("query", &b_callback).real()
+            - test.reply_fee(&b_callback).real()
     );
 
     // Canister B doesn't get the transferred cycles.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(b_id)
+        initial_cycles - test.canister_execution_cost(b_id).real()
     );
 }
 
@@ -3584,7 +3660,7 @@ fn replicated_query_can_accept_cycles() {
     let initial_cycles = Cycles::new(1_000_000_000_000);
     let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
-    let transferred_cycles = Cycles::from(1_000_000u128);
+    let transferred_cycles = Cycles::from(1_000_000_u128);
 
     // Canister B attempts to accept cycles in a replicated query. Should succeed.
     let b_callback = wasm()
@@ -3650,16 +3726,16 @@ fn replicated_query_can_accept_cycles() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
-            - test.call_fee("query", &b_callback)
-            - test.reply_fee(&response_payload)
+            - test.canister_execution_cost(a_id).real()
+            - test.call_fee("query", &b_callback).real()
+            - test.reply_fee(&response_payload).real()
             - transferred_cycles
     );
 
     // Canister B gets the transferred cycles.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(b_id) + transferred_cycles
+        initial_cycles - test.canister_execution_cost(b_id).real() + transferred_cycles
     );
 }
 
@@ -3669,7 +3745,7 @@ fn replicated_query_does_not_accept_cycles_on_trap() {
     let initial_cycles = Cycles::new(1_000_000_000_000);
     let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
-    let transferred_cycles = Cycles::from(1_000_000u128);
+    let transferred_cycles = Cycles::from(1_000_000_u128);
 
     // Canister B attempts to accept cycles in a replicated query. Should succeed.
     let b_callback = wasm()
@@ -3736,15 +3812,15 @@ fn replicated_query_does_not_accept_cycles_on_trap() {
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
-            - test.canister_execution_cost(a_id)
-            - test.call_fee("query", &b_callback)
-            - test.reject_fee(reject_message)
+            - test.canister_execution_cost(a_id).real()
+            - test.call_fee("query", &b_callback).real()
+            - test.reject_fee(reject_message).real()
     );
 
     // Canister B does not get any cycles.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(b_id)
+        initial_cycles - test.canister_execution_cost(b_id).real()
     );
 }
 
@@ -3753,7 +3829,7 @@ fn replicated_query_can_burn_cycles() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
     let initial_cycles = Cycles::new(1_000_000_000_000);
     let canister_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
-    let cycles_to_burn = Cycles::new(10_000_000u128);
+    let cycles_to_burn = Cycles::new(10_000_000_u128);
 
     let payload = wasm().cycles_burn128(cycles_to_burn).reply().build();
     let (message_id, _) = test.ingress_raw(canister_id, "query", payload);
@@ -3772,18 +3848,18 @@ fn replicated_query_can_burn_cycles() {
     // Canister A loses `cycles_to_burn` from its balance (in addition to execution cost)...
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(canister_id) - cycles_to_burn
+        initial_cycles - test.canister_execution_cost(canister_id).real() - cycles_to_burn
     );
 
     // ...and the burned cycles are accounted for in the canister's metrics.
     let burned_cycles = *test
         .canister_state(canister_id)
         .system_state
-        .canister_metrics
-        .get_consumed_cycles_by_use_cases()
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
-    assert_eq!(burned_cycles, NominalCycles::from(cycles_to_burn));
+    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
 }
 
 #[test]
@@ -3791,7 +3867,7 @@ fn replicated_query_does_not_burn_cycles_on_trap() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
     let initial_cycles = Cycles::new(1_000_000_000_000);
     let canister_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
-    let cycles_to_burn = Cycles::new(10_000_000u128);
+    let cycles_to_burn = Cycles::new(10_000_000_u128);
 
     let payload = wasm().cycles_burn128(cycles_to_burn).reply().trap().build();
     let (message_id, _) = test.ingress_raw(canister_id, "query", payload);
@@ -3812,15 +3888,15 @@ fn replicated_query_does_not_burn_cycles_on_trap() {
     // Canister A only loses cycles due to executing but not `cycles_to_burn` (since it trapped)...
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(canister_id)
+        initial_cycles - test.canister_execution_cost(canister_id).real()
     );
 
     // ...and no burned cycles are accounted for in the canister's metrics.
     assert!(
         test.canister_state(canister_id)
             .system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::BurnedCycles)
             .is_none()
     );
@@ -3879,20 +3955,20 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     let transmission_consumption_before_response = *test
         .canister_state(a_id)
         .system_state
-        .canister_metrics
-        .get_consumed_cycles_by_use_cases()
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::RequestAndResponseTransmission)
         .unwrap();
     let instruction_consumption_before_response = *test
         .canister_state(a_id)
         .system_state
-        .canister_metrics
-        .get_consumed_cycles_by_use_cases()
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::Instructions)
         .unwrap();
 
-    assert!(transmission_consumption_before_response.get() > 0);
-    assert!(instruction_consumption_before_response.get() > 0);
+    assert_gt!(transmission_consumption_before_response.get(), 0);
+    assert_gt!(instruction_consumption_before_response.get(), 0);
 
     // Check that canister A's balance is decremented for consumed cycles
     // plus transferred cycles to canister B.
@@ -3926,14 +4002,14 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     // Check that canister A's balance is updated correctly.
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
-        initial_cycles - execution_cost - transmission_cost - transferred_cycles
+        initial_cycles - execution_cost.real() - transmission_cost.real() - transferred_cycles
     );
 
     assert_eq!(
         test.canister_state(a_id)
             .system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .len(),
         2
     );
@@ -3941,46 +4017,52 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     let transmission_consumption_after_response = *test
         .canister_state(a_id)
         .system_state
-        .canister_metrics
-        .get_consumed_cycles_by_use_cases()
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::RequestAndResponseTransmission)
         .unwrap();
     let instruction_consumption_after_response = *test
         .canister_state(a_id)
         .system_state
-        .canister_metrics
-        .get_consumed_cycles_by_use_cases()
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::Instructions)
         .unwrap();
 
     // Check that consumed cycles are correct for both use cases.
     assert_eq!(
         transmission_consumption_after_response,
-        NominalCycles::from(transmission_cost)
+        transmission_cost.nominal(),
     );
 
     assert_eq!(
         instruction_consumption_after_response,
-        NominalCycles::from(execution_cost)
+        execution_cost.nominal(),
     );
 
     // Consumed cycles after the response should be smaller than before
     // the response because we expect a refund for prepaid cycles.
-    assert!(transmission_consumption_after_response < transmission_consumption_before_response);
-    assert!(instruction_consumption_after_response < instruction_consumption_before_response);
+    assert_lt!(
+        transmission_consumption_after_response,
+        transmission_consumption_before_response
+    );
+    assert_lt!(
+        instruction_consumption_after_response,
+        instruction_consumption_before_response
+    );
 
     // Check that canister B's balance is updated correctly.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(b_id) + transferred_cycles
+        initial_cycles - test.canister_execution_cost(b_id).real() + transferred_cycles
     );
 
     // Check that consumed cycles are correct only for the `Instructions` use case.
     assert_eq!(
         test.canister_state(b_id)
             .system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .len(),
         1
     );
@@ -3989,11 +4071,11 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         *test
             .canister_state(b_id)
             .system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::Instructions)
             .unwrap(),
-        NominalCycles::from(test.canister_execution_cost(b_id))
+        test.canister_execution_cost(b_id).nominal(),
     );
 }
 
@@ -4148,7 +4230,7 @@ fn test_sign_with_schnorr_api_is_enabled() {
                 call_args()
                     .other_side(sign_with_threshold_key_payload(method, key_id.clone()))
                     .on_reject(wasm().reject_message().reject()),
-                Cycles::from(100_000_000_000u128),
+                Cycles::from(100_000_000_000_u128),
             )
             .build();
         let (_, ingress_status) = test.ingress_raw(canister_id, "update", run);
@@ -4427,7 +4509,7 @@ fn test_vetkd_derive_key_api_is_enabled() {
             call_args()
                 .other_side(sign_with_threshold_key_payload(method, key_id.clone()))
                 .on_reject(wasm().reject_message().reject()),
-            Cycles::from(100_000_000_000u128),
+            Cycles::from(100_000_000_000_u128),
         )
         .build();
     let (_, ingress_status) = test.ingress_raw(canister_id, "update", run);
@@ -4491,7 +4573,7 @@ fn cannot_accept_cycles_after_replying() {
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let c_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let d_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
-    let transferred_cycles = Cycles::from(1_000_000u128);
+    let transferred_cycles = Cycles::from(1_000_000_u128);
 
     // Canister C and D simply reply with the payload they were called with.
     let c_callback = wasm().message_payload().append_and_reply().build();
@@ -4501,7 +4583,7 @@ fn cannot_accept_cycles_after_replying() {
     // then replies to A and finally tries to accept the remaining cycles after replying.
     // It should not be able to accept any more cycles after replying.
     let b_callback = wasm()
-        .accept_cycles(transferred_cycles / 2u64)
+        .accept_cycles(transferred_cycles / 2_u64)
         .message_payload()
         .append_and_reply()
         .call_simple(
@@ -4509,7 +4591,7 @@ fn cannot_accept_cycles_after_replying() {
             "update",
             call_args()
                 .other_side(c_callback)
-                .on_reply(wasm().accept_cycles(transferred_cycles / 2u64).build()),
+                .on_reply(wasm().accept_cycles(transferred_cycles / 2_u64).build()),
         )
         .call_simple(d_id, "update", call_args().other_side(d_callback))
         .build();
@@ -4545,12 +4627,214 @@ fn cannot_accept_cycles_after_replying() {
     // The remaining was refunded as part of the reply delivered to A.
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
-        initial_cycles - (transferred_cycles / 2u64)
+        initial_cycles - (transferred_cycles / 2_u64)
     );
 
     // Canister B gets half of transferred_cycles that it accepted before replying.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles + (transferred_cycles / 2u64)
+        initial_cycles + (transferred_cycles / 2_u64)
     );
+}
+
+#[test]
+fn get_dynamic_signature_queue_size_vetkd_returns_registry_max() {
+    // Keys that don't use pre-signatures (e.g. VetKd) get the registry max queue size.
+    let key_id = make_vetkd_key("vetkd_key");
+    let stashes: BTreeMap<IDkgMasterPublicKeyId, PreSignatureStash> = BTreeMap::new();
+    assert_eq!(
+        super::get_dynamic_signature_queue_size(&stashes, 50, &key_id),
+        50
+    );
+    assert_eq!(
+        super::get_dynamic_signature_queue_size(&stashes, 200, &key_id),
+        200
+    );
+}
+
+#[test]
+fn get_dynamic_signature_queue_size_idkg_empty_stash_returns_min_of_registry_and_cap() {
+    // Ecdsa/Schnorr key with no stash: queue size is min(registry, MAX_PAIRED_PRE_SIGNATURES).
+    let key_id = make_ecdsa_key("ecdsa_test_key");
+    let stashes: BTreeMap<IDkgMasterPublicKeyId, PreSignatureStash> = BTreeMap::new();
+
+    // Registry < constant → result is registry limit.
+    let max_queue_size_registry = MAX_PAIRED_PRE_SIGNATURES as u32 - 50;
+    assert_eq!(
+        super::get_dynamic_signature_queue_size(&stashes, max_queue_size_registry, &key_id),
+        max_queue_size_registry as usize
+    );
+    // Registry > contant → result is the constant (capped).
+    let max_queue_size_registry = MAX_PAIRED_PRE_SIGNATURES as u32 + 50;
+    assert_eq!(
+        super::get_dynamic_signature_queue_size(&stashes, max_queue_size_registry, &key_id),
+        MAX_PAIRED_PRE_SIGNATURES
+    );
+}
+
+/// Efficiently creates a pre-signature stash of the given size, for testing.
+/// All pre-signatures are identical, but this is fine for our purposes.
+fn make_pre_signature_stash(key_id: &IDkgMasterPublicKeyId, size: u64) -> PreSignatureStash {
+    let pre_signature = pre_signature_for_tests(key_id);
+    PreSignatureStash {
+        key_transcript: Arc::new(key_transcript_for_tests(key_id)),
+        pre_signatures: BTreeMap::from_iter(
+            (0..size).map(|i| (PreSigId(i), pre_signature.clone())),
+        ),
+    }
+}
+
+#[test]
+fn get_dynamic_signature_queue_size_idkg_stash_size_within_range() {
+    // Stash size in [max_queue_size, MAX_PAIRED_PRE_SIGNATURES] is returned as-is.
+    let ecdsa_key_id = IDkgMasterPublicKeyId::try_from(make_ecdsa_key("ecdsa_stash_test")).unwrap();
+    let key_id = ecdsa_key_id.inner();
+    let pre_signature_count = 30;
+    let stash = make_pre_signature_stash(&ecdsa_key_id, pre_signature_count);
+    let stashes = BTreeMap::from([(ecdsa_key_id.clone(), stash)]);
+
+    // Registry 20, stash 30 → max_queue_size=20, result = clamp(30, 20, 100) = 30.
+    assert_eq!(
+        super::get_dynamic_signature_queue_size(&stashes, 20, key_id),
+        pre_signature_count as usize
+    );
+}
+
+#[test]
+fn get_dynamic_signature_queue_size_idkg_stash_size_capped_at_max_paired() {
+    // Stash size > MAX_PAIRED_PRE_SIGNATURES is capped.
+    let ecdsa_key_id =
+        IDkgMasterPublicKeyId::try_from(make_ecdsa_key("ecdsa_large_stash")).unwrap();
+    let key_id = ecdsa_key_id.inner();
+    let stash = make_pre_signature_stash(&ecdsa_key_id, MAX_PAIRED_PRE_SIGNATURES as u64 + 3);
+    let stashes = BTreeMap::from([(ecdsa_key_id.clone(), stash)]);
+    assert_eq!(
+        super::get_dynamic_signature_queue_size(&stashes, 20, key_id),
+        MAX_PAIRED_PRE_SIGNATURES
+    );
+}
+
+#[test]
+fn get_dynamic_signature_queue_size_idkg_stash_below_floor_returns_floor() {
+    // Stash size < max_queue_size → result is max_queue_size (floor).
+    let ecdsa_key_id =
+        IDkgMasterPublicKeyId::try_from(make_ecdsa_key("ecdsa_small_stash")).unwrap();
+    let key_id = ecdsa_key_id.inner();
+    let stash = make_pre_signature_stash(&ecdsa_key_id, 5);
+    let stashes = BTreeMap::from([(ecdsa_key_id.clone(), stash)]);
+
+    // Registry 50, stash 5 → max_queue_size=50, result = clamp(5, 50, 100) = 50.
+    assert_eq!(
+        super::get_dynamic_signature_queue_size(&stashes, 50, key_id),
+        50
+    );
+}
+
+/// Runbook:
+/// - The proxy canister makes a `stop_canister` call to stop `canister_id` attaching 1T cycles to the call.
+/// - The total cycles balance of the proxy canister and `canister_id` must not increase and can only decrease by at most 1B cycles.
+///
+/// Returns the result of the `stop_canister` call as reported by the proxy canister (universal canister forwarding the call to the mgmt canister).
+fn stop_canister_refunds_cycles(
+    test: &mut ExecutionTest,
+    proxy: CanisterId,
+    canister_id: CanisterId,
+) -> Result<WasmResult, UserError> {
+    let cycles = |test: &mut ExecutionTest| {
+        test.canister_state(proxy).system_state.balance()
+            + test.canister_state(canister_id).system_state.balance()
+    };
+    let cycles_before = cycles(test);
+
+    let canister_id_record: CanisterIdRecord = canister_id.into();
+    let ingress_id = test
+        .ingress_raw(
+            proxy,
+            "update",
+            wasm()
+                .call_with_cycles(
+                    CanisterId::ic_00(),
+                    "stop_canister",
+                    call_args().other_side(Encode!(&canister_id_record).unwrap()),
+                    Cycles::new(1_000_000_000_000),
+                )
+                .build(),
+        )
+        .0;
+    test.process_stopping_canisters();
+    test.execute_all();
+
+    let cycles_after = cycles(test);
+    assert_le!(cycles_after, cycles_before);
+    assert_le!(cycles_before, cycles_after + Cycles::new(1_000_000_000));
+
+    check_ingress_status(test.ingress_status(&ingress_id))
+}
+
+#[test]
+fn stopping_running_canister_refunds_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let proxy = test.universal_canister().unwrap();
+    let canister_id = test.universal_canister().unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.status(),
+        CanisterStatusType::Running
+    );
+    test.set_controller(canister_id, proxy.get()).unwrap();
+    let res = stop_canister_refunds_cycles(&mut test, proxy, canister_id);
+    let _ = get_reply(res);
+}
+
+#[test]
+fn stopping_stopping_canister_refunds_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let proxy = test.universal_canister().unwrap();
+    let canister_id = test.universal_canister().unwrap();
+
+    test.stop_canister(canister_id);
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.status(),
+        CanisterStatusType::Stopping
+    );
+    test.set_controller(canister_id, proxy.get()).unwrap();
+    let res = stop_canister_refunds_cycles(&mut test, proxy, canister_id);
+    let _ = get_reply(res);
+}
+
+#[test]
+fn stopping_stopped_canister_refunds_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let proxy = test.universal_canister().unwrap();
+    let canister_id = test.universal_canister().unwrap();
+
+    test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.status(),
+        CanisterStatusType::Stopped
+    );
+    test.set_controller(canister_id, proxy.get()).unwrap();
+    let res = stop_canister_refunds_cycles(&mut test, proxy, canister_id);
+    let _ = get_reply(res);
+}
+
+#[test]
+fn stopping_canister_not_controlled_by_caller_refunds_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let proxy = test.universal_canister().unwrap();
+    let canister_id = test.universal_canister().unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.status(),
+        CanisterStatusType::Running
+    );
+    let res = stop_canister_refunds_cycles(&mut test, proxy, canister_id);
+    let _ = get_reject(res);
 }

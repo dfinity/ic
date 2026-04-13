@@ -5,7 +5,6 @@ use crate::{
         get_propose_to_reroute_canister_ranges_command,
     },
     layout::Layout,
-    state_tool_helper::StateToolHelper,
     steps::{
         ComputeExpectedManifestsStep, CopyWorkDirStep, ReadRegistryStep, SplitStateStep,
         StateSplitStrategy, ValidateCUPStep, WaitForCUPStep,
@@ -21,7 +20,7 @@ use ic_recovery::{
     CUPS_DIR, IC_STATE_DIR, NeuronArgs, Recovery, RecoveryArgs,
     cli::{consent_given, read_optional, wait_for_confirmation},
     error::{RecoveryError, RecoveryResult},
-    get_node_heights_from_metrics,
+    get_available_nodes_heights_from_metrics,
     recovery_iterator::RecoveryIterator,
     recovery_state::{HasRecoveryState, RecoveryState},
     registry_helper::RegistryPollingStrategy,
@@ -131,7 +130,6 @@ pub struct SubnetSplitting {
     recovery_args: RecoveryArgs,
     neuron_args: Option<NeuronArgs>,
     recovery: Recovery,
-    state_tool_helper: StateToolHelper,
     layout: Layout,
     logger: Logger,
     subnet_type: SubnetType,
@@ -153,13 +151,6 @@ impl SubnetSplitting {
         )
         .expect("Failed to initialize recovery");
 
-        let state_tool_helper = StateToolHelper::new(
-            recovery.binary_dir.clone(),
-            recovery_args.replica_version.clone(),
-            logger.clone(),
-        )
-        .expect("Failed to initialize state tool helper");
-
         let subnet_type = Self::check_subnets_preconditions(
             &recovery,
             subnet_splitting_args.source_subnet_id,
@@ -174,7 +165,6 @@ impl SubnetSplitting {
             neuron_args,
             layout: Layout::new(&recovery),
             recovery,
-            state_tool_helper,
             logger,
             subnet_type,
         }
@@ -283,12 +273,12 @@ impl SubnetSplitting {
         }
 
         if check_height
-            && get_node_heights_from_metrics(
+            && get_available_nodes_heights_from_metrics(
                 &recovery.logger,
                 &recovery.registry_helper,
                 subnet_id,
             )?
-            .iter()
+            .into_values()
             .any(|metrics| metrics.finalization_height > Height::new(0))
         {
             return validation_error(String::from("Subnet has a non-zero height"));
@@ -350,6 +340,7 @@ impl SubnetSplitting {
         match self.upload_node(target_subnet) {
             Some(node_ip) => Ok(UploadStateAndRestartStep {
                 logger: self.recovery.logger.clone(),
+                ssh_user: SshUser::Admin,
                 upload_method: DataLocation::Remote(node_ip),
                 work_dir: self.layout.work_dir(target_subnet),
                 data_src: self.layout.ic_state_dir(target_subnet),
@@ -653,7 +644,6 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
             StepType::Cleanup => self.recovery.get_cleanup_step().into(),
             StepType::ComputeExpectedManifestsStep => ComputeExpectedManifestsStep {
                 layout: self.layout.clone(),
-                state_tool_helper: self.state_tool_helper.clone(),
                 source_subnet_id: self.params.source_subnet_id,
                 destination_subnet_id: self.params.destination_subnet_id,
                 canister_id_ranges_to_move: self.params.canister_id_ranges_to_move.clone(),

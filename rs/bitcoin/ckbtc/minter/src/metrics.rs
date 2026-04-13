@@ -211,15 +211,6 @@ pub fn encode_metrics(
             }) as f64,
         )?
         .value(
-            &[("status", "sending")],
-            state::read_state(|s| {
-                s.requests_in_flight
-                    .values()
-                    .filter(|v| matches!(*v, state::InFlightStatus::Sending { .. }))
-                    .count()
-            }) as f64,
-        )?
-        .value(
             &[("status", "submitted")],
             state::read_state(|s| {
                 s.submitted_transactions
@@ -333,6 +324,12 @@ pub fn encode_metrics(
         "ckbtc_minter_outpoint_count",
         state::read_state(|s| s.outpoint_account.len()) as f64,
         "Total number of outputs the minter has to remember.",
+    )?;
+
+    metrics.encode_gauge(
+        "ckbtc_minter_duplicated_outpoint_count",
+        state::read_state(|s| s.duplicated_outpoints.len()) as f64,
+        "Total number of outpoints found to be duplicated during update_balance.",
     )?;
 
     metrics.encode_gauge(

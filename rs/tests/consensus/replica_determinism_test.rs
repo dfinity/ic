@@ -13,6 +13,7 @@ Success:: The restarted node reports block finalizations.
 
 end::catalog[] */
 
+use ic_agent::AgentError;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
@@ -137,16 +138,27 @@ fn test(env: TestEnv) {
             // For the same reason as before, if N = DKG_INTERVAL + 1, it's guaranteed
             // that a catch up package is proposed by the faulty node.
             for n in 0..(DKG_INTERVAL + 1) {
-                agent
-                    .update(&canister.canister_id(), "update")
-                    .with_arg(wasm().set_global_data(&[n as u8]).reply())
-                    .call_and_wait()
-                    .await
-                    .expect("failed to update");
-                let response = canister
-                    .query(wasm().get_global_data().append_and_reply())
-                    .await
-                    .expect("failed to query");
+                // TODO(DSM-118): consider removing the retries if the underlying issue has been resolved
+                ic_system_test_driver::retry_agent_on_transport_errors!(
+                    "update call after restart",
+                    &log,
+                    agent
+                        .update(&canister.canister_id(), "update")
+                        .with_arg(wasm().set_global_data(&[n as u8]).reply())
+                        .call_and_wait()
+                )
+                .await
+                .expect("transport error persisted after retries")
+                .expect("failed to update");
+                let response = ic_system_test_driver::retry_agent_on_transport_errors!(
+                    "query call after restart",
+                    &log,
+                    canister
+                        .query(wasm().get_global_data().append_and_reply())
+                )
+                .await
+                .expect("transport error persisted after retries")
+                .expect("failed to query");
                 assert_eq!(response, vec![n as u8]);
             }
         }
@@ -157,6 +169,17 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test))
+        // One of the nodes has a corrupted state and proposes a CUP share which will be invalidated
+        // by the peers (and vice versa), so it's expected that the metric is increased.
+        .remove_metrics_to_check("consensus_invalidated_artifacts")
+        // It is expected that the malicious node crashes due to state divergence and restarts.
+        //  TODO(DSM-118): The replica may occasionally be started 3 times (instead of the usual 2) if
+        // it crashes again briefly during the catch-up process after the divergence. Consider reducing
+        // this number if the underlying issue has been resolved.
+        .update_orchestrator_metrics_to_check(
+            "orchestrator_replica_process_start_attempts_total",
+            3,
+        )
         .execute_from_args()?;
     Ok(())
 }

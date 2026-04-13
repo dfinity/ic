@@ -375,9 +375,8 @@ fn check_plaintexts_pair(
     Ok((plaintext_curve, key_curve))
 }
 
-fn mega_hash_to_scalars(
+fn mega_setup_ro(
     alg: IdkgProtocolAlgorithm,
-    plaintext_curve: EccCurveType,
     ctype: MEGaCiphertextType,
     dealer_index: NodeIndex,
     recipient_index: NodeIndex,
@@ -385,12 +384,7 @@ fn mega_hash_to_scalars(
     public_key: &EccPoint,
     ephemeral_key: &EccPoint,
     shared_secret: &EccPoint,
-) -> CanisterThresholdResult<Vec<EccScalar>> {
-    let count = match ctype {
-        MEGaCiphertextType::Single => 1,
-        MEGaCiphertextType::Pairs => 2,
-    };
-
+) -> CanisterThresholdResult<RandomOracle> {
     let mut ro = RandomOracle::new(DomainSep::MegaEncryption(
         ctype,
         alg,
@@ -402,7 +396,55 @@ fn mega_hash_to_scalars(
     ro.add_point("public_key", public_key)?;
     ro.add_point("ephemeral_key", ephemeral_key)?;
     ro.add_point("shared_secret", shared_secret)?;
-    ro.output_scalars(plaintext_curve, count)
+    Ok(ro)
+}
+
+fn mega_hash_to_scalar(
+    alg: IdkgProtocolAlgorithm,
+    plaintext_curve: EccCurveType,
+    dealer_index: NodeIndex,
+    recipient_index: NodeIndex,
+    associated_data: &[u8],
+    public_key: &EccPoint,
+    ephemeral_key: &EccPoint,
+    shared_secret: &EccPoint,
+) -> CanisterThresholdResult<EccScalar> {
+    let ro = mega_setup_ro(
+        alg,
+        MEGaCiphertextType::Single,
+        dealer_index,
+        recipient_index,
+        associated_data,
+        public_key,
+        ephemeral_key,
+        shared_secret,
+    )?;
+
+    ro.output_scalar(plaintext_curve)
+}
+
+fn mega_hash_to_scalars(
+    alg: IdkgProtocolAlgorithm,
+    plaintext_curve: EccCurveType,
+    dealer_index: NodeIndex,
+    recipient_index: NodeIndex,
+    associated_data: &[u8],
+    public_key: &EccPoint,
+    ephemeral_key: &EccPoint,
+    shared_secret: &EccPoint,
+) -> CanisterThresholdResult<(EccScalar, EccScalar)> {
+    let ro = mega_setup_ro(
+        alg,
+        MEGaCiphertextType::Pairs,
+        dealer_index,
+        recipient_index,
+        associated_data,
+        public_key,
+        ephemeral_key,
+        shared_secret,
+    )?;
+
+    ro.output_two_scalars(plaintext_curve)
 }
 
 /// Compute the Proof Of Possession (PoP) base element
@@ -514,10 +556,9 @@ impl MEGaCiphertextSingle {
         for (index, (pubkey, ptext)) in recipients.iter().zip(plaintexts).enumerate() {
             let ubeta = pubkey.point.scalar_mul(&beta)?;
 
-            let hm = mega_hash_to_scalars(
+            let hm = mega_hash_to_scalar(
                 alg,
                 plaintext_curve,
-                ctype,
                 dealer_index,
                 index as NodeIndex,
                 associated_data,
@@ -526,7 +567,7 @@ impl MEGaCiphertextSingle {
                 &ubeta,
             )?;
 
-            let ctext = hm[0].add(ptext)?;
+            let ctext = hm.add(ptext)?;
 
             ctexts.push(ctext);
         }
@@ -573,10 +614,9 @@ impl MEGaCiphertextSingle {
 
         let plaintext_curve = self.ctexts[recipient_index as usize].curve_type();
 
-        let hm = mega_hash_to_scalars(
+        let hm = mega_hash_to_scalar(
             alg,
             plaintext_curve,
-            MEGaCiphertextType::Single,
             dealer_index,
             recipient_index,
             associated_data,
@@ -585,7 +625,7 @@ impl MEGaCiphertextSingle {
             shared_secret,
         )?;
 
-        self.ctexts[recipient_index as usize].sub(&hm[0])
+        self.ctexts[recipient_index as usize].sub(&hm)
     }
 
     pub fn decrypt(
@@ -636,10 +676,9 @@ impl MEGaCiphertextPair {
         for (index, (pubkey, ptext)) in recipients.iter().zip(plaintexts).enumerate() {
             let ubeta = pubkey.point.scalar_mul(&beta)?;
 
-            let hm = mega_hash_to_scalars(
+            let (hm0, hm1) = mega_hash_to_scalars(
                 alg,
                 plaintext_curve,
-                ctype,
                 dealer_index,
                 index as NodeIndex,
                 associated_data,
@@ -648,8 +687,8 @@ impl MEGaCiphertextPair {
                 &ubeta,
             )?;
 
-            let ctext0 = hm[0].add(&ptext.0)?;
-            let ctext1 = hm[1].add(&ptext.1)?;
+            let ctext0 = ptext.0.add(&hm0)?;
+            let ctext1 = ptext.1.add(&hm1)?;
 
             ctexts.push((ctext0, ctext1));
         }
@@ -696,10 +735,9 @@ impl MEGaCiphertextPair {
 
         let plaintext_curve = self.ctexts[recipient_index as usize].0.curve_type();
 
-        let hm = mega_hash_to_scalars(
+        let (hm0, hm1) = mega_hash_to_scalars(
             alg,
             plaintext_curve,
-            MEGaCiphertextType::Pairs,
             dealer_index,
             recipient_index,
             associated_data,
@@ -708,8 +746,8 @@ impl MEGaCiphertextPair {
             shared_secret,
         )?;
 
-        let ptext0 = self.ctexts[recipient_index as usize].0.sub(&hm[0])?;
-        let ptext1 = self.ctexts[recipient_index as usize].1.sub(&hm[1])?;
+        let ptext0 = self.ctexts[recipient_index as usize].0.sub(&hm0)?;
+        let ptext1 = self.ctexts[recipient_index as usize].1.sub(&hm1)?;
 
         Ok((ptext0, ptext1))
     }

@@ -1,9 +1,13 @@
+mod cloud_provision;
+mod generate_network_config;
+
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
+use tracing::{info, warn};
 
-mod generate_network_config;
+use cloud_provision::obtain_guestos_config;
 use generate_network_config::{generate_networkd_config, validate_and_construct_ipv4_address_info};
 
 use config_tool::deserialize_config;
@@ -22,6 +26,7 @@ pub enum Commands {
         /// config.json input file
         config_object: PathBuf,
     },
+
     /// Regenerate systemd network configuration files, optionally incorporating specified IPv4 configuration parameters, and then restart the systemd network.
     RegenerateNetworkConfig {
         #[arg(long, default_value_t = DEFAULT_SYSTEMD_NETWORK_DIR.to_string(), value_name = "DIR")]
@@ -44,6 +49,17 @@ pub enum Commands {
         /// IPv4 gateway
         ipv4_gateway: Option<String>,
     },
+
+    /// Provision GuestOS config from the cloud metadata
+    CloudProvision {
+        /// Path where to save the obtained config.json
+        #[arg(long, default_value = "/mnt/config/config.json")]
+        config_path: PathBuf,
+
+        /// systemd-networkd output directory
+        #[arg(long, default_value = DEFAULT_SYSTEMD_NETWORK_DIR)]
+        systemd_network_dir: PathBuf,
+    },
 }
 
 #[derive(Parser)]
@@ -54,6 +70,8 @@ struct GuestOSArgs {
 }
 
 pub fn main() -> Result<()> {
+    ic_os_logging::init_logging();
+
     #[cfg(not(target_os = "linux"))]
     {
         eprintln!("ERROR: this only runs on Linux.");
@@ -94,11 +112,26 @@ pub fn main() -> Result<()> {
                 ipv4_info,
             )?;
 
-            eprintln!("Restarting systemd networkd");
+            warn!("Restarting systemd networkd");
             restart_systemd_networkd();
 
             Ok(())
         }
+
+        Some(Commands::CloudProvision {
+            config_path,
+            systemd_network_dir,
+        }) => {
+            let config = obtain_guestos_config(systemd_network_dir)
+                .context("unable to obtain GuestOS config")?;
+            let json = serde_json::to_vec_pretty(&config).context("unable to encode to JSON")?;
+            std::fs::write(&config_path, &json)
+                .context("unable to write GuestOS config to disk")?;
+
+            info!("GuestOS config was written to {}", config_path.display());
+            Ok(())
+        }
+
         None => Ok(()),
     }
 }

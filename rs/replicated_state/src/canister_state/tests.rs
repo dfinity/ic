@@ -5,13 +5,13 @@ use super::*;
 use crate::CallContext;
 use crate::CallOrigin;
 use crate::Memory;
+use crate::canister_state::canister_snapshots::CanisterSnapshots;
 use crate::canister_state::execution_state::CustomSection;
 use crate::canister_state::execution_state::CustomSectionType;
 use crate::canister_state::execution_state::WasmMetadata;
 use crate::canister_state::system_state::testing::SystemStateTesting;
 use crate::canister_state::system_state::{
-    CallContextManager, CanisterHistory, CanisterStatus, CyclesUseCase,
-    MAX_CANISTER_HISTORY_CHANGES,
+    CallContextManager, CanisterHistory, CanisterStatus, MAX_CANISTER_HISTORY_CHANGES,
 };
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use assert_matches::assert_matches;
@@ -30,9 +30,12 @@ use ic_types::messages::{
     NO_DEADLINE, StopCanisterCallId, StopCanisterContext,
 };
 use ic_types::methods::{Callback, WasmClosure};
-use ic_types::nominal_cycles::NominalCycles;
-use ic_types::time::CoarseTime;
-use ic_types::{CountBytes, Cycles, Time};
+use ic_types::time::{CoarseTime, UNIX_EPOCH};
+use ic_types::{CountBytes, Time};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, NominalCycles,
+    NominalCyclesTesting,
+};
 use ic_wasm_types::CanisterModule;
 use prometheus::IntCounter;
 use strum::IntoEnumIterator;
@@ -91,9 +94,15 @@ impl CanisterStateFixture {
             Cycles::new(1 << 36),
             NumSeconds::from(100_000),
         );
+        let canister_snapshots = CanisterSnapshots::default();
 
         CanisterStateFixture {
-            canister_state: CanisterState::new(system_state, None, scheduler_state),
+            canister_state: CanisterState::new(
+                system_state,
+                None,
+                scheduler_state,
+                canister_snapshots,
+            ),
         }
     }
 
@@ -115,17 +124,17 @@ impl CanisterStateFixture {
                 Cycles::zero(),
                 Time::from_nanos_since_unix_epoch(0),
                 Default::default(),
+                None,
             )
             .unwrap();
         self.canister_state
             .system_state
             .register_callback(Callback::new(
                 call_context_id,
-                CANISTER_ID,
                 respondent,
                 Cycles::zero(),
-                Cycles::new(42),
-                Cycles::new(84),
+                CompoundCycles::new(Cycles::new(42), CanisterCyclesCostSchedule::Normal),
+                CompoundCycles::new(Cycles::new(84), CanisterCyclesCostSchedule::Normal),
                 WasmClosure::new(0, 2),
                 WasmClosure::new(0, 2),
                 None,
@@ -165,13 +174,11 @@ impl CanisterStateFixture {
         self.with_input_slot_reservation();
 
         // Enqueue the response.
-        let response = RequestOrResponse::from(default_input_response(
-            self.make_callback(deadline),
-            deadline,
-        ));
+        let response = default_input_response(self.make_callback(deadline), deadline);
+        let message = RequestOrResponse::Response(Arc::new(response.clone()));
         assert!(
             self.push_input(
-                response.clone(),
+                message.clone(),
                 SubnetType::Application,
                 InputQueueType::RemoteSubnet,
             )
@@ -179,19 +186,20 @@ impl CanisterStateFixture {
         );
 
         // Pop the response and make it into a paused response execution task.
-        assert_eq!(
-            Some(response.clone().into()),
-            self.canister_state.pop_input()
+        let canister_message = self.canister_state.pop_input().unwrap();
+        assert_matches!(
+            &canister_message,
+            CanisterMessage::Response{ response: r, .. } if r.as_ref() == &response
         );
         self.canister_state
             .system_state
             .task_queue
             .enqueue(ExecutionTask::PausedExecution {
                 id: PausedExecutionId(13),
-                input: CanisterMessageOrTask::Message(response.clone().into()),
+                input: CanisterMessageOrTask::Message(canister_message),
             });
 
-        response
+        message
     }
 }
 
@@ -278,9 +286,10 @@ fn canister_state_push_input_best_effort_response_no_reserved_slot() {
             .unwrap()
     );
     // Only one response was enqueued.
-    assert_eq!(
-        Some(CanisterMessage::Response(response.into())),
-        fixture.canister_state.pop_input()
+    let canister_message = fixture.canister_state.pop_input().unwrap();
+    assert_matches!(
+        &canister_message,
+        CanisterMessage::Response{ response: r, .. } if r.as_ref() == &response
     );
     assert!(!fixture.canister_state.has_input());
 }
@@ -491,12 +500,26 @@ fn canister_state_induct_messages_to_self_duplicate_of_paused_response(deadline:
         .refund(Cycles::new(1))
         .build();
 
-    // Make an input queue slot reservation.
-    fixture
-        .canister_state
-        .push_output_request(request.clone().into(), UNIX_EPOCH)
-        .unwrap();
-    fixture.pop_output().unwrap();
+    // Make two input queue slot reservations (for response and duplicate).
+    for _ in 0..2 {
+        fixture
+            .canister_state
+            .push_output_request(request.clone().into(), UNIX_EPOCH)
+            .unwrap();
+        fixture.pop_output().unwrap();
+    }
+
+    // And an output queue slot reservation, for the duplicate.
+    assert!(
+        fixture
+            .push_input(
+                request.clone().into(),
+                SubnetType::Application,
+                InputQueueType::LocalSubnet,
+            )
+            .unwrap()
+    );
+    fixture.canister_state.pop_input().unwrap();
 
     // Enqueue the inbound response.
     assert!(
@@ -509,11 +532,11 @@ fn canister_state_induct_messages_to_self_duplicate_of_paused_response(deadline:
             .unwrap()
     );
 
-    // Pop the response and make it into a paused response execution task.
-    let response_canister_message = CanisterMessage::Response(response.clone().into());
-    assert_eq!(
-        Some(response_canister_message.clone()),
-        fixture.canister_state.pop_input()
+    // Pop the response and pause its execution.
+    let response_canister_message = fixture.canister_state.pop_input().unwrap();
+    assert_matches!(
+        &response_canister_message,
+        CanisterMessage::Response{ response: r, .. } if r.as_ref() == &response
     );
     fixture
         .canister_state
@@ -524,23 +547,12 @@ fn canister_state_induct_messages_to_self_duplicate_of_paused_response(deadline:
             input: CanisterMessageOrTask::Message(response_canister_message),
         });
 
-    // Make an output queue slot reservation.
-    assert!(
-        fixture
-            .push_input(
-                request.clone().into(),
-                SubnetType::Application,
-                InputQueueType::LocalSubnet,
-            )
-            .unwrap()
-    );
-    fixture.canister_state.pop_input().unwrap();
-
-    // Emqueue the response in the output queue.
+    // Enqueue the duplicate response into the output queue.
     fixture
         .canister_state
         .push_output_response(response.clone().into());
 
+    // Attempt to induct the duplicate response.
     fixture.canister_state.induct_messages_to_self(
         &mut SUBNET_AVAILABLE_MEMORY.clone(),
         SubnetType::Application,
@@ -823,6 +835,7 @@ fn canister_state_ingress_induction_cycles_debit() {
     let system_state = &mut CanisterStateFixture::new().canister_state.system_state;
     let initial_balance = system_state.balance();
     let ingress_induction_debit = Cycles::new(42);
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
     system_state.add_postponed_charge_to_ingress_induction_cycles_debit(ingress_induction_debit);
     assert_eq!(
         ingress_induction_debit,
@@ -836,6 +849,7 @@ fn canister_state_ingress_induction_cycles_debit() {
 
     system_state.apply_ingress_induction_cycles_debit(
         system_state.canister_id(),
+        cost_schedule,
         &no_op_logger(),
         &mock_metrics(),
     );
@@ -854,54 +868,73 @@ fn canister_state_ingress_induction_cycles_debit() {
     // Check that 'ingress_induction_cycles_debit' is added
     // to consumed cycles.
     assert_eq!(
-        system_state.canister_metrics.consumed_cycles,
-        ingress_induction_debit.into()
+        system_state.canister_metrics().consumed_cycles().get(),
+        ingress_induction_debit.get()
     );
     assert_eq!(
         *system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::IngressInduction)
             .unwrap(),
-        ingress_induction_debit.into()
+        NominalCycles::new(ingress_induction_debit.get()),
     );
 }
+
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 
 #[test]
 fn update_balance_and_consumed_cycles_correctly() {
     let mut system_state = CanisterStateFixture::new().canister_state.system_state;
-    let initial_consumed_cycles = NominalCycles::from(1000);
-    system_state.canister_metrics.consumed_cycles = initial_consumed_cycles;
-
-    let cycles = Cycles::new(100);
-    system_state.add_cycles(cycles, CyclesUseCase::Memory);
-    assert_eq!(system_state.balance(), INITIAL_CYCLES + cycles);
+    let initial_consumed_cycles = Cycles::new(1000);
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    let prepaid_cycles =
+        CompoundCycles::<ic_types_cycles::Memory>::new(initial_consumed_cycles, cost_schedule);
+    system_state.consume_cycles(prepaid_cycles);
     assert_eq!(
-        system_state.canister_metrics.consumed_cycles,
-        initial_consumed_cycles - NominalCycles::from(cycles)
+        system_state.balance(),
+        INITIAL_CYCLES - initial_consumed_cycles
+    );
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles(),
+        NominalCycles::new(initial_consumed_cycles.get())
+    );
+
+    let refund = CompoundCycles::<ic_types_cycles::Memory>::new(Cycles::new(100), cost_schedule);
+    system_state.refund_cycles(prepaid_cycles, refund);
+    assert_eq!(
+        system_state.balance(),
+        INITIAL_CYCLES - initial_consumed_cycles + refund.real()
+    );
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles(),
+        NominalCycles::new((initial_consumed_cycles - refund.real()).get())
     );
 }
 
 #[test]
 fn update_balance_and_consumed_cycles_by_use_case_correctly() {
     let mut system_state = CanisterStateFixture::new().canister_state.system_state;
-    let cycles_to_consume = Cycles::from(1000u128);
-    system_state.remove_cycles(cycles_to_consume, CyclesUseCase::Memory);
+    let cycles_to_consume = Cycles::from(1000_u128);
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    let prepaid_cycles =
+        CompoundCycles::<ic_types_cycles::Memory>::new(cycles_to_consume, cost_schedule);
+    system_state.consume_cycles(prepaid_cycles);
 
-    let cycles_to_add = Cycles::from(100u128);
-    system_state.add_cycles(cycles_to_add, CyclesUseCase::Memory);
+    let refund =
+        CompoundCycles::<ic_types_cycles::Memory>::new(Cycles::from(100_u128), cost_schedule);
+    system_state.refund_cycles(prepaid_cycles, refund);
     assert_eq!(
         system_state.balance(),
-        INITIAL_CYCLES - cycles_to_consume + cycles_to_add
+        INITIAL_CYCLES - cycles_to_consume + refund.real()
     );
     assert_eq!(
         *system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::Memory)
             .unwrap(),
-        NominalCycles::from(cycles_to_consume - cycles_to_add)
+        NominalCycles::new((cycles_to_consume - refund.real()).get())
     );
 }
 
@@ -911,11 +944,10 @@ fn canister_state_callback_round_trip() {
 
     let minimal_callback = Callback::new(
         CallContextId::new(1),
-        CANISTER_ID,
         OTHER_CANISTER_ID,
         Cycles::zero(),
-        Cycles::zero(),
-        Cycles::zero(),
+        CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
         WasmClosure::new(0, 2),
         WasmClosure::new(0, 2),
         None,
@@ -923,11 +955,10 @@ fn canister_state_callback_round_trip() {
     );
     let maximal_callback = Callback::new(
         CallContextId::new(1),
-        CANISTER_ID,
         OTHER_CANISTER_ID,
         Cycles::new(21),
-        Cycles::new(42),
-        Cycles::new(84),
+        CompoundCycles::new(Cycles::new(42), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::new(84), CanisterCyclesCostSchedule::Normal),
         WasmClosure::new(0, 2),
         WasmClosure::new(1, 2),
         Some(WasmClosure::new(2, 2)),
@@ -935,11 +966,16 @@ fn canister_state_callback_round_trip() {
     );
     let u64_callback = Callback::new(
         CallContextId::new(u64::MAX - 1),
-        CanisterId::from_u64(u64::MAX - 2),
         CanisterId::from_u64(u64::MAX - 3),
         Cycles::new(u128::MAX - 4),
-        Cycles::new(u128::MAX - 5),
-        Cycles::new(u128::MAX - 6),
+        CompoundCycles::new(
+            Cycles::new(u128::MAX - 5),
+            CanisterCyclesCostSchedule::Normal,
+        ),
+        CompoundCycles::new(
+            Cycles::new(u128::MAX - 6),
+            CanisterCyclesCostSchedule::Normal,
+        ),
         WasmClosure::new(u32::MAX - 7, u64::MAX - 8),
         WasmClosure::new(u32::MAX - 9, u64::MAX - 10),
         Some(WasmClosure::new(u32::MAX - 11, u64::MAX - 12)),
@@ -974,38 +1010,6 @@ fn canister_state_log_visibility_round_trip() {
     let round_trip = LogVisibilityV2::try_from(encoded).unwrap();
 
     assert_eq!(initial, round_trip);
-}
-
-#[test]
-fn long_execution_mode_round_trip() {
-    use ic_protobuf::state::canister_state_bits::v1 as pb;
-
-    for initial in LongExecutionMode::iter() {
-        let encoded = pb::LongExecutionMode::from(initial);
-        let round_trip = LongExecutionMode::from(encoded);
-
-        assert_eq!(initial, round_trip);
-    }
-
-    // Backward compatibility check.
-    assert_eq!(
-        LongExecutionMode::from(pb::LongExecutionMode::Unspecified),
-        LongExecutionMode::Opportunistic
-    );
-}
-
-#[test]
-fn long_execution_mode_decoding() {
-    use ic_protobuf::state::canister_state_bits::v1 as pb;
-    fn test(code: i32, decoded: LongExecutionMode) {
-        let encoded = pb::LongExecutionMode::try_from(code).unwrap_or_default();
-        assert_eq!(LongExecutionMode::from(encoded), decoded);
-    }
-    test(-1, LongExecutionMode::Opportunistic);
-    test(0, LongExecutionMode::Opportunistic);
-    test(1, LongExecutionMode::Opportunistic);
-    test(2, LongExecutionMode::Prioritized);
-    test(3, LongExecutionMode::Opportunistic);
 }
 
 #[test]
@@ -1110,14 +1114,6 @@ fn execution_state_test_partial_eq() {
     assert_ne!(
         ExecutionState {
             metadata: WasmMetadata::new(custom_sections),
-            ..state_1.clone()
-        },
-        state_1
-    );
-
-    assert_ne!(
-        ExecutionState {
-            last_executed_round: ExecutionRound::from(12345),
             ..state_1.clone()
         },
         state_1
@@ -1250,7 +1246,10 @@ fn drops_aborted_canister_install_after_split() {
         .enqueue(ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Request(Arc::new(RequestBuilder::new().build())),
             call_id: InstallCodeCallId::new(0),
-            prepaid_execution_cycles: Cycles::from(0u128),
+            prepaid_execution_cycles: CompoundCycles::new(
+                Cycles::zero(),
+                CanisterCyclesCostSchedule::Normal,
+            ),
         });
 
     // Expected canister state is identical, minus the `AbortedInstallCode` task.
@@ -1270,9 +1269,10 @@ fn reverts_stopping_status_after_split() {
         CallOrigin::Ingress(user_test_id(1), message_test_id(2), String::from("")),
         false,
         false,
-        Cycles::from(0u128),
+        Cycles::from(0_u128),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
+        None,
     ));
     canister_state
         .system_state

@@ -338,6 +338,11 @@ pub trait SshKeyGen {
     fn ssh_keygen(&self) -> Result<()> {
         self.ssh_keygen_for_user(SSH_USERNAME)
     }
+
+    /// Returns the public key of the SSH key-pair in OpenSSH format
+    /// e.g.
+    /// ssh-rsa AAAAB3NzaC1yc2EAAAABJQAAAIBmhLUTJiP...== somename
+    fn get_ssh_public_key(&self) -> Result<String>;
 }
 
 impl SshKeyGen for TestEnv {
@@ -373,5 +378,12 @@ impl SshKeyGen for TestEnv {
         }
 
         Ok(())
+    }
+
+    fn get_ssh_public_key(&self) -> Result<String> {
+        let pub_key_path = self
+            .get_path(SSH_AUTHORIZED_PUB_KEYS_DIR)
+            .join(SSH_USERNAME);
+        fs::read_to_string(pub_key_path).context("Could not read SSH public key")
     }
 }

@@ -53,11 +53,13 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     fn gen_node_signing_key_pair_internal(
         &self,
     ) -> Result<CspPublicKey, CspBasicSignatureKeygenError> {
-        let (sk_bytes, pk_bytes) = ed25519::keypair_from_rng(&mut *self.rng_write_lock());
+        let seed = self.generate_seed();
+        let (sk_bytes, pk_bytes) = ed25519::keypair_from_seed(seed);
         let secret_key = CspSecretKey::Ed25519(sk_bytes);
         let public_key = CspPublicKey::Ed25519(pk_bytes);
         let key_id = KeyId::from(&public_key);
-        let public_key_proto = node_signing_pk_to_proto(public_key.clone());
+        let mut public_key_proto = node_signing_pk_to_proto(public_key.clone());
+        self.set_timestamp(&mut public_key_proto);
         let valid_public_key = validate_node_signing_public_key(public_key_proto)?;
         self.store_node_signing_key_pair(key_id, secret_key, valid_public_key.get().clone())?;
         Ok(public_key)

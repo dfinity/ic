@@ -29,7 +29,9 @@ use ic_types::{
     methods::{FuncRef, WasmMethod},
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
-use memory_tracker::{DirtyPageTracking, MemoryLimits, SigsegvMemoryTracker};
+use memory_tracker::{
+    DirtyPageTracking, MemoryLimits, MissingPageHandlerKind, SigsegvMemoryTracker,
+};
 use signal_stack::WasmtimeSignalStack;
 
 use crate::wasm_utils::instrumentation::{
@@ -91,7 +93,7 @@ fn convert_backtrace(wasm: &wasmtime::WasmBacktrace) -> Option<CanisterBacktrace
     }
 }
 
-fn wasmtime_error_to_hypervisor_error(err: anyhow::Error) -> HypervisorError {
+fn wasmtime_error_to_hypervisor_error(err: wasmtime::Error) -> HypervisorError {
     let backtrace = err
         .downcast_ref::<wasmtime::WasmBacktrace>()
         .and_then(convert_backtrace);
@@ -201,6 +203,31 @@ struct WasmMemoryInfo {
     dirty_page_tracking: DirtyPageTracking,
 }
 
+/// A wrapper around a raw pointer to the Store.
+/// This type is Send + Sync so that we can store it in a closure owned by a signal handler.
+///
+/// # Safety
+///
+/// The pointer is only valid as long as the WasmtimeInstance is alive.
+/// This construction is only safe because we store it in a closure which gets
+/// dropped along with the associated WasmtimeInstance.
+#[derive(Copy, Clone)]
+struct StorePtr(*mut wasmtime::Store<StoreData>);
+
+unsafe impl Send for StorePtr {}
+unsafe impl Sync for StorePtr {}
+
+impl StorePtr {
+    /// # Safety
+    ///
+    /// This method can only be called if the WasmtimeInstance is alive and we
+    /// have exclusive access to the store.
+    #[allow(unsafe_op_in_unsafe_fn)]
+    unsafe fn get(&mut self) -> &mut wasmtime::Store<StoreData> {
+        &mut *self.0
+    }
+}
+
 pub struct WasmtimeEmbedder {
     log: ReplicaLogger,
     config: EmbeddersConfig,
@@ -246,9 +273,9 @@ impl WasmtimeEmbedder {
 
     pub fn compile(&self, wasm_binary: &BinaryEncodedWasm) -> HypervisorResult<Module> {
         let module = wasmtime::Module::new(&self.create_engine()?, wasm_binary.as_slice())
-            .map_err(|e| {
+            .map_err(|_| {
                 HypervisorError::WasmEngineError(WasmEngineError::FailedToInstantiateModule(
-                    format!("{e:?}"),
+                    "Error in Wasm compilation".to_string(),
                 ))
             })?;
         Ok(module)
@@ -418,7 +445,6 @@ impl WasmtimeEmbedder {
 
         let stable_memory_limits = MemoryLimits {
             max_memory_size: self.config.max_stable_memory_size,
-            max_accessed_pages: current_accessed_limit,
             max_dirty_pages: current_dirty_page_limit,
         };
         let max_heap_memory_size = self
@@ -427,7 +453,6 @@ impl WasmtimeEmbedder {
             .max(self.config.max_wasm64_memory_size);
         let heap_memory_limits = MemoryLimits {
             max_memory_size: max_heap_memory_size,
-            max_accessed_pages: NumOsPages::new(max_heap_memory_size.get() / PAGE_SIZE as u64),
             max_dirty_pages: NumOsPages::new(max_heap_memory_size.get() / PAGE_SIZE as u64),
         };
 
@@ -442,7 +467,6 @@ impl WasmtimeEmbedder {
                     .tables(MAX_STORE_TABLES)
                     .table_elements(MAX_STORE_TABLE_ELEMENTS)
                     .build(),
-                canister_backtrace: self.config.feature_flags.canister_backtrace,
             },
         );
         store.limiter(|state| &mut state.limits);
@@ -556,7 +580,42 @@ impl WasmtimeEmbedder {
             }
         }
 
-        let memory_trackers = sigsegv_memory_tracker(memories, &mut store, self.log.clone());
+        // Create a closure to decrement the instruction counter.
+        // SAFETY: We store a raw pointer to the Store and a copy of the Global.
+        // These remain valid for the lifetime of the WasmtimeInstance because:
+        // 1. The Store is owned by WasmtimeInstance
+        // 2. The Global is a lightweight handle that references data in the Store
+        // 3. The memory tracker (which holds this closure) is also owned by WasmtimeInstance
+        // 4. All are dropped together when WasmtimeInstance is dropped
+        let subtract_instruction_counter: Arc<Mutex<dyn FnMut(u64) + Send>> = {
+            if let Some(global) = store.data().num_instructions_global {
+                // Store a wrapped pointer to the Store and a copy of the Global
+                let mut store_ptr = StorePtr(&mut store as *mut wasmtime::Store<StoreData>);
+                let global_copy = global;
+
+                Arc::new(Mutex::new(move |instructions_to_subtract: u64| {
+                    // SAFETY: Accessing the Store and Global from the signal handler.
+                    // Both pointers are guaranteed valid by the lifetime relationship described above.
+                    unsafe {
+                        let store_ref = store_ptr.get();
+                        if let Val::I64(current) = global_copy.get(&mut *store_ref) {
+                            let new_value = current.saturating_sub(instructions_to_subtract as i64);
+                            let _ = global_copy.set(store_ref, Val::I64(new_value));
+                        }
+                    }
+                }))
+            } else {
+                Arc::new(Mutex::new(|_| {}))
+            }
+        };
+
+        let memory_trackers = sigsegv_memory_tracker(
+            memories,
+            &mut store,
+            self.log.clone(),
+            self.config.feature_flags.deterministic_memory_tracker,
+            subtract_instruction_counter,
+        );
 
         let signal_stack = WasmtimeSignalStack::new();
         let mut main_memory_type = WasmMemoryType::Wasm32;
@@ -580,7 +639,6 @@ impl WasmtimeEmbedder {
             log: self.log.clone(),
             instance_stats: InstanceStats::default(),
             store,
-            canister_backtrace: self.config.feature_flags.canister_backtrace,
             modification_tracking,
             dirty_page_overhead,
             #[cfg(debug_assertions)]
@@ -717,7 +775,13 @@ fn sigsegv_memory_tracker<S>(
     memories: HashMap<CanisterMemoryType, MemorySigSegvInfo>,
     store: &mut wasmtime::Store<S>,
     log: ReplicaLogger,
+    deterministic_memory_tracker: FlagStatus,
+    subtract_instruction_counter: Arc<Mutex<dyn FnMut(u64) + Send>>,
 ) -> HashMap<CanisterMemoryType, Arc<Mutex<SigsegvMemoryTracker>>> {
+    let maybe_missing_page_handler_kind = match deterministic_memory_tracker {
+        FlagStatus::Enabled => Some(MissingPageHandlerKind::Deterministic),
+        FlagStatus::Disabled => None,
+    };
     let mut tracked_memories = vec![];
     let mut result = HashMap::new();
     for (
@@ -755,7 +819,9 @@ fn sigsegv_memory_tracker<S>(
                     log.clone(),
                     dirty_page_tracking,
                     page_map,
+                    maybe_missing_page_handler_kind,
                     memory_limits,
+                    subtract_instruction_counter.clone(),
                 )
                 .expect("failed to instantiate SIGSEGV memory tracker"),
             ))
@@ -778,7 +844,6 @@ pub struct StoreData {
     pub num_instructions_global: Option<wasmtime::Global>,
     pub log: ReplicaLogger,
     pub limits: StoreLimits,
-    pub canister_backtrace: FlagStatus,
 }
 
 impl StoreData {
@@ -846,8 +911,6 @@ pub struct WasmtimeInstance {
     log: ReplicaLogger,
     instance_stats: InstanceStats,
     store: wasmtime::Store<StoreData>,
-    #[allow(unused)]
-    canister_backtrace: FlagStatus,
     modification_tracking: ModificationTracking,
     dirty_page_overhead: NumInstructions,
     #[cfg(debug_assertions)]

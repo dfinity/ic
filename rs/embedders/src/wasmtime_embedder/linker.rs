@@ -18,7 +18,8 @@ use ic_interfaces::execution_environment::{
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
-use ic_types::{Cycles, NumBytes, NumInstructions, Time};
+use ic_types::{NumBytes, NumInstructions, Time};
+use ic_types_cycles::Cycles;
 use ic_wasm_types::WasmEngineError;
 use num_traits::ops::saturating::SaturatingAdd;
 
@@ -38,35 +39,33 @@ fn unexpected_err(s: String) -> HypervisorError {
 fn process_err(
     store: &mut impl AsContextMut<Data = StoreData>,
     mut e: HypervisorError,
-) -> anyhow::Error {
+) -> wasmtime::Error {
     add_backtrace(&mut e, &store);
     match store.as_context_mut().data_mut().system_api_mut() {
         Ok(api) => {
-            let result = anyhow::Error::msg(format! {"{e}"});
+            let result = wasmtime::Error::msg(format! {"{e}"});
             api.set_execution_error(e);
             result
         }
-        Err(_) => {
-            anyhow::Error::msg(format! {"Failed to access system api while processing error: {e}"})
-        }
+        Err(_) => wasmtime::Error::msg(
+            format! {"Failed to access system api while processing error: {e}"},
+        ),
     }
 }
 
 fn add_backtrace(e: &mut HypervisorError, store: impl AsContext<Data = StoreData>) {
-    if store.as_context().data().canister_backtrace == FlagStatus::Enabled {
-        match e {
-            HypervisorError::Trapped {
-                trap_code: _,
-                backtrace,
-            }
-            | HypervisorError::CalledTrap {
-                message: _,
-                backtrace,
-            } => {
-                *backtrace = convert_backtrace(&WasmBacktrace::capture(store));
-            }
-            _ => {}
+    match e {
+        HypervisorError::Trapped {
+            trap_code: _,
+            backtrace,
         }
+        | HypervisorError::CalledTrap {
+            message: _,
+            backtrace,
+        } => {
+            *backtrace = convert_backtrace(&WasmBacktrace::capture(store));
+        }
+        _ => {}
     }
 }
 
@@ -105,7 +104,7 @@ fn store_value(
 fn charge_for_cpu(
     caller: &mut Caller<'_, StoreData>,
     overhead: NumInstructions,
-) -> Result<(), anyhow::Error> {
+) -> Result<(), wasmtime::Error> {
     charge_for_system_api_call(caller, overhead, 0).map_err(|e| process_err(caller, e))
 }
 
@@ -115,7 +114,7 @@ fn charge_for_cpu_and_mem(
     caller: &mut Caller<'_, StoreData>,
     overhead: NumInstructions,
     num_bytes: usize,
-) -> Result<(), anyhow::Error> {
+) -> Result<(), wasmtime::Error> {
     charge_for_system_api_call(caller, overhead, num_bytes).map_err(|e| process_err(caller, e))
 }
 
@@ -176,8 +175,13 @@ fn charge_direct_fee(
         instruction_counter = system_api.out_of_instructions(instruction_counter)?;
     }
 
+    // If the fee can't fit into an i64 without overflowing, we'll run out of instructions anyway (even with DTS) so just fail.
+    let fee = fee.get().try_into().map_err(|_| {
+        HypervisorError::InstructionLimitExceeded(NumInstructions::from(instruction_limit as u64))
+    })?;
+
     // Now we can subtract the fee and store the new instruction counter.
-    instruction_counter -= fee.get() as i64;
+    instruction_counter = instruction_counter.saturating_sub(fee);
     store_value(&num_instructions_global, instruction_counter, caller)?;
 
     // If the instruction counter became negative after subtracting the fee,
@@ -240,7 +244,7 @@ pub fn syscalls<
     fn with_system_api<T>(
         mut caller: &mut Caller<'_, StoreData>,
         f: impl Fn(&mut SystemApiImpl) -> HypervisorResult<T>,
-    ) -> Result<T, anyhow::Error> {
+    ) -> Result<T, wasmtime::Error> {
         caller
             .data_mut()
             .system_api_mut()
@@ -251,14 +255,14 @@ pub fn syscalls<
     fn with_error_handling<T>(
         caller: &mut Caller<'_, StoreData>,
         f: impl Fn(&mut Caller<'_, StoreData>) -> HypervisorResult<T>,
-    ) -> Result<T, anyhow::Error> {
+    ) -> Result<T, wasmtime::Error> {
         f(caller).map_err(|e| process_err(caller, e))
     }
 
     fn with_memory_and_system_api<T>(
         mut caller: &mut Caller<'_, StoreData>,
         f: impl Fn(&mut SystemApiImpl, &mut [u8]) -> HypervisorResult<T>,
-    ) -> Result<T, anyhow::Error> {
+    ) -> Result<T, wasmtime::Error> {
         caller
             .get_export(WASM_HEAP_MEMORY_NAME)
             .ok_or_else(|| HypervisorError::ToolchainContractViolation {
@@ -285,7 +289,7 @@ pub fn syscalls<
     fn debug_print_is_enabled(
         caller: &mut Caller<'_, StoreData>,
         feature_flags: &FeatureFlags,
-    ) -> Result<bool, anyhow::Error> {
+    ) -> Result<bool, wasmtime::Error> {
         match (
             feature_flags.rate_limiting_of_debug_prints,
             with_system_api(caller, |s| Ok(s.subnet_type()))?,
@@ -301,7 +305,7 @@ pub fn syscalls<
     fn logging_charge_bytes(
         caller: &mut Caller<'_, StoreData>,
         message_num_bytes: usize,
-    ) -> Result<usize, anyhow::Error> {
+    ) -> Result<usize, wasmtime::Error> {
         let byte_capacity = with_system_api(caller, |s| Ok(s.canister_log().byte_capacity()))?;
         let remaining_bytes = with_system_api(caller, |s| Ok(s.canister_log().remaining_bytes()))?;
         let allocated_num_bytes = message_num_bytes.min(byte_capacity);
@@ -338,9 +342,69 @@ pub fn syscalls<
                 charge_for_cpu(&mut caller, overhead::MSG_CALLER_SIZE)?;
                 with_system_api(&mut caller, |s| s.ic0_msg_caller_size()).and_then(|s| {
                     I::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0::msg_caller_size failed: {e}"))
+                        wasmtime::Error::msg(format!("ic0::msg_caller_size failed: {e}"))
                     })
                 })
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "msg_caller_info_data_copy", {
+            move |mut caller: Caller<'_, StoreData>, dst: I, offset: I, size: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
+                charge_for_cpu_and_mem(&mut caller, overhead::MSG_CALLER_INFO_DATA_COPY, size)?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_msg_caller_info_data_copy(dst, offset, size, memory)
+                })?;
+                Ok(())
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "msg_caller_info_data_size", {
+            move |mut caller: Caller<'_, StoreData>| {
+                charge_for_cpu(&mut caller, overhead::MSG_CALLER_INFO_DATA_SIZE)?;
+                with_system_api(&mut caller, |s| s.ic0_msg_caller_info_data_size()).and_then(|s| {
+                    I::try_from(s).map_err(|e| {
+                        wasmtime::Error::msg(format!("ic0::msg_caller_info_data_size failed: {e}"))
+                    })
+                })
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "msg_caller_info_signer_copy", {
+            move |mut caller: Caller<'_, StoreData>, dst: I, offset: I, size: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
+                charge_for_cpu_and_mem(&mut caller, overhead::MSG_CALLER_INFO_SIGNER_COPY, size)?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_msg_caller_info_signer_copy(dst, offset, size, memory)
+                })?;
+                Ok(())
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "msg_caller_info_signer_size", {
+            move |mut caller: Caller<'_, StoreData>| {
+                charge_for_cpu(&mut caller, overhead::MSG_CALLER_INFO_SIGNER_SIZE)?;
+                with_system_api(&mut caller, |s| s.ic0_msg_caller_info_signer_size()).and_then(
+                    |s| {
+                        I::try_from(s).map_err(|e| {
+                            wasmtime::Error::msg(format!(
+                                "ic0::msg_caller_info_signer_size failed: {e}"
+                            ))
+                        })
+                    },
+                )
             }
         })
         .unwrap();
@@ -351,7 +415,7 @@ pub fn syscalls<
                 charge_for_cpu(&mut caller, overhead::MSG_ARG_DATA_SIZE)?;
                 with_system_api(&mut caller, |s| s.ic0_msg_arg_data_size()).and_then(|s| {
                     I::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0::msg_arg_data_size failed: {e}"))
+                        wasmtime::Error::msg(format!("ic0::msg_arg_data_size failed: {e}"))
                     })
                 })
             }
@@ -379,7 +443,7 @@ pub fn syscalls<
                 charge_for_cpu(&mut caller, overhead::MSG_METHOD_NAME_SIZE)?;
                 with_system_api(&mut caller, |s| s.ic0_msg_method_name_size()).and_then(|s| {
                     I::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0::msg_method_name_size failed: {e}"))
+                        wasmtime::Error::msg(format!("ic0::msg_method_name_size failed: {e}"))
                     })
                 })
             }
@@ -468,7 +532,7 @@ pub fn syscalls<
                 charge_for_cpu(&mut caller, overhead::MSG_REJECT_MSG_SIZE)?;
                 with_system_api(&mut caller, |s| s.ic0_msg_reject_msg_size()).and_then(|s| {
                     I::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0_msg_reject_msg_size failed: {e}"))
+                        wasmtime::Error::msg(format!("ic0_msg_reject_msg_size failed: {e}"))
                     })
                 })
             }
@@ -496,7 +560,7 @@ pub fn syscalls<
                 charge_for_cpu(&mut caller, overhead::CANISTER_SELF_SIZE)?;
                 with_system_api(&mut caller, |s| s.ic0_canister_self_size()).and_then(|s| {
                     I::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0_canister_self_size failed: {e}"))
+                        wasmtime::Error::msg(format!("ic0_canister_self_size failed: {e}"))
                     })
                 })
             }
@@ -526,7 +590,7 @@ pub fn syscalls<
 
                     with_system_api(&mut caller, |s| s.ic0_env_var_count()).and_then(|s| {
                         I::try_from(s).map_err(|e| {
-                            anyhow::Error::msg(format!("ic0::env_var_count failed: {e}"))
+                            wasmtime::Error::msg(format!("ic0::env_var_count failed: {e}"))
                         })
                     })
                 }
@@ -541,7 +605,7 @@ pub fn syscalls<
                     charge_for_cpu(&mut caller, overhead::ENV_VAR_NAME_SIZE)?;
                     with_system_api(&mut caller, |s| s.ic0_env_var_name_size(index)).and_then(|s| {
                         I::try_from(s).map_err(|e| {
-                            anyhow::Error::msg(format!("ic0::env_var_name_size failed: {e}"))
+                            wasmtime::Error::msg(format!("ic0::env_var_name_size failed: {e}"))
                         })
                     })
                 }
@@ -598,7 +662,7 @@ pub fn syscalls<
                     })
                     .and_then(|s| {
                         I::try_from(s).map_err(|e| {
-                            anyhow::Error::msg(format!("ic0::env_var_value_size failed: {e}"))
+                            wasmtime::Error::msg(format!("ic0::env_var_value_size failed: {e}"))
                         })
                     })
                 }
@@ -641,7 +705,7 @@ pub fn syscalls<
                 let mut num_bytes = logging_charge_bytes(&mut caller, length)?;
                 let debug_print_is_enabled = debug_print_is_enabled(&mut caller, &feature_flags)?;
                 if debug_print_is_enabled {
-                    num_bytes += length;
+                    num_bytes = num_bytes.saturating_add(length);
                 }
                 charge_for_cpu_and_mem(&mut caller, overhead::DEBUG_PRINT, num_bytes)?;
                 let offset: usize = offset.try_into().expect("Failed to convert I to usize");
@@ -662,7 +726,7 @@ pub fn syscalls<
             move |mut caller: Caller<'_, StoreData>, offset: I, length: I| -> Result<(), _> {
                 let offset: usize = offset.try_into().expect("Failed to convert I to usize");
                 let length: usize = length.try_into().expect("Failed to convert I to usize");
-                let num_bytes = length + logging_charge_bytes(&mut caller, length)?;
+                let num_bytes = length.saturating_add(logging_charge_bytes(&mut caller, length)?);
                 charge_for_cpu_and_mem(&mut caller, overhead::TRAP, num_bytes)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_trap(offset, length, memory)
@@ -955,7 +1019,7 @@ pub fn syscalls<
                 charge_for_cpu(&mut caller, overhead::SUBNET_SELF_SIZE)?;
                 with_system_api(&mut caller, |s| s.ic0_subnet_self_size()).and_then(|s| {
                     I::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0::subnet_self_size failed: {e}"))
+                        wasmtime::Error::msg(format!("ic0::subnet_self_size failed: {e}"))
                     })
                 })
             }
@@ -1065,8 +1129,9 @@ pub fn syscalls<
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::ROOT_KEY_SIZE)?;
                 with_system_api(&mut caller, |s| s.ic0_root_key_size()).and_then(|s| {
-                    I::try_from(s)
-                        .map_err(|e| anyhow::Error::msg(format!("ic0::root_key_size failed: {e}")))
+                    I::try_from(s).map_err(|e| {
+                        wasmtime::Error::msg(format!("ic0::root_key_size failed: {e}"))
+                    })
                 })
             }
         })
@@ -1115,7 +1180,7 @@ pub fn syscalls<
                 charge_for_cpu(&mut caller, overhead::DATA_CERTIFICATE_SIZE)?;
                 with_system_api(&mut caller, |s| s.ic0_data_certificate_size()).and_then(|x| {
                     I::try_from(x).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0::data_certificate_size failed: {e}"))
+                        wasmtime::Error::msg(format!("ic0::data_certificate_size failed: {e}"))
                     })
                 })
             }
@@ -1166,7 +1231,7 @@ pub fn syscalls<
                     let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_mint_cycles128(Cycles::from_parts(amount_high, amount_low), dst, memory)
                 })
-                .map_err(|e| anyhow::Error::msg(format!("ic0_mint_cycles128 failed: {e}")))
+                .map_err(|e| wasmtime::Error::msg(format!("ic0_mint_cycles128 failed: {e}")))
             }
         })
         .unwrap();
@@ -1179,7 +1244,7 @@ pub fn syscalls<
                     let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cycles_burn128(Cycles::from_parts(amount_high, amount_low), dst, memory)
                 })
-                .map_err(|e| anyhow::Error::msg(format!("ic0_cycles_burn128 failed: {e}")))
+                .map_err(|e| wasmtime::Error::msg(format!("ic0_cycles_burn128 failed: {e}")))
             }
         })
         .unwrap();
@@ -1195,7 +1260,7 @@ pub fn syscalls<
                     let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cost_call(method_name_size, payload_size, dst, memory)
                 })
-                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_call failed: {e}")))
+                .map_err(|e| wasmtime::Error::msg(format!("ic0_cost_call failed: {e}")))
             }
         })
         .unwrap();
@@ -1208,7 +1273,7 @@ pub fn syscalls<
                     let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cost_create_canister(dst, memory)
                 })
-                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_create_canister failed: {e}")))
+                .map_err(|e| wasmtime::Error::msg(format!("ic0_cost_create_canister failed: {e}")))
             }
         })
         .unwrap();
@@ -1224,7 +1289,7 @@ pub fn syscalls<
                     let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cost_http_request(request_size, max_res_bytes, dst, memory)
                 })
-                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_http_request failed: {e}")))
+                .map_err(|e| wasmtime::Error::msg(format!("ic0_cost_http_request failed: {e}")))
             }
         })
         .unwrap();
@@ -1242,7 +1307,7 @@ pub fn syscalls<
                     let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cost_http_request_v2(params_src, params_size, dst, memory)
                 })
-                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_http_request_v2 failed: {e}")))
+                .map_err(|e| wasmtime::Error::msg(format!("ic0_cost_http_request_v2 failed: {e}")))
             }
         })
         .unwrap();
@@ -1257,7 +1322,7 @@ pub fn syscalls<
                     let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cost_sign_with_ecdsa(src, size, curve, dst, memory)
                 })
-                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_sign_with_ecdsa failed: {e}")))
+                .map_err(|e| wasmtime::Error::msg(format!("ic0_cost_sign_with_ecdsa failed: {e}")))
             }
         })
         .unwrap();
@@ -1272,7 +1337,9 @@ pub fn syscalls<
                     let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cost_sign_with_schnorr(src, size, algorithm, dst, memory)
                 })
-                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_sign_with_schnorr failed: {e}")))
+                .map_err(|e| {
+                    wasmtime::Error::msg(format!("ic0_cost_sign_with_schnorr failed: {e}"))
+                })
             }
         })
         .unwrap();
@@ -1287,7 +1354,7 @@ pub fn syscalls<
                     let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cost_vetkd_derive_key(src, size, curve, dst, memory)
                 })
-                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_vetkd_derive_key failed: {e}")))
+                .map_err(|e| wasmtime::Error::msg(format!("ic0_cost_vetkd_derive_key failed: {e}")))
             }
         })
         .unwrap();

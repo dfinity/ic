@@ -202,7 +202,6 @@ def main():
     # ownership will be preserved while unpacking (see below).
     prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, limit_prefix, extra_files)
     strip_files(fs_basedir, fakeroot_statefile, strip_paths)
-    subprocess.run(["sync"], check=True)
 
     # Now build the basic filesystem image. Wrap again in fakeroot
     # so correct permissions are read for all files etc.
@@ -256,8 +255,6 @@ def main():
         e2fsdroid_args += ["-S", file_contexts_file]
     e2fsdroid_args += [image_file]
     subprocess.run(e2fsdroid_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
-
-    subprocess.run(["sync"], check=True)
 
     # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
     # If dflate is ever misbehaving, it can be replaced with:

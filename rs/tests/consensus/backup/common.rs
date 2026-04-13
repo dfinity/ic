@@ -31,7 +31,7 @@ use ic_consensus_system_test_utils::upgrade::bless_replica_version;
 use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
     ssh_access::{
-        AuthMean, generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
+        AuthMean, generate_key_strings, get_update_subnet_payload_with_keys, update_subnet_record,
         wait_until_authentication_is_granted,
     },
     upgrade::{
@@ -64,7 +64,7 @@ use std::{
 };
 use std::{fs::File, time::Duration};
 
-const DKG_INTERVAL: u64 = 9;
+const DKG_INTERVAL: u64 = 29;
 const SUBNET_SIZE: usize = 4;
 const DIVERGENCE_LOG_STR: &str = "The state hash of the CUP at height ";
 
@@ -106,7 +106,7 @@ pub fn test(env: TestEnv) {
     // Bless target version
     let sha256 = get_guestos_update_img_sha256();
     let upgrade_url = get_guestos_update_img_url();
-    let guest_launch_measurements = get_guestos_launch_measurements();
+    let guest_launch_measurements = get_guestos_update_launch_measurements();
     block_on(bless_replica_version(
         &nns_node,
         &target_version,
@@ -147,28 +147,22 @@ pub fn test(env: TestEnv) {
 
     // Copy all the binaries needed for the replay of the current version in order to avoid downloading them
     copy_file(
-        &get_dependency_path(std::env::var("IC_REPLAY_PATH").expect("IC_REPLAY_PATH not set")),
+        &get_dependency_path_from_env("IC_REPLAY_PATH"),
         &backup_binaries_dir,
         "ic-replay",
     );
     copy_file(
-        &get_dependency_path(
-            std::env::var("SANDBOX_LAUNCHER_PATH").expect("SANDBOX_LAUNCHER_PATH not set"),
-        ),
+        &get_dependency_path_from_env("SANDBOX_LAUNCHER_PATH"),
         &backup_binaries_dir,
         "sandbox_launcher",
     );
     copy_file(
-        &get_dependency_path(
-            std::env::var("CANISTER_SANDBOX_PATH").expect("CANISTER_SANDBOX_PATH not set"),
-        ),
+        &get_dependency_path_from_env("CANISTER_SANDBOX_PATH"),
         &backup_binaries_dir,
         "canister_sandbox",
     );
     copy_file(
-        &get_dependency_path(
-            std::env::var("COMPILER_SANDBOX_PATH").expect("COMPILER_SANDBOX_PATH not set"),
-        ),
+        &get_dependency_path_from_env("COMPILER_SANDBOX_PATH"),
         &backup_binaries_dir,
         "compiler_sandbox",
     );
@@ -217,7 +211,8 @@ pub fn test(env: TestEnv) {
     });
 
     info!(log, "Update the registry with the backup key");
-    let payload = get_updatesubnetpayload_with_keys(subnet_id, None, Some(vec![backup_public_key]));
+    let payload =
+        get_update_subnet_payload_with_keys(subnet_id, None, Some(vec![backup_public_key]));
     block_on(update_subnet_record(nns_node.get_public_url(), payload));
     let backup_mean = AuthMean::PrivateKey(backup_private_key);
     wait_until_authentication_is_granted(&log, &node_ip, "backup", &backup_mean);
@@ -268,8 +263,7 @@ pub fn test(env: TestEnv) {
     write!(f, "{config_str}").expect("Should be able to write the config file");
 
     info!(log, "Start the backup process in a separate thread");
-    let ic_backup_path =
-        &get_dependency_path(std::env::var("IC_BACKUP_PATH").expect("IC_BACKUP_PATH not set"));
+    let ic_backup_path = &get_dependency_path_from_env("IC_BACKUP_PATH");
     let mut command = Command::new(ic_backup_path);
     command
         .arg("--config-file")
@@ -355,17 +349,26 @@ pub fn test(env: TestEnv) {
         some_checkpoint_dir(&backup_dir, &subnet_id).expect("Checkpoint doesn't exist");
 
     let canister_dir = checkpoint.join("canister_states").join(canister_id_hex);
-    let memory_artifact_path = fs::read_dir(canister_dir)
+    // Remove ALL vmemory_0 overlays to guarantee the state hash changes.
+    // A single arbitrary overlay might only delete outdated pages. If there is
+    // a merge in the next checkpoint interval, the deleted overlay might not affect
+    // the next checkpoint's hash. It would likely be sufficient to just delete the
+    // newest overlay, but that requires more assumptions on how LSMT works.
+    let memory_artifact_paths: Vec<PathBuf> = fs::read_dir(canister_dir)
         .expect("Should read canister dir")
         .flatten()
         .map(|entry| entry.path())
-        .find(|path| path.display().to_string().contains("vmemory_0"))
-        .expect("Should find file");
-
-    assert!(memory_artifact_path.exists());
-    info!(log, "Removing memory file: {:?}", memory_artifact_path);
-    fs::remove_file(&memory_artifact_path).unwrap();
-    assert!(!memory_artifact_path.exists());
+        .filter(|path| path.display().to_string().contains("vmemory_0"))
+        .collect();
+    assert!(
+        !memory_artifact_paths.is_empty(),
+        "Should find vmemory_0 files"
+    );
+    for path in &memory_artifact_paths {
+        info!(log, "Removing memory file: {:?}", path);
+        fs::remove_file(path).unwrap();
+        assert!(!path.exists());
+    }
 
     info!(log, "Start again the backup process in a separate thread");
     let mut command = Command::new(ic_backup_path);
@@ -479,7 +482,7 @@ fn copy_file(binary_path: &Path, backup_binaries_dir: &Path, file_name: &str) {
 
 fn highest_dir_entry(dir: &PathBuf, radix: u32) -> u64 {
     if !dir.exists() {
-        return 0u64;
+        return 0_u64;
     }
     match std::fs::read_dir(dir) {
         Ok(file_list) => file_list
@@ -494,7 +497,7 @@ fn highest_dir_entry(dir: &PathBuf, radix: u32) -> u64 {
                     .unwrap_or_else(|_| "0".to_string())
             })
             .map(|s| u64::from_str_radix(&s, radix).unwrap_or(0))
-            .fold(0u64, |a: u64, b: u64| -> u64 { a.max(b) }),
+            .fold(0_u64, |a: u64, b: u64| -> u64 { a.max(b) }),
         Err(_) => 0,
     }
 }

@@ -711,10 +711,14 @@ fn make_update_call(agent: &Agent, canister_id: &Principal) -> (RequestId, Vec<u
         .unwrap();
 
     let request_id = update.request_id;
-    let CallResponse::Response(result) =
-        block_on(agent.update_signed(*canister_id, update.signed_update)).unwrap()
-    else {
-        panic!("Failed to get response");
+    let response = block_on(agent.update_signed(*canister_id, update.signed_update)).unwrap();
+
+    let result = match response {
+        CallResponse::Response(result) => result,
+        CallResponse::Poll(request_id) => {
+            let (result, _cert) = block_on(agent.wait(&request_id, *canister_id)).unwrap();
+            result
+        }
     };
 
     (request_id, result)

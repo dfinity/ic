@@ -110,6 +110,33 @@ fn convert_install_code(item: &pb::InstallCode) -> api::InstallCode {
     }
 }
 
+/// Why this (and similar functions) exist: convert_action takes a stored Action
+/// (i.e. a pb object) by reference and converts it to a response API type.
+/// For most action types, the conversion is done via a.clone().into(). The same thing
+/// should NOT be done for CreateCanisterAndInstallCode (and similar types), because
+/// it would be very wasteful. The waste comes from cloning wasm_module, which gets
+/// immediately dropped by into.
+fn convert_create_canister_and_install_code(
+    item: &pb::CreateCanisterAndInstallCode,
+) -> api::CreateCanisterAndInstallCode {
+    let pb::CreateCanisterAndInstallCode {
+        host_subnet_id,
+        canister_settings,
+        wasm_module,
+        install_arg_hash,
+
+        // Not used.
+        install_arg: _,
+    } = item;
+
+    api::CreateCanisterAndInstallCode {
+        host_subnet_id: *host_subnet_id,
+        canister_settings: canister_settings.clone().map(|x| x.into()),
+        wasm_module_hash: wasm_module.as_ref().and_then(|w| w.hash.clone()),
+        install_arg_hash: install_arg_hash.clone(),
+    }
+}
+
 fn convert_ledger_parameters(
     item: &pb::create_service_nervous_system::LedgerParameters,
     omit_large_fields: bool,
@@ -163,7 +190,7 @@ fn convert_create_service_nervous_system(
     let dapp_canisters = dapp_canisters.clone();
     let initial_token_distribution = initial_token_distribution.clone().map(|x| x.into());
     let swap_parameters = swap_parameters.clone().map(|x| x.into());
-    let governance_parameters = governance_parameters.map(|x| x.into());
+    let governance_parameters = governance_parameters.clone().map(|x| x.into());
 
     let logo = if omit_large_fields {
         None
@@ -249,6 +276,11 @@ fn convert_action(
 
         // The action types with potentially large fields need to be converted in a way that avoids
         // cloning the action first.
+        pb::proposal::Action::CreateCanisterAndInstallCode(v) => {
+            api::proposal::Action::CreateCanisterAndInstallCode(
+                convert_create_canister_and_install_code(v),
+            )
+        }
         pb::proposal::Action::InstallCode(v) => {
             api::proposal::Action::InstallCode(convert_install_code(v))
         }
@@ -531,6 +563,10 @@ pub(crate) fn proposal_data_to_info(
     let reward_event_round = data.reward_event_round;
     let derived_proposal_information = data.derived_proposal_information.clone().map(|x| x.into());
     let total_potential_voting_power = data.total_potential_voting_power;
+    let success_value = data
+        .success_value
+        .clone()
+        .map(|success_value| success_value.into());
 
     let proposal = data
         .proposal
@@ -559,6 +595,7 @@ pub(crate) fn proposal_data_to_info(
         deadline_timestamp_seconds,
         derived_proposal_information,
         total_potential_voting_power,
+        success_value,
     }
 }
 
@@ -566,9 +603,9 @@ pub(crate) fn proposal_data_to_info(
 mod tests {
     use super::*;
 
-    use crate::{
-        pb::v1::{CreateServiceNervousSystem, create_service_nervous_system::LedgerParameters},
-        proposals::self_describing::LocallyDescribableProposalAction,
+    use crate::pb::v1::{
+        CreateServiceNervousSystem, SelfDescribingProposalAction,
+        create_service_nervous_system::LedgerParameters,
     };
 
     use ic_base_types::PrincipalId;
@@ -721,7 +758,11 @@ mod tests {
             }),
             ..Default::default()
         };
-        let self_describing_action = create_service_nervous_system.to_self_describing_action();
+        let self_describing_action = SelfDescribingProposalAction {
+            type_name: "Create Service Nervous System (SNS)".to_string(),
+            type_description: "Create a new Service Nervous System (SNS).".to_string(),
+            value: Some(pb::SelfDescribingValue::from(create_service_nervous_system)),
+        };
 
         // Sanity check that the self-describing value does have logos when we don't omit them.
         let self_describing_value_with_logos =

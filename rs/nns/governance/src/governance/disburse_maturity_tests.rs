@@ -22,7 +22,7 @@ static DEFAULT_MATURITY_MODULATION_BASIS_POINTS: i32 = 100; // 1%
 fn create_neuron_builder() -> NeuronBuilder {
     NeuronBuilder::new(
         NeuronId { id: 1 },
-        icp_ledger::Subaccount([1u8; 32]),
+        icp_ledger::Subaccount([1_u8; 32]),
         CONTROLLER,
         DissolveStateAndAge::DissolvingOrDissolved {
             when_dissolved_timestamp_seconds: NOW_SECONDS + ONE_DAY_SECONDS,
@@ -89,7 +89,7 @@ fn test_initiate_maturity_disbursement_to_provided_account_successful() {
                 to_account: Some(Account {
                     owner: Some(PrincipalId::new_user_test_id(2)),
                     subaccount: Some(Subaccount {
-                        subaccount: vec![2u8; 32]
+                        subaccount: vec![2_u8; 32]
                     }),
                 }),
                 to_account_identifier: None,
@@ -112,7 +112,7 @@ fn test_initiate_maturity_disbursement_to_provided_account_successful() {
             destination: Some(Destination::AccountToDisburseTo(Account {
                 owner: Some(PrincipalId::new_user_test_id(2)),
                 subaccount: Some(Subaccount {
-                    subaccount: vec![2u8; 32]
+                    subaccount: vec![2_u8; 32]
                 }),
             })),
             timestamp_of_disbursement_seconds: NOW_SECONDS,
@@ -206,7 +206,7 @@ fn test_initiate_maturity_disbursement_account_identifier_invalid() {
                 percentage_to_disburse: 50,
                 to_account: None,
                 to_account_identifier: Some(AccountIdentifierProto {
-                    hash: vec![1u8; 1000],
+                    hash: vec![1_u8; 1000],
                 }),
             },
             NOW_SECONDS,
@@ -233,11 +233,11 @@ fn test_initiate_maturity_disbursement_both_account_and_account_identifier_inval
                 to_account: Some(Account {
                     owner: Some(PrincipalId::new_user_test_id(2)),
                     subaccount: Some(Subaccount {
-                        subaccount: vec![2u8; 32]
+                        subaccount: vec![2_u8; 32]
                     }),
                 }),
                 to_account_identifier: Some(AccountIdentifierProto {
-                    hash: vec![3u8; 32],
+                    hash: vec![3_u8; 32],
                 }),
             },
             NOW_SECONDS,
@@ -342,7 +342,7 @@ fn test_initiate_maturity_disbursement_neuron_invalid_destination() {
                 to_account: Some(Account {
                     owner: Some(PrincipalId::new_user_test_id(2)),
                     subaccount: Some(Subaccount {
-                        subaccount: vec![1u8; 33],
+                        subaccount: vec![1_u8; 33],
                     }),
                 }),
                 to_account_identifier: None,
@@ -442,12 +442,10 @@ fn test_initiate_maturity_disbursement_too_many_disbursements() {
 fn test_initiate_maturity_disbursement_disbursement_too_small() {
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
     let neuron = create_neuron_builder()
-        .with_maturity_e8s_equivalent(10_500_000_000)
+        .with_maturity_e8s_equivalent(9_900_000_000)
         .build();
     neuron_store.add_neuron(neuron).unwrap();
 
-    // 1% of 10_500_000_000 is 105_000_000, with -5% maturity modulation, the worst case
-    // disbursement is 105_000_000 * 0.95 = 99_750_000 < 1e8.
     assert_eq!(
         initiate_maturity_disbursement(
             &mut neuron_store,
@@ -461,9 +459,8 @@ fn test_initiate_maturity_disbursement_disbursement_too_small() {
             NOW_SECONDS,
         ),
         Err(InitiateMaturityDisbursementError::DisbursementTooSmall {
-            disbursement_maturity_e8s: 105_000_000,
+            disbursement_maturity_e8s: 99_000_000,
             minimum_disbursement_e8s: 100_000_000,
-            worst_case_maturity_modulation_basis_points: -500,
         })
     );
 }

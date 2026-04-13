@@ -27,10 +27,23 @@ pub fn do_decode(path: PathBuf) -> Result<(), String> {
         .ok_or_else(|| format!("failed to convert path {} to UTF-8 string", path.display()))?;
     match fname {
         SYSTEM_METADATA_FILE => {
-            display_proto_with_error_metric::<pb_metadata::SystemMetadata, SystemMetadata>(
-                path.clone(),
-                &dummy_metrics as &dyn CheckpointLoadingMetrics,
-            )
+            // display_proto_with_error_metric::<pb_metadata::SystemMetadata, SystemMetadata>(
+            //     path.clone(),
+            //     &dummy_metrics as &dyn CheckpointLoadingMetrics,
+            // )
+            let f: ProtoFileWith<pb_metadata::SystemMetadata, ReadOnly> = path.into();
+            let pb = f.deserialize().map_err(|e| format!("{e:?}"))?;
+            let metrics = &dummy_metrics as &dyn CheckpointLoadingMetrics;
+            let t = SystemMetadata::try_from((pb, Default::default(), metrics)).map_err(|e| {
+                format!(
+                    "failed to decode rust type {} from protobuf {}: {}",
+                    std::any::type_name::<SystemMetadata>(),
+                    std::any::type_name::<pb_metadata::SystemMetadata>(),
+                    e
+                )
+            })?;
+            println!("{t:#?}");
+            Ok(())
         }
         INGRESS_HISTORY_FILE => {
             display_proto::<pb_ingress::IngressHistoryState, IngressHistoryState>(path.clone())

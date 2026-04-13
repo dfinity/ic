@@ -46,3 +46,7 @@ path = "launch_single_host.rs"
 [[bin]]
 name = "ic-systest-kill-start"
 path = "kill_start_test.rs"
+
+[[bin]]
+name = "guestos-no-failed-systemd-units"
+path = "guestos_no_failed_systemd_units.rs"

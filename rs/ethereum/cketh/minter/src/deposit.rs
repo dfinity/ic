@@ -163,7 +163,7 @@ pub async fn update_last_observed_block_number() -> Option<BlockNumber> {
     match read_state(rpc_client)
         .get_block_by_number(block_height.clone())
         .with_cycles(MIN_ATTACHED_CYCLES)
-        .send()
+        .try_send()
         .await
         .reduce_with_strategy(NoReduction)
     {
@@ -257,7 +257,7 @@ where
             .with_response_size_estimate(
                 ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE + HEADER_SIZE_LIMIT,
             )
-            .send()
+            .try_send()
             .await
             .reduce_with_strategy(NoReduction)
             .map(<S::Parser>::parse_all_logs);

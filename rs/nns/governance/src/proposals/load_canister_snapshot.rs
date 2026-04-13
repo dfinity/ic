@@ -1,6 +1,8 @@
 use crate::{
     pb::v1::{GovernanceError, LoadCanisterSnapshot, Topic, governance_error::ErrorType},
-    proposals::{call_canister::CallCanister, topic_to_manage_canister},
+    proposals::{
+        call_canister::CallCanister, self_describing::DocumentedAction, topic_to_manage_canister,
+    },
 };
 use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -9,13 +11,6 @@ use ic_nns_handler_root_interface::LoadCanisterSnapshotRequest;
 
 impl LoadCanisterSnapshot {
     pub fn validate(&self) -> Result<(), GovernanceError> {
-        if !crate::are_canister_snapshot_proposals_enabled() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "LoadCanisterSnapshot proposals are not enabled yet.",
-            ));
-        }
-
         let Self {
             canister_id,
             snapshot_id,
@@ -50,6 +45,9 @@ impl LoadCanisterSnapshot {
 }
 
 impl CallCanister for LoadCanisterSnapshot {
+    // TODO: Use a typed reply instead of () so that the result is recorded.
+    type Reply = ();
+
     fn canister_and_function(&self) -> Result<(CanisterId, &str), GovernanceError> {
         Ok((ROOT_CANISTER_ID, "load_canister_snapshot"))
     }
@@ -90,3 +88,15 @@ fn validate_canister_id(
 fn defects_to_governance_error(defects: Vec<String>) -> GovernanceError {
     crate::proposals::invalid_proposal_error(&defects.join("; "))
 }
+
+impl DocumentedAction for LoadCanisterSnapshot {
+    const NAME: &'static str = "Load Canister Snapshot";
+    const DESCRIPTION: &'static str = "Load a snapshot created by a Take Canister Snapshot \
+        proposal into a canister controlled by the NNS. Loading a snapshot replaces the \
+        canister's current stable memory, heap memory, data, and Wasm module with what was saved \
+        in the snapshot, rolling the canister back to that earlier state.";
+}
+
+#[cfg(test)]
+#[path = "load_canister_snapshot_tests.rs"]
+mod tests;

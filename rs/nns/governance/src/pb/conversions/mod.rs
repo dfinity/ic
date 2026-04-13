@@ -1,13 +1,15 @@
-use crate::pb::proposal_conversions::{ProposalDisplayOptions, convert_proposal};
-use crate::pb::v1 as pb;
+use crate::pb::{
+    proposal_conversions::{ProposalDisplayOptions, convert_proposal},
+    v1::{self as pb, successful_proposal_execution_value::ProposalType},
+};
 
 use ic_crypto_sha2::Sha256;
 use ic_nns_governance_api as api;
-use ic_protobuf::registry::replica_version::v1::{
-    GuestLaunchMeasurement as PbGuestLaunchMeasurement,
-    GuestLaunchMeasurementMetadata as PbGuestLaunchMeasurementMetadata,
-    GuestLaunchMeasurements as PbGuestLaunchMeasurements,
+use ic_nns_governance_conversions::{
+    convert_guest_launch_measurements_from_api_to_pb,
+    convert_guest_launch_measurements_from_pb_to_api,
 };
+use ic_nns_handler_root_interface as root;
 
 #[cfg(test)]
 mod tests;
@@ -463,6 +465,9 @@ impl From<api::proposal::Action> for pb::proposal::Action {
             api::proposal::Action::LoadCanisterSnapshot(v) => {
                 pb::proposal::Action::LoadCanisterSnapshot(v.into())
             }
+            api::proposal::Action::CreateCanisterAndInstallCode(v) => {
+                pb::proposal::Action::CreateCanisterAndInstallCode(v.into())
+            }
         }
     }
 }
@@ -520,6 +525,9 @@ impl From<api::ProposalActionRequest> for pb::proposal::Action {
             }
             api::ProposalActionRequest::LoadCanisterSnapshot(v) => {
                 pb::proposal::Action::LoadCanisterSnapshot(v.into())
+            }
+            api::ProposalActionRequest::CreateCanisterAndInstallCode(v) => {
+                pb::proposal::Action::CreateCanisterAndInstallCode(v.into())
             }
         }
     }
@@ -1481,8 +1489,9 @@ impl From<api::ProposalData> for pb::ProposalData {
             neurons_fund_data: item.neurons_fund_data.map(|x| x.into()),
             total_potential_voting_power: item.total_potential_voting_power,
             topic: item.topic,
-            // This is not intended to be initialized from outside of canister.
+            // These are not intended to be initialized from outside of canister.
             previous_ballots_timestamp_seconds: None,
+            success_value: None,
         }
     }
 }
@@ -1758,6 +1767,65 @@ impl From<api::DerivedProposalInformation> for pb::DerivedProposalInformation {
     fn from(item: api::DerivedProposalInformation) -> Self {
         Self {
             swap_background_information: item.swap_background_information.map(|x| x.into()),
+        }
+    }
+}
+
+impl From<pb::SuccessfulProposalExecutionValue> for api::SuccessfulProposalExecutionValue {
+    fn from(item: pb::SuccessfulProposalExecutionValue) -> Self {
+        match item.proposal_type {
+            Some(ProposalType::CreateCanisterAndInstallCode(ok)) => {
+                api::SuccessfulProposalExecutionValue::CreateCanisterAndInstallCode(ok.into())
+            }
+            None => {
+                // This shouldn't happen, but if it does, we need a fallback.
+                // Use a CreateCanisterAndInstallCode with None canister_id.
+                api::SuccessfulProposalExecutionValue::CreateCanisterAndInstallCode(
+                    api::CreateCanisterAndInstallCodeOk { canister_id: None },
+                )
+            }
+        }
+    }
+}
+
+impl From<pb::CreateCanisterAndInstallCodeOk> for api::CreateCanisterAndInstallCodeOk {
+    fn from(item: pb::CreateCanisterAndInstallCodeOk) -> Self {
+        Self {
+            canister_id: item.canister_id,
+        }
+    }
+}
+
+impl From<root::CreateCanisterAndInstallCodeOk> for pb::CreateCanisterAndInstallCodeOk {
+    fn from(ok: root::CreateCanisterAndInstallCodeOk) -> Self {
+        Self {
+            canister_id: Some(ok.canister_id),
+        }
+    }
+}
+
+/// This is not actually used. It is just needed to satisfy some `where` clause
+/// of perform_call_canister.
+impl From<()> for pb::SuccessfulProposalExecutionValue {
+    fn from(_: ()) -> Self {
+        Self {
+            proposal_type: None,
+        }
+    }
+}
+
+impl From<root::CreateCanisterAndInstallCodeOk> for pb::SuccessfulProposalExecutionValue {
+    fn from(ok: root::CreateCanisterAndInstallCodeOk) -> Self {
+        Self::from(pb::CreateCanisterAndInstallCodeOk::from(ok))
+    }
+}
+
+/// This is an "upgrade" conversion.
+/// I.e. if you have enum E { A(A) }, then, you can upgrade A to E.
+impl From<pb::CreateCanisterAndInstallCodeOk> for pb::SuccessfulProposalExecutionValue {
+    fn from(ok: pb::CreateCanisterAndInstallCodeOk) -> Self {
+        Self {
+            proposal_type: Some(ProposalType::CreateCanisterAndInstallCode(ok)),
         }
     }
 }
@@ -2446,6 +2514,7 @@ impl From<pb::create_service_nervous_system::GovernanceParameters>
             neuron_maximum_age_for_age_bonus: item.neuron_maximum_age_for_age_bonus,
             neuron_maximum_age_bonus: item.neuron_maximum_age_bonus,
             voting_reward_parameters: item.voting_reward_parameters.map(|x| x.into()),
+            custom_proposal_criticality: item.custom_proposal_criticality.map(|x| x.into()),
         }
     }
 }
@@ -2465,6 +2534,7 @@ impl From<api::create_service_nervous_system::GovernanceParameters>
             neuron_maximum_age_for_age_bonus: item.neuron_maximum_age_for_age_bonus,
             neuron_maximum_age_bonus: item.neuron_maximum_age_bonus,
             voting_reward_parameters: item.voting_reward_parameters.map(|x| x.into()),
+            custom_proposal_criticality: item.custom_proposal_criticality.map(|x| x.into()),
         }
     }
 }
@@ -2492,6 +2562,30 @@ impl From<api::create_service_nervous_system::governance_parameters::VotingRewar
             initial_reward_rate: item.initial_reward_rate,
             final_reward_rate: item.final_reward_rate,
             reward_rate_transition_duration: item.reward_rate_transition_duration,
+        }
+    }
+}
+impl From<pb::create_service_nervous_system::governance_parameters::CustomProposalCriticality>
+    for api::create_service_nervous_system::governance_parameters::CustomProposalCriticality
+{
+    fn from(
+        item: pb::create_service_nervous_system::governance_parameters::CustomProposalCriticality,
+    ) -> Self {
+        Self {
+            additional_critical_native_action_ids: Some(item.additional_critical_native_action_ids),
+        }
+    }
+}
+impl From<api::create_service_nervous_system::governance_parameters::CustomProposalCriticality>
+    for pb::create_service_nervous_system::governance_parameters::CustomProposalCriticality
+{
+    fn from(
+        item: api::create_service_nervous_system::governance_parameters::CustomProposalCriticality,
+    ) -> Self {
+        Self {
+            additional_critical_native_action_ids: item
+                .additional_critical_native_action_ids
+                .unwrap_or_default(),
         }
     }
 }
@@ -2707,70 +2801,6 @@ impl From<api::BlessAlternativeGuestOsVersion> for pb::BlessAlternativeGuestOsVe
     }
 }
 
-fn convert_guest_launch_measurements_from_pb_to_api(
-    item: PbGuestLaunchMeasurements,
-) -> api::GuestLaunchMeasurements {
-    api::GuestLaunchMeasurements {
-        guest_launch_measurements: Some(
-            item.guest_launch_measurements
-                .into_iter()
-                .map(convert_guest_launch_measurement_from_pb_to_api)
-                .collect(),
-        ),
-    }
-}
-
-fn convert_guest_launch_measurements_from_api_to_pb(
-    item: api::GuestLaunchMeasurements,
-) -> PbGuestLaunchMeasurements {
-    PbGuestLaunchMeasurements {
-        guest_launch_measurements: item
-            .guest_launch_measurements
-            .unwrap_or_default()
-            .into_iter()
-            .map(convert_guest_launch_measurement_from_api_to_pb)
-            .collect(),
-    }
-}
-
-fn convert_guest_launch_measurement_from_pb_to_api(
-    item: PbGuestLaunchMeasurement,
-) -> api::GuestLaunchMeasurement {
-    api::GuestLaunchMeasurement {
-        measurement: Some(item.measurement),
-        metadata: item
-            .metadata
-            .map(convert_guest_launch_measurement_metadata_from_pb_to_api),
-    }
-}
-
-fn convert_guest_launch_measurement_from_api_to_pb(
-    item: api::GuestLaunchMeasurement,
-) -> PbGuestLaunchMeasurement {
-    PbGuestLaunchMeasurement {
-        measurement: item.measurement.unwrap_or_default(),
-        metadata: item
-            .metadata
-            .map(convert_guest_launch_measurement_metadata_from_api_to_pb),
-    }
-}
-
-fn convert_guest_launch_measurement_metadata_from_pb_to_api(
-    item: PbGuestLaunchMeasurementMetadata,
-) -> api::GuestLaunchMeasurementMetadata {
-    api::GuestLaunchMeasurementMetadata {
-        kernel_cmdline: item.kernel_cmdline,
-    }
-}
-
-fn convert_guest_launch_measurement_metadata_from_api_to_pb(
-    item: api::GuestLaunchMeasurementMetadata,
-) -> PbGuestLaunchMeasurementMetadata {
-    PbGuestLaunchMeasurementMetadata {
-        kernel_cmdline: item.kernel_cmdline,
-    }
-}
-
 impl From<pb::LoadCanisterSnapshot> for api::LoadCanisterSnapshot {
     fn from(item: pb::LoadCanisterSnapshot) -> Self {
         Self {
@@ -2788,10 +2818,8 @@ impl From<api::LoadCanisterSnapshot> for pb::LoadCanisterSnapshot {
     }
 }
 
-impl From<pb::update_canister_settings::CanisterSettings>
-    for api::update_canister_settings::CanisterSettings
-{
-    fn from(item: pb::update_canister_settings::CanisterSettings) -> Self {
+impl From<pb::CanisterSettings> for api::CanisterSettings {
+    fn from(item: pb::CanisterSettings) -> Self {
         Self {
             controllers: item.controllers.map(|x| x.into()),
             compute_allocation: item.compute_allocation,
@@ -2800,14 +2828,13 @@ impl From<pb::update_canister_settings::CanisterSettings>
             log_visibility: item.log_visibility,
             wasm_memory_limit: item.wasm_memory_limit,
             wasm_memory_threshold: item.wasm_memory_threshold,
+            snapshot_visibility: item.snapshot_visibility,
         }
     }
 }
 
-impl From<api::update_canister_settings::CanisterSettings>
-    for pb::update_canister_settings::CanisterSettings
-{
-    fn from(item: api::update_canister_settings::CanisterSettings) -> Self {
+impl From<api::CanisterSettings> for pb::CanisterSettings {
+    fn from(item: api::CanisterSettings) -> Self {
         Self {
             controllers: item.controllers.map(|x| x.into()),
             compute_allocation: item.compute_allocation,
@@ -2816,62 +2843,112 @@ impl From<api::update_canister_settings::CanisterSettings>
             log_visibility: item.log_visibility,
             wasm_memory_limit: item.wasm_memory_limit,
             wasm_memory_threshold: item.wasm_memory_threshold,
+            snapshot_visibility: item.snapshot_visibility,
         }
     }
 }
 
-impl From<pb::update_canister_settings::Controllers>
-    for api::update_canister_settings::Controllers
-{
-    fn from(item: pb::update_canister_settings::Controllers) -> Self {
+impl From<pb::canister_settings::Controllers> for api::canister_settings::Controllers {
+    fn from(item: pb::canister_settings::Controllers) -> Self {
         Self {
             controllers: item.controllers,
         }
     }
 }
 
-impl From<api::update_canister_settings::Controllers>
-    for pb::update_canister_settings::Controllers
-{
-    fn from(item: api::update_canister_settings::Controllers) -> Self {
+impl From<api::canister_settings::Controllers> for pb::canister_settings::Controllers {
+    fn from(item: api::canister_settings::Controllers) -> Self {
         Self {
             controllers: item.controllers,
         }
     }
 }
 
-impl From<pb::update_canister_settings::LogVisibility>
-    for api::update_canister_settings::LogVisibility
-{
-    fn from(item: pb::update_canister_settings::LogVisibility) -> Self {
+impl From<pb::canister_settings::LogVisibility> for api::canister_settings::LogVisibility {
+    fn from(item: pb::canister_settings::LogVisibility) -> Self {
         match item {
-            pb::update_canister_settings::LogVisibility::Unspecified => {
-                api::update_canister_settings::LogVisibility::Unspecified
+            pb::canister_settings::LogVisibility::Unspecified => {
+                api::canister_settings::LogVisibility::Unspecified
             }
-            pb::update_canister_settings::LogVisibility::Controllers => {
-                api::update_canister_settings::LogVisibility::Controllers
+            pb::canister_settings::LogVisibility::Controllers => {
+                api::canister_settings::LogVisibility::Controllers
             }
-            pb::update_canister_settings::LogVisibility::Public => {
-                api::update_canister_settings::LogVisibility::Public
+            pb::canister_settings::LogVisibility::Public => {
+                api::canister_settings::LogVisibility::Public
             }
         }
     }
 }
 
-impl From<api::update_canister_settings::LogVisibility>
-    for pb::update_canister_settings::LogVisibility
-{
-    fn from(item: api::update_canister_settings::LogVisibility) -> Self {
+impl From<api::canister_settings::LogVisibility> for pb::canister_settings::LogVisibility {
+    fn from(item: api::canister_settings::LogVisibility) -> Self {
         match item {
-            api::update_canister_settings::LogVisibility::Unspecified => {
-                pb::update_canister_settings::LogVisibility::Unspecified
+            api::canister_settings::LogVisibility::Unspecified => {
+                pb::canister_settings::LogVisibility::Unspecified
             }
-            api::update_canister_settings::LogVisibility::Controllers => {
-                pb::update_canister_settings::LogVisibility::Controllers
+            api::canister_settings::LogVisibility::Controllers => {
+                pb::canister_settings::LogVisibility::Controllers
             }
-            api::update_canister_settings::LogVisibility::Public => {
-                pb::update_canister_settings::LogVisibility::Public
+            api::canister_settings::LogVisibility::Public => {
+                pb::canister_settings::LogVisibility::Public
             }
+        }
+    }
+}
+
+// The api type here (the conversion destination) is a response type (per the
+// Widget (response) vs. WidgetRequest convention described at the top of
+// api/src/types.rs), and thus, it doesn't have the whole wasm (nor install arg),
+// but rather, just the hashes of those.
+impl From<pb::CreateCanisterAndInstallCode> for api::CreateCanisterAndInstallCode {
+    fn from(item: pb::CreateCanisterAndInstallCode) -> Self {
+        Self {
+            host_subnet_id: item.host_subnet_id,
+            canister_settings: item.canister_settings.map(|x| x.into()),
+            wasm_module_hash: item.wasm_module.as_ref().and_then(|w| w.hash.clone()),
+            install_arg_hash: item.install_arg_hash,
+        }
+    }
+}
+
+// Only used during canister_init (see InstallCode for the same pattern).
+impl From<api::CreateCanisterAndInstallCode> for pb::CreateCanisterAndInstallCode {
+    fn from(item: api::CreateCanisterAndInstallCode) -> Self {
+        Self {
+            host_subnet_id: item.host_subnet_id,
+            canister_settings: item.canister_settings.map(|x| x.into()),
+            install_arg_hash: item.install_arg_hash,
+
+            // The api version of this type does not have these. Really,
+            // this conversion should just explode, since it is impossible
+            // to do correctly, but quietly letting errors happen in these
+            // cases was an existing pattern, and we just carry on that
+            // (bad) tradition here. It wouldn't cause a problem in
+            // in production, since canister_init would never again
+            // be called in production, since the Governance canister
+            // already exists, and there would only be one of them.
+            wasm_module: None,
+            install_arg: None,
+        }
+    }
+}
+
+// Used when submitting a proposal.
+impl From<api::CreateCanisterAndInstallCodeRequest> for pb::CreateCanisterAndInstallCode {
+    fn from(item: api::CreateCanisterAndInstallCodeRequest) -> Self {
+        let install_arg_hash = item
+            .install_arg
+            .as_ref()
+            .map(|arg| Sha256::hash(arg).to_vec());
+
+        let wasm_module = item.wasm_module.map(pb::WasmModule::from);
+
+        Self {
+            host_subnet_id: item.host_subnet_id,
+            canister_settings: item.canister_settings.map(|x| x.into()),
+            wasm_module,
+            install_arg: item.install_arg,
+            install_arg_hash,
         }
     }
 }
@@ -2997,6 +3074,8 @@ impl From<pb::governance::GovernanceCachedMetrics> for api::governance::Governan
             fully_lost_voting_power_neuron_subset_metrics: item
                 .fully_lost_voting_power_neuron_subset_metrics
                 .map(|x| x.into()),
+            total_maturity_disbursements_in_progress_e8s_equivalent: item
+                .total_maturity_disbursements_in_progress_e8s_equivalent,
         }
     }
 }
@@ -3061,6 +3140,8 @@ impl From<api::governance::GovernanceCachedMetrics> for pb::governance::Governan
             fully_lost_voting_power_neuron_subset_metrics: item
                 .fully_lost_voting_power_neuron_subset_metrics
                 .map(|x| x.into()),
+            total_maturity_disbursements_in_progress_e8s_equivalent: item
+                .total_maturity_disbursements_in_progress_e8s_equivalent,
         }
     }
 }
@@ -3504,232 +3585,6 @@ impl From<api::settle_neurons_fund_participation_response::Result>
     }
 }
 
-impl From<pb::AuditEvent> for api::AuditEvent {
-    fn from(item: pb::AuditEvent) -> Self {
-        Self {
-            timestamp_seconds: item.timestamp_seconds,
-            payload: item.payload.map(|x| x.into()),
-        }
-    }
-}
-impl From<api::AuditEvent> for pb::AuditEvent {
-    fn from(item: api::AuditEvent) -> Self {
-        Self {
-            timestamp_seconds: item.timestamp_seconds,
-            payload: item.payload.map(|x| x.into()),
-        }
-    }
-}
-
-impl From<pb::audit_event::ResetAging> for api::audit_event::ResetAging {
-    fn from(item: pb::audit_event::ResetAging) -> Self {
-        Self {
-            neuron_id: item.neuron_id,
-            previous_aging_since_timestamp_seconds: item.previous_aging_since_timestamp_seconds,
-            new_aging_since_timestamp_seconds: item.new_aging_since_timestamp_seconds,
-            neuron_stake_e8s: item.neuron_stake_e8s,
-            neuron_dissolve_state: item.neuron_dissolve_state.map(|x| x.into()),
-        }
-    }
-}
-impl From<api::audit_event::ResetAging> for pb::audit_event::ResetAging {
-    fn from(item: api::audit_event::ResetAging) -> Self {
-        Self {
-            neuron_id: item.neuron_id,
-            previous_aging_since_timestamp_seconds: item.previous_aging_since_timestamp_seconds,
-            new_aging_since_timestamp_seconds: item.new_aging_since_timestamp_seconds,
-            neuron_stake_e8s: item.neuron_stake_e8s,
-            neuron_dissolve_state: item.neuron_dissolve_state.map(|x| x.into()),
-        }
-    }
-}
-
-impl From<pb::audit_event::reset_aging::NeuronDissolveState>
-    for api::audit_event::reset_aging::NeuronDissolveState
-{
-    fn from(item: pb::audit_event::reset_aging::NeuronDissolveState) -> Self {
-        match item {
-            pb::audit_event::reset_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(v) => {
-                api::audit_event::reset_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(v)
-            }
-            pb::audit_event::reset_aging::NeuronDissolveState::DissolveDelaySeconds(v) => {
-                api::audit_event::reset_aging::NeuronDissolveState::DissolveDelaySeconds(v)
-            }
-        }
-    }
-}
-impl From<api::audit_event::reset_aging::NeuronDissolveState>
-    for pb::audit_event::reset_aging::NeuronDissolveState
-{
-    fn from(item: api::audit_event::reset_aging::NeuronDissolveState) -> Self {
-        match item {
-            api::audit_event::reset_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(
-                v,
-            ) => {
-                pb::audit_event::reset_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(v)
-            }
-            api::audit_event::reset_aging::NeuronDissolveState::DissolveDelaySeconds(v) => {
-                pb::audit_event::reset_aging::NeuronDissolveState::DissolveDelaySeconds(v)
-            }
-        }
-    }
-}
-
-impl From<pb::audit_event::RestoreAging> for api::audit_event::RestoreAging {
-    fn from(item: pb::audit_event::RestoreAging) -> Self {
-        Self {
-            neuron_id: item.neuron_id,
-            previous_aging_since_timestamp_seconds: item.previous_aging_since_timestamp_seconds,
-            new_aging_since_timestamp_seconds: item.new_aging_since_timestamp_seconds,
-            neuron_stake_e8s: item.neuron_stake_e8s,
-            neuron_dissolve_state: item.neuron_dissolve_state.map(|x| x.into()),
-        }
-    }
-}
-impl From<api::audit_event::RestoreAging> for pb::audit_event::RestoreAging {
-    fn from(item: api::audit_event::RestoreAging) -> Self {
-        Self {
-            neuron_id: item.neuron_id,
-            previous_aging_since_timestamp_seconds: item.previous_aging_since_timestamp_seconds,
-            new_aging_since_timestamp_seconds: item.new_aging_since_timestamp_seconds,
-            neuron_stake_e8s: item.neuron_stake_e8s,
-            neuron_dissolve_state: item.neuron_dissolve_state.map(|x| x.into()),
-        }
-    }
-}
-
-impl From<pb::audit_event::restore_aging::NeuronDissolveState>
-    for api::audit_event::restore_aging::NeuronDissolveState
-{
-    fn from(item: pb::audit_event::restore_aging::NeuronDissolveState) -> Self {
-        match item {
-            pb::audit_event::restore_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(
-                v,
-            ) => {
-                api::audit_event::restore_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(
-                    v,
-                )
-            }
-            pb::audit_event::restore_aging::NeuronDissolveState::DissolveDelaySeconds(v) => {
-                api::audit_event::restore_aging::NeuronDissolveState::DissolveDelaySeconds(v)
-            }
-        }
-    }
-}
-impl From<api::audit_event::restore_aging::NeuronDissolveState>
-    for pb::audit_event::restore_aging::NeuronDissolveState
-{
-    fn from(item: api::audit_event::restore_aging::NeuronDissolveState) -> Self {
-        match item {
-            api::audit_event::restore_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(
-                v,
-            ) => {
-                pb::audit_event::restore_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(
-                    v,
-                )
-            }
-            api::audit_event::restore_aging::NeuronDissolveState::DissolveDelaySeconds(v) => {
-                pb::audit_event::restore_aging::NeuronDissolveState::DissolveDelaySeconds(v)
-            }
-        }
-    }
-}
-
-impl From<pb::audit_event::NormalizeDissolveStateAndAge>
-    for api::audit_event::NormalizeDissolveStateAndAge
-{
-    fn from(item: pb::audit_event::NormalizeDissolveStateAndAge) -> Self {
-        Self {
-            neuron_id: item.neuron_id,
-            neuron_legacy_case: item.neuron_legacy_case,
-            previous_when_dissolved_timestamp_seconds: item
-                .previous_when_dissolved_timestamp_seconds,
-            previous_aging_since_timestamp_seconds: item.previous_aging_since_timestamp_seconds,
-        }
-    }
-}
-impl From<api::audit_event::NormalizeDissolveStateAndAge>
-    for pb::audit_event::NormalizeDissolveStateAndAge
-{
-    fn from(item: api::audit_event::NormalizeDissolveStateAndAge) -> Self {
-        Self {
-            neuron_id: item.neuron_id,
-            neuron_legacy_case: item.neuron_legacy_case,
-            previous_when_dissolved_timestamp_seconds: item
-                .previous_when_dissolved_timestamp_seconds,
-            previous_aging_since_timestamp_seconds: item.previous_aging_since_timestamp_seconds,
-        }
-    }
-}
-
-impl From<pb::audit_event::NeuronLegacyCase> for api::audit_event::NeuronLegacyCase {
-    fn from(item: pb::audit_event::NeuronLegacyCase) -> Self {
-        match item {
-            pb::audit_event::NeuronLegacyCase::Unspecified => {
-                api::audit_event::NeuronLegacyCase::Unspecified
-            }
-            pb::audit_event::NeuronLegacyCase::DissolvingOrDissolved => {
-                api::audit_event::NeuronLegacyCase::DissolvingOrDissolved
-            }
-            pb::audit_event::NeuronLegacyCase::Dissolved => {
-                api::audit_event::NeuronLegacyCase::Dissolved
-            }
-            pb::audit_event::NeuronLegacyCase::NoneDissolveState => {
-                api::audit_event::NeuronLegacyCase::NoneDissolveState
-            }
-        }
-    }
-}
-impl From<api::audit_event::NeuronLegacyCase> for pb::audit_event::NeuronLegacyCase {
-    fn from(item: api::audit_event::NeuronLegacyCase) -> Self {
-        match item {
-            api::audit_event::NeuronLegacyCase::Unspecified => {
-                pb::audit_event::NeuronLegacyCase::Unspecified
-            }
-            api::audit_event::NeuronLegacyCase::DissolvingOrDissolved => {
-                pb::audit_event::NeuronLegacyCase::DissolvingOrDissolved
-            }
-            api::audit_event::NeuronLegacyCase::Dissolved => {
-                pb::audit_event::NeuronLegacyCase::Dissolved
-            }
-            api::audit_event::NeuronLegacyCase::NoneDissolveState => {
-                pb::audit_event::NeuronLegacyCase::NoneDissolveState
-            }
-        }
-    }
-}
-
-impl From<pb::audit_event::Payload> for api::audit_event::Payload {
-    fn from(item: pb::audit_event::Payload) -> Self {
-        match item {
-            pb::audit_event::Payload::ResetAging(v) => {
-                api::audit_event::Payload::ResetAging(v.into())
-            }
-            pb::audit_event::Payload::RestoreAging(v) => {
-                api::audit_event::Payload::RestoreAging(v.into())
-            }
-            pb::audit_event::Payload::NormalizeDissolveStateAndAge(v) => {
-                api::audit_event::Payload::NormalizeDissolveStateAndAge(v.into())
-            }
-        }
-    }
-}
-impl From<api::audit_event::Payload> for pb::audit_event::Payload {
-    fn from(item: api::audit_event::Payload) -> Self {
-        match item {
-            api::audit_event::Payload::ResetAging(v) => {
-                pb::audit_event::Payload::ResetAging(v.into())
-            }
-            api::audit_event::Payload::RestoreAging(v) => {
-                pb::audit_event::Payload::RestoreAging(v.into())
-            }
-            api::audit_event::Payload::NormalizeDissolveStateAndAge(v) => {
-                pb::audit_event::Payload::NormalizeDissolveStateAndAge(v.into())
-            }
-        }
-    }
-}
-
 impl From<pb::RestoreAgingSummary> for api::RestoreAgingSummary {
     fn from(item: pb::RestoreAgingSummary) -> Self {
         Self {
@@ -3995,6 +3850,8 @@ impl From<pb::NnsFunction> for api::NnsFunction {
             pb::NnsFunction::SetSubnetOperationalLevel => {
                 api::NnsFunction::SetSubnetOperationalLevel
             }
+            pb::NnsFunction::SplitSubnet => api::NnsFunction::SplitSubnet,
+            pb::NnsFunction::DeleteSubnet => api::NnsFunction::DeleteSubnet,
         }
     }
 }
@@ -4090,6 +3947,8 @@ impl From<api::NnsFunction> for pb::NnsFunction {
             api::NnsFunction::SetSubnetOperationalLevel => {
                 pb::NnsFunction::SetSubnetOperationalLevel
             }
+            api::NnsFunction::SplitSubnet => pb::NnsFunction::SplitSubnet,
+            api::NnsFunction::DeleteSubnet => pb::NnsFunction::DeleteSubnet,
         }
     }
 }

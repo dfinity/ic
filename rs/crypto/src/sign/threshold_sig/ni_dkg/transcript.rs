@@ -60,8 +60,6 @@ mod creation {
         dealers: &NiDkgDealers,
         verified_dealings: &NiDkgDealings,
     ) {
-        // TODO (CRP-572): We could improve the complexity from O(|dealings| *
-        // log(|dealers|)) to O(|dealings| + |dealers|) e.g. by using a HashSet.
         let dealing_node_ids_not_in_dealers: BTreeSet<NodeId> = verified_dealings
             .iter()
             .filter(|(node_id, _)| !dealers.get().contains(node_id))

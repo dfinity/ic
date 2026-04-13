@@ -8,6 +8,7 @@ use ic_types::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::execution_environment::SUBNET_HEAP_DELTA_CAPACITY;
 use crate::flag_status::FlagStatus;
 
 // Defining 100000 globals in a module can result in significant overhead in
@@ -72,13 +73,10 @@ pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 10_000;
 /// duration and sandbox process eviction is activated.
 pub(crate) const DEFAULT_MAX_SANDBOX_IDLE_TIME: Duration = Duration::from_secs(30 * 60);
 
-/// Sandbox processes may be evicted if their total RSS exceeds 50 GiB.
-pub(crate) const DEFAULT_MAX_SANDBOXES_RSS: NumBytes = NumBytes::new(50 * 1024 * 1024 * 1024);
-
 /// The maximum number of pages that a message dirties without optimizing dirty
 /// page copying by triggering a new execution slice for copying pages.
 /// This default is 1 GiB.
-pub(crate) const DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION: usize = (GiB as usize) / PAGE_SIZE;
+pub(crate) const DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION: usize = (GIB as usize) / PAGE_SIZE;
 
 /// Scheduling overhead for copying dirty pages, in instructions.
 pub(crate) const DIRTY_PAGE_COPY_OVERHEAD: NumInstructions = NumInstructions::new(3_000);
@@ -86,34 +84,32 @@ pub(crate) const DIRTY_PAGE_COPY_OVERHEAD: NumInstructions = NumInstructions::ne
 /// The overhead for dirty pages in Wasm64.
 pub const WASM64_DIRTY_PAGE_OVERHEAD_MULTIPLIER: u64 = 4;
 
-#[allow(non_upper_case_globals)]
-const KiB: u64 = 1024;
-#[allow(non_upper_case_globals)]
-const GiB: u64 = KiB * KiB * KiB;
+const KIB: u64 = 1024;
+const GIB: u64 = KIB * KIB * KIB;
 
 // Maximum number of stable memory dirty OS pages (4KiB) that an upgrade/install message execution
 // is allowed to produce.
 const STABLE_MEMORY_DIRTY_PAGE_LIMIT_UPGRADE: NumOsPages =
-    NumOsPages::new(8 * GiB / (PAGE_SIZE as u64));
+    NumOsPages::new(8 * GIB / (PAGE_SIZE as u64));
 // Maximum number of stable memory dirty OS pages (4KiB) that a regular message (update) execution
 // is allowed to produce.
 const STABLE_MEMORY_DIRTY_PAGE_LIMIT_MESSAGE: NumOsPages =
-    NumOsPages::new(2 * GiB / (PAGE_SIZE as u64));
+    NumOsPages::new(2 * GIB / (PAGE_SIZE as u64));
 // Maximum number of stable memory dirty OS pages (4KiB) that a non-replicated query is allowed to produce.
-const STABLE_MEMORY_DIRTY_PAGE_LIMIT_QUERY: NumOsPages = NumOsPages::new(GiB / (PAGE_SIZE as u64));
+const STABLE_MEMORY_DIRTY_PAGE_LIMIT_QUERY: NumOsPages = NumOsPages::new(GIB / (PAGE_SIZE as u64));
 
 // Maximum number of stable memory OS pages (4KiB) that that an upgrade/install message execution
 // is allowed to access.
 const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_UPGRADE: NumOsPages =
-    NumOsPages::new(8 * GiB / (PAGE_SIZE as u64));
+    NumOsPages::new(8 * GIB / (PAGE_SIZE as u64));
 // Maximum number of stable memory OS pages (4KiB) that a that a regular message (update) execution
 // is allowed to access.
 const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_MESSAGE: NumOsPages =
-    NumOsPages::new(2 * GiB / (PAGE_SIZE as u64));
+    NumOsPages::new(2 * GIB / (PAGE_SIZE as u64));
 // Maximum number of stable memory OS pages (4KiB) that a single non-replicated query execution
 // is allowed to access.
 const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_QUERY: NumOsPages =
-    NumOsPages::new(GiB / (PAGE_SIZE as u64));
+    NumOsPages::new(GIB / (PAGE_SIZE as u64));
 
 /// The maximum size in bytes for an uncompressed Wasm module. This value is
 /// also used as the maximum size for the Wasm chunk store of each canister.
@@ -124,18 +120,18 @@ pub struct FeatureFlags {
     /// If this flag is enabled, then the output of the `debug_print` system-api
     /// call will be skipped based on heuristics.
     pub rate_limiting_of_debug_prints: FlagStatus,
-    /// Collect a backtrace from the canister when it panics.
-    pub canister_backtrace: FlagStatus,
     /// If this flag is enabled, then the environment variables are supported.
     pub environment_variables: FlagStatus,
+    /// Use deterministic memory tracker.
+    pub deterministic_memory_tracker: FlagStatus,
 }
 
 impl FeatureFlags {
     const fn const_default() -> Self {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
-            canister_backtrace: FlagStatus::Enabled,
             environment_variables: FlagStatus::Enabled,
+            deterministic_memory_tracker: FlagStatus::Disabled,
         }
     }
 }
@@ -220,13 +216,11 @@ pub struct Config {
     /// duration and sandbox process eviction is activated.
     pub max_sandbox_idle_time: Duration,
 
-    /// Sandbox processes may be evicted if their total RSS exceeds
-    /// the specified amount in bytes. By default, we assume that
-    /// each sandbox process has 50 MiB RSS (see `DEFAULT_SANDBOX_PROCESS_RSS`).
-    /// The actual RSS is updated in the background thread, while the
-    /// synchronous RSS-based eviction is only triggered when there is
-    /// a memory pressure (see `DEFAULT_MIN_MEM_AVAILABLE_TO_EVICT_SANDBOXES`)
-    pub max_sandboxes_rss: NumBytes,
+    /// The subnet heap delta capacity used for computing the maximum
+    /// sandbox RSS (`default_subnet_heap_delta_capacity / 3`).
+    /// This is the default value from `SchedulerConfig` and may be
+    /// overridden at runtime by the registry's `maximum_state_delta`.
+    pub default_subnet_heap_delta_capacity: NumBytes,
 
     /// Dirty page overhead. The number of instructions to charge for each dirty
     /// page created by a write to stable memory. The default value should be
@@ -288,7 +282,7 @@ impl Config {
             },
             max_sandbox_count: DEFAULT_MAX_SANDBOX_COUNT,
             max_sandbox_idle_time: DEFAULT_MAX_SANDBOX_IDLE_TIME,
-            max_sandboxes_rss: DEFAULT_MAX_SANDBOXES_RSS,
+            default_subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
             dirty_page_overhead: NumInstructions::new(0),
             trace_execution: FlagStatus::Disabled,
             max_dirty_pages_without_optimization: DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION,

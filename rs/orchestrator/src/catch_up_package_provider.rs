@@ -169,7 +169,7 @@ impl CatchUpPackageProvider {
 
         let mut nodes: Vec<(NodeId, NodeRecord)> = self
             .registry
-            .registry_client
+            .get_registry_client()
             .get_subnet_node_records(subnet_id, registry_version)
             .ok()
             .flatten()
@@ -516,11 +516,8 @@ fn get_cup_proto_height(cup: &pb::CatchUpPackage) -> Option<Height> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
-    use crate::{
-        catch_up_package_provider::CatchUpPackageProvider, registry_helper::RegistryHelper,
-    };
     use assert_matches::assert_matches;
     use http_body_util::{StreamBody, combinators::BoxBody};
     use hyper::{
@@ -705,7 +702,19 @@ mod tests {
         ))
     }
 
-    fn mock_tls_config() -> MockTlsConfig {
+    pub(crate) fn mock_tls_config() -> MockTlsConfig {
+        mock_tls_config_impl::<usize>(None)
+    }
+
+    pub(crate) fn mock_tls_config_called_times<Times: Into<mockall::TimesRange>>(
+        times: Times,
+    ) -> MockTlsConfig {
+        mock_tls_config_impl(Some(times))
+    }
+
+    fn mock_tls_config_impl<Times: Into<mockall::TimesRange>>(
+        opt_times: Option<Times>,
+    ) -> MockTlsConfig {
         #[derive(Debug)]
         struct NoVerify;
         impl ServerCertVerifier for NoVerify {
@@ -748,9 +757,12 @@ mod tests {
             .with_no_client_auth();
 
         let mut tls_config = MockTlsConfig::new();
-        tls_config
+        let expectation = tls_config
             .expect_client_config()
             .returning(move |_, _| Ok(accept_any_config.clone()));
+        if let Some(t) = opt_times {
+            expectation.times(t);
+        }
         tls_config
     }
 

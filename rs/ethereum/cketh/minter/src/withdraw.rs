@@ -193,9 +193,9 @@ async fn latest_transaction_count() -> Option<TransactionCount> {
     match read_state(rpc_client)
         .get_transaction_count((minter_address().await.into_bytes(), BlockTag::Latest))
         .with_cycles(MIN_ATTACHED_CYCLES)
-        .send()
+        .try_send()
         .await
-        .map(TransactionCount::from)
+        .map(|res| res.map(TransactionCount::from))
         .reduce_with_strategy(MinByKey::new(|count: &TransactionCount| *count))
     {
         Ok(transaction_count) => Some(transaction_count),
@@ -354,7 +354,7 @@ async fn send_transactions_batch(latest_transaction_count: Option<TransactionCou
         rpc_client
             .send_raw_transaction(tx.raw_transaction_hex())
             .with_cycles(MIN_ATTACHED_CYCLES)
-            .send()
+            .try_send()
             .await
             .reduce_with_strategy(AnyOf)
     }))
@@ -401,7 +401,7 @@ async fn finalize_transactions_batch() {
                 rpc_client
                     .get_transaction_receipt(*hash)
                     .with_cycles(MIN_ATTACHED_CYCLES)
-                    .send()
+                    .try_send()
                     .await
                     .reduce_with_strategy(NoReduction)
             }))
@@ -472,8 +472,8 @@ async fn finalized_transaction_count() -> Result<TransactionCount, MultiCallErro
     read_state(rpc_client)
         .get_transaction_count((minter_address().await.into_bytes(), BlockTag::Finalized))
         .with_cycles(MIN_ATTACHED_CYCLES)
-        .send()
+        .try_send()
         .await
-        .map(TransactionCount::from)
+        .map(|res| res.map(TransactionCount::from))
         .reduce_with_strategy(NoReduction)
 }

@@ -2,9 +2,10 @@ use super::*;
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_test_utilities_types::{
     ids::{canister_test_id, message_test_id, user_test_id},
-    messages::{RequestBuilder, ResponseBuilder},
+    messages::RequestBuilder,
 };
 use ic_types::{messages::RequestMetadata, methods::WasmClosure, time::UNIX_EPOCH};
+use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles};
 use maplit::btreemap;
 
 #[test]
@@ -17,6 +18,7 @@ fn call_context_origin() {
         Cycles::new(10),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
+        None,
     );
     assert_eq!(
         ccm.call_contexts().get(&cc_id).unwrap().call_origin,
@@ -41,6 +43,7 @@ fn call_context_handling() {
         Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
+        None,
     );
     let call_context_id2 = call_context_manager.new_call_context(
         CallOrigin::CanisterUpdate(
@@ -52,6 +55,7 @@ fn call_context_handling() {
         Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
+        None,
     );
 
     let call_context_id3 = call_context_manager.new_call_context(
@@ -64,6 +68,7 @@ fn call_context_handling() {
         Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
+        None,
     );
 
     // Call context 3 was not responded and does not have outstanding calls,
@@ -75,7 +80,7 @@ fn call_context_handling() {
             },
             call_context_manager.call_context(call_context_id3).cloned()
         ),
-        call_context_manager.on_canister_result(call_context_id3, None, Ok(None), 0.into())
+        call_context_manager.on_canister_result(call_context_id3, Ok(None), 0.into())
     );
 
     // First they're unanswered
@@ -97,11 +102,10 @@ fn call_context_handling() {
     // First call (CallContext 1) makes two outgoing calls
     let callback_id1 = call_context_manager.register_callback(Callback::new(
         call_context_id1,
-        canister_test_id(1),
         canister_test_id(2),
         Cycles::zero(),
-        Cycles::new(42),
-        Cycles::new(84),
+        CompoundCycles::new(Cycles::new(42), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::new(84), CanisterCyclesCostSchedule::Normal),
         WasmClosure::new(0, 1),
         WasmClosure::new(2, 3),
         None,
@@ -109,11 +113,10 @@ fn call_context_handling() {
     ));
     let callback_id2 = call_context_manager.register_callback(Callback::new(
         call_context_id1,
-        canister_test_id(1),
         canister_test_id(2),
         Cycles::zero(),
-        Cycles::new(43),
-        Cycles::new(85),
+        CompoundCycles::new(Cycles::new(43), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::new(85), CanisterCyclesCostSchedule::Normal),
         WasmClosure::new(4, 5),
         WasmClosure::new(6, 7),
         None,
@@ -126,11 +129,10 @@ fn call_context_handling() {
     // Second one (CallContext 2) has one outgoing call
     let callback_id3 = call_context_manager.register_callback(Callback::new(
         call_context_id2,
-        canister_test_id(1),
         canister_test_id(2),
         Cycles::zero(),
-        Cycles::new(44),
-        Cycles::new(86),
+        CompoundCycles::new(Cycles::new(44), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::new(86), CanisterCyclesCostSchedule::Normal),
         WasmClosure::new(8, 9),
         WasmClosure::new(10, 11),
         None,
@@ -163,10 +165,12 @@ fn call_context_handling() {
     assert_eq!(callback.on_reject, WasmClosure::new(2, 3));
     assert_eq!(call_context_manager.callbacks().len(), 3);
 
+    call_context_manager
+        .unregister_callback(callback_id1)
+        .unwrap();
     assert_eq!(
         call_context_manager.on_canister_result(
             call_context_id1,
-            Some(callback_id1),
             Ok(Some(WasmResult::Reply(vec![1]))),
             0.into()
         ),
@@ -209,6 +213,9 @@ fn call_context_handling() {
 
     // We mark the CallContext 2 as responded and it is deleted as it has no
     // outstanding calls
+    call_context_manager
+        .unregister_callback(callback_id3)
+        .unwrap();
     assert_eq!(
         (
             CallContextAction::Reply {
@@ -219,7 +226,6 @@ fn call_context_handling() {
         ),
         call_context_manager.on_canister_result(
             call_context_id2,
-            Some(callback_id3),
             Ok(Some(WasmResult::Reply(vec![]))),
             0.into()
         )
@@ -231,17 +237,15 @@ fn call_context_handling() {
     let callback = call_context_manager.callback(callback_id2).unwrap().clone();
     assert_eq!(callback.on_reply, WasmClosure::new(4, 5));
     assert_eq!(callback.on_reject, WasmClosure::new(6, 7));
+    call_context_manager
+        .unregister_callback(callback_id2)
+        .unwrap();
     assert_eq!(
         (
             CallContextAction::AlreadyResponded,
             call_context_manager.call_context(call_context_id1).cloned()
         ),
-        call_context_manager.on_canister_result(
-            call_context_id1,
-            Some(callback_id2),
-            Ok(None),
-            0.into()
-        )
+        call_context_manager.on_canister_result(call_context_id1, Ok(None), 0.into())
     );
 
     // Since CallContext 1 was already responded, make sure we're in a clean state
@@ -259,6 +263,7 @@ fn withdraw_cycles_fails_when_not_enough_available_cycles() {
         Cycles::new(30),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
+        None,
     );
 
     assert_eq!(
@@ -277,6 +282,7 @@ fn withdraw_cycles_succeeds_when_enough_available_cycles() {
         Cycles::new(30),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
+        None,
     );
 
     let cc = ccm.withdraw_cycles(cc_id, Cycles::new(25)).unwrap().clone();
@@ -297,15 +303,15 @@ fn test_call_context_instructions_executed_is_updated() {
         Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
+        None,
     );
     // Register a callback, so the call context is not deleted in `on_canister_result()` later.
     let _callback_id = call_context_manager.register_callback(Callback::new(
         call_context_id,
-        canister_test_id(1),
         canister_test_id(2),
         Cycles::zero(),
-        Cycles::new(42),
-        Cycles::new(84),
+        CompoundCycles::new(Cycles::new(42), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::new(84), CanisterCyclesCostSchedule::Normal),
         WasmClosure::new(0, 1),
         WasmClosure::new(2, 3),
         None,
@@ -314,7 +320,7 @@ fn test_call_context_instructions_executed_is_updated() {
 
     // Finish a successful execution with 1K instructions.
     assert_eq!(
-        call_context_manager.on_canister_result(call_context_id, None, Ok(None), 1_000.into()),
+        call_context_manager.on_canister_result(call_context_id, Ok(None), 1_000.into()),
         (CallContextAction::NotYetResponded, None)
     );
     assert_eq!(
@@ -330,7 +336,6 @@ fn test_call_context_instructions_executed_is_updated() {
     assert_eq!(
         call_context_manager.on_canister_result(
             call_context_id,
-            None,
             Err(HypervisorError::InstructionLimitExceeded(2_000.into())),
             2_000.into()
         ),
@@ -352,6 +357,10 @@ fn test_call_context_instructions_executed_is_updated() {
 fn call_context_roundtrip_encoding() {
     use ic_protobuf::state::canister_state_bits::v1 as pb;
 
+    let sender_info = SenderInfo {
+        info: vec![42, 43, 44],
+        signer: CanisterId::from_u64(8),
+    };
     let minimal_call_context = CallContext::new(
         CallOrigin::Ingress(user_test_id(1), message_test_id(2), String::from("")),
         false,
@@ -359,6 +368,7 @@ fn call_context_roundtrip_encoding() {
         Cycles::zero(),
         UNIX_EPOCH,
         Default::default(),
+        Some(sender_info.clone()),
     );
     let maximal_call_context = CallContext::new(
         CallOrigin::Ingress(user_test_id(1), message_test_id(2), String::from("")),
@@ -367,6 +377,7 @@ fn call_context_roundtrip_encoding() {
         Cycles::new(3),
         Time::from_nanos_since_unix_epoch(4),
         RequestMetadata::new(5, Time::from_nanos_since_unix_epoch(6)),
+        Some(sender_info.clone()),
     );
 
     for call_context in [minimal_call_context, maximal_call_context] {
@@ -381,15 +392,13 @@ fn call_context_roundtrip_encoding() {
 fn callback_stats() {
     let mut ccm = CallContextManager::default();
     let call_context_id = CallContextId::from(1);
-    let originator = canister_test_id(1);
     let respondent = canister_test_id(2);
     let best_effort_callback = Callback::new(
         call_context_id,
-        originator,
         respondent,
         Cycles::zero(),
-        Cycles::new(42),
-        Cycles::new(84),
+        CompoundCycles::new(Cycles::new(42), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::new(84), CanisterCyclesCostSchedule::Normal),
         WasmClosure::new(0, 1),
         WasmClosure::new(2, 3),
         None,
@@ -397,93 +406,33 @@ fn callback_stats() {
     );
     let guaranteed_response_callback = Callback::new(
         call_context_id,
-        originator,
         respondent,
         Cycles::zero(),
-        Cycles::new(42),
-        Cycles::new(84),
+        CompoundCycles::new(Cycles::new(42), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::new(84), CanisterCyclesCostSchedule::Normal),
         WasmClosure::new(0, 1),
         WasmClosure::new(2, 3),
         None,
         NO_DEADLINE,
     );
 
-    fn calculate_callback_counts(
-        ccm: &CallContextManager,
-        aborted_or_paused_response: Option<&Response>,
-    ) -> BTreeMap<CanisterId, usize> {
-        CallContextManagerStats::calculate_unresponded_callbacks_per_respondent(
-            ccm.callbacks(),
-            aborted_or_paused_response,
-        )
-    }
-
-    assert_eq!(0, ccm.unresponded_callback_count(None));
-    assert_eq!(btreemap! {}, calculate_callback_counts(&ccm, None));
-    assert_eq!(0, ccm.unresponded_guaranteed_response_callback_count(None));
+    assert_eq!(0, ccm.unresponded_callback_count());
+    assert_eq!(0, ccm.unresponded_guaranteed_response_callback_count());
 
     //
     // Register a best-effort callback.
     //
     let best_effort_callback_id = ccm.register_callback(best_effort_callback);
-    let best_effort_callback_response = ResponseBuilder::new()
-        .originator(originator)
-        .respondent(respondent)
-        .originator_reply_callback(best_effort_callback_id)
-        .deadline(CoarseTime::from_secs_since_unix_epoch(14))
-        .build();
-    assert_eq!(1, ccm.unresponded_callback_count(None));
-    assert_eq!(
-        btreemap! { respondent => 1 },
-        calculate_callback_counts(&ccm, None)
-    );
-    assert_eq!(0, ccm.unresponded_guaranteed_response_callback_count(None));
+    assert_eq!(1, ccm.unresponded_callback_count());
+    assert_eq!(0, ccm.unresponded_guaranteed_response_callback_count());
 
     //
     // Register a guaranteed response callback.
     //
     let guaranteed_response_callback_id = ccm.register_callback(guaranteed_response_callback);
-    let guaranteed_response_callback_response = ResponseBuilder::new()
-        .originator(originator)
-        .respondent(respondent)
-        .originator_reply_callback(guaranteed_response_callback_id)
-        .deadline(NO_DEADLINE)
-        .build();
     // 2 pending callbacks, one guaranteed response.
-    assert_eq!(2, ccm.unresponded_callback_count(None));
-    assert_eq!(
-        btreemap! { respondent => 2 },
-        calculate_callback_counts(&ccm, None)
-    );
-    assert_eq!(1, ccm.unresponded_guaranteed_response_callback_count(None));
-
-    // But only 1 if either response is in DTS execution.
-    assert_eq!(
-        1,
-        ccm.unresponded_callback_count(Some(&guaranteed_response_callback_response))
-    );
-    assert_eq!(
-        btreemap! { respondent => 1 },
-        calculate_callback_counts(&ccm, Some(&guaranteed_response_callback_response))
-    );
-    assert_eq!(
-        0,
-        ccm.unresponded_guaranteed_response_callback_count(Some(
-            &guaranteed_response_callback_response
-        ))
-    );
-    assert_eq!(
-        1,
-        ccm.unresponded_callback_count(Some(&best_effort_callback_response))
-    );
-    assert_eq!(
-        btreemap! { respondent => 1 },
-        calculate_callback_counts(&ccm, Some(&best_effort_callback_response))
-    );
-    assert_eq!(
-        1,
-        ccm.unresponded_guaranteed_response_callback_count(Some(&best_effort_callback_response))
-    );
+    assert_eq!(2, ccm.unresponded_callback_count());
+    assert_eq!(1, ccm.unresponded_guaranteed_response_callback_count());
 
     // Also test an encode-decode roundtrip, to ensure that the count is preserved.
     let call_context_manager_proto: pb::CallContextManager = (&ccm).into();
@@ -493,23 +442,18 @@ fn callback_stats() {
     );
 
     //
-    // Unreguster the best-effort callback.
+    // Unregister the best-effort callback.
     //
     ccm.unregister_callback(best_effort_callback_id);
-    assert_eq!(1, ccm.unresponded_callback_count(None));
-    assert_eq!(
-        btreemap! { respondent => 1 },
-        calculate_callback_counts(&ccm, None)
-    );
-    assert_eq!(1, ccm.unresponded_guaranteed_response_callback_count(None));
+    assert_eq!(1, ccm.unresponded_callback_count());
+    assert_eq!(1, ccm.unresponded_guaranteed_response_callback_count());
 
     //
     // Unregister the guaranteed response callback.
     //
     ccm.unregister_callback(guaranteed_response_callback_id);
-    assert_eq!(0, ccm.unresponded_callback_count(None));
-    assert_eq!(btreemap! {}, calculate_callback_counts(&ccm, None));
-    assert_eq!(0, ccm.unresponded_guaranteed_response_callback_count(None));
+    assert_eq!(0, ccm.unresponded_callback_count());
+    assert_eq!(0, ccm.unresponded_guaranteed_response_callback_count());
 }
 
 #[test]
@@ -517,11 +461,10 @@ fn test_expire_callbacks() {
     fn callback_with_deadline(deadline: CoarseTime) -> Callback {
         Callback::new(
             CallContextId::from(1),
-            canister_test_id(1),
             canister_test_id(2),
             Cycles::zero(),
-            Cycles::new(42),
-            Cycles::new(84),
+            CompoundCycles::new(Cycles::new(42), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::new(84), CanisterCyclesCostSchedule::Normal),
             WasmClosure::new(0, 1),
             WasmClosure::new(2, 3),
             None,
@@ -586,6 +529,7 @@ fn call_context_stats() {
             Cycles::zero(),
             Time::from_nanos_since_unix_epoch(1),
             RequestMetadata::new(2, UNIX_EPOCH),
+            None,
         )
     }
 
@@ -730,7 +674,7 @@ fn call_context_stats() {
     // Non-response result on the best effort call context. Call context is
     // consumed, but no effect on the stats.
     //
-    ccm.on_canister_result(best_effort_id, None, Ok(None), 0.into());
+    ccm.on_canister_result(best_effort_id, Ok(None), 0.into());
     assert_eq!(2, ccm.call_contexts.len());
     assert_eq!(1, ccm.unresponded_canister_update_call_contexts(None));
     assert_eq!(
@@ -742,7 +686,7 @@ fn call_context_stats() {
     //
     // A no response result to the guaranteed response call context.
     //
-    ccm.on_canister_result(guaranteed_response_id, None, Ok(None), 1.into());
+    ccm.on_canister_result(guaranteed_response_id, Ok(None), 1.into());
     assert_eq!(1, ccm.call_contexts.len());
     // No more unresponded call contexts.
     assert_eq!(0, ccm.unresponded_canister_update_call_contexts(None));
@@ -755,27 +699,30 @@ fn call_context_stats() {
 fn roundtrip_encode() {
     let mut ccm = CallContextManager::default();
 
-    let this = canister_test_id(13);
     let other = canister_test_id(14);
     let deadline_1 = CoarseTime::from_secs_since_unix_epoch(1);
     let deadline_2 = CoarseTime::from_secs_since_unix_epoch(2);
 
     // Create a new call context.
+    let sender_info = SenderInfo {
+        info: vec![42, 43, 44],
+        signer: CanisterId::from_u64(8),
+    };
     let call_context_id = ccm.new_call_context(
         CallOrigin::CanisterUpdate(other, CallbackId::new(13), NO_DEADLINE, String::from("")),
         Cycles::new(30),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
+        Some(sender_info),
     );
 
     // Register two best-effort and one guaranteed response callbacks.
     let callback_1 = ccm.register_callback(Callback::new(
         call_context_id,
-        this,
         other,
         Cycles::new(21),
-        Cycles::new(42),
-        Cycles::new(84),
+        CompoundCycles::new(Cycles::new(42), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::new(84), CanisterCyclesCostSchedule::Normal),
         WasmClosure::new(0, 1),
         WasmClosure::new(2, 3),
         None,
@@ -783,11 +730,10 @@ fn roundtrip_encode() {
     ));
     ccm.register_callback(Callback::new(
         call_context_id,
-        this,
         other,
         Cycles::zero(),
-        Cycles::new(43),
-        Cycles::new(85),
+        CompoundCycles::new(Cycles::new(43), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::new(85), CanisterCyclesCostSchedule::Normal),
         WasmClosure::new(4, 5),
         WasmClosure::new(6, 7),
         Some(WasmClosure::new(8, 9)),
@@ -795,11 +741,10 @@ fn roundtrip_encode() {
     ));
     ccm.register_callback(Callback::new(
         call_context_id,
-        this,
         other,
         Cycles::zero(),
-        Cycles::new(44),
-        Cycles::new(86),
+        CompoundCycles::new(Cycles::new(44), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::new(86), CanisterCyclesCostSchedule::Normal),
         WasmClosure::new(10, 11),
         WasmClosure::new(12, 13),
         None,

@@ -7,8 +7,8 @@ use crate::common::rest::{
     RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult,
     RawCanisterSnapshotDownload, RawCanisterSnapshotId, RawCanisterSnapshotUpload, RawCycles,
     RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse,
-    RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTickConfigs, RawTime,
-    RawVerifyCanisterSigArg, SubnetId, Topology,
+    RawPrincipalId, RawSenderInfo, RawSetStableMemory, RawStableMemory, RawSubnetId,
+    RawTickConfigs, RawTime, RawVerifyCanisterSigArg, SubnetId, Topology,
 };
 #[cfg(windows)]
 use crate::wsl_path;
@@ -49,6 +49,9 @@ use tracing_subscriber::EnvFilter;
 
 // wait time between polling requests
 const POLLING_PERIOD_MS: u64 = 10;
+
+// the default value of the `--hard-ttl` CLI option of the PocketIC server
+const HARD_TTL_SECS: u64 = 600; // 10 minutes
 
 const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
@@ -144,6 +147,8 @@ impl PocketIc {
         icp_features: IcpFeatures,
         initial_time: Option<InitialTime>,
         http_gateway_config: Option<InstanceHttpGatewayConfig>,
+        mainnet_nns_subnet_id: Option<bool>,
+        disable_ingress_validation: Option<bool>,
     ) -> Self {
         let server_url = if let Some(server_url) = server_url {
             server_url
@@ -152,6 +157,7 @@ impl PocketIc {
                 server_binary,
                 reuse: true,
                 ttl: None,
+                hard_ttl: Some(Duration::from_secs(HARD_TTL_SECS)),
             })
             .await;
             server_url
@@ -198,6 +204,8 @@ impl PocketIc {
             icp_features: Some(icp_features),
             incomplete_state: None,
             initial_time,
+            mainnet_nns_subnet_id,
+            disable_ingress_validation,
         };
 
         let test_driver_pid = std::process::id();
@@ -483,6 +491,7 @@ impl PocketIc {
             forward_to: HttpGatewayBackend::PocketIcInstance(self.instance_id),
             domains: domains.clone(),
             https_config: https_config.clone(),
+            domain_custom_provider_local_file: None,
         };
         let res = self
             .reqwest_client
@@ -662,6 +671,27 @@ impl PocketIc {
         .await
     }
 
+    async fn submit_call_with_effective_principal_and_sender_info_inner(
+        &self,
+        canister_id: CanisterId,
+        effective_principal: RawEffectivePrincipal,
+        sender: Principal,
+        method: &str,
+        payload: Vec<u8>,
+        sender_info: Option<RawSenderInfo>,
+    ) -> Result<RawMessageId, RejectResponse> {
+        let endpoint = "update/submit_ingress_message";
+        let raw_canister_call = RawCanisterCall {
+            sender: sender.as_slice().to_vec(),
+            canister_id: canister_id.as_slice().to_vec(),
+            method: method.to_string(),
+            payload,
+            effective_principal,
+            sender_info,
+        };
+        self.post(endpoint, raw_canister_call).await
+    }
+
     /// Submit an update call with a provided effective principal (without executing it immediately).
     pub async fn submit_call_with_effective_principal(
         &self,
@@ -671,15 +701,56 @@ impl PocketIc {
         method: &str,
         payload: Vec<u8>,
     ) -> Result<RawMessageId, RejectResponse> {
-        let endpoint = "update/submit_ingress_message";
-        let raw_canister_call = RawCanisterCall {
-            sender: sender.as_slice().to_vec(),
-            canister_id: canister_id.as_slice().to_vec(),
-            method: method.to_string(),
-            payload,
+        self.submit_call_with_effective_principal_and_sender_info_inner(
+            canister_id,
             effective_principal,
-        };
-        self.post(endpoint, raw_canister_call).await
+            sender,
+            method,
+            payload,
+            None,
+        )
+        .await
+    }
+
+    /// Submit an update call with a provided effective principal and sender info (without executing it immediately).
+    pub async fn submit_call_with_effective_principal_and_sender_info(
+        &self,
+        canister_id: CanisterId,
+        effective_principal: RawEffectivePrincipal,
+        sender: Principal,
+        method: &str,
+        payload: Vec<u8>,
+        sender_info: RawSenderInfo,
+    ) -> Result<RawMessageId, RejectResponse> {
+        self.submit_call_with_effective_principal_and_sender_info_inner(
+            canister_id,
+            effective_principal,
+            sender,
+            method,
+            payload,
+            Some(sender_info),
+        )
+        .await
+    }
+
+    /// Submit an update call with sender info (without executing it immediately).
+    pub async fn submit_call_with_sender_info(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+        method: &str,
+        payload: Vec<u8>,
+        sender_info: RawSenderInfo,
+    ) -> Result<RawMessageId, RejectResponse> {
+        self.submit_call_with_effective_principal_and_sender_info(
+            canister_id,
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender,
+            method,
+            payload,
+            sender_info,
+        )
+        .await
     }
 
     /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
@@ -784,6 +855,69 @@ impl PocketIc {
         .await
     }
 
+    async fn update_call_with_effective_principal_and_sender_info_inner(
+        &self,
+        canister_id: CanisterId,
+        effective_principal: RawEffectivePrincipal,
+        sender: Principal,
+        method: &str,
+        payload: Vec<u8>,
+        sender_info: Option<RawSenderInfo>,
+    ) -> Result<Vec<u8>, RejectResponse> {
+        let message_id = self
+            .submit_call_with_effective_principal_and_sender_info_inner(
+                canister_id,
+                effective_principal,
+                sender,
+                method,
+                payload,
+                sender_info,
+            )
+            .await?;
+        self.await_call(message_id).await
+    }
+
+    /// Execute an update call with a provided effective principal and sender info on a canister.
+    pub async fn update_call_with_effective_principal_and_sender_info(
+        &self,
+        canister_id: CanisterId,
+        effective_principal: RawEffectivePrincipal,
+        sender: Principal,
+        method: &str,
+        payload: Vec<u8>,
+        sender_info: RawSenderInfo,
+    ) -> Result<Vec<u8>, RejectResponse> {
+        self.update_call_with_effective_principal_and_sender_info_inner(
+            canister_id,
+            effective_principal,
+            sender,
+            method,
+            payload,
+            Some(sender_info),
+        )
+        .await
+    }
+
+    /// Execute an update call with sender info on a canister.
+    pub async fn update_call_with_sender_info(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+        method: &str,
+        payload: Vec<u8>,
+        sender_info: RawSenderInfo,
+    ) -> Result<Vec<u8>, RejectResponse> {
+        self.update_call_with_effective_principal_and_sender_info(
+            canister_id,
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender,
+            method,
+            payload,
+            sender_info,
+        )
+        .await
+    }
+
     /// Execute a query call on a canister.
     #[instrument(skip(self, payload), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
     pub async fn query_call(
@@ -823,6 +957,50 @@ impl PocketIc {
             sender,
             method,
             payload,
+            None,
+        )
+        .await
+    }
+
+    /// Execute a query call with a provided effective principal and sender info on a canister.
+    pub async fn query_call_with_effective_principal_and_sender_info(
+        &self,
+        canister_id: CanisterId,
+        effective_principal: RawEffectivePrincipal,
+        sender: Principal,
+        method: &str,
+        payload: Vec<u8>,
+        sender_info: RawSenderInfo,
+    ) -> Result<Vec<u8>, RejectResponse> {
+        let endpoint = "read/query";
+        self.canister_call(
+            endpoint,
+            effective_principal,
+            canister_id,
+            sender,
+            method,
+            payload,
+            Some(sender_info),
+        )
+        .await
+    }
+
+    /// Execute a query call with sender info on a canister.
+    pub async fn query_call_with_sender_info(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+        method: &str,
+        payload: Vec<u8>,
+        sender_info: RawSenderInfo,
+    ) -> Result<Vec<u8>, RejectResponse> {
+        self.query_call_with_effective_principal_and_sender_info(
+            canister_id,
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender,
+            method,
+            payload,
+            sender_info,
         )
         .await
     }
@@ -1632,6 +1810,7 @@ impl PocketIc {
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
+        sender_info: Option<RawSenderInfo>,
     ) -> Result<Vec<u8>, RejectResponse> {
         let raw_canister_call = RawCanisterCall {
             sender: sender.as_slice().to_vec(),
@@ -1639,6 +1818,7 @@ impl PocketIc {
             method: method.to_string(),
             payload,
             effective_principal,
+            sender_info,
         };
 
         let result: RawCanisterResult = self.post(endpoint, raw_canister_call).await;
@@ -1653,16 +1833,15 @@ impl PocketIc {
         method: &str,
         payload: Vec<u8>,
     ) -> Result<Vec<u8>, RejectResponse> {
-        let message_id = self
-            .submit_call_with_effective_principal(
-                canister_id,
-                effective_principal,
-                sender,
-                method,
-                payload,
-            )
-            .await?;
-        self.await_call(message_id).await
+        self.update_call_with_effective_principal_and_sender_info_inner(
+            canister_id,
+            effective_principal,
+            sender,
+            method,
+            payload,
+            None,
+        )
+        .await
     }
 
     /// Get the pending canister HTTP outcalls.

@@ -12,9 +12,6 @@ DEPENDENCIES = [
     "@crate_index//:ping",
     "@crate_index//:rayon",
     "@crate_index//:regex",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
-    "@crate_index//:serde_with",
 ]
 
 rust_library(

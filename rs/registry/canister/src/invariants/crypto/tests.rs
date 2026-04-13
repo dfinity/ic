@@ -73,8 +73,6 @@ fn node_crypto_keys_invariants_valid_snapshot() {
     assert!(check_node_crypto_keys_invariants(&snapshot).is_ok());
 }
 
-// TODO(CRP-1450): add tests for "missing" "invalid", and "duplicated" scenarios, so that
-//   these scenarios are tested for all 5 keys of a node.
 #[test]
 fn node_crypto_keys_invariants_missing_committee_key() {
     // Crypto keys for the test.
@@ -502,7 +500,7 @@ fn initial_dkg_transcript(
     num_nodes: usize,
     rng: &mut ReproducibleRng,
 ) -> NiDkgTranscript {
-    let mut target_id_bytes = [0u8; 32];
+    let mut target_id_bytes = [0_u8; 32];
     rng.fill_bytes(&mut target_id_bytes);
     let target_id = NiDkgTargetId::new(target_id_bytes);
     let receiver_keys = generate_node_keys(num_nodes);

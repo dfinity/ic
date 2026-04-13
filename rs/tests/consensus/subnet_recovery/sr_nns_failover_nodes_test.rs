@@ -31,7 +31,6 @@ use ic_consensus_system_test_utils::{
     rw_message::{
         cert_state_makes_progress_with_retries, install_nns_and_check_progress, store_message,
     },
-    set_sandbox_env_vars,
     subnet::assert_subnet_is_healthy,
 };
 use ic_recovery::nns_recovery_failover_nodes::{
@@ -62,6 +61,8 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test))
+        // The replica binary is "broken" and restarted by the orchestrator multiple times
+        .remove_metrics_to_check("orchestrator_replica_process_start_attempts_total")
         .execute_from_args()?;
     Ok(())
 }
@@ -180,9 +181,7 @@ pub fn test(env: TestEnv) {
         highest_cert_share,
     );
 
-    let recovery_dir = get_dependency_path("rs/tests");
-    set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
-
+    let recovery_dir = tempdir().unwrap().path().to_path_buf();
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
         nns_url: parent_nns_node.get_public_url(),
@@ -190,7 +189,6 @@ pub fn test(env: TestEnv) {
         admin_key_file: Some(ssh_authorized_priv_keys_dir.join(SSH_USERNAME)),
         test_mode: true,
         skip_prompts: true,
-        use_local_binaries: false,
     };
     let subnet_args = NNSRecoveryFailoverNodesArgs {
         subnet_id: topo_broken_ic.root_subnet_id(),
@@ -301,10 +299,8 @@ pub fn test(env: TestEnv) {
 
 fn setup_file_server(env: &TestEnv, file_path: &std::path::PathBuf) -> String {
     // Set up Universal VM with HTTP Bin testing service
-    let activate_script = &read_dependency_to_string(
-        "rs/tests/consensus/subnet_recovery/orchestrator_universal_vm_activation.sh",
-    )
-    .expect("File not found")[..];
+    let activate_script = &read_dependency_from_env_to_string("ORCHESTRATOR_UVM_ACTIVATION_SCRIPT")
+        .expect("File not found")[..];
     let config_dir = env
         .single_activate_script_config_dir(UNIVERSAL_VM_NAME, activate_script)
         .unwrap();
@@ -315,7 +311,7 @@ fn setup_file_server(env: &TestEnv, file_path: &std::path::PathBuf) -> String {
         &fs::read(file_path).expect("File not found")[..],
     );
 
-    let path = get_dependency_path("rs/tests/static-file-server.tar");
+    let path = get_dependency_path_from_env("STATIC_FILE_SERVER_IMAGE");
     let _ = insert_file_to_config(
         config_dir.clone(),
         "static-file-server.tar",

@@ -1,4 +1,5 @@
 use crate::*;
+use ic_crypto_sha2::Sha256;
 use ic_types::NodeIndex;
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -312,42 +313,32 @@ impl EccScalar {
     pub fn hash_to_scalar(
         curve: EccCurveType,
         input: &[u8],
-        domain_separator: &[u8],
+        dst: &[u8],
     ) -> CanisterThresholdResult<Self> {
-        let h = Self::hash_to_several_scalars(curve, 1, input, domain_separator)?;
-        Ok(h[0].clone())
+        match curve {
+            EccCurveType::Ed25519 | EccCurveType::K256 | EccCurveType::P256 => {
+                const XMD_LEN: usize = 48; // "L" in RFC 9380 for this curve
+                let ub = ic_crypto_internal_seed::xmd::<XMD_LEN, Sha256>(input, dst);
+                EccScalar::from_bytes_wide(curve, &ub)
+            }
+        }
     }
 
     /// Hash an input into multiple Scalar values
-    pub fn hash_to_several_scalars(
+    pub fn hash_to_two_scalars(
         curve: EccCurveType,
-        count: usize,
         input: &[u8],
-        domain_separator: &[u8],
-    ) -> CanisterThresholdResult<Vec<Self>> {
-        let s_bits = curve.scalar_bits();
-        let security_level = curve.security_level();
-
-        let field_len = (s_bits + security_level).div_ceil(8); // "L" in spec
-        let len_in_bytes = count * field_len;
-
-        let uniform_bytes = ic_crypto_internal_seed::xmd::<ic_crypto_sha2::Sha256>(
-            input,
-            domain_separator,
-            len_in_bytes,
-        )?;
-
-        let mut out = Vec::with_capacity(count);
-
-        for i in 0..count {
-            let s = EccScalar::from_bytes_wide(
-                curve,
-                &uniform_bytes[i * field_len..(i + 1) * field_len],
-            )?;
-            out.push(s);
+        dst: &[u8],
+    ) -> CanisterThresholdResult<(Self, Self)> {
+        match curve {
+            EccCurveType::Ed25519 | EccCurveType::K256 | EccCurveType::P256 => {
+                const XMD_LEN: usize = 48; // "L" in RFC 9380 for this curve
+                let ub = ic_crypto_internal_seed::xmd::<{ 2 * XMD_LEN }, Sha256>(input, dst);
+                let s0 = EccScalar::from_bytes_wide(curve, &ub[..XMD_LEN])?;
+                let s1 = EccScalar::from_bytes_wide(curve, &ub[XMD_LEN..])?;
+                Ok((s0, s1))
+            }
         }
-
-        Ok(out)
     }
 
     /// Deserialize a scalar value (with tag)
@@ -427,7 +418,7 @@ impl EccScalar {
     pub fn random<R: CryptoRng + RngCore>(curve: EccCurveType, rng: &mut R) -> Self {
         // Use rejection sampling to avoid biasing the output
 
-        let mut buf = vec![0u8; curve.scalar_bytes()];
+        let mut buf = vec![0_u8; curve.scalar_bytes()];
 
         loop {
             rng.fill_bytes(&mut buf);
@@ -584,13 +575,13 @@ impl<'de> Deserialize<'de> for EccScalarBytes {
                 if v.len() != 32 {
                     return Err(E::invalid_length(v.len(), &"32 bytes"));
                 }
-                let mut arr = [0u8; 32];
+                let mut arr = [0_u8; 32];
                 arr.copy_from_slice(v);
                 Ok(Box::new(arr))
             }
             // Old format: CBOR array of integers
             fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-                let mut arr = [0u8; 32];
+                let mut arr = [0_u8; 32];
                 for (i, byte) in arr.iter_mut().enumerate() {
                     *byte = seq
                         .next_element()?
@@ -893,7 +884,10 @@ impl EccPoint {
     }
 
     /// Return pt1 * scalar1 + pt2 * scalar2
-    pub fn mul_2_points(
+    ///
+    /// This function may run in variable time with respect to the inputs and
+    /// should not be used with secret values
+    pub fn mul_2_points_vartime(
         pt1: &EccPoint,
         scalar1: &EccScalar,
         pt2: &EccPoint,
@@ -905,21 +899,77 @@ impl EccPoint {
                 EccScalar::K256(s1),
                 EccPointInternal::K256(pt2),
                 EccScalar::K256(s2),
-            ) => Ok(Self::from(secp256k1::Point::lincomb(pt1, s1, pt2, s2))),
+            ) => Ok(Self::from(secp256k1::Point::lincomb_vartime(
+                pt1, s1, pt2, s2,
+            ))),
 
             (
                 EccPointInternal::P256(pt1),
                 EccScalar::P256(s1),
                 EccPointInternal::P256(pt2),
                 EccScalar::P256(s2),
-            ) => Ok(Self::from(secp256r1::Point::lincomb(pt1, s1, pt2, s2))),
+            ) => Ok(Self::from(secp256r1::Point::lincomb_vartime(
+                pt1, s1, pt2, s2,
+            ))),
 
             (
                 EccPointInternal::Ed25519(pt1),
                 EccScalar::Ed25519(s1),
                 EccPointInternal::Ed25519(pt2),
                 EccScalar::Ed25519(s2),
-            ) => Ok(Self::from(ed25519::Point::lincomb(pt1, s1, pt2, s2))),
+            ) => Ok(Self::from(ed25519::Point::lincomb_vartime(
+                pt1, s1, pt2, s2,
+            ))),
+
+            _ => Err(CanisterThresholdError::CurveMismatch),
+        }
+    }
+
+    /// Compute 3-ary multi scalar multiplication (p1*s1 + p2*s2 + p3*s3)
+    ///
+    /// This function may run in variable time with respect to the inputs and
+    /// should not be used with secret values
+    pub fn mul_3_points_vartime(
+        p1: &EccPoint,
+        s1: &EccScalar,
+        p2: &EccPoint,
+        s2: &EccScalar,
+        p3: &EccPoint,
+        s3: &EccScalar,
+    ) -> CanisterThresholdResult<Self> {
+        match (&p1.point, s1, &p2.point, s2, &p3.point, s3) {
+            (
+                EccPointInternal::K256(p1),
+                EccScalar::K256(s1),
+                EccPointInternal::K256(p2),
+                EccScalar::K256(s2),
+                EccPointInternal::K256(p3),
+                EccScalar::K256(s3),
+            ) => Ok(Self::from(secp256k1::Point::lincomb3_vartime(
+                p1, s1, p2, s2, p3, s3,
+            ))),
+
+            (
+                EccPointInternal::P256(p1),
+                EccScalar::P256(s1),
+                EccPointInternal::P256(p2),
+                EccScalar::P256(s2),
+                EccPointInternal::P256(p3),
+                EccScalar::P256(s3),
+            ) => Ok(Self::from(secp256r1::Point::lincomb3_vartime(
+                p1, s1, p2, s2, p3, s3,
+            ))),
+
+            (
+                EccPointInternal::Ed25519(p1),
+                EccScalar::Ed25519(s1),
+                EccPointInternal::Ed25519(p2),
+                EccScalar::Ed25519(s2),
+                EccPointInternal::Ed25519(p3),
+                EccScalar::Ed25519(s3),
+            ) => Ok(Self::from(ed25519::Point::lincomb3_vartime(
+                p1, s1, p2, s2, p3, s3,
+            ))),
 
             _ => Err(CanisterThresholdError::CurveMismatch),
         }
@@ -966,11 +1016,11 @@ impl EccPoint {
                 match next {
                     SlidingWindowStep::Continue => {}
                     SlidingWindowStep::Window(window) => match window {
-                        1i8 => {
+                        1_i8 => {
                             let sum = accum.add_points(self)?;
                             *accum = sum;
                         }
-                        -1i8 => {
+                        -1_i8 => {
                             let sum = accum.sub_points(self)?;
                             *accum = sum;
                         }
@@ -1151,7 +1201,7 @@ impl EccPoint {
             }
             let sb = (*s).scalar_bits_be();
 
-            let mut window = vec![0u8; num_windows];
+            let mut window = vec![0_u8; num_windows];
             for (i, w) in window.iter_mut().enumerate() {
                 *w = Window::extract(&sb, i);
             }
@@ -1473,7 +1523,7 @@ pub(crate) struct WindowInfo<const WINDOW_SIZE: usize> {}
 impl<const WINDOW_SIZE: usize> WindowInfo<WINDOW_SIZE> {
     const SIZE: usize = WINDOW_SIZE;
 
-    const MASK: u8 = 0xFFu8 >> (8 - WINDOW_SIZE);
+    const MASK: u8 = 0xFF_u8 >> (8 - WINDOW_SIZE);
     const MAX: usize = 1 << WINDOW_SIZE;
 
     /// * `bit_len` denotes the total bit size
@@ -1590,16 +1640,16 @@ impl Naf {
 
         // 2) sum = scalar + shifted;
         let mut sum = Vec::with_capacity(bytes.len() + 1);
-        let mut overflow = 0u8;
+        let mut overflow = 0_u8;
 
         for i in 0..bytes.len() {
             let result = bytes[bytes.len() - i - 1] as u16 + shifted[i] as u16 + overflow as u16;
             overflow = (result >> 8) as u8;
-            sum.push((result & 0x00FFu16) as u8);
+            sum.push((result & 0x00FF_u16) as u8);
         }
         // the sum of the last bytes may overflow and we then need to add 1 more byte
         sum.push((overflow != 0) as u8);
-        shifted.push(0u8);
+        shifted.push(0_u8);
 
         // 3) c = shifted ^ sum;
         let c: Vec<u8> = shifted
@@ -1638,7 +1688,7 @@ impl Naf {
         assert!((pos + bit_len) <= self.bit_len());
         let byte_offset = pos / 8;
         let spans_two_bytes = ((pos % 8) + bit_len) > 8;
-        let mask = 0xFFu8 >> (8 - bit_len);
+        let mask = 0xFF_u8 >> (8 - bit_len);
         if spans_two_bytes {
             let extract = |byte_0, byte_1| {
                 let shifted_0: u8 = byte_0 >> (pos % 8);

@@ -7,8 +7,9 @@ use ic_management_canister_types_private::{
 use ic_state_machine_tests::StateMachine;
 use ic_test_utilities::universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, wasm};
 use ic_test_utilities_execution_environment::get_reply;
+use ic_types::NumBytes;
 use ic_types::ingress::WasmResult;
-use ic_types::{Cycles, NumBytes};
+use ic_types_cycles::Cycles;
 
 // The following test uses `StateMachine` instead of `ExecutionTest`
 // because the compute capacity of the subnet is not initialized

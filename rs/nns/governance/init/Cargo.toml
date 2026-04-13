@@ -13,7 +13,6 @@ path = "src/lib.rs"
 [dependencies]
 ic-base-types = { path = "../../../types/base_types" }
 ic-nervous-system-common = { path = "../../../nervous_system/common" }
-ic-nervous-system-common-build-metadata = { path = "../../../nervous_system/common/build_metadata" }
 ic-nervous-system-common-test-keys = { path = "../../../nervous_system/common/test_keys" }
 ic-nns-common = { path = "../../common" }
 ic-nns-governance-api = { path = "../api" }

@@ -23,6 +23,7 @@ use ic_types::messages::{
 };
 use ic_types::xnet::{RejectReason, RejectSignal, StreamIndex, StreamIndexedQueue, StreamSlice};
 use ic_types::{CanisterId, SubnetId};
+use ic_types_cycles::CompoundCycles;
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
@@ -503,6 +504,12 @@ impl StreamHandlerImpl {
             stream.reject_signals(),
             StreamComponent::SignalsTo(remote_subnet),
         );
+        assert_valid_signals_begin(
+            stream.signals_begin(),
+            stream.signals_end(),
+            stream.reject_signals(),
+            StreamComponent::SignalsTo(remote_subnet),
+        );
         assert_valid_signals_for_messages(
             stream.signals_end(),
             stream_slice.header().begin(),
@@ -734,6 +741,7 @@ impl StreamHandlerImpl {
         stream: &mut Stream,
         available_guaranteed_response_memory: &mut i64,
     ) {
+        let own_cost_schedule = state.get_own_cost_schedule();
         let (msg, msg_type) = match msg {
             StreamMessage::Request(req) => {
                 (RequestOrResponse::Request(req), LABEL_VALUE_TYPE_REQUEST)
@@ -813,7 +821,10 @@ impl StreamHandlerImpl {
                 self.metrics.critical_error_sender_subnet_mismatch.inc();
                 stream.push_accept_signal();
                 // Cycles are lost.
-                state.observe_lost_cycles_due_to_dropped_messages(rep.refund);
+                state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                    rep.refund,
+                    own_cost_schedule,
+                ));
             }
         }
     }
@@ -840,6 +851,7 @@ impl StreamHandlerImpl {
         let receiver_host_subnet = state.metadata.network_topology.route(msg.receiver().get());
 
         let payload_size = msg.payload_size_bytes().get();
+        let own_cost_schedule = state.get_own_cost_schedule();
         match receiver_host_subnet {
             // Matching receiver subnet, try inducting message.
             Some(host_subnet) if host_subnet == self.subnet_id => {
@@ -898,7 +910,9 @@ impl StreamHandlerImpl {
                                 );
                                 self.metrics.critical_error_induct_response_failed.inc();
                                 // Cycles are lost.
-                                state.observe_lost_cycles_due_to_dropped_messages(response.refund);
+                                state.observe_lost_cycles_due_to_dropped_messages(
+                                    CompoundCycles::new(response.refund, own_cost_schedule),
+                                );
                                 Accept
                             }
                         }
@@ -986,6 +1000,7 @@ impl StreamHandlerImpl {
         match receiver_host_subnet {
             // Matching receiver subnet, try crediting the cycles.
             Some(host_subnet) if host_subnet == self.subnet_id => {
+                let cost_schedule = state.get_own_cost_schedule();
                 stream.push_accept_signal();
                 if state.credit_refund(refund) {
                     self.observe_inducted_message_status(
@@ -998,7 +1013,10 @@ impl StreamHandlerImpl {
                         LABEL_VALUE_TYPE_REFUND,
                         LABEL_VALUE_DROPPED,
                     );
-                    state.observe_lost_cycles_due_to_dropped_messages(refund.amount());
+                    state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                        refund.amount(),
+                        cost_schedule,
+                    ));
                 }
             }
 
@@ -1246,6 +1264,25 @@ fn assert_valid_signals_for_messages(
         messages_begin <= signals_end && signals_end <= messages_end,
         "Invalid {stream_component}: signals_end {signals_end}, messages [{messages_begin}, {messages_end})",
     );
+}
+
+fn assert_valid_signals_begin(
+    signals_begin: StreamIndex,
+    signals_end: StreamIndex,
+    reject_signals: &VecDeque<RejectSignal>,
+    stream_component: StreamComponent,
+) {
+    assert!(
+        signals_begin <= signals_end,
+        "Invalid {stream_component}: signals_begin {signals_begin} after signals_end {signals_end}"
+    );
+    if let Some(first_reject_signal) = reject_signals.front() {
+        assert!(
+            signals_begin <= first_reject_signal.index,
+            "Invalid {stream_component}: first reject signal {} before signals_begin {signals_begin}",
+            first_reject_signal.index
+        );
+    }
 }
 
 /// Ensures that the given slice messages (if non-empty) begin where the reverse

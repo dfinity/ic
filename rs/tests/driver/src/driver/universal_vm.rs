@@ -5,7 +5,7 @@ use crate::driver::farm::Farm;
 use crate::driver::farm::HostFeature;
 use crate::driver::farm::id_of_file;
 use crate::driver::ic::VmAllocationStrategy;
-use crate::driver::ic::VmResources;
+use crate::driver::ic::VmResourceOverrides;
 use crate::driver::resource::AllocatedVm;
 use crate::driver::resource::{
     DiskImage, allocate_resources, get_resource_request_for_universal_vm,
@@ -14,11 +14,11 @@ use crate::driver::test_env::SshKeyGen;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::{HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession};
 use crate::driver::test_setup::{GroupSetup, InfraProvider};
-use crate::util::block_on;
 use anyhow::{Result, bail};
 use chrono::Duration;
 use chrono::Utc;
 use slog::info;
+use ssh2::Session;
 use std::fs::{self, File};
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr};
@@ -35,7 +35,7 @@ use crate::driver::constants::SSH_USERNAME;
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct UniversalVm {
     pub name: String,
-    pub vm_resources: VmResources,
+    pub vm_resource_overrides: VmResourceOverrides,
     pub vm_allocation: Option<VmAllocationStrategy>,
     pub required_host_features: Vec<HostFeature>,
     pub has_ipv4: bool,
@@ -64,7 +64,7 @@ impl UniversalVm {
     pub fn new(name: String) -> Self {
         UniversalVm {
             name,
-            vm_resources: Default::default(),
+            vm_resource_overrides: Default::default(),
             vm_allocation: Default::default(),
             required_host_features: Default::default(),
             has_ipv4: false,
@@ -73,8 +73,8 @@ impl UniversalVm {
         }
     }
 
-    pub fn with_vm_resources(mut self, vm_resources: VmResources) -> Self {
-        self.vm_resources = vm_resources;
+    pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
+        self.vm_resource_overrides = vm_resource_overrides;
         self
     }
 
@@ -109,7 +109,7 @@ impl UniversalVm {
     }
 
     pub fn start(&self, env: &TestEnv) -> Result<()> {
-        let farm = block_on(Farm::from_test_env(env, "universal VM"));
+        let farm = Farm::from_test_env(env, "universal VM");
         let pot_setup = GroupSetup::read_attribute(env);
 
         env.ssh_keygen()?;
@@ -133,11 +133,11 @@ impl UniversalVm {
             let config_ssh_img = universal_vm_dir.join(CONF_SSH_IMG_FNAME);
             create_universal_vm_config_image(&config_ssh_dir, &config_ssh_img, "SSH")?;
 
-            let ssh_config_img_file_spec = AttachImageSpec::new(block_on(farm.upload_file(
+            let ssh_config_img_file_spec = AttachImageSpec::new(farm.upload_file(
                 &pot_setup.infra_group_name,
                 config_ssh_img,
                 CONF_SSH_IMG_FNAME,
-            ))?);
+            )?);
             image_specs.push(ssh_config_img_file_spec);
         }
 
@@ -157,8 +157,7 @@ impl UniversalVm {
                 let file_id = id_of_file(config_img.clone())?;
                 let mut file_spec = AttachImageSpec::new(file_id.clone());
 
-                let upload = match block_on(farm.claim_file(&pot_setup.infra_group_name, &file_id))?
-                {
+                let upload = match farm.claim_file(&pot_setup.infra_group_name, &file_id)? {
                     ClaimResult::FileClaimed(file_expiration) => {
                         if let Some(expiration) = file_expiration.expiration {
                             let now = Utc::now();
@@ -176,11 +175,11 @@ impl UniversalVm {
                 };
 
                 if upload {
-                    file_spec = AttachImageSpec::new(block_on(farm.upload_file(
+                    file_spec = AttachImageSpec::new(farm.upload_file(
                         &pot_setup.infra_group_name,
                         config_img,
                         CONF_IMG_FNAME,
-                    ))?);
+                    )?);
                     info!(env.logger(), "Uploaded image: {}", file_id);
                 } else {
                     info!(
@@ -193,13 +192,13 @@ impl UniversalVm {
         }
 
         if InfraProvider::read_attribute(env) == InfraProvider::Farm {
-            block_on(farm.attach_disk_images(
+            farm.attach_disk_images(
                 &pot_setup.infra_group_name,
                 &self.name,
                 "usb-storage",
                 image_specs,
-            ))?;
-            block_on(farm.start_vm(&pot_setup.infra_group_name, &self.name))?;
+            )?;
+            farm.start_vm(&pot_setup.infra_group_name, &self.name)?;
         }
 
         Ok(())
@@ -369,6 +368,16 @@ echo "$ipv4"
 "#;
 
 impl RetrieveIpv4Addr for DeployedUniversalVm {
+    fn block_on_ipv4_from_session(&self, session: &Session) -> Result<Ipv4Addr> {
+        use anyhow::Context;
+        let ipv4_string =
+            self.block_on_bash_script_from_session(session, IPV4_RETRIEVE_SH_SCRIPT)?;
+        ipv4_string
+            .trim()
+            .parse::<Ipv4Addr>()
+            .context("ipv4 retrieval")
+    }
+
     fn block_on_ipv4(&self) -> Result<Ipv4Addr> {
         use anyhow::Context;
         let ipv4_string = self.block_on_bash_script(IPV4_RETRIEVE_SH_SCRIPT)?;

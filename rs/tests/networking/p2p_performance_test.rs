@@ -6,13 +6,16 @@ use ic_system_test_driver::{
     driver::{
         farm::HostFeature,
         group::SystemTestGroup,
-        ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+        ic::{
+            AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet,
+            VmResourceOverrides,
+        },
         prometheus_vm::HasPrometheus,
         simulate_network::{ProductionSubnetTopology, SimulateNetwork},
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-            READY_WAIT_TIMEOUT, RETRY_BACKOFF, SubnetSnapshot, get_dependency_path,
+            READY_WAIT_TIMEOUT, RETRY_BACKOFF, SubnetSnapshot, get_dependency_path_from_env,
         },
         universal_vm::{UniversalVm, UniversalVms},
     },
@@ -58,11 +61,11 @@ pub fn setup(
 ) {
     let logger = env.logger();
 
-    let path = get_dependency_path("rs/tests/jaeger_uvm_config_image.zst");
+    let path = get_dependency_path_from_env("JAEGER_UVM_CONFIG_IMAGE_ZST");
 
     UniversalVm::new(JAEGER_VM_NAME.to_string())
         .with_required_host_features(vec![HostFeature::Performance])
-        .with_vm_resources(VmResources {
+        .with_resource_overrides(VmResourceOverrides {
             vcpus: Some(NrOfVCPUs::new(16)),
             memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
             boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
@@ -80,24 +83,16 @@ pub fn setup(
         "Jaeger frontend available at: http://[{}]:16686", jaeger_ipv6
     );
 
-    let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(16)),
-        memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
-        boot_image_minimal_size_gibibytes,
-    };
     InternetComputer::new()
         .with_required_host_features(vec![HostFeature::Performance])
         .with_jaeger_addr(SocketAddr::new(IpAddr::V6(jaeger_ipv6), 4317))
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .with_default_vm_resources(vm_resources)
-                .add_nodes(nodes_nns_subnet),
-        )
-        .add_subnet(
-            Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(vm_resources)
-                .add_nodes(nodes_app_subnet),
-        )
+        .with_resource_overrides(VmResourceOverrides {
+            vcpus: Some(NrOfVCPUs::new(16)),
+            memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
+            boot_image_minimal_size_gibibytes,
+        })
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(nodes_nns_subnet))
+        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(nodes_app_subnet))
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
     info!(logger, "Step 1: Installing NNS canisters ...");

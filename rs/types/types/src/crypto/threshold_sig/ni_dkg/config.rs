@@ -75,13 +75,13 @@ impl TryFrom<pb::NiDkgConfig> for NiDkgConfig {
             dealers: config
                 .dealers
                 .into_iter()
-                .map(|dealer| crate::node_id_try_from_option(Some(dealer)))
+                .map(crate::node_id_try_from_protobuf)
                 .collect::<Result<BTreeSet<_>, _>>()?,
             max_corrupt_receivers: NumberOfNodes::from(config.max_corrupt_receivers),
             receivers: config
                 .receivers
                 .into_iter()
-                .map(|receiver| crate::node_id_try_from_option(Some(receiver)))
+                .map(crate::node_id_try_from_protobuf)
                 .collect::<Result<BTreeSet<_>, _>>()?,
             threshold: NumberOfNodes::from(config.threshold),
             registry_version: RegistryVersion::from(config.registry_version),

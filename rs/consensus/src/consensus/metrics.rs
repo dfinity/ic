@@ -9,7 +9,7 @@ use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
 };
 use ic_types::{
-    CountBytes, Height, Time,
+    Height, Time,
     batch::BatchPayload,
     consensus::{Block, BlockPayload, BlockProposal, ConsensusMessageHashable, HasHeight, HasRank},
 };
@@ -150,7 +150,8 @@ impl BatchStats {
 
     pub(crate) fn add_from_payload(&mut self, payload: &BatchPayload) {
         self.ingress_messages_delivered += payload.ingress.message_count();
-        self.ingress_message_bytes_delivered += payload.ingress.count_bytes();
+        self.ingress_message_bytes_delivered +=
+            payload.ingress.total_messages_size_estimate().get() as usize;
         self.xnet_bytes_delivered += payload.xnet.size_bytes();
         self.ingress_ids
             .extend(payload.ingress.message_ids().cloned());
@@ -179,6 +180,7 @@ pub(crate) struct FinalizerMetrics {
     pub canister_http_success_delivered: IntCounterVec,
     pub canister_http_timeouts_delivered: IntCounter,
     pub canister_http_divergences_delivered: IntCounter,
+    pub canister_http_flexible_candid_failures: IntCounter,
     pub canister_http_payload_bytes_delivered: Histogram,
 }
 
@@ -275,6 +277,10 @@ impl FinalizerMetrics {
                 "canister_http_divergences_delivered",
                 "Total number of canister http messages delivered as divergences",
             ),
+            canister_http_flexible_candid_failures: metrics_registry.int_counter(
+                "canister_http_flexible_candid_failures",
+                "Total number of flexible canister http responses skipped due to candid encoding/decoding failures",
+            ),
             canister_http_payload_bytes_delivered: metrics_registry.histogram(
                 "canister_http_payload_bytes_delivered",
                 "Total number of bytes in the canister http payload",
@@ -303,10 +309,18 @@ impl FinalizerMetrics {
         self.canister_http_success_delivered
             .with_label_values(&["non_replicated"])
             .inc_by(batch_stats.canister_http.single_signature_responses as u64);
+        self.canister_http_success_delivered
+            .with_label_values(&["flexible"])
+            .inc_by(batch_stats.canister_http.flexible_ok_responses as u64);
         self.canister_http_timeouts_delivered
             .inc_by(batch_stats.canister_http.timeouts as u64);
         self.canister_http_divergences_delivered
             .inc_by(batch_stats.canister_http.divergence_responses as u64);
+        self.canister_http_flexible_candid_failures.inc_by(
+            batch_stats
+                .canister_http
+                .flexible_ok_responses_candid_failures as u64,
+        );
         self.canister_http_payload_bytes_delivered
             .observe(batch_stats.canister_http.payload_bytes as f64);
 

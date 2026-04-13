@@ -1,7 +1,8 @@
 use anyhow::Result;
 use ic_base_types::PrincipalId;
+use ic_canister_client::{Ed25519KeyPair, Sender};
+use ic_canister_client_sender::SigKeys;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
-use ic_consensus_system_test_utils::set_sandbox_env_vars;
 use ic_crypto_utils_threshold_sig_der::public_key_der_to_pem;
 use ic_limits::DKG_INTERVAL_HEIGHT;
 use ic_nervous_system_common::E8;
@@ -9,7 +10,9 @@ use ic_nns_common::types::NeuronId;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
-use ic_system_test_driver::driver::ic::{ImageSizeGiB, InternetComputer, Subnet, VmResources};
+use ic_system_test_driver::driver::ic::{
+    ImageSizeGiB, InternetComputer, Subnet, VmResourceOverrides,
+};
 use ic_system_test_driver::driver::ic_gateway_vm::{
     HasIcGatewayVm, IC_GATEWAY_VM_NAME, IcGatewayVm,
 };
@@ -29,14 +32,13 @@ use std::sync::mpsc::{self, Receiver};
 use std::{io::Write, process::Command};
 use url::Url;
 
-use crate::proposals::NEURON_CONTROLLER;
-use crate::proposals::NEURON_SECRET_KEY_PEM;
-use crate::proposals::ProposalWithMainnetState;
+use crate::proposals::{
+    ProposalWithMainnetState, RECOVERED_NNS_DICTATOR_NEURON_IDENTITY, RecoveredNnsDictatorNeuron,
+};
 
-pub const MAINNET_NODE_VM_RESOURCES: VmResources = VmResources {
-    vcpus: None,
-    memory_kibibytes: None,
+pub const MAINNET_NODE_VM_RESOURCE_OVERRIDES: VmResourceOverrides = VmResourceOverrides {
     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(192)),
+    ..VmResourceOverrides::const_default()
 };
 
 // Default path to the mainnet NNS state tarball on the backup pod. Can be overridden through the
@@ -186,16 +188,18 @@ fn setup_recovered_nns(
     let recovered_nns_node = topology.unassigned_nodes().next().unwrap();
     fetch_ic_config(&env, &nns_node);
 
-    // The following ensures ic-replay and ic-recovery know where to get their required dependencies.
-    let recovery_dir = get_dependency_path("rs/tests");
-    set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
-
     // Wait until we have fetched ic-replay before setting the test neuron (which needs ic-replay)
     fetch_mainnet_ic_replay_thread
         .join()
         .unwrap_or_else(|e| panic!("Failed to fetch the mainnet ic-replay because {e:?}"));
 
-    let neuron_id: NeuronId = setup_test_neuron(&env);
+    // Replace the subnet list record in the registry with a singleton containing only the
+    // recovered NNS subnet, so that this testnet does not try to connect to mainnet nodes through
+    // XNet connections.
+    patch_subnet_list(&env);
+    // Set up a dictator neuron with a large stake to be able to pass any proposal instantly during
+    // the test
+    let (neuron_id, neuron_secret_key_pem) = setup_test_neuron(&env);
 
     // Wait until the aux node is setup and we have fetched ic-recovery before starting the recovery
     let aux_node = rx_aux_node.recv().unwrap();
@@ -204,7 +208,13 @@ fn setup_recovered_nns(
         .unwrap_or_else(|e| panic!("Failed to fetch the mainnet ic-recovery because {e:?}"));
 
     recover_nns_subnet(&env, &nns_node, &recovered_nns_node, &aux_node);
-    ProposalWithMainnetState::write_dictator_neuron_id_to_env(&env, neuron_id);
+    ProposalWithMainnetState::write_dictator_neuron_identity_to_env(
+        &env,
+        RecoveredNnsDictatorNeuron {
+            neuron_id,
+            neuron_secret_key_pem,
+        },
+    );
 
     test_recovered_nns(&env, &recovered_nns_node);
 
@@ -223,6 +233,7 @@ fn setup_recovered_nns(
         subnet_id: SubnetId::from(PrincipalId::from_str(ORIGINAL_NNS_ID).unwrap()),
         max_ingress_bytes_per_message: None,
         max_ingress_messages_per_block: None,
+        max_ingress_bytes_per_block: None,
         max_block_payload_size: None,
         unit_delay_millis: None,
         initial_notary_delay_millis: None,
@@ -233,6 +244,7 @@ fn setup_recovered_nns(
         is_halted: None,
         halt_at_cup_height: None,
         features: None,
+        resource_limits: None,
         chain_key_config: None,
         chain_key_signing_enable: None,
         chain_key_signing_disable: None,
@@ -277,7 +289,7 @@ fn setup_recovered_nns(
 fn fetch_mainnet_ic_replay(env: &TestEnv) {
     // TODO (CON-1624): fetch the mainnet version of ic-replay
     std::fs::copy(
-        get_dependency_path(std::env::var("IC_REPLAY_PATH").unwrap()),
+        get_dependency_path_from_env("IC_REPLAY_PATH"),
         env.get_path(PATH_IC_REPLAY),
     )
     .unwrap();
@@ -286,7 +298,7 @@ fn fetch_mainnet_ic_replay(env: &TestEnv) {
 fn fetch_mainnet_ic_recovery(env: &TestEnv) {
     // TODO (CON-1624): fetch the mainnet version of ic-recovery
     std::fs::copy(
-        get_dependency_path(std::env::var("IC_RECOVERY_PATH").unwrap()),
+        get_dependency_path_from_env("IC_RECOVERY_PATH"),
         env.get_path(PATH_IC_RECOVERY),
     )
     .unwrap();
@@ -380,15 +392,22 @@ fn fetch_ic_config(env: &TestEnv, nns_node: &IcNodeSnapshot) {
     );
 }
 
-fn setup_test_neuron(env: &TestEnv) -> NeuronId {
-    let neuron_id = with_neuron_for_tests(env);
-    with_trusted_neurons_following_neuron_for_tests(env, neuron_id);
-    neuron_id
+fn patch_subnet_list(env: &TestEnv) {
+    ic_replay(env, |cmd| {
+        cmd.arg("overwrite-subnet-list-with-singleton");
+    });
 }
 
-fn with_neuron_for_tests(env: &TestEnv) -> NeuronId {
+fn setup_test_neuron(env: &TestEnv) -> (NeuronId, String) {
+    let neuron_identity = Ed25519KeyPair::generate(&mut rand::thread_rng());
+    let neuron_principal = Sender::SigKeys(SigKeys::Ed25519(neuron_identity)).get_principal_id();
+    let neuron_id = with_neuron_for_tests(env, neuron_principal);
+    with_trusted_neurons_following_neuron_for_tests(env, neuron_id, neuron_principal);
+    (neuron_id, neuron_identity.to_pem())
+}
+
+fn with_neuron_for_tests(env: &TestEnv, controller: PrincipalId) -> NeuronId {
     let logger: slog::Logger = env.logger();
-    let controller = PrincipalId::from_str(NEURON_CONTROLLER).unwrap();
 
     info!(logger, "Create a neuron followed by trusted neurons ...");
     // The neuron's stake must be large enough to be eligible to make proposals (> reject cost fee),
@@ -420,12 +439,14 @@ fn with_neuron_for_tests(env: &TestEnv) -> NeuronId {
     neuron_id
 }
 
-fn with_trusted_neurons_following_neuron_for_tests(env: &TestEnv, neuron_id: NeuronId) {
-    let NeuronId(id) = neuron_id;
-    let controller = PrincipalId::from_str(NEURON_CONTROLLER).unwrap();
+fn with_trusted_neurons_following_neuron_for_tests(
+    env: &TestEnv,
+    NeuronId(neuron_id): NeuronId,
+    controller: PrincipalId,
+) {
     ic_replay(env, |cmd| {
         cmd.arg("with-trusted-neurons-following-neuron-for-tests")
-            .arg(id.to_string())
+            .arg(neuron_id.to_string())
             .arg(controller.to_string());
     });
 }
@@ -471,12 +492,6 @@ fn recover_nns_subnet(
     let _session = aux_node.block_on_ssh_session();
 
     info!(logger, "Starting ic-recovery ...");
-    let recovery_binaries_path =
-        std::fs::canonicalize(get_dependency_path("rs/tests/recovery/binaries")).unwrap();
-
-    let dir = env.base_path();
-    std::os::unix::fs::symlink(recovery_binaries_path, dir.join("recovery/binaries")).unwrap();
-
     let nns_url: Url = nns_node.get_public_url();
     let replica_version = get_guestos_img_version();
     let subnet_id = SubnetId::from(PrincipalId::from_str(ORIGINAL_NNS_ID).unwrap());
@@ -487,11 +502,11 @@ fn recover_nns_subnet(
     let nns_ip = nns_node.get_ip_addr();
     let upload_ip = recovered_nns_node.get_ip_addr();
 
-    let ic_recovery_path = env.get_path(PATH_IC_RECOVERY);
-    let mut cmd = Command::new(ic_recovery_path);
+    let recovery_dir = tempdir().unwrap().path().to_path_buf();
+    let mut cmd = Command::new(get_dependency_path_from_env("IC_RECOVERY_PATH"));
     cmd.arg("--skip-prompts")
         .arg("--dir")
-        .arg(dir)
+        .arg(recovery_dir)
         .arg("--nns-url")
         .arg(nns_url.to_string())
         .arg("--replica-version")
@@ -693,7 +708,7 @@ fn setup_ic(env: TestEnv) {
             .unwrap();
 
     InternetComputer::new()
-        .with_default_vm_resources(MAINNET_NODE_VM_RESOURCES)
+        .with_resource_overrides(MAINNET_NODE_VM_RESOURCE_OVERRIDES)
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .with_api_boundary_nodes(1)
         .with_unassigned_nodes(1)
@@ -710,25 +725,29 @@ fn setup_ic(env: TestEnv) {
 /// This script can be sourced such that we can easily use the legacy
 /// nns-tools shell scripts in /testnet/tools/nns-tools/ with the dynamic
 /// testnet deployed by this system-test.
-fn write_sh_lib(env: &TestEnv, neuron_id: NeuronId, http_gateway: &Url) {
+fn write_sh_lib(env: &TestEnv, NeuronId(neuron_id): NeuronId, http_gateway: &Url) {
     let logger: slog::Logger = env.logger();
     let set_testnet_env_vars_sh_path = env.get_path(PATH_SET_TESTNET_ENV_VARS_SH);
     let set_testnet_env_vars_sh_str = set_testnet_env_vars_sh_path.display();
-    let ic_admin =
-        fs::canonicalize(get_dependency_path("rs/tests/recovery/binaries/ic-admin")).unwrap();
+    let ic_admin = fs::canonicalize(get_dependency_path_from_env("IC_ADMIN_PATH")).unwrap();
     let pem = env.get_path("neuron_secret_key.pem");
     let mut pem_file = File::create(&pem).unwrap();
     pem_file
-        .write_all(NEURON_SECRET_KEY_PEM.as_bytes())
+        .write_all(
+            RECOVERED_NNS_DICTATOR_NEURON_IDENTITY
+                .get()
+                .expect("'write_dictator_neuron_identity_to_env' should have been called before 'write_sh_lib'")
+                .1
+                .as_bytes(),
+        )
         .unwrap();
-    let neuron_id_number = neuron_id.0;
     fs::write(
         &set_testnet_env_vars_sh_path,
         format!(
             "export IC_ADMIN={ic_admin:?};\n\
              export PEM={pem:?};\n\
              export NNS_URL=\"{http_gateway}\";\n\
-             export NEURON_ID={neuron_id_number:?};\n\
+             export NEURON_ID={neuron_id:?};\n\
             "
         ),
     )

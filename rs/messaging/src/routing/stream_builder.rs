@@ -13,7 +13,8 @@ use ic_types::messages::{
     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES, Payload, RejectContext,
     Request, RequestOrResponse, Response, StreamMessage,
 };
-use ic_types::{CountBytes, Cycles, SubnetId};
+use ic_types::{CountBytes, SubnetId};
+use ic_types_cycles::{CompoundCycles, Cycles};
 #[cfg(test)]
 use mockall::automock;
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
@@ -30,6 +31,8 @@ struct StreamBuilderMetrics {
     pub stream_bytes: IntGaugeVec,
     /// Stream begin, by remote subnet.
     pub stream_begin: IntGaugeVec,
+    /// Signals currently enqueued in streams, by remote subnet.
+    pub stream_signals: IntGaugeVec,
     /// Signals end, by remote subnet.
     pub signals_end: IntGaugeVec,
     /// Routed XNet messages, by type and status.
@@ -52,6 +55,7 @@ struct StreamBuilderMetrics {
 const METRIC_STREAM_MESSAGES: &str = "mr_stream_messages";
 const METRIC_STREAM_BYTES: &str = "mr_stream_bytes";
 const METRIC_STREAM_BEGIN: &str = "mr_stream_begin";
+const METRIC_STREAM_SIGNALS: &str = "mr_stream_signals";
 const METRIC_SIGNALS_END: &str = "mr_signals_end";
 const METRIC_ROUTED_MESSAGES: &str = "mr_routed_message_count";
 const METRIC_ROUTED_PAYLOAD_SIZES: &str = "mr_routed_payload_size_bytes";
@@ -91,6 +95,11 @@ impl StreamBuilderMetrics {
         let stream_begin = metrics_registry.int_gauge_vec(
             METRIC_STREAM_BEGIN,
             "Stream begin, by remote subnet",
+            &[LABEL_REMOTE],
+        );
+        let stream_signals = metrics_registry.int_gauge_vec(
+            METRIC_STREAM_SIGNALS,
+            "Signals currently enqueued in streams, by remote subnet.",
             &[LABEL_REMOTE],
         );
         let signals_end = metrics_registry.int_gauge_vec(
@@ -149,6 +158,7 @@ impl StreamBuilderMetrics {
             stream_messages,
             stream_bytes,
             stream_begin,
+            stream_signals,
             signals_end,
             routed_messages,
             routed_payload_sizes,
@@ -215,6 +225,7 @@ impl StreamBuilderImpl {
         reject_code: RejectCode,
         reject_message: String,
     ) {
+        let own_cost_schedule = state.get_own_cost_schedule();
         state
             .push_input(
                 Response {
@@ -247,7 +258,10 @@ impl StreamBuilderImpl {
                     response
                 );
                 self.metrics.critical_error_induct_response_failed.inc();
-                state.observe_lost_cycles_due_to_dropped_messages(req.payment);
+                state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                    req.payment,
+                    own_cost_schedule,
+                ));
             });
     }
 
@@ -460,7 +474,7 @@ impl StreamBuilderImpl {
                         && is_at_limit(
                             &dst_stream_entry,
                             network_topology
-                                .subnets
+                                .subnets()
                                 .get(&dst_subnet_id)
                                 .map_or(SubnetType::Application, |topology| topology.subnet_type),
                         )
@@ -611,27 +625,34 @@ impl StreamBuilderImpl {
                     stream.messages().len(),
                     stream.count_bytes(),
                     stream.messages_begin(),
+                    stream.signals_begin(),
                     stream.signals_end(),
                 )
             })
-            .for_each(|(subnet, len, size_bytes, begin, signals_end)| {
-                self.metrics
-                    .stream_messages
-                    .with_label_values(&[&subnet])
-                    .set(len as i64);
-                self.metrics
-                    .stream_bytes
-                    .with_label_values(&[&subnet])
-                    .set(size_bytes as i64);
-                self.metrics
-                    .stream_begin
-                    .with_label_values(&[&subnet])
-                    .set(begin.get() as i64);
-                self.metrics
-                    .signals_end
-                    .with_label_values(&[&subnet])
-                    .set(signals_end.get() as i64);
-            });
+            .for_each(
+                |(subnet, len, size_bytes, begin, signals_begin, signals_end)| {
+                    self.metrics
+                        .stream_messages
+                        .with_label_values(&[&subnet])
+                        .set(len as i64);
+                    self.metrics
+                        .stream_bytes
+                        .with_label_values(&[&subnet])
+                        .set(size_bytes as i64);
+                    self.metrics
+                        .stream_begin
+                        .with_label_values(&[&subnet])
+                        .set(begin.get() as i64);
+                    self.metrics
+                        .stream_signals
+                        .with_label_values(&[&subnet])
+                        .set((signals_end - signals_begin).get() as i64);
+                    self.metrics
+                        .signals_end
+                        .with_label_values(&[&subnet])
+                        .set(signals_end.get() as i64);
+                },
+            );
         self.observe_misrouted_messages(&state);
 
         {
@@ -663,6 +684,7 @@ impl StreamBuilderImpl {
         streams: &mut BTreeMap<SubnetId, Stream>,
     ) {
         let mut cycles_lost = Cycles::zero();
+        let own_cost_schedule = state.get_own_cost_schedule();
         state.take_refunds(|refund| {
             match network_topology.route(refund.recipient().get()) {
                 Some(dst_subnet_id) => {
@@ -704,7 +726,10 @@ impl StreamBuilderImpl {
                 }
             }
         });
-        state.observe_lost_cycles_due_to_dropped_messages(cycles_lost);
+        state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+            cycles_lost,
+            own_cost_schedule,
+        ));
     }
 }
 

@@ -14,7 +14,6 @@ documentation = "https://docs.rs/ic-ethereum-types"
 hex = { workspace = true }
 ic-sha3 = { workspace = true }
 minicbor = { workspace = true }
-minicbor-derive = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]

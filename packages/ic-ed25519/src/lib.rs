@@ -15,6 +15,9 @@ use zeroize::ZeroizeOnDrop;
 
 pub use ic_principal::Principal as CanisterId;
 
+/// The length of an Ed25519 signature in bytes
+pub const SIGNATURE_BYTES: usize = 64;
+
 /// An error if a private key cannot be decoded
 #[derive(Clone, Debug, Error)]
 pub enum PrivateKeyDecodingError {
@@ -123,7 +126,7 @@ impl PrivateKey {
             let mut sha2 = Sha512::new();
             sha2.update(seed);
             let digest: [u8; 64] = sha2.finalize().into();
-            let mut truncated = [0u8; 32];
+            let mut truncated = [0_u8; 32];
             truncated.copy_from_slice(&digest[..32]);
             truncated
         };
@@ -136,7 +139,7 @@ impl PrivateKey {
     /// Sign a message and return a signature
     ///
     /// This is the non-prehashed variant of Ed25519
-    pub fn sign_message(&self, msg: &[u8]) -> [u8; 64] {
+    pub fn sign_message(&self, msg: &[u8]) -> [u8; SIGNATURE_BYTES] {
         self.sk.sign(msg).into()
     }
 
@@ -288,7 +291,7 @@ impl PrivateKey {
     /// incompatible with additive derivation.
     ///
     pub fn derive_subkey(&self, derivation_path: &DerivationPath) -> (DerivedPrivateKey, [u8; 32]) {
-        let chain_code = [0u8; 32];
+        let chain_code = [0_u8; 32];
         self.derive_subkey_with_chain_code(derivation_path, &chain_code)
     }
 
@@ -322,7 +325,7 @@ impl PrivateKey {
             sha2.update(derived_scalar.to_bytes());
             sha2.update(chain_code);
             let hash: [u8; 64] = sha2.finalize().into();
-            let mut truncated = [0u8; 32];
+            let mut truncated = [0_u8; 32];
             truncated.copy_from_slice(&hash[..32]);
             truncated
         };
@@ -358,7 +361,7 @@ impl DerivedPrivateKey {
     /// Sign a message and return a signature
     ///
     /// This is the non-prehashed variant of Ed25519
-    pub fn sign_message(&self, msg: &[u8]) -> [u8; 64] {
+    pub fn sign_message(&self, msg: &[u8]) -> [u8; SIGNATURE_BYTES] {
         ed25519_dalek::hazmat::raw_sign::<Sha512>(&self.esk, msg, &self.vk).to_bytes()
     }
 
@@ -378,7 +381,7 @@ impl DerivedPrivateKey {
     /// incompatible with additive derivation.
     ///
     pub fn derive_subkey(&self, derivation_path: &DerivationPath) -> (DerivedPrivateKey, [u8; 32]) {
-        let chain_code = [0u8; 32];
+        let chain_code = [0_u8; 32];
         self.derive_subkey_with_chain_code(derivation_path, &chain_code)
     }
 
@@ -412,7 +415,7 @@ impl DerivedPrivateKey {
             sha2.update(derived_scalar.to_bytes());
             sha2.update(chain_code);
             let hash: [u8; 64] = sha2.finalize().into();
-            let mut truncated = [0u8; 32];
+            let mut truncated = [0_u8; 32];
             truncated.copy_from_slice(&hash[..32]);
             truncated
         };
@@ -445,12 +448,12 @@ struct Signature {
 
 impl Signature {
     fn from_slice(signature: &[u8]) -> Result<Self, SignatureError> {
-        if signature.len() != 64 {
+        if signature.len() != SIGNATURE_BYTES {
             return Err(SignatureError::InvalidLength);
         }
 
         let (r, r_bytes) = {
-            let mut r_bytes = [0u8; 32];
+            let mut r_bytes = [0_u8; 32];
             r_bytes.copy_from_slice(&signature[..32]);
             let r = CompressedEdwardsY(r_bytes)
                 .decompress()
@@ -460,7 +463,7 @@ impl Signature {
         };
 
         let s = {
-            let mut s_bytes = [0u8; 32];
+            let mut s_bytes = [0_u8; 32];
             s_bytes.copy_from_slice(&signature[32..]);
             Option::<Scalar>::from(Scalar::from_canonical_bytes(s_bytes))
                 .ok_or(SignatureError::InvalidSignature)?
@@ -564,16 +567,25 @@ impl PublicKey {
     /// encoding of a point not in the prime order subgroup), then the DER
     /// encoding of that invalid key will be returned.
     pub fn convert_raw_to_der(raw: &[u8]) -> Result<Vec<u8>, PublicKeyDecodingError> {
-        // We continue to check the length, since otherwise the DER
-        // encoding itself would be invalid and unparsable.
-        if raw.len() != Self::BYTES {
-            return Err(PublicKeyDecodingError::InvalidKeyEncoding(format!(
+        let raw32: [u8; 32] = raw.try_into().map_err(|_| {
+            PublicKeyDecodingError::InvalidKeyEncoding(format!(
                 "Expected key of exactly {} bytes, got {}",
                 Self::BYTES,
                 raw.len()
-            )));
-        };
+            ))
+        })?;
 
+        Ok(Self::convert_raw32_to_der(raw32))
+    }
+
+    /// Convert a raw Ed25519 public key (32 bytes) to the DER encoding
+    ///
+    /// # Warning
+    ///
+    /// This performs no validity check on the public key. If you pass an invalid
+    /// key (ie a encoding of a point not in the prime order subgroup), then the
+    /// DER encoding of that invalid key will be returned.
+    pub fn convert_raw32_to_der(raw: [u8; 32]) -> Vec<u8> {
         const DER_PREFIX: [u8; 12] = [
             48, 42, // A sequence of 42 bytes follows
             48, 5, // An sequence of 5 bytes follows
@@ -584,8 +596,8 @@ impl PublicKey {
 
         let mut der_enc = Vec::with_capacity(DER_PREFIX.len() + Self::BYTES);
         der_enc.extend_from_slice(&DER_PREFIX);
-        der_enc.extend_from_slice(raw);
-        Ok(der_enc)
+        der_enc.extend_from_slice(&raw);
+        der_enc
     }
 
     /// Serialize this public key in raw format
@@ -635,7 +647,7 @@ impl PublicKey {
     ///
     /// See RFC 8410 for details on the format
     ///
-    /// This returns a Vec<u8> instead of a String for accidental/historical reasons
+    /// This returns a `Vec<u8>` instead of a `String` for accidental/historical reasons
     pub fn serialize_rfc8410_pem(&self) -> Vec<u8> {
         let der = self.serialize_rfc8410_der();
         pem::encode(&pem::Pem::new("PUBLIC KEY", der)).into()
@@ -849,7 +861,7 @@ impl PublicKey {
     /// This is the same derivation system used by the Internet Computer when
     /// deriving subkeys for Ed25519
     pub fn derive_subkey(&self, derivation_path: &DerivationPath) -> (Self, [u8; 32]) {
-        let chain_code = [0u8; 32];
+        let chain_code = [0_u8; 32];
         self.derive_subkey_with_chain_code(derivation_path, &chain_code)
     }
 
@@ -941,11 +953,11 @@ impl DerivationPath {
 
             let hkdf = hkdf::Hkdf::<Sha512>::new(Some(&chain_code), &ikm);
 
-            let mut okm = [0u8; 96];
+            let mut okm = [0_u8; 96];
             hkdf.expand(b"Ed25519", &mut okm)
                 .expect("96 is a valid length for HKDF-SHA-512");
 
-            let mut offset = [0u8; 64];
+            let mut offset = [0_u8; 64];
             offset.copy_from_slice(&okm[0..64]);
             offset.reverse(); // dalek uses little endian
             let offset = Scalar::from_bytes_mod_order_wide(&offset);

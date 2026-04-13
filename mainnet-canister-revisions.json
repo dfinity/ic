@@ -4,8 +4,8 @@
     "sha256": "5bf34cb029e437c4ccb990b1595876d4c869566d66b8b58059d0ee742891c219"
   },
   "bitcoin_testnet": {
-    "sha256": "ee669a352fbca79f21aa6d0b7190f4daae74ef203b0ccf8d7fb82123dfd2d6a6",
-    "tag": "release/2025-12-03"
+    "sha256": "a0dfef8f5c52e628ce3a197277f0d5fc427f3b34f6f4deb771572855616c9749",
+    "tag": "release/2026-03-06"
   },
   "ck_btc_archive": {
     "rev": "512cf412f33d430b79f42330518166d14fc6884e",
@@ -22,14 +22,6 @@
   "ck_btc_ledger_v1": {
     "rev": "d4ee25b0865e89d3eaac13a60f0016d5e3296b31",
     "sha256": "a170bfdce5d66e751a3cc03747cb0f06b450af500e75e15976ec08a3f5691f4c"
-  },
-  "ck_btc_ledger_v2": {
-    "rev": "e54d3fa34ded227c885d04e64505fa4b5d564743",
-    "sha256": "3d808fa63a3d8ebd4510c0400aa078e99a31afaa0515f0b68778f929ce4b2a46"
-  },
-  "ck_btc_ledger_v2_noledgerversion": {
-    "rev": "aba60ffbc46acfc8990bf4d5685c1360bd7026b9",
-    "sha256": "67cfcbabb79e683b6fc855450d9972c9efaa7a1cd28c6387965616fbead191ea"
   },
   "ck_btc_ledger_v3": {
     "rev": "2190613d3b5bcd9b74c382b22d151580b8ac271a",
@@ -51,21 +43,13 @@
     "rev": "d4ee25b0865e89d3eaac13a60f0016d5e3296b31",
     "sha256": "e6072806ae22868ee09c07923d093b1b0b687dba540d22cfc1e1a5392bfcca46"
   },
-  "ck_eth_ledger_v2": {
-    "rev": "e54d3fa34ded227c885d04e64505fa4b5d564743",
-    "sha256": "98a7b7391608dc4a554d6964bad24157b6aaf890a05bbaad3fcc92033d9c7b02"
-  },
-  "ck_eth_ledger_v2_noledgerversion": {
-    "rev": "aba60ffbc46acfc8990bf4d5685c1360bd7026b9",
-    "sha256": "73d0c5f057aaf33004218ce588780e1b454c717c702b1cf47532f32c23515f1e"
-  },
   "ck_eth_ledger_v3": {
     "rev": "2190613d3b5bcd9b74c382b22d151580b8ac271a",
     "sha256": "9637743e1215a4db376a62ee807a0986faf20833be2b332df09b3d5dbdd7339e"
   },
   "cycles-minting": {
-    "rev": "1bc0a59539613f6ec273a59a172ae43dfabb1ce0",
-    "sha256": "beb44ce1ea1540373a4d4f45fb3a5f4045d0e0bd162b3a621f3b551324175e28"
+    "rev": "e114e3d7f4efef3dc9876b619e71deb79868640e",
+    "sha256": "6ef07db375180b081b2e992c9b67e1aca941b63ffbad8ac9ac68d2de8d332912"
   },
   "cycles_ledger": {
     "sha256": "ed99402535bb4f58e4ab469acc40c903f2fdeea409be16623d5c6a9131cbf120",
@@ -76,28 +60,32 @@
     "sha256": "8df72887ab235f4533ee613b1bc7293ec8d62c866525b1425934cf992ef894a7"
   },
   "dogecoin": {
-    "sha256": "2efd5a5b28315a3d4896419df14a4aad8a346174f53cc7727a63b37ec086b3ac",
-    "tag": "release/2025-12-10"
+    "sha256": "1fe3ce73e9422a0a3e0444ea7b5a615d2b36c4b940d3cbcfe9e3d5c6cdc32494",
+    "tag": "release/2026-03-12"
   },
   "genesis-token": {
     "rev": "36ceffe4c47f4c3a881e75951178f5413f777f6c",
     "sha256": "bce508df3db43b47b158c0aab9a7c9a3709a78e055a7ced76d5ff89832f9e778"
   },
   "governance": {
-    "rev": "1b25ff7b66627df8413677f55919010c4d6719d0",
-    "sha256": "70b9e15632552f316c84b48e3ea732997bfa71417255fb5d60c44aae8fe420d8"
+    "rev": "2450f6dd9beb5e2049a7b201e7b54f28e9d63815",
+    "sha256": "7f48ef5dd1604ea4ebeed2a7bc63810182620d3ba67c9a39fcb10518232dc8e5"
   },
   "governance-canister_test": {
-    "rev": "1b25ff7b66627df8413677f55919010c4d6719d0",
-    "sha256": "affcfdbf835312c9a8f859f3c9c4b00f1c35e0974f48a2a10df81bd8c697ba21"
+    "rev": "2450f6dd9beb5e2049a7b201e7b54f28e9d63815",
+    "sha256": "cf461d53342f67a992e1ebcc8589ad6249fcaf58c558cb45d559e522a4bdb7ab"
   },
   "index": {
     "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
-  "internet_identity_test": {
-    "sha256": "2c45c2aad6647f5bd9300dee7f6dd4eddf26ff9253cda4895a0aaa1b9e10ab43",
-    "tag": "release-2026-01-16"
+  "internet_identity_backend": {
+    "sha256": "5dc3dec9b91e8cf384248f9a4c6265dcb3c2b294dd0d2362490d600ddfde4733",
+    "tag": "release-2026-04-03"
+  },
+  "internet_identity_frontend": {
+    "sha256": "bbbac12ca3ccf84301dd6e1fc29c197cdfbb282e664a430c4322e52257377cbf",
+    "tag": "release-2026-04-03"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
@@ -112,44 +100,44 @@
     "sha256": "a7c87d163a0cc69f6a5e4ed11f9a99618bde8658d21e8d84207963bb2400347c"
   },
   "nns_dapp_test": {
-    "sha256": "fefa040b4e98dbd18f383ee5985b84e79a73fc7c06e27c783dc0ce37222c3669",
-    "tag": "proposal-140007"
+    "sha256": "fcabe56e58ddc5ea06f708913f897c2113675e56a9a105cfa23a3ea4886d7a00",
+    "tag": "proposal-141231"
   },
   "node-rewards": {
-    "rev": "2f21d74c33949bf556a980c85f8c1ddf85a78439",
-    "sha256": "19b893f2e17ec04a17e21c386fa62b8b9a55f98a4f4d9753c5c065bd21513fe4"
+    "rev": "d17cf0bcd330e94f868cc7d19d0ac860cbe64198",
+    "sha256": "da1f1f9ec646bfe4a50f2ec06111b57845b549a2d86d27c31eab138965f29a58"
   },
   "registry": {
-    "rev": "1b25ff7b66627df8413677f55919010c4d6719d0",
-    "sha256": "0f4a7386dd0d9a2cada8d215788f53a1a4c2f33544bee77e3687df845eb819e8"
+    "rev": "2450f6dd9beb5e2049a7b201e7b54f28e9d63815",
+    "sha256": "c0a54698d11602385af6fe688d31f86b85a89a02b643557988d36682425f36cf"
   },
   "root": {
-    "rev": "1b25ff7b66627df8413677f55919010c4d6719d0",
-    "sha256": "b0d15266ff3b38e15e6ae4638e0655034c330ab42ed5388e013885ecd4a8e2da"
+    "rev": "077cec5e8f1a366d13d56eb800a9ffbaae2e460b",
+    "sha256": "0b5ce8c2fda7b9c813cae67fc1a1efb3698af3b534dec781f24aada24770d98d"
   },
   "sns-wasm": {
-    "rev": "ff761f361981cff6a760b7d181f696551878b92a",
-    "sha256": "5906d35741e4c69690b7a881073a7075dfb2525878b82017a92648e40fe3c934"
+    "rev": "2b7652941d6a896473e7b386dd97fc6a091633e7",
+    "sha256": "328185cf9ccbeb531c4485ad0e4a00c020ea3249f7902968c00dc9aaac739fc2"
   },
   "sns_aggregator_test": {
     "sha256": "58f3cdf3320adb0864ff2e7d880af5c9b75e056240ff47a9f3e6eda3b17066f1",
     "tag": "proposal-138924-agg"
   },
   "sns_archive": {
-    "rev": "3f3d9bfac750f82f424185ac5b32a756cfd45ad9",
-    "sha256": "cb3f2ecc540f3b4c073f1a4de1fc4a9cef11cb1901405f49f9ef855a53b69e1c"
+    "rev": "cf41372e3d4dc1accfe2c09a7969f8bddc729dc1",
+    "sha256": "f7f48f402a128cbd18dc7734c7f149f2814c8181766f39897a66d514d47ccf11"
   },
   "sns_governance": {
-    "rev": "724ae4101bfdd8d4443126a6a8b1ec5ca9b68a12",
-    "sha256": "12e2af5c3c6b0211365b5360c17bc1261a97adc0c917f618308f6bb1cb3f76e6"
+    "rev": "43723a278465c0725b7cc2e3374f7c8545395cb6",
+    "sha256": "a71edb4c6a1014dfc7251c74cdc1ed02b5b3f14e1577022c2be28902214d2d2d"
   },
   "sns_index": {
-    "rev": "3f3d9bfac750f82f424185ac5b32a756cfd45ad9",
-    "sha256": "73eb5d98d6e7020cd99a3430ef1284c05e2a708ae5274ca0387deca7551265e5"
+    "rev": "cf41372e3d4dc1accfe2c09a7969f8bddc729dc1",
+    "sha256": "dab6808d0dfc06e5e88336d0c3d3e45e5448c6e36c2a781f3e9e09bd450f528c"
   },
   "sns_ledger": {
-    "rev": "3f3d9bfac750f82f424185ac5b32a756cfd45ad9",
-    "sha256": "24e6b0b09ba44b1123453877994bb59ce75555c2e33f19f58163a3e0c6e62bd1"
+    "rev": "cf41372e3d4dc1accfe2c09a7969f8bddc729dc1",
+    "sha256": "354dd6ecfdc72b5409805b31dea22c9db11df6e14095a5a68924eb63535e6d8a"
   },
   "sns_ledger_v2": {
     "rev": "e54d3fa34ded227c885d04e64505fa4b5d564743",
@@ -158,6 +146,10 @@
   "sns_root": {
     "rev": "724ae4101bfdd8d4443126a6a8b1ec5ca9b68a12",
     "sha256": "d26b930d8756bb75b6caa5195346499b18bbd6448810386e1b8f2f1f808ade86"
+  },
+  "subnet_rental": {
+    "sha256": "419fc07a8d46655030a5b3f438a764e0fcd67ae4e13a11deac045a6f38730db2",
+    "tag": "0.5.0"
   },
   "swap": {
     "rev": "0e4c8234a9e0508ae30c5b8a7498406294c25e95",

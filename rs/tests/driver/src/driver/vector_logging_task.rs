@@ -25,7 +25,7 @@ pub(crate) fn vector_logging_task(group_ctx: GroupContext, start_time: DateTime<
 
     loop {
         if let Err(e) = vector_vm.sync_with_vector(&env) {
-            warn!(logger, "Failed to sync with vector vm due to: {:?}", e);
+            warn!(logger, "Failed to sync with vector vm due to: {}", e);
         }
 
         std::thread::sleep(KEEPALIVE_INTERVAL);

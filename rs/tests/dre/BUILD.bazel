@@ -1,18 +1,16 @@
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "MAINNET_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "XNET_TEST_CANISTER_DATA")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "MAINNET_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test(
     name = "guest_os_qualification",
-    data = XNET_TEST_CANISTER_DATA,
     env = MAINNET_ENV,
     tags = [
         "colocate",
         "manual",
     ],
-    runtime_deps = MAINNET_NNS_CANISTER_RUNTIME_DEPS | COUNTER_CANISTER_RUNTIME_DEPS | {
-        "XNET_TEST_CANISTER_WASM_PATH": "//rs/rust_canisters/xnet_test:xnet-test-canister",
+    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS | MAINNET_NNS_CANISTER_RUNTIME_DEPS | COUNTER_CANISTER_RUNTIME_DEPS | {
         "IC_VERSION_FILE": "//bazel:version.txt",
     },
     deps = [

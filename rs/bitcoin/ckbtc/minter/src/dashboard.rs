@@ -368,6 +368,10 @@ impl<Builder: DashboardBuilder> Dashboard<Builder> {
                         <td><code>{}</code></td>
                     </tr>
                     <tr>
+                        <th>Min deposit {native_token} amount</th>
+                        <td>{}</td>
+                    </tr>
+                    <tr>
                         <th>Check Fee</th>
                         <td>{}</td>
                     </tr>
@@ -401,6 +405,7 @@ impl<Builder: DashboardBuilder> Dashboard<Builder> {
             s.btc_checker_principal
                 .map(|p| p.to_string())
                 .unwrap_or_else(|| "N/A".to_string()),
+            DisplayAmount(s.effective_deposit_min_btc_amount()),
             DisplayAmount(s.check_fee),
             DisplayAmount(s.retrieve_btc_min_amount),
             DisplayAmount(s.fee_based_retrieve_btc_min_amount),
@@ -430,9 +435,6 @@ impl<Builder: DashboardBuilder> Dashboard<Builder> {
                 match status {
                     state::InFlightStatus::Signing => {
                         write!(buf, "<td>Signing...</td>").unwrap();
-                    }
-                    state::InFlightStatus::Sending { txid } => {
-                        write!(buf, "<td>Sending TX {}</td>", self.txid_link(txid)).unwrap();
                     }
                 }
                 writeln!(buf, "</tr>").unwrap();

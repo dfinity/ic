@@ -80,23 +80,42 @@ pub enum WasmValidationError {
     /// Module contains an invalid export section
     InvalidExportSection(String),
     /// Same function name is exported multiple times (with different types).
-    DuplicateExport { name: String },
+    DuplicateExport {
+        name: String,
+    },
     /// There are too many exports defined in the module.
-    TooManyExports { defined: usize, allowed: usize },
+    TooManyExports {
+        defined: usize,
+        allowed: usize,
+    },
     /// The total length of exported function names is too large.
-    ExportedNamesTooLong { total_length: usize, allowed: usize },
+    ExportedNamesTooLong {
+        total_length: usize,
+        allowed: usize,
+    },
     /// Module contains an invalid data section
     InvalidDataSection(String),
+    // Module contains an invalid table section.
+    InvalidTableSection(String),
     /// Module contains an invalid custom section
     InvalidCustomSection(String),
     /// Module contains an invalid global section
     InvalidGlobalSection(String),
     /// Module contains too many globals.
-    TooManyGlobals { defined: usize, allowed: usize },
+    TooManyGlobals {
+        defined: usize,
+        allowed: usize,
+    },
     /// Module contains too many functions.
-    TooManyFunctions { defined: usize, allowed: usize },
+    TooManyFunctions {
+        defined: usize,
+        allowed: usize,
+    },
     /// Module contains too many custom sections.
-    TooManyCustomSections { defined: usize, allowed: usize },
+    TooManyCustomSections {
+        defined: usize,
+        allowed: usize,
+    },
     /// A function was too complex.
     FunctionComplexityTooHigh {
         index: usize,
@@ -104,17 +123,33 @@ pub enum WasmValidationError {
         allowed: usize,
     },
     /// A function contains an unsupported Wasm instruction.
-    UnsupportedWasmInstruction { index: usize, instruction: String },
+    UnsupportedWasmInstruction {
+        index: usize,
+        instruction: String,
+    },
     /// A function was too large.
     FunctionTooLarge {
         index: usize,
         size: usize,
         allowed: usize,
     },
+    /// A function name was too large.
+    FunctionNameTooLarge {
+        index: usize,
+        size: usize,
+        allowed: usize,
+        name: String,
+    },
     /// The code section is too large.
-    CodeSectionTooLarge { size: u32, allowed: u32 },
+    CodeSectionTooLarge {
+        size: u32,
+        allowed: u32,
+    },
     /// The total module size is too large.
-    ModuleTooLarge { size: u64, allowed: u64 },
+    ModuleTooLarge {
+        size: u64,
+        allowed: u64,
+    },
     // The initial Wasm64 heap memory is too large.
     InitialWasm64MemoryTooLarge {
         declared_size: u64,
@@ -170,6 +205,9 @@ impl std::fmt::Display for WasmValidationError {
             Self::InvalidDataSection(err) => {
                 write!(f, "Wasm module has an invalid data section. {err}")
             }
+            Self::InvalidTableSection(err) => {
+                write!(f, "Wasm module has an invalid table section. {err}")
+            }
             Self::InvalidCustomSection(err) => {
                 write!(f, "Wasm module has an invalid custom section. {err}")
             }
@@ -215,6 +253,16 @@ impl std::fmt::Display for WasmValidationError {
                 "Wasm module contains a function at index {index} \
                     of size {size} that exceeds the maximum allowed size of {allowed}.",
             ),
+            Self::FunctionNameTooLarge {
+                index,
+                size,
+                allowed,
+                name,
+            } => write!(
+                f,
+                "Wasm module contains a function at index {index} \
+                    with name '{name}' of size {size} bytes that exceeds the maximum allowed size of {allowed} bytes.",
+            ),
             Self::CodeSectionTooLarge { size, allowed } => write!(
                 f,
                 "Wasm module code section size of {size} \
@@ -246,6 +294,7 @@ impl AsErrorHelp for WasmValidationError {
             | WasmValidationError::InvalidFunctionSignature(_)
             | WasmValidationError::InvalidImportSection(_)
             | WasmValidationError::InvalidDataSection(_)
+            | WasmValidationError::InvalidTableSection(_)
             | WasmValidationError::InvalidCustomSection(_)
             | WasmValidationError::InvalidGlobalSection(_)
             | WasmValidationError::UnsupportedWasmInstruction { .. }
@@ -286,6 +335,10 @@ impl AsErrorHelp for WasmValidationError {
                 smaller functions."
                     .to_string(),
                 doc_link: doc_ref("wasm-module-function-too-large"),
+            },
+            WasmValidationError::FunctionNameTooLarge { .. } => ErrorHelp::UserError {
+                suggestion: "Try using shorter function names.".to_string(),
+                doc_link: doc_ref("wasm-module-function-name-too-large"),
             },
             WasmValidationError::CodeSectionTooLarge { .. } => ErrorHelp::UserError {
                 suggestion: "Try shrinking the module code section using tools like \

@@ -9,7 +9,7 @@ pytest==8.4.1
 python_gitlab==6.0.0
 pyyaml==6.0.2
 PyGithub==2.6.1
-cryptography==45.0.4
+cryptography==46.0.5
 pyjwt==2.10.1
 requests==2.32.4
 toml==0.10.2

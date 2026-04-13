@@ -33,7 +33,6 @@ ic-state-sync-manager = { path = "../state_sync_manager" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types = { path = "../../types/types" }
-ic-types-test-utils = { path = "../../types/types_test_utils" }
 mockall = { workspace = true }
 pin-project-lite = "0.2"
 quinn = { workspace = true }
@@ -44,5 +43,4 @@ serde = { workspace = true }
 slog = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
-tokio-stream = { workspace = true }
 turmoil = { workspace = true }

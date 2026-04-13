@@ -22,7 +22,7 @@ use anyhow::Result;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{
-    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, Subnet, VmResources,
+    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, Subnet, VmResourceOverrides,
 };
 use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use ic_system_test_driver::driver::test_env::TestEnv;
@@ -139,14 +139,14 @@ fn setup(env: TestEnv, config: Config) {
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(VmResources {
-                    vcpus: None,
+                .with_resource_overrides(VmResourceOverrides {
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(
                         (24 + 2 * NUM_CANISTERS as u64) * 1024 * 1024,
                     )),
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(
                         100 + 2 * NUM_CANISTERS as u64,
                     )),
+                    ..VmResourceOverrides::default()
                 })
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL_LARGE))
                 .add_nodes(config.nodes_count - config.allowed_failures)
@@ -166,10 +166,6 @@ fn setup(env: TestEnv, config: Config) {
 }
 
 fn test(env: TestEnv, config: Config) {
-    block_on(test_async(env, config));
-}
-
-async fn test_async(env: TestEnv, config: Config) {
     let logger = env.logger();
 
     // Test 1: simulate malicious chunks by altering them in receiving side
@@ -189,14 +185,13 @@ async fn test_async(env: TestEnv, config: Config) {
         rejoin_node.clone(),
         agent_node,
         nodes.take(config.allowed_failures),
-    )
-    .await;
+    );
 
     info!(
         logger,
         "Collecting metrics of invalid chunks during state sync"
     );
-    let results = fetch_metrics::<u64>(
+    let results = block_on(fetch_metrics::<u64>(
         &logger,
         rejoin_node,
         vec![
@@ -204,8 +199,8 @@ async fn test_async(env: TestEnv, config: Config) {
             INVALID_MANIFEST_CHUNK,
             INVALID_STATE_CHUNK,
         ],
-    )
-    .await;
+    ));
+
     // Assert the number of invalid chunks detected during state sync is the same as the pre-defined allowance
     assert_metrics(results, &config);
 
@@ -230,14 +225,13 @@ async fn test_async(env: TestEnv, config: Config) {
         rejoin_node.clone(),
         agent_node,
         nodes.take(config.allowed_failures),
-    )
-    .await;
+    );
 
     info!(
         logger,
         "Collecting metrics of invalid chunks during state sync"
     );
-    let result = fetch_metrics::<u64>(
+    let result = block_on(fetch_metrics::<u64>(
         &logger,
         rejoin_node,
         vec![
@@ -245,8 +239,8 @@ async fn test_async(env: TestEnv, config: Config) {
             INVALID_MANIFEST_CHUNK,
             INVALID_STATE_CHUNK,
         ],
-    )
-    .await;
+    ));
+
     // Assert that there are some invalid chunks detected during state sync
     let total_invalid_chunks = result[INVALID_META_MANIFEST_CHUNK][0]
         + result[INVALID_MANIFEST_CHUNK][0]

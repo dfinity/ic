@@ -243,7 +243,10 @@ impl LedgerClient {
                 }
             }
             Err(e) => {
-                if e.contains("has no query method") || e.contains("not found") {
+                if e.contains("has no query method")
+                    || e.contains("not found")
+                    || e.contains("Certificate is not authorized")
+                {
                     tracing::warn!(
                         "Symbol endpoint not present in the ledger canister. Couldn't verify token symbol."
                     );

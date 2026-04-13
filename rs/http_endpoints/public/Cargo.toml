@@ -10,7 +10,6 @@ documentation.workspace = true
 askama = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
-byte-unit = "4.0.14"
 bytes = { workspace = true }
 cfg-if = "1.0.0"
 crossbeam = "0.8.4"
@@ -48,7 +47,6 @@ ic-validator = { path = "../../validator" }
 inferno = { workspace = true }
 prometheus = { workspace = true }
 prost = { workspace = true }
-rand = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
@@ -66,6 +64,7 @@ tracing-subscriber = { workspace = true }
 ic-canister-client = { path = "../../canister_client" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-canonical-state = { path = "../../canonical_state" }
+ic-canonical-state-tree-hash = { path = "../../canonical_state/tree_hash" }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
 ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
 ic-crypto-test-utils-crypto-returning-ok = { path = "../../crypto/test_utils/crypto_returning_ok" }

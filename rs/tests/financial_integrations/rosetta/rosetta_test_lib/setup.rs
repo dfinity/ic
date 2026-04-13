@@ -13,7 +13,7 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SshSession,
-            SubnetSnapshot, get_dependency_path,
+            SubnetSnapshot, get_dependency_path_from_env,
         },
         universal_vm::{UniversalVm, UniversalVms, insert_file_to_config},
     },
@@ -284,12 +284,7 @@ echo \"Rosetta container started \"
         .unwrap();
 
     // Add Rosetta image to config dir.
-    let path = get_dependency_path("rs/rosetta-api/icp")
-        .into_os_string()
-        .into_string()
-        .unwrap();
-    let path = format!("{path}/rosetta_image.tar");
-    let rosetta_image_path = Path::new(path.as_str());
+    let rosetta_image_path = &get_dependency_path_from_env("ROSETTA_IMAGE_PATH");
     if !rosetta_image_path.exists() {
         error!(&logger, "Rosetta image not found: {:?}", rosetta_image_path);
     } else {

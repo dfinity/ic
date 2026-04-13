@@ -10,6 +10,7 @@ use ic_icrc3_test_ledger::{AddBlockResult, ArchiveBlocksArgs};
 use ic_ledger_canister_core::range_utils;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc::generic_value::{ICRC3Value, Value};
+use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryArchiveFn, QueryBlockArchiveFn};
 use icrc_ledger_types::icrc3::blocks::{ArchivedBlocks, ICRC3DataCertificate};
 use icrc_ledger_types::icrc3::blocks::{
@@ -44,7 +45,7 @@ fn next_block_id() -> u64 {
 fn first_non_archive_index() -> u64 {
     ARCHIVES.with(|archives| match archives.borrow().last() {
         Some(archive) => archive.block_range.end,
-        None => 0u64,
+        None => 0_u64,
     })
 }
 
@@ -341,12 +342,12 @@ fn get_blocks_for_request(blocks: &BlockStorage, request: GetBlocksRequest) -> B
 }
 
 #[query]
-fn icrc1_metadata() -> Vec<(String, MetadataValue)> {
+fn icrc1_metadata() -> Vec<(MetadataKey, MetadataValue)> {
     vec![
-        MetadataValue::entry("icrc1:decimals", 0u64),
-        MetadataValue::entry("icrc1:name", ""),
-        MetadataValue::entry("icrc1:symbol", "XTST"),
-        MetadataValue::entry("icrc1:fee", 0u64),
+        MetadataValue::entry(MetadataKey::ICRC1_DECIMALS, 0_u64).unwrap(),
+        MetadataValue::entry(MetadataKey::ICRC1_NAME, "").unwrap(),
+        MetadataValue::entry(MetadataKey::ICRC1_SYMBOL, "XTST").unwrap(),
+        MetadataValue::entry(MetadataKey::ICRC1_FEE, 0_u64).unwrap(),
     ]
 }
 

@@ -21,7 +21,9 @@ use ic_crypto_internal_test_vectors::ed25519::Ed25519TestVector::RFC8032_ED25519
 use ic_crypto_internal_tls::TlsEd25519SecretKeyDerBytes;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
+use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types::crypto::AlgorithmId;
+use ic_types::time::GENESIS;
 use mockall::Sequence;
 use rand::Rng;
 use std::io;
@@ -44,6 +46,30 @@ fn should_generate_node_signing_key_pair_and_store_keys() {
             .node_signing_public_key
             .expect("missing node signing key"),
         node_signing_pk_to_proto(gen_key_result)
+    );
+}
+
+#[test]
+fn should_generate_node_signing_public_key_with_timestamp() {
+    let time_source = FastForwardTimeSource::new();
+    time_source.set_time(GENESIS).expect("wrong time");
+    let vault = LocalCspVault::builder_for_test()
+        .with_time_source(time_source)
+        .build();
+
+    let _ = vault
+        .gen_node_signing_key_pair()
+        .expect("failed to create keys");
+
+    assert_eq!(
+        vault
+            .current_node_public_keys_with_timestamps()
+            .expect("Failed to retrieve current public keys")
+            .node_signing_public_key
+            .expect("missing node signing public key")
+            .timestamp
+            .expect("missing node signing key generation timestamp"),
+        GENESIS.as_millis_since_unix_epoch()
     );
 }
 

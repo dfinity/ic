@@ -18,7 +18,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
-        ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+        ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides},
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationBuilder,
@@ -47,22 +47,20 @@ const NODES: usize = 3 * FAULTY + 1; // 49
 const IDLE_DURATION: Duration = Duration::from_secs(10 * 60);
 
 pub fn setup(env: TestEnv) {
-    let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(8)),
-        memory_kibibytes: Some(AmountOfMemoryKiB::new(4195000)), // 4GiB
-        boot_image_minimal_size_gibibytes: None,
-    };
     InternetComputer::new()
+        .with_resource_overrides(VmResourceOverrides {
+            vcpus: Some(NrOfVCPUs::new(8)),
+            memory_kibibytes: Some(AmountOfMemoryKiB::new(4195000)), // 4GiB
+            ..VmResourceOverrides::default()
+        })
         .add_subnet(
             Subnet::new(SubnetType::System)
-                .with_default_vm_resources(vm_resources)
                 // Use low DKG interval to confirm system works across interval boundaries.
                 .with_dkg_interval_length(Height::from(99))
                 .add_nodes(NODES),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(vm_resources)
                 .with_dkg_interval_length(Height::from(49))
                 .add_nodes(1),
         )
@@ -128,7 +126,7 @@ pub fn test(env: TestEnv) {
     info!(log, "Step 5: Kill {} nodes", FAULTY);
     let nodes: Vec<_> = subnet.nodes().collect();
     for node in nodes.iter().take(FAULTY) {
-        block_on(async { node.vm().await.kill().await });
+        node.vm().kill();
     }
     for node in nodes.iter().take(FAULTY) {
         node.await_status_is_unavailable()
@@ -150,7 +148,7 @@ pub fn test(env: TestEnv) {
         "Step 7: Kill an additonal node causing consensus to stop due to {} (f+1) faulty nodes",
         FAULTY + 1
     );
-    block_on(async { nodes[FAULTY].vm().await.kill().await });
+    nodes[FAULTY].vm().kill();
     nodes[FAULTY]
         .await_status_is_unavailable()
         .expect("Node still healthy");
@@ -167,7 +165,7 @@ pub fn test(env: TestEnv) {
     };
 
     info!(log, "Step 8: Restart one node again",);
-    block_on(async { nodes[FAULTY].vm().await.start().await });
+    nodes[FAULTY].vm().start();
     for n in nodes.iter().skip(FAULTY) {
         n.await_status_is_healthy().unwrap();
     }

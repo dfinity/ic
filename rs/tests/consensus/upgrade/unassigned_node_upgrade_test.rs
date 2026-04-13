@@ -29,7 +29,7 @@ use ic_consensus_system_test_utils::upgrade::{
 use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
     ssh_access::{
-        AuthMean, generate_key_strings, get_updatesshreadonlyaccesskeyspayload,
+        AuthMean, generate_key_strings, get_update_ssh_keys_for_all_unassigned_nodes_payload,
         update_ssh_keys_for_all_unassigned_nodes, wait_until_authentication_is_granted,
     },
 };
@@ -70,7 +70,8 @@ fn test(env: TestEnv) {
 
     // obtain readonly access
     let (readonly_private_key, readonly_public_key) = generate_key_strings();
-    let payload = get_updatesshreadonlyaccesskeyspayload(vec![readonly_public_key.clone()]);
+    let payload =
+        get_update_ssh_keys_for_all_unassigned_nodes_payload(vec![readonly_public_key.clone()]);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         payload,
@@ -103,7 +104,7 @@ fn test(env: TestEnv) {
         info!(logger, "Initial: {:?}", blessed_versions);
         let sha256 = get_guestos_update_img_sha256();
         info!(logger, "Update image SHA256: {}", sha256);
-        let guest_launch_measurements = get_guestos_launch_measurements();
+        let guest_launch_measurements = get_guestos_update_launch_measurements();
 
         // prepare for the 1. proposal
         let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());

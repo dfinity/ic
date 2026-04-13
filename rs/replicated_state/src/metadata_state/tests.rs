@@ -5,7 +5,7 @@ use super::subnet_call_context_manager::{
 };
 use super::*;
 use crate::InputQueueType;
-use crate::testing::CanisterQueuesTesting;
+use crate::testing::{CanisterQueuesTesting, StreamTesting};
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_canister_threshold_sigs::{
     CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_ecdsa_presig_quadruple,
@@ -29,7 +29,8 @@ use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_test_utilities_types::xnet::{StreamHeaderBuilder, StreamSliceBuilder};
 use ic_types::batch::BlockmakerMetrics;
 use ic_types::canister_http::{
-    CanisterHttpMethod, CanisterHttpRequestContext, PricingVersion, Replication, Transform,
+    CanisterHttpMethod, CanisterHttpRequestContext, PricingVersion, RefundStatus, Replication,
+    Transform,
 };
 use ic_types::consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature};
 use ic_types::crypto::AlgorithmId;
@@ -38,7 +39,8 @@ use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers,
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{CallbackId, CanisterCall, Payload, Refund, Request, RequestMetadata};
 use ic_types::time::{CoarseTime, current_time};
-use ic_types::{Cycles, ExecutionRound, Height};
+use ic_types::{ExecutionRound, Height};
+use ic_types_cycles::{Cycles, NominalCyclesTesting};
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use proptest::prelude::*;
@@ -126,7 +128,7 @@ fn entries_sorted_lexicographically() {
     let mut ingress_history = IngressHistoryState::new();
     let time = UNIX_EPOCH;
 
-    for i in (0..10u64).rev() {
+    for i in (0..10_u64).rev() {
         ingress_history.insert(
             message_test_id(i),
             IngressStatus::Known {
@@ -140,7 +142,7 @@ fn entries_sorted_lexicographically() {
             |_| {},
         );
     }
-    let mut expected: Vec<_> = (0..10u64).map(message_test_id).collect();
+    let mut expected: Vec<_> = (0..10_u64).map(message_test_id).collect();
     expected.sort();
 
     let actual: Vec<_> = ingress_history
@@ -368,26 +370,23 @@ fn system_metadata_roundtrip_encoding() {
     system_metadata.bitcoin_get_successors_follow_up_responses =
         btreemap! { 10.into() => vec![vec![1], vec![2]] };
 
-    // Decoding a `SystemMetadata` with no `canister_allocation_ranges` succeeds.
-    let mut proto = pb::SystemMetadata::from(&system_metadata);
-    proto.canister_allocation_ranges = None;
-    assert_eq!(
-        system_metadata,
-        (proto, &DummyMetrics as &dyn CheckpointLoadingMetrics)
-            .try_into()
-            .unwrap()
-    );
-
     // Validates that a roundtrip encode-decode results in the same `SystemMetadata`.
     fn validate_roundtrip_encoding(system_metadata: &SystemMetadata) {
         let proto = pb::SystemMetadata::from(system_metadata);
         assert_eq!(
             *system_metadata,
-            (proto, &DummyMetrics as &dyn CheckpointLoadingMetrics)
+            (
+                proto,
+                system_metadata.subnet_schedule.clone(),
+                &DummyMetrics as &dyn CheckpointLoadingMetrics
+            )
                 .try_into()
                 .unwrap()
         );
     }
+
+    // Decoding a `SystemMetadata` with no `canister_allocation_ranges` succeeds.
+    validate_roundtrip_encoding(&system_metadata);
 
     // Set `canister_allocation_ranges`, but not `last_generated_canister_id`.
     system_metadata.canister_allocation_ranges = canister_allocation_ranges.try_into().unwrap();
@@ -417,6 +416,114 @@ fn system_metadata_roundtrip_encoding() {
         },
     );
     validate_roundtrip_encoding(&system_metadata);
+
+    // Add scheduling priority for a canister.
+    system_metadata
+        .subnet_schedule
+        .get_mut(CanisterId::from_u64(1))
+        .accumulated_priority = 1.into();
+    validate_roundtrip_encoding(&system_metadata);
+}
+
+#[test]
+fn network_topology_roundtrip_encoding() {
+    use ic_protobuf::state::system_metadata::v1 as pb;
+
+    fn range(start: u64, end: u64) -> CanisterIdRange {
+        CanisterIdRange {
+            start: start.into(),
+            end: end.into(),
+        }
+    }
+
+    let nns_subnet_id = subnet_test_id(42);
+    let app_subnet_id = SUBNET_1;
+    let engine_subnet_id = SUBNET_2;
+
+    let app_subnet_topo = SubnetTopology {
+        public_key: vec![1, 2, 3],
+        nodes: [node_test_id(1), node_test_id(2)].into_iter().collect(),
+        subnet_type: SubnetType::Application,
+        ..Default::default()
+    };
+
+    let engine_subnet_topo = SubnetTopology {
+        public_key: vec![4, 5, 6],
+        nodes: [node_test_id(3)].into_iter().collect(),
+        subnet_type: SubnetType::CloudEngine,
+        ..Default::default()
+    };
+
+    let filtered_routing_table = Arc::new(
+        RoutingTable::try_from(btreemap! {
+            range(10, 19) => app_subnet_id,
+        })
+        .unwrap(),
+    );
+
+    let full_routing_table = Arc::new(
+        RoutingTable::try_from(btreemap! {
+            range(10, 19) => app_subnet_id,
+            range(20, 29) => engine_subnet_id,
+        })
+        .unwrap(),
+    );
+
+    let canister_migrations = Arc::new(
+        CanisterMigrations::try_from(btreemap! {
+            range(10, 12) => vec![app_subnet_id, nns_subnet_id],
+        })
+        .unwrap(),
+    );
+
+    let ecdsa_key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: "test_key".to_string(),
+    });
+    let chain_key_enabled_subnets = btreemap! {
+        ecdsa_key_id => vec![app_subnet_id],
+    };
+
+    let bitcoin_testnet_canister_id = Some(canister_test_id(100));
+    let bitcoin_mainnet_canister_id = Some(canister_test_id(101));
+
+    // NetworkTopology without full_topology (non-NNS subnet).
+    let network_topology = NetworkTopology::new(
+        btreemap! { app_subnet_id => app_subnet_topo.clone() },
+        filtered_routing_table.clone(),
+        canister_migrations.clone(),
+        nns_subnet_id,
+        chain_key_enabled_subnets.clone(),
+        bitcoin_testnet_canister_id,
+        bitcoin_mainnet_canister_id,
+        None,
+    );
+
+    let proto = pb::NetworkTopology::from(&network_topology);
+    let round_trip = NetworkTopology::try_from(proto).unwrap();
+    assert_eq!(network_topology, round_trip);
+
+    // NetworkTopology with full_topology (NNS subnet).
+    let network_topology_with_full = NetworkTopology::new(
+        btreemap! { app_subnet_id => app_subnet_topo.clone() },
+        filtered_routing_table,
+        canister_migrations,
+        nns_subnet_id,
+        chain_key_enabled_subnets,
+        bitcoin_testnet_canister_id,
+        bitcoin_mainnet_canister_id,
+        Some(FullTopology {
+            subnets: btreemap! {
+                app_subnet_id => app_subnet_topo,
+                engine_subnet_id => engine_subnet_topo,
+            },
+            routing_table: full_routing_table,
+        }),
+    );
+
+    let proto = pb::NetworkTopology::from(&network_topology_with_full);
+    let round_trip = NetworkTopology::try_from(proto).unwrap();
+    assert_eq!(network_topology_with_full, round_trip);
 }
 
 #[test]
@@ -471,7 +578,7 @@ fn system_metadata_split() {
     system_metadata.prev_state_hash = Some(CryptoHash(vec![1, 2, 3]).into());
     system_metadata.batch_time = current_time();
     system_metadata.subnet_metrics = SubnetMetrics {
-        consumed_cycles_by_deleted_canisters: 2197.into(),
+        consumed_cycles_by_deleted_canisters: NominalCycles::new(2197),
         ..Default::default()
     };
 
@@ -529,7 +636,7 @@ fn system_metadata_split_with_batch_time() {
     system_metadata.prev_state_hash = Some(CryptoHash(vec![1, 2, 3]).into());
     system_metadata.batch_time = current_time();
     system_metadata.subnet_metrics = SubnetMetrics {
-        consumed_cycles_by_deleted_canisters: 2197.into(),
+        consumed_cycles_by_deleted_canisters: NominalCycles::new(2197),
         ..Default::default()
     };
 
@@ -644,7 +751,7 @@ fn system_metadata_online_split() {
     system_metadata.batch_time = current_time();
     system_metadata.network_topology.routing_table = Arc::new(routing_table);
     system_metadata.subnet_metrics = SubnetMetrics {
-        consumed_cycles_by_deleted_canisters: 2197.into(),
+        consumed_cycles_by_deleted_canisters: NominalCycles::new(2197),
         ..Default::default()
     };
 
@@ -761,6 +868,7 @@ fn subnet_call_contexts_deserialization() {
         time: UNIX_EPOCH,
         replication: Replication::FullyReplicated,
         pricing_version: PricingVersion::Legacy,
+        refund_status: RefundStatus::default(),
     };
     subnet_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
         canister_http_request,
@@ -1035,7 +1143,6 @@ fn sign_with_threshold_context_roundtrip() {
                     derivation_path: Arc::new(vec![]),
                     pseudo_random_id: [1; 32],
                     batch_time: UNIX_EPOCH,
-                    matched_pre_signature: None,
                     nonce: Some([3; 32]),
                 },
             );
@@ -1092,6 +1199,130 @@ fn network_topology_ecdsa_subnets() {
     assert_eq!(
         network_topology.chain_key_enabled_subnets(&key),
         &[subnet_test_id(1)]
+    );
+}
+
+#[test]
+fn network_topology_route_uses_filtered_topology() {
+    let subnet_a = subnet_test_id(1);
+    let subnet_b = subnet_test_id(2);
+
+    // The filtered routing table only contains subnet_a's range.
+    let routing_table = Arc::new(
+        RoutingTable::try_from(btreemap! {
+            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
+        })
+        .unwrap(),
+    );
+
+    // The filtered subnets map only contains subnet_a.
+    // subnet_b exists in the network but is not visible to this subnet.
+    let network_topology = NetworkTopology {
+        subnets: btreemap! {
+            subnet_a => SubnetTopology::default(),
+        },
+        routing_table,
+        canister_migrations: Arc::new(CanisterMigrations::default()),
+        nns_subnet_id: subnet_test_id(42),
+        ..Default::default()
+    };
+
+    // --- Canister ID routing ---
+
+    // Canister on subnet_a: resolvable via the filtered routing table.
+    assert_eq!(
+        network_topology.route(canister_test_id(50).get()),
+        Some(subnet_a),
+    );
+    // Canister 150 is not in the filtered routing table at all.
+    assert_eq!(network_topology.route(canister_test_id(150).get()), None);
+
+    // --- Subnet ID routing ---
+
+    // subnet_a is in the filtered subnets map.
+    assert_eq!(network_topology.route(subnet_a.get()), Some(subnet_a));
+    // subnet_b is NOT in the filtered subnets map.
+    assert_eq!(network_topology.route(subnet_b.get()), None);
+}
+
+#[test]
+fn subnets_for_certification_falls_back_to_filtered() {
+    let subnet_a = subnet_test_id(1);
+
+    let routing_table = Arc::new(
+        RoutingTable::try_from(btreemap! {
+            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
+        })
+        .unwrap(),
+    );
+
+    let network_topology = NetworkTopology {
+        subnets: btreemap! {
+            subnet_a => SubnetTopology::default(),
+        },
+        routing_table: routing_table.clone(),
+        ..Default::default()
+    };
+
+    // Without full_topology, subnets_for_certification returns the filtered map.
+    assert_eq!(
+        network_topology.subnets_for_certification(),
+        network_topology.subnets()
+    );
+    assert_eq!(network_topology.routing_table(), &routing_table);
+    assert_eq!(
+        network_topology.routing_table_for_certification(),
+        network_topology.routing_table()
+    );
+}
+
+#[test]
+fn subnets_for_certification_returns_full_topology_when_set() {
+    use crate::metadata_state::testing::NetworkTopologyTesting;
+
+    let subnet_a = subnet_test_id(1);
+    let subnet_b = subnet_test_id(2); // e.g., a cloud engine
+
+    let full_subnets = btreemap! {
+        subnet_a => SubnetTopology::default(),
+        subnet_b => SubnetTopology::default(),
+    };
+    let full_routing_table = Arc::new(
+        RoutingTable::try_from(btreemap! {
+            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
+            CanisterIdRange { start: CanisterId::from(100_u64), end: CanisterId::from(199_u64) } => subnet_b,
+        })
+        .unwrap(),
+    );
+
+    let filtered_subnets = btreemap! {
+        subnet_a => SubnetTopology::default(),
+    };
+    let filtered_routing_table = Arc::new(
+        RoutingTable::try_from(btreemap! {
+            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
+        })
+        .unwrap(),
+    );
+
+    let mut network_topology = NetworkTopology {
+        subnets: filtered_subnets.clone(),
+        routing_table: filtered_routing_table.clone(),
+        ..Default::default()
+    };
+    network_topology.set_full_topology(Some(FullTopology {
+        subnets: full_subnets.clone(),
+        routing_table: full_routing_table.clone(),
+    }));
+
+    // subnets() and routing_table() return the filtered view.
+    assert_eq!(network_topology.subnets(), &filtered_subnets);
+    assert_eq!(network_topology.routing_table(), &filtered_routing_table);
+    // subnets_for_certification() and routing_table_for_certification() return the full view.
+    assert_eq!(network_topology.subnets_for_certification(), &full_subnets);
+    assert_eq!(
+        network_topology.routing_table_for_certification(),
+        &full_routing_table
     );
 }
 
@@ -1948,6 +2179,7 @@ fn stream_roundtrip_encoding() {
 
     let mut stream = Stream::with_signals(
         messages,
+        130.into(),
         153.into(),
         [RejectSignal::new(
             RejectReason::CanisterMigrating,
@@ -1965,54 +2197,80 @@ fn stream_roundtrip_encoding() {
 }
 
 #[test]
-fn deserializing_stream_fails_for_bad_reject_signals() {
+fn deserializing_stream_fails_for_bad_signals() {
     let stream = pb_queues::Stream {
         messages_begin: 0,
         messages: Vec::new(),
+        signals_begin: 150,
         signals_end: 153,
         reject_signals: Vec::new(),
         reverse_stream_flags: None,
     };
+    let assert_invalid_reject_signals =
+        |reject_signals: Vec<pb_queues::RejectSignal>, expected_error: &str| {
+            let bad_stream = pb_queues::Stream {
+                reject_signals,
+                ..stream.clone()
+            };
+            let deserialized_result: Result<Stream, _> = bad_stream.try_into();
+            assert_matches!(deserialized_result, Err(ProxyDecodeError::Other(err_msg)) if err_msg == expected_error, "expected \"{expected_error}\"");
+        };
 
     // Deserializing a stream with duplicate reject signals (by index) should fail.
-    let bad_stream = pb_queues::Stream {
-        reject_signals: vec![
+    assert_invalid_reject_signals(
+        vec![
             pb_queues::RejectSignal {
                 reason: 1,
-                index: 1,
+                index: 150,
             },
             pb_queues::RejectSignal {
                 reason: 1,
-                index: 1,
+                index: 150,
             },
         ],
-        ..stream.clone()
-    };
-    let deserialized_result: Result<Stream, _> = bad_stream.try_into();
-    assert_matches!(
-        deserialized_result,
-        Err(ProxyDecodeError::Other(err_msg)) if err_msg == "reject signals not strictly sorted, received [1, 1]"
+        "reject signals not strictly sorted, received [150, 150]",
     );
 
     // Deserializing a stream with descending reject signals (by index) should fail.
-    let bad_stream = pb_queues::Stream {
-        reject_signals: vec![
+    assert_invalid_reject_signals(
+        vec![
             pb_queues::RejectSignal {
                 reason: 1,
-                index: 1,
+                index: 151,
             },
             pb_queues::RejectSignal {
                 reason: 1,
-                index: 0,
+                index: 150,
             },
         ],
+        "reject signals not strictly sorted, received [151, 150]",
+    );
+
+    // Deserializing a stream with reject signals before `signals_begin` should fail.
+    assert_invalid_reject_signals(
+        vec![pb_queues::RejectSignal {
+            reason: 1,
+            index: 149,
+        }],
+        "first reject signal RejectSignal { reason: CanisterMigrating, index: 149 } before signals_begin 150",
+    );
+
+    // Deserializing a stream with reject signals after `signals_end` should fail.
+    assert_invalid_reject_signals(
+        vec![pb_queues::RejectSignal {
+            reason: 1,
+            index: 153,
+        }],
+        "reject signals not strictly sorted, received [153, 153]",
+    );
+
+    let bad_stream = pb_queues::Stream {
+        signals_begin: 153,
+        signals_end: 150,
         ..stream
     };
     let deserialized_result: Result<Stream, _> = bad_stream.try_into();
-    assert_matches!(
-        deserialized_result,
-        Err(ProxyDecodeError::Other(err_msg)) if err_msg == "reject signals not strictly sorted, received [1, 0]"
-    );
+    assert_matches!(deserialized_result, Err(ProxyDecodeError::Other(err_msg)) if err_msg == "signals_begin 153 after signals_end 150");
 }
 
 #[test]
@@ -2123,25 +2381,25 @@ fn stream_responses_tracking() {
 #[test]
 fn consumed_cycles_total_calculates_the_right_amount() {
     let mut consumed_cycles_by_use_case = BTreeMap::new();
-    consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::from(5));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::HTTPOutcalls, NominalCycles::from(12));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::ECDSAOutcalls, NominalCycles::from(30));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::Instructions, NominalCycles::from(100));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::Memory, NominalCycles::from(50));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::CanisterCreation, NominalCycles::from(40));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::NonConsumed, NominalCycles::from(10));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::new(5));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::HTTPOutcalls, NominalCycles::new(12));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::ECDSAOutcalls, NominalCycles::new(30));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::Instructions, NominalCycles::new(100));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::Memory, NominalCycles::new(50));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::CanisterCreation, NominalCycles::new(40));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::NonConsumed, NominalCycles::new(10));
 
     let subnet_metrics = SubnetMetrics {
-        consumed_cycles_by_deleted_canisters: NominalCycles::from(10),
-        consumed_cycles_http_outcalls: NominalCycles::from(20),
-        consumed_cycles_ecdsa_outcalls: NominalCycles::from(30),
+        consumed_cycles_by_deleted_canisters: NominalCycles::new(10),
+        consumed_cycles_http_outcalls: NominalCycles::new(20),
+        consumed_cycles_ecdsa_outcalls: NominalCycles::new(30),
         consumed_cycles_by_use_case,
         ..Default::default()
     };
 
     assert_eq!(
         subnet_metrics.consumed_cycles_total(),
-        NominalCycles::from(250)
+        NominalCycles::new(250)
     );
 }
 

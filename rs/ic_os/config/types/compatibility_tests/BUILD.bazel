@@ -6,7 +6,6 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/ic_os/config/types:config_types",
     "@crate_index//:anyhow",
-    "@crate_index//:macaddr",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:url",

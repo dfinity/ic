@@ -2,34 +2,53 @@ use crate::{
     pb::v1::{
         Empty, ManageNeuron, SelfDescribingValue, Topic, Visibility, Vote,
         manage_neuron::{
-            AddHotKey, ChangeAutoStakeMaturity, ClaimOrRefresh, Command, Configure, Disburse,
-            DisburseMaturity, DisburseToNeuron, Follow, IncreaseDissolveDelay, JoinCommunityFund,
-            LeaveCommunityFund, Merge, NeuronIdOrSubaccount, RefreshVotingPower, RegisterVote,
-            RemoveHotKey, SetDissolveTimestamp, SetFollowing, SetVisibility, Spawn, Split,
-            StakeMaturity, StartDissolving, StopDissolving,
+            ClaimOrRefresh, Command, Configure, Disburse, Follow, JoinCommunityFund,
+            LeaveCommunityFund, NeuronIdOrSubaccount, RefreshVotingPower, RegisterVote,
+            SetFollowing, SetVisibility, StartDissolving, StopDissolving,
             claim_or_refresh::{By as ClaimOrRefreshBy, MemoAndController},
             configure::Operation,
             set_following::FolloweesForTopic,
         },
     },
-    proposals::self_describing::{
-        LocallyDescribableProposalAction, SelfDescribingProstEnum, ValueBuilder,
-    },
+    proposals::self_describing::{DocumentedAction, SelfDescribingProstEnum, ValueBuilder},
 };
 
 use ic_cdk::println;
 
-impl LocallyDescribableProposalAction for ManageNeuron {
-    const TYPE_NAME: &'static str = "Manage Neuron";
-    const TYPE_DESCRIPTION: &'static str = "Manages a neuron by executing a command such as \
-        configuring its settings, disbursing its stake, spawning a new neuron, following other \
-        neurons, registering a vote, or performing other neuron management operations.";
+impl DocumentedAction for ManageNeuron {
+    const NAME: &'static str = "Manage Neuron";
+    const DESCRIPTION: &'static str = "Call a major function on a specified target neuron. \
+        Only the followees of the target neuron may vote on these proposals, which effectively \
+        provides the followees with control over the target neuron. This can provide a convenient \
+        and highly secure means for a team of individuals to manage an important neuron. For \
+        example, a neuron might hold a large balance, or belong to an organization of high \
+        repute, and be publicized so that many other neurons can follow its vote. In both cases, \
+        managing the private key of the principal securely could be problematic. (Either a single \
+        copy is held, which is very insecure and provides for a single party to take control, or \
+        a group of individuals must divide responsibility — for example, using threshold \
+        cryptography, which is complex and time consuming). To address this using this proposal \
+        type, the important neuron can be configured to follow the neurons controlled by \
+        individual members of a team. Now they can submit proposals to make the important neuron \
+        perform actions, which are adopted if and only if a majority of them vote to adopt. \
+        (Submitting such a proposal costs a small fee, to prevent denial-of-service attacks.) \
+        Nearly any command on the target neuron can be executed, including commands that change \
+        the follow rules, allowing the set of team members to be dynamic. Only the final step of \
+        dissolving the neuron once its dissolve delay reaches zero cannot be performed using this \
+        type of proposal, since this would allow control/\"ownership\" over the locked balances \
+        to be transferred. (The only exception to this rule applies to not-for-profit \
+        organizations, which may be allowed to dissolve their neurons without using the initial \
+        private key.) To prevent a neuron falling under the malign control of the principal's \
+        private key by accident, the private key can be destroyed so that the neuron can only be \
+        controlled by its followees, although this makes it impossible to subsequently unlock the \
+        balance.";
+}
 
-    fn to_self_describing_value(&self) -> SelfDescribingValue {
+impl From<ManageNeuron> for SelfDescribingValue {
+    fn from(value: ManageNeuron) -> Self {
         let builder = ValueBuilder::new();
 
         // Flatten all the id/neuron_id_or_subaccount cases into a single field (either "neuron_id" or "subaccount")
-        let neuron_id_or_subaccount = match self.get_neuron_id_or_subaccount() {
+        let neuron_id_or_subaccount = match value.get_neuron_id_or_subaccount() {
             Ok(Some(neuron_id_or_subaccount)) => Some(neuron_id_or_subaccount),
             _ => {
                 println!(
@@ -55,20 +74,7 @@ impl LocallyDescribableProposalAction for ManageNeuron {
             }
         };
 
-        builder.add_field("command", self.command.clone()).build()
-    }
-}
-
-impl From<NeuronIdOrSubaccount> for SelfDescribingValue {
-    fn from(id: NeuronIdOrSubaccount) -> Self {
-        match id {
-            NeuronIdOrSubaccount::NeuronId(neuron_id) => {
-                ValueBuilder::new().add_field("NeuronId", neuron_id).build()
-            }
-            NeuronIdOrSubaccount::Subaccount(subaccount) => ValueBuilder::new()
-                .add_field("Subaccount", subaccount)
-                .build(),
-        }
+        builder.add_field("command", value.command).build()
     }
 }
 
@@ -142,20 +148,6 @@ impl From<Configure> for SelfDescribingValue {
     }
 }
 
-impl From<IncreaseDissolveDelay> for SelfDescribingValue {
-    fn from(value: IncreaseDissolveDelay) -> Self {
-        let IncreaseDissolveDelay {
-            additional_dissolve_delay_seconds,
-        } = value;
-        ValueBuilder::new()
-            .add_field(
-                "additional_dissolve_delay_seconds",
-                additional_dissolve_delay_seconds,
-            )
-            .build()
-    }
-}
-
 impl From<StartDissolving> for SelfDescribingValue {
     fn from(value: StartDissolving) -> Self {
         let StartDissolving {} = value;
@@ -170,29 +162,6 @@ impl From<StopDissolving> for SelfDescribingValue {
     }
 }
 
-impl From<AddHotKey> for SelfDescribingValue {
-    fn from(value: AddHotKey) -> Self {
-        let AddHotKey { new_hot_key } = value;
-        Self::singleton_map("new_hot_key", new_hot_key)
-    }
-}
-
-impl From<RemoveHotKey> for SelfDescribingValue {
-    fn from(value: RemoveHotKey) -> Self {
-        let RemoveHotKey { hot_key_to_remove } = value;
-        Self::singleton_map("hot_key_to_remove", hot_key_to_remove)
-    }
-}
-
-impl From<SetDissolveTimestamp> for SelfDescribingValue {
-    fn from(value: SetDissolveTimestamp) -> Self {
-        let SetDissolveTimestamp {
-            dissolve_timestamp_seconds,
-        } = value;
-        Self::singleton_map("dissolve_timestamp_seconds", dissolve_timestamp_seconds)
-    }
-}
-
 impl From<JoinCommunityFund> for SelfDescribingValue {
     fn from(value: JoinCommunityFund) -> Self {
         let JoinCommunityFund {} = value;
@@ -204,18 +173,6 @@ impl From<LeaveCommunityFund> for SelfDescribingValue {
     fn from(value: LeaveCommunityFund) -> Self {
         let LeaveCommunityFund {} = value;
         SelfDescribingValue::NULL
-    }
-}
-
-impl From<ChangeAutoStakeMaturity> for SelfDescribingValue {
-    fn from(value: ChangeAutoStakeMaturity) -> Self {
-        let ChangeAutoStakeMaturity {
-            requested_setting_for_auto_stake_maturity,
-        } = value;
-        Self::singleton_map(
-            "requested_setting_for_auto_stake_maturity",
-            requested_setting_for_auto_stake_maturity,
-        )
     }
 }
 
@@ -234,59 +191,6 @@ impl From<Disburse> for SelfDescribingValue {
         ValueBuilder::new()
             .add_field("amount_e8s", amount_e8s)
             .add_field("to_account", to_account)
-            .build()
-    }
-}
-
-impl From<Split> for SelfDescribingValue {
-    fn from(value: Split) -> Self {
-        let Split { amount_e8s, memo } = value;
-        ValueBuilder::new()
-            .add_field("amount_e8s", amount_e8s)
-            .add_field("memo", memo)
-            .build()
-    }
-}
-
-impl From<Spawn> for SelfDescribingValue {
-    fn from(value: Spawn) -> Self {
-        let Spawn {
-            new_controller,
-            nonce,
-            percentage_to_spawn,
-        } = value;
-        ValueBuilder::new()
-            .add_field("new_controller", new_controller)
-            .add_field("nonce", nonce)
-            .add_field("percentage_to_spawn", percentage_to_spawn)
-            .build()
-    }
-}
-
-impl From<StakeMaturity> for SelfDescribingValue {
-    fn from(value: StakeMaturity) -> Self {
-        let StakeMaturity {
-            percentage_to_stake,
-        } = value;
-        Self::singleton_map("percentage_to_stake", percentage_to_stake)
-    }
-}
-
-impl From<DisburseToNeuron> for SelfDescribingValue {
-    fn from(value: DisburseToNeuron) -> Self {
-        let DisburseToNeuron {
-            new_controller,
-            amount_e8s,
-            dissolve_delay_seconds,
-            kyc_verified,
-            nonce,
-        } = value;
-        ValueBuilder::new()
-            .add_field("new_controller", new_controller)
-            .add_field("amount_e8s", amount_e8s)
-            .add_field("dissolve_delay_seconds", dissolve_delay_seconds)
-            .add_field("kyc_verified", kyc_verified)
-            .add_field("nonce", nonce)
             .build()
     }
 }
@@ -347,32 +251,10 @@ impl From<ClaimOrRefresh> for SelfDescribingValue {
     }
 }
 
-impl From<Merge> for SelfDescribingValue {
-    fn from(merge: Merge) -> Self {
-        let Merge { source_neuron_id } = merge;
-        Self::singleton_map("source_neuron_id", source_neuron_id)
-    }
-}
-
 impl From<RefreshVotingPower> for SelfDescribingValue {
     fn from(value: RefreshVotingPower) -> Self {
         let RefreshVotingPower {} = value;
         SelfDescribingValue::NULL
-    }
-}
-
-impl From<DisburseMaturity> for SelfDescribingValue {
-    fn from(value: DisburseMaturity) -> Self {
-        let DisburseMaturity {
-            percentage_to_disburse,
-            to_account,
-            to_account_identifier,
-        } = value;
-        ValueBuilder::new()
-            .add_field("percentage_to_disburse", percentage_to_disburse)
-            .add_field("to_account", to_account)
-            .add_field("to_account_identifier", to_account_identifier)
-            .build()
     }
 }
 

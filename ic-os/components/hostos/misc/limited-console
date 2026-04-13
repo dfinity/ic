@@ -22,6 +22,7 @@ show_menu() {
     echo "  ip-addresses            - Show all IP addresses"
     echo "  ping-gateway            - Test connectivity to IPv6 gateway"
     echo "  routes                  - Show routing table"
+    echo "  guestos-alternative     - Show or swap the GuestOS boot alternative (A/B)"
     echo "  manual-recovery         - Manual node recovery (ONLY FOR EMERGENCY USE)"
     echo "  rbash-console           - Drop into restricted bash console"
     echo "  clear                   - Clear the console"
@@ -104,7 +105,7 @@ execute_command() {
             if [ -n "$gateway" ]; then
                 echo "Gateway: $gateway"
                 echo ""
-                /bin/ping6 -c 4 "$gateway" 2>&1
+                /bin/ping -6 -c 4 "$gateway" 2>&1
             else
                 echo "No IPv6 gateway found in routing table"
                 echo "IPv6 routes:"
@@ -118,6 +119,21 @@ execute_command() {
             echo ""
             echo "IPv6 routes:"
             /bin/ip -6 route show
+            ;;
+        "guestos-alternative")
+            case "${2:-}" in
+                "show")
+                    /opt/ic/bin/hostos_tool guestos-alternative show
+                    ;;
+                "swap")
+                    sudo /opt/ic/bin/hostos_tool guestos-alternative swap ${3:+"$3"}
+                    ;;
+                *)
+                    echo "Usage: guestos-alternative show|swap [A|B]"
+                    echo "  show      - Show the current GuestOS boot alternative"
+                    echo "  swap [A|B]- Swap GuestOS boot alternative (defaults to opposite of current)"
+                    ;;
+            esac
             ;;
         "manual-recovery")
             echo "=== Manual Node Recovery ==="

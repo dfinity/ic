@@ -8,7 +8,6 @@ nano
 tcpdump
 iperf
 curl
-iputils-ping
 
 # may want to ssh into other hosts -- not sure if this is really advisable
 openssh-client

@@ -14,8 +14,8 @@ use ic_types::messages::MessageId;
 use ic_types::registry::RegistryClientError;
 use ic_types_test_utils::ids::{NODE_1, SUBNET_27};
 
-pub const KEY_ID_1: [u8; 32] = [0u8; 32];
-pub const KEY_ID_2: [u8; 32] = [1u8; 32];
+pub const KEY_ID_1: [u8; 32] = [0_u8; 32];
+pub const KEY_ID_2: [u8; 32] = [1_u8; 32];
 // We don't use registry version 0 and 1 as they might be used as default
 // versions.
 pub const REG_V1: RegistryVersion = RegistryVersion::new(2);
@@ -167,8 +167,6 @@ pub fn registry_returning_none() -> Arc<dyn RegistryClient> {
     Arc::new(registry)
 }
 
-// TODO(DFN-1397): add exact error checks to the tests that
-// expect a specific error.
 pub fn registry_returning(error: RegistryClientError) -> Arc<dyn RegistryClient> {
     let mut registry = MockRegistryClient::new();
     registry

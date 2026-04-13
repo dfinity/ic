@@ -9,12 +9,14 @@ use thiserror::Error;
 
 const GRUB_ENV_SIZE: usize = 1024;
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy, EnumString, Display)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, EnumString, Display, clap::ValueEnum)]
 pub enum BootAlternative {
     // Bash scripts depend on the string representations, be very careful if you want to change them
     #[strum(serialize = "A")]
+    #[clap(name = "A")]
     A,
     #[strum(serialize = "B")]
+    #[clap(name = "B")]
     B,
 }
 

@@ -17,7 +17,6 @@ ic-cdk = { workspace = true }
 lazy_static = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
 
 [dev-dependencies]
 canister-test = { path = "../../rust_canisters/canister_test" }

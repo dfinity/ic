@@ -4,14 +4,14 @@ use crate::consensus::metrics::{
 use ic_consensus_utils::pool_reader::filter_past_payloads;
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
-    consensus::PayloadValidationError,
+    consensus::{PayloadValidationError, PayloadWithSizeEstimate},
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
     self_validating_payload::SelfValidatingPayloadBuilder,
 };
 use ic_logger::{ReplicaLogger, error, warn};
 use ic_types::{
-    CountBytes, Height, NumBytes, Time,
+    Height, NumBytes, Time,
     batch::{BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload},
     consensus::Payload,
     messages::MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT,
@@ -43,7 +43,7 @@ pub(crate) enum BatchPayloadSectionBuilder {
     SelfValidating(Arc<dyn SelfValidatingPayloadBuilder>),
     CanisterHttp(Arc<dyn BatchPayloadBuilder>),
     QueryStats(Arc<dyn BatchPayloadBuilder>),
-    VetKd(Arc<dyn BatchPayloadBuilder>),
+    ChainKey(Arc<dyn BatchPayloadBuilder>),
 }
 
 impl BatchPayloadSectionBuilder {
@@ -93,7 +93,7 @@ impl BatchPayloadSectionBuilder {
             Self::SelfValidating(_) => "self_validating",
             Self::CanisterHttp(_) => "canister_http",
             Self::QueryStats(_) => "query_stats",
-            Self::VetKd(_) => "vetkd",
+            Self::ChainKey(_) => "chain_key",
         }
     }
 
@@ -114,12 +114,14 @@ impl BatchPayloadSectionBuilder {
             Self::Ingress(builder) => {
                 let past_payloads = builder
                     .filter_past_payloads(past_payloads, proposal_context.validation_context);
-                let ingress = builder.get_ingress_payload(
+                let PayloadWithSizeEstimate {
+                    payload: ingress,
+                    wire_size_estimate: size,
+                } = builder.get_ingress_payload(
                     &past_payloads,
                     proposal_context.validation_context,
                     max_size,
                 );
-                let size = NumBytes::new(ingress.count_bytes() as u64);
 
                 // Validate the ingress payload as a safety measure
                 if let Err(err) = builder.validate_ingress_payload(
@@ -322,40 +324,41 @@ impl BatchPayloadSectionBuilder {
                     }
                 }
             }
-            Self::VetKd(builder) => {
+            Self::ChainKey(builder) => {
                 let past_payloads: Vec<PastPayload> =
                     filter_past_payloads(past_payloads, |_, _, payload| {
                         if payload.is_summary() {
                             None
                         } else {
-                            Some(&payload.as_ref().as_data().batch.vetkd)
+                            Some(&payload.as_ref().as_data().batch.chain_key)
                         }
                     });
 
-                let vetkd = builder.build_payload(
+                let chain_key = builder.build_payload(
                     height,
                     max_size,
                     &past_payloads,
                     proposal_context.validation_context,
                 );
-                let size = NumBytes::new(vetkd.len() as u64);
+                let size = NumBytes::new(chain_key.len() as u64);
 
                 // Check validation as safety measure
-                match builder.validate_payload(height, proposal_context, &vetkd, &past_payloads) {
+                match builder.validate_payload(height, proposal_context, &chain_key, &past_payloads)
+                {
                     Ok(()) => {
-                        payload.vetkd = vetkd;
+                        payload.chain_key = chain_key;
                         size
                     }
                     Err(err) => {
                         error!(
                             logger,
-                            "VetKd payload did not pass validation, this is a bug, {:?} @{}",
+                            "chain_key payload did not pass validation, this is a bug, {:?} @{}",
                             err,
                             CRITICAL_ERROR_VALIDATION_NOT_PASSED
                         );
 
                         metrics.critical_error_validation_not_passed.inc();
-                        payload.vetkd = vec![];
+                        payload.chain_key = vec![];
                         NumBytes::new(0)
                     }
                 }
@@ -384,28 +387,33 @@ impl BatchPayloadSectionBuilder {
             Self::Ingress(builder) => {
                 let past_payloads = builder
                     .filter_past_payloads(past_payloads, proposal_context.validation_context);
-                builder.validate_ingress_payload(
-                    &payload.ingress,
-                    &past_payloads,
-                    proposal_context.validation_context,
-                )?;
-                Ok(NumBytes::new(payload.ingress.count_bytes() as u64))
+                builder
+                    .validate_ingress_payload(
+                        &payload.ingress,
+                        &past_payloads,
+                        proposal_context.validation_context,
+                    )
+                    .map_err(PayloadValidationError::from)
             }
             Self::XNet(builder) => {
                 let past_payloads = builder.filter_past_payloads(past_payloads);
-                Ok(builder.validate_xnet_payload(
-                    &payload.xnet,
-                    proposal_context.validation_context,
-                    &past_payloads,
-                )?)
+                builder
+                    .validate_xnet_payload(
+                        &payload.xnet,
+                        proposal_context.validation_context,
+                        &past_payloads,
+                    )
+                    .map_err(PayloadValidationError::from)
             }
             Self::SelfValidating(builder) => {
                 let past_payloads = builder.filter_past_payloads(past_payloads);
-                Ok(builder.validate_self_validating_payload(
-                    &payload.self_validating,
-                    proposal_context.validation_context,
-                    &past_payloads,
-                )?)
+                builder
+                    .validate_self_validating_payload(
+                        &payload.self_validating,
+                        proposal_context.validation_context,
+                        &past_payloads,
+                    )
+                    .map_err(PayloadValidationError::from)
             }
             Self::CanisterHttp(builder) => {
                 let past_payloads: Vec<PastPayload> =
@@ -445,24 +453,24 @@ impl BatchPayloadSectionBuilder {
 
                 Ok(NumBytes::new(payload.query_stats.len() as u64))
             }
-            Self::VetKd(builder) => {
+            Self::ChainKey(builder) => {
                 let past_payloads: Vec<PastPayload> =
                     filter_past_payloads(past_payloads, |_, _, payload| {
                         if payload.is_summary() {
                             None
                         } else {
-                            Some(&payload.as_ref().as_data().batch.vetkd)
+                            Some(&payload.as_ref().as_data().batch.chain_key)
                         }
                     });
 
                 builder.validate_payload(
                     height,
                     proposal_context,
-                    &payload.vetkd,
+                    &payload.chain_key,
                     &past_payloads,
                 )?;
 
-                Ok(NumBytes::new(payload.vetkd.len() as u64))
+                Ok(NumBytes::new(payload.chain_key.len() as u64))
             }
         }
     }

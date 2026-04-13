@@ -31,10 +31,8 @@ use ic_replicated_state::{Memory, NetworkTopology, SystemState};
 use ic_sys::PageIndex;
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::ids::canister_test_id;
-use ic_types::{
-    ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-    batch::CanisterCyclesCostSchedule, time::UNIX_EPOCH,
-};
+use ic_types::{ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions, time::UNIX_EPOCH};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_wasm_types::BinaryEncodedWasm;
 
 use ic_replicated_state::NumWasmPages;
@@ -63,6 +61,7 @@ fn test_wasmtime_system_api() {
         canister_id,
         canister_id.get(),
         Cycles::zero(),
+        UNIX_EPOCH,
         NumSeconds::from(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl),
     );
@@ -112,7 +111,6 @@ fn test_wasmtime_system_api() {
             num_instructions_global: None,
             log: no_op_logger(),
             limits: StoreLimits::default(),
-            canister_backtrace: config.feature_flags.canister_backtrace,
         },
     );
 

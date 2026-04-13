@@ -3,6 +3,7 @@ use devicemapper::{Bytes, DM, DevId, DmName, DmOptions, Sectors};
 use ic_device::device_mapping::{BaseDevice, LinearSegment, MappedDevice, TempDevice};
 use std::path::Path;
 use std::sync::Arc;
+use tracing::warn;
 
 const UPGRADE_DM_NAME: &str = "upgrade-guestos";
 const DATA_PARTITION_DM_NAME: &str = "guestos-data";
@@ -121,7 +122,7 @@ fn cleanup_devices(dev_mapper: &DM) {
     let devices = match dev_mapper.list_devices() {
         Ok(devices) => devices,
         Err(err) => {
-            eprintln!("Failed to list devices: {err}");
+            warn!("Failed to list devices: {err}");
             return;
         }
     };
@@ -143,7 +144,7 @@ fn try_remove_device(dev_mapper: &DM, name: &DmName) {
         match dev_mapper.device_remove(&DevId::Name(name), DmOptions::default()) {
             Ok(_) => return,
             Err(err) => {
-                eprintln!("Failed to remove device {name} (attempt {retry}/{MAX_RETRIES}): {err}");
+                warn!("Failed to remove device {name} (attempt {retry}/{MAX_RETRIES}): {err}");
                 std::thread::sleep(std::time::Duration::from_secs(RETRY_DELAY_SECS));
             }
         }
@@ -156,6 +157,7 @@ mod tests {
     use gpt::{GptConfig, GptDisk};
     use ic_device::device_mapping::LoopDeviceWrapper;
     use std::fs::File;
+    use std::io::{Read, Seek, SeekFrom};
     use std::os::unix::fs::FileExt;
     use std::path::PathBuf;
     use std::sync::Mutex;
@@ -272,16 +274,24 @@ mod tests {
             .read_at(&mut read_buf, partition10_start_bytes)
             .expect("Failed to read from device file");
         assert_eq!(read_buf, b"bar");
+        // Sync the device to ensure that the writes are persisted to the backing file
+        upgrade_device
+            .sync_all()
+            .expect("Failed to sync device file");
         drop(upgrade_device);
 
-        let file = File::open(&setup.backing_file).expect("Failed to open backing file");
+        let mut file = File::open(&setup.backing_file).expect("Failed to open backing file");
         let mut read_buf = vec![0; 3];
-        file.read_at(&mut read_buf, partition3_start_bytes)
+        file.seek(SeekFrom::Start(partition3_start_bytes))
+            .expect("Failed to seek");
+        file.read_exact(&mut read_buf)
             .expect("Failed to read from backing file");
         // Check that the read-write partition is written to the backing file
         assert_eq!(read_buf, b"foo");
 
-        file.read_at(&mut read_buf, partition10_start_bytes)
+        file.seek(SeekFrom::Start(partition10_start_bytes))
+            .expect("Failed to seek");
+        file.read_exact(&mut read_buf)
             .expect("Failed to read from backing file");
         // Check that the read-only partition is not written to the backing file
         assert_eq!(read_buf, &[0, 0, 0]);

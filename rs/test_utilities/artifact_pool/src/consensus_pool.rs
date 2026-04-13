@@ -179,21 +179,6 @@ impl TestConsensusPool {
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         dkg_pool: Option<Arc<RwLock<DkgPoolImpl>>>,
     ) -> Self {
-        let dkg_payload_builder = Box::new(dkg_payload_builder_fn(
-            subnet_id,
-            registry_client.clone(),
-            crypto,
-            state_manager.clone(),
-            dkg_pool.unwrap_or_else(|| {
-                Arc::new(std::sync::RwLock::new(
-                    ic_artifact_pool::dkg_pool::DkgPoolImpl::new(
-                        ic_metrics::MetricsRegistry::new(),
-                        no_op_logger(),
-                    ),
-                ))
-            }),
-        ));
-
         let cup_contents = registry_client
             .get_cup_contents(subnet_id, registry_client.get_latest_version())
             .expect("Failed to retreive the DKG transcripts from registry");
@@ -205,10 +190,26 @@ impl TestConsensusPool {
         )
         .expect("Failed to get DKG summary from CUP contents");
 
+        let dkg_payload_builder = Box::new(dkg_payload_builder_fn(
+            subnet_id,
+            registry_client.clone(),
+            crypto,
+            state_manager.clone(),
+            dkg_pool.unwrap_or_else(|| {
+                Arc::new(std::sync::RwLock::new(
+                    ic_artifact_pool::dkg_pool::DkgPoolImpl::new(
+                        ic_metrics::MetricsRegistry::new(),
+                        no_op_logger(),
+                        summary.height,
+                    ),
+                ))
+            }),
+        ));
+
         let pool = ConsensusPoolImpl::new(
             node_id,
             subnet_id,
-            (&ic_test_utilities_consensus::make_genesis(summary)).into(),
+            ic_test_utilities_consensus::make_genesis(summary).into(),
             pool_config,
             ic_metrics::MetricsRegistry::new(),
             no_op_logger(),
@@ -225,22 +226,37 @@ impl TestConsensusPool {
         }
     }
 
-    /// Utility function to determine the identity of the block maker with the
-    /// specified rank at a given height. Panics if this rank does not exist.
-    pub fn get_block_maker_by_rank(&self, height: Height, rank: Rank) -> NodeId {
+    /// Returns the node that is the block maker with the given rank at the given height,
+    /// or when `rank` is `None`, returns a node that is not a block maker at that height.
+    /// Panics if the rank does not exist (for `Some(rank)`) or if no non-blockmaker exists
+    /// (for `None`, e.g. when the committee has only one member).
+    pub fn get_block_maker_by_rank(&self, height: Height, rank: Option<Rank>) -> NodeId {
         let pool_reader = PoolReader::new(&self.pool);
         let prev_beacon = pool_reader.get_random_beacon(height.decrement()).unwrap();
-        *self
-            .membership
-            .get_nodes(height)
-            .unwrap()
-            .iter()
-            .find(|node| {
-                self.membership
-                    .get_block_maker_rank(height, &prev_beacon, **node)
-                    == Ok(Some(rank))
-            })
-            .unwrap()
+        match rank {
+            Some(rank) => *self
+                .membership
+                .get_nodes(height)
+                .unwrap()
+                .iter()
+                .find(|node| {
+                    self.membership
+                        .get_block_maker_rank(height, &prev_beacon, **node)
+                        == Ok(Some(rank))
+                })
+                .unwrap(),
+            None => *self
+                .membership
+                .get_nodes(height)
+                .unwrap()
+                .iter()
+                .find(|node| {
+                    self.membership
+                        .get_block_maker_rank(height, &prev_beacon, **node)
+                        == Ok(None)
+                })
+                .expect("No non-blockmaker node found (e.g. single-node committee)"),
+        }
     }
 
     pub fn make_next_block(&self) -> BlockProposal {
@@ -283,7 +299,7 @@ impl TestConsensusPool {
             }),
         };
         block.payload = Payload::new(ic_types::crypto::crypto_hash, payload);
-        let signer = self.get_block_maker_by_rank(block.height(), rank);
+        let signer = self.get_block_maker_by_rank(block.height(), Some(rank));
         BlockProposal::fake(block, signer)
     }
 
@@ -300,7 +316,7 @@ impl TestConsensusPool {
     /// Creates an equivocation proof for the given height and rank. Make sure
     /// the rank is valid, otherwise this function panics.
     pub fn make_equivocation_proof(&self, rank: Rank, height: Height) -> EquivocationProof {
-        let signer = self.get_block_maker_by_rank(height, rank);
+        let signer = self.get_block_maker_by_rank(height, Some(rank));
         EquivocationProof {
             signer,
             version: self

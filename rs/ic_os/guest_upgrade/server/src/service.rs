@@ -1,8 +1,7 @@
 use crate::SevFirmwareFactory;
 use crate::server::ConnInfo;
-use attestation::attestation_package::generate_attestation_package;
-use attestation::verification::{
-    AttestationVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
+use attestation::attestation_package::{
+    AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
 };
 use config_types::TrustedExecutionEnvironmentConfig;
 use der::asn1::OctetStringRef;
@@ -15,7 +14,8 @@ use guest_upgrade_shared::{
         disk_encryption_key_exchange_service_server::DiskEncryptionKeyExchangeService,
     },
 };
-use ic_sev::guest::key_deriver::{Key, derive_key_from_sev_measurement};
+use sev_guest::attestation_package::generate_attestation_package;
+use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use std::ops::Deref;
 use std::path::Path;
 use tokio::sync::watch::Sender;

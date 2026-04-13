@@ -1,16 +1,19 @@
 # Essentials
-curl
 build-essential
+curl
 git
 git-lfs
 gnupg
-uuid-dev
-zsh
 iproute2
-shellcheck
-xxd
-vim
+jq
+rclone
 retry
+shellcheck
+sudo
+time
+uuid-dev
+vim
+xxd
 zip
 
 # Bitcoin core (for bitcoin adapter integration test)
@@ -18,29 +21,15 @@ libtool
 libevent-dev
 libboost-dev
 
-# GitHub CI
-sudo
-jq
-rclone
-time
-podman # rosetta-release.yml
-rsync # container-base-images.yml
-lcov # used for bazel coverage
-
 # RUST
 gcc
-lld
 pkg-config
-libssl-dev
-libunwind-dev
-libusb-1.0-0-dev
-libsqlite3-dev
-zlib1g-dev
 libclang-18-dev
+libunwind-dev # required for the cargo build of ic-canister-sandbox-backend-lib crate (see: rs/canister_sandbox/src/backtrace.c)  
+libusb-1.0-0-dev # required for HSM
+lld # required for ovmf_sev genrule
 protobuf-compiler
 llvm
-liblmdb-dev
-liblzma-dev
 
 # IC-OS
 clang
@@ -60,6 +49,8 @@ libsystemd-dev
 libvirt-dev
 mtools # used for mcopy and mmd
 nasm # to build OVMF
+podman
+rsync
 zstd
 iputils-ping # for ping6 required by the bazel-test-bare-metal
 

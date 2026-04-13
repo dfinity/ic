@@ -3,7 +3,8 @@ use ic_config::{
 };
 use ic_management_canister_types_private::CanisterSettingsArgsBuilder;
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
-use ic_types::{CanisterId, Cycles, NumBytes};
+use ic_types::{CanisterId, NumBytes};
+use ic_types_cycles::Cycles;
 
 use libfuzzer_sys::fuzz_target;
 use std::cell::RefCell;

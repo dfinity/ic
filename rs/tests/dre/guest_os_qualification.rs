@@ -1,11 +1,11 @@
 use ic_protobuf::registry::subnet::v1::SubnetType;
+use ic_system_test_driver::driver::test_env_api::get_guestos_update_launch_measurements;
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
     test_env_api::{
-        get_guestos_initial_launch_measurements, get_guestos_initial_update_img_sha256,
-        get_guestos_initial_update_img_url, get_guestos_launch_measurements,
-        get_guestos_update_img_sha256, get_guestos_update_img_url, get_ic_build_version,
-        get_mainnet_nns_revision,
+        get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
+        get_guestos_launch_measurements, get_guestos_update_img_sha256, get_guestos_update_img_url,
+        get_ic_build_version, get_mainnet_nns_revision,
     },
 };
 use ic_types::ReplicaVersion;
@@ -106,9 +106,7 @@ pub fn main() -> anyhow::Result<()> {
                             version: initial_version.clone(),
                             url: get_guestos_initial_update_img_url(),
                             sha256: get_guestos_initial_update_img_sha256(),
-                            guest_launch_measurements: Some(
-                                get_guestos_initial_launch_measurements(),
-                            ),
+                            guest_launch_measurements: Some(get_guestos_launch_measurements()),
                         }),
                         // Ensure that application subnets are on the
                         // initial version. As the step above, this
@@ -142,7 +140,9 @@ pub fn main() -> anyhow::Result<()> {
                             version: target_version.clone(),
                             url: get_guestos_update_img_url(),
                             sha256: get_guestos_update_img_sha256(),
-                            guest_launch_measurements: Some(get_guestos_launch_measurements()),
+                            guest_launch_measurements: Some(
+                                get_guestos_update_launch_measurements(),
+                            ),
                         }),
                         // Ensure that application subnets are on the
                         // new version.
@@ -196,9 +196,7 @@ pub fn main() -> anyhow::Result<()> {
                             version: initial_version.clone(),
                             url: get_guestos_initial_update_img_url(),
                             sha256: get_guestos_initial_update_img_sha256(),
-                            guest_launch_measurements: Some(
-                                get_guestos_initial_launch_measurements(),
-                            ),
+                            guest_launch_measurements: Some(get_guestos_launch_measurements()),
                         }),
                         // Downgrade to the inital version
                         Box::new(UpdateSubnetType {

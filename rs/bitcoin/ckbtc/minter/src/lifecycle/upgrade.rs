@@ -11,6 +11,10 @@ use serde::Serialize;
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct UpgradeArgs {
+    /// Minimum amount of bitcoin that can be deposited
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deposit_btc_min_amount: Option<u64>,
+
     /// Minimum amount of bitcoin that can be retrieved.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub retrieve_btc_min_amount: Option<u64>,

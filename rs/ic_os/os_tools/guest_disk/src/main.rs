@@ -8,10 +8,11 @@ use config_types::GuestOSConfig;
 use guest_disk::generated_key::{DEFAULT_GENERATED_KEY_PATH, GeneratedKeyDiskEncryption};
 use guest_disk::sev::SevDiskEncryption;
 use guest_disk::{DEFAULT_PREVIOUS_SEV_KEY_PATH, DiskEncryption, Partition, crypt_name};
-use ic_sev::guest::firmware::SevGuestFirmware;
 use nix::unistd::getuid;
+use sev_guest::firmware::SevGuestFirmware;
 use std::ffi::{CStr, c_char, c_int, c_void};
 use std::path::{Path, PathBuf};
+use tracing::warn;
 
 #[derive(clap::Parser)]
 pub enum Args {
@@ -31,6 +32,8 @@ pub enum Args {
 
 #[cfg(target_os = "linux")]
 fn main() -> Result<()> {
+    ic_os_logging::init_logging();
+
     let args = Args::parse();
 
     // TODO: We could replace this with Linux capabilities but this works well for now.
@@ -44,7 +47,7 @@ fn main() -> Result<()> {
     run(
         args,
         &guestos_config,
-        ic_sev::guest::is_sev_active().context("Failed to check if SEV is active")?,
+        sev_guest::is_sev_active().context("Failed to check if SEV is active")?,
         || {
             ::sev::firmware::guest::Firmware::open()
                 .context("Failed to open /dev/sev-guest")
@@ -96,7 +99,7 @@ fn run(
 }
 
 unsafe extern "C" fn cryptsetup_log(_level: c_int, msg: *const c_char, _usrptr: *mut c_void) {
-    eprintln!(
+    warn!(
         "libcryptsetup: {}",
         unsafe { CStr::from_ptr(msg) }.to_string_lossy()
     );

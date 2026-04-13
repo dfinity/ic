@@ -13,6 +13,7 @@ rust_library(
         "//rs/registry/subnet_type",
         "//rs/sys",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/types/types",
         "@crate_index//:json5",
         "@crate_index//:serde",

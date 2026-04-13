@@ -116,7 +116,7 @@ pub fn construct_ic_stack(
                     registry_cup.height()
                 );
 
-                let registry_cup_proto = pb::CatchUpPackage::from(&registry_cup);
+                let registry_cup_proto = pb::CatchUpPackage::from(registry_cup.clone());
                 (registry_cup, registry_cup_proto)
             }
         }
@@ -285,6 +285,7 @@ pub fn construct_ic_stack(
         config.http_handler.clone(),
         log.clone(),
         rt_handle_http.clone(),
+        node_id,
         subnet_id,
         root_subnet_id,
         registry.clone(),

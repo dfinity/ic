@@ -7,7 +7,7 @@ use bitcoin::{
 };
 use futures::TryFutureExt;
 use http::Uri;
-use ic_logger::{ReplicaLogger, debug, error, info};
+use ic_logger::{ReplicaLogger, debug, error};
 use std::{io, net::SocketAddr, time::Duration};
 use thiserror::Error;
 use tokio::{
@@ -147,7 +147,7 @@ impl<Header: Decodable + Encodable + Clone, Block: Decodable + Encodable + Clone
         } = config;
 
         let timeout_duration = Duration::from_secs(CONNECTION_TIMEOUT_SECS);
-        let data = vec![0u8; STREAM_BUFFER_SIZE];
+        let data = vec![0_u8; STREAM_BUFFER_SIZE];
         let unparsed = vec![];
 
         let tcp_stream_attempt = timeout(
@@ -335,7 +335,7 @@ pub fn handle_stream<
                 stream
             }
             Err(err) => {
-                info!(every_n_seconds => 300, &logger, "Failed to connect to {} ::: {}", address, err);
+                error!(&logger, "Failed to connect to {} ::: {}", address, err);
                 let kind = match err {
                     StreamError::Io(_) => StreamEventKind::FailedToConnect,
                     StreamError::Timeout => StreamEventKind::FailedToConnect,

@@ -5,7 +5,7 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 /// `AmountOf<Unit>` provides a type-safe way to keep an amount of
 /// some `Unit`.
@@ -182,7 +182,7 @@ impl<Unit, Repr: Copy> AmountOf<Unit, Repr> {
     /// let three_apples = AmountOf::<Apple, u64>::from(3);
     /// assert_eq!(9, (three_apples * 3).get());
     /// ```
-    pub fn get(&self) -> Repr {
+    pub const fn get(&self) -> Repr {
         self.0
     }
 }
@@ -391,6 +391,17 @@ where
     }
 }
 
+impl<Unit, Repr> Neg for AmountOf<Unit, Repr>
+where
+    Repr: Neg<Output = Repr>,
+{
+    type Output = Self;
+
+    fn neg(self) -> Self {
+        Self(-self.0, PhantomData)
+    }
+}
+
 impl<Unit, Repr> MulAssign<Repr> for AmountOf<Unit, Repr>
 where
     Repr: MulAssign,
@@ -493,6 +504,17 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl<Unit, Repr> std::str::FromStr for AmountOf<Unit, Repr>
+where
+    Repr: std::str::FromStr,
+{
+    type Err = Repr::Err;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.parse::<Repr>().map(Self::from)
     }
 }
 

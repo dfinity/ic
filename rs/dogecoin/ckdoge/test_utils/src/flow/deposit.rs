@@ -239,4 +239,39 @@ where
         let balance_after = self.setup.as_ref().ledger().icrc1_balance_of(self.account);
         assert_eq!(balance_after - self.balance_before, total_minted_amount);
     }
+
+    pub fn expect_no_mint_value_too_small(self) -> UpdateBalanceFlow<S> {
+        let rejected_deposits: BTreeSet<_> = self
+            .result
+            .as_ref()
+            .expect("BUG: update_balance error")
+            .iter()
+            .filter_map(|status| match status {
+                UtxoStatus::ValueTooSmall(utxo)
+                    if self.deposit_transactions.contains(&utxo.outpoint.txid) =>
+                {
+                    Some(utxo)
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            rejected_deposits.len(),
+            self.deposit_transactions.len(),
+            "BUG: unexpected minted transactions in {:?}",
+            self.deposit_transactions
+        );
+
+        let balance_after = self.setup.as_ref().ledger().icrc1_balance_of(self.account);
+        assert_eq!(
+            self.balance_before, balance_after,
+            "BUG: balance should not change"
+        );
+
+        UpdateBalanceFlow {
+            setup: self.setup,
+            account: self.account,
+            deposit_transactions: self.deposit_transactions,
+        }
+    }
 }

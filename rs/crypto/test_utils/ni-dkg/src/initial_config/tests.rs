@@ -317,5 +317,5 @@ fn node_id(node_id: u64) -> NodeId {
 }
 
 fn target_id() -> NiDkgTargetId {
-    NiDkgTargetId::new([42u8; 32])
+    NiDkgTargetId::new([42_u8; 32])
 }

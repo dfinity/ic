@@ -186,7 +186,6 @@
 
 #![forbid(unsafe_code)]
 
-use ic_crypto_internal_seed::XmdError;
 use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
 use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
 use ic_types::{NumberOfNodes, Randomness};
@@ -390,14 +389,6 @@ impl From<CanisterThresholdError> for IDkgCreateTranscriptInternalError {
             CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
             CanisterThresholdError::InsufficientDealings => Self::InsufficientDealings,
             x => Self::InternalError(format!("{x:?}")),
-        }
-    }
-}
-
-impl From<XmdError> for CanisterThresholdError {
-    fn from(e: XmdError) -> Self {
-        match e {
-            XmdError::InvalidOutputLength(x) => Self::InvalidArguments(format!("{x:?}")),
         }
     }
 }

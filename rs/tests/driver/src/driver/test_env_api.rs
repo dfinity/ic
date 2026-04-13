@@ -145,7 +145,7 @@ use crate::{
         test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute},
     },
     retry_with_msg, retry_with_msg_async, retry_with_msg_async_quiet,
-    util::{block_on, create_agent},
+    util::{MetricsFetcher, block_on, create_agent},
 };
 use anyhow::{Context, Result, anyhow, bail};
 use async_trait::async_trait;
@@ -161,7 +161,10 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::Neuron;
 use ic_nns_init::read_initial_mutations_from_local_store_dir;
-use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
+use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
+    itest_helpers::{self, NnsCanisters},
+};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_protobuf::registry::{
     node::v1 as pb_node,
@@ -193,9 +196,8 @@ use slog::{Logger, debug, info, warn};
 use ssh2::Session;
 use std::{
     cmp::max,
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     convert::TryFrom,
-    ffi::OsStr,
     fs,
     future::Future,
     io::{Read, Write},
@@ -205,18 +207,23 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::{runtime::Runtime as Rt, sync::Mutex as TokioMutex};
+use tokio::sync::Mutex as TokioMutex;
 use url::Url;
 
 pub use super::ic_images::*;
+pub use tempfile::tempdir;
 
 pub const READY_WAIT_TIMEOUT: Duration = Duration::from_secs(500);
 pub const SSH_RETRY_TIMEOUT: Duration = Duration::from_secs(500);
 pub const RETRY_BACKOFF: Duration = Duration::from_secs(5);
 const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 const READY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(6);
-// It usually takes below 60 secs to install nns canisters.
-const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(160);
+// NNS canister installation involves sequential canister creation at specific
+// IDs followed by parallel installation and controller setup. With ~12
+// canisters being created sequentially (~5s each) plus parallel installation
+// and controller setting, this typically takes 120-180s but can exceed 160s
+// under load.
+const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(300);
 const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
 const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
@@ -226,6 +233,9 @@ const FW_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 const IC_TOPOLOGY_EVENT_NAME: &str = "ic_topology_created_event";
 const INFRA_GROUP_CREATED_EVENT_NAME: &str = "infra_group_name_created_event";
 pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehavior>>;
+
+pub(crate) const REPLICA_METRICS_PORT: u16 = 9090;
+pub(crate) const ORCHESTRATOR_METRICS_PORT: u16 = 9091;
 
 pub fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
     let l = sha256.len();
@@ -819,10 +829,17 @@ impl SubnetSnapshot {
     }
 
     pub fn raw_subnet_record(&self) -> pb_subnet::SubnetRecord {
+        self.raw_subnet_record_at_version(self.registry_version)
+    }
+
+    pub fn raw_subnet_record_at_version(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> pb_subnet::SubnetRecord {
         self.local_registry
-            .get_subnet_record(self.subnet_id, self.registry_version)
+            .get_subnet_record(self.subnet_id, registry_version)
             .unwrap_result(
-                self.registry_version,
+                registry_version,
                 &format!("subnet_record(subnet_id={})", self.subnet_id),
             )
     }
@@ -933,6 +950,56 @@ impl IcNodeSnapshot {
             .contains(&self.node_id)
     }
 
+    pub fn await_api_bn_healthy(&self) -> Result<()> {
+        block_on(self.await_api_bn_healthy_async())
+    }
+
+    pub async fn await_api_bn_healthy_async(&self) -> Result<()> {
+        let domain = self
+            .get_domain()
+            .ok_or_else(|| anyhow!("API BN has no domain configured"))?;
+        let api_bn_addr = SocketAddr::new(self.get_ip_addr(), 443);
+        let log = self.env.logger();
+
+        let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .danger_accept_invalid_certs(true)
+            .resolve(&domain, api_bn_addr)
+            .build()
+            .map_err(|e| anyhow!("Failed to build HTTP client: {e}"))?;
+
+        retry_with_msg_async!(
+            format!("await_api_bn_healthy for {domain}"),
+            &log,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                let url = format!("https://{domain}/health");
+                info!(log, "Checking API BN health endpoint {url}");
+
+                let response = client.get(&url).send().await;
+
+                match response {
+                    Ok(resp) => {
+                        if resp.status().is_success() {
+                            info!(log, "API BN with domain {domain} is healthy");
+                            Ok(())
+                        } else {
+                            bail!(
+                                "API BN with domain {domain} returned non-success status: {}",
+                                resp.status()
+                            )
+                        }
+                    }
+                    Err(e) => {
+                        bail!("API BN with domain {domain} not reachable: {e}")
+                    }
+                }
+            }
+        )
+        .await
+    }
+
     pub fn effective_canister_id(&self) -> PrincipalId {
         match self.subnet_id() {
             Some(subnet_id) => {
@@ -979,6 +1046,24 @@ impl IcNodeSnapshot {
         }
     }
 
+    pub fn canister_installer<'a>(&'a self, wasm_name: &str) -> CanisterInstaller<'a> {
+        CanisterInstaller::new(self, wasm_name)
+    }
+
+    pub fn canister_installer_from_env<'a>(&'a self, env_name: &str) -> CanisterInstaller<'a> {
+        CanisterInstaller::new(
+            self,
+            std::env::var(env_name).unwrap_or_else(|err| panic!("{env_name} not set: {err}")),
+        )
+    }
+
+    pub fn canister_installer_with_raw_wasm<'a>(
+        &'a self,
+        raw_wasm: Vec<u8>,
+    ) -> CanisterInstaller<'a> {
+        CanisterInstaller::new_with_raw_wasm(self, raw_wasm)
+    }
+
     /// Load wasm binary from the artifacts directory (see [HasArtifacts]) and
     /// install it on the target node.
     ///
@@ -991,65 +1076,10 @@ impl IcNodeSnapshot {
         name: &str,
         arg: Option<Vec<u8>>,
     ) -> Principal {
-        self.create_and_install_canister_with_arg_and_cycles(name, arg, None)
-    }
-
-    pub fn install_canister_with_arg(
-        &self,
-        canister_id: Principal,
-        name: &str,
-        arg: Option<Vec<u8>>,
-    ) {
-        let canister_bytes = load_wasm(name);
-        self.with_default_agent(move |agent| async move {
-            // Create a canister.
-            let mgr = ManagementCanister::create(&agent);
-
-            let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
-            if let Some(arg) = arg {
-                install_code = install_code.with_raw_arg(arg)
-            }
-            install_code
-                .call_and_wait()
-                .await
-                .map_err(|err| format!("Couldn't install canister: {err}"))?;
-            Ok::<_, String>(canister_id)
-        })
-        .expect("Could not install canister");
-    }
-
-    pub fn create_and_install_canister_with_arg_and_cycles(
-        &self,
-        name: &str,
-        arg: Option<Vec<u8>>,
-        cycles_amount: Option<u128>,
-    ) -> Principal {
-        let canister_bytes = load_wasm(name);
-        let effective_canister_id = self.effective_canister_id();
-
-        self.with_default_agent(move |agent| async move {
-            // Create a canister.
-            let mgr = ManagementCanister::create(&agent);
-            let canister_id = mgr
-                .create_canister()
-                .as_provisional_create_with_amount(cycles_amount)
-                .with_effective_canister_id(effective_canister_id)
-                .call_and_wait()
-                .await
-                .map_err(|err| format!("Couldn't create canister with provisional API: {err}"))?
-                .0;
-
-            let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
-            if let Some(arg) = arg {
-                install_code = install_code.with_raw_arg(arg)
-            }
-            install_code
-                .call_and_wait()
-                .await
-                .map_err(|err| format!("Couldn't install canister: {err}"))?;
-            Ok::<_, String>(canister_id)
-        })
-        .expect("Could not install canister")
+        self.canister_installer(name)
+            .with_optional_arg(arg)
+            .block_on_install()
+            .expect("Could not install install the canister")
     }
 
     pub fn wait_for_orchestrator_fw_rule(&self, logger: &Logger) -> Result<()> {
@@ -1065,13 +1095,14 @@ impl IcNodeSnapshot {
     }
 
     fn wait_for_orchestrator_fw_rule_once(&self, logger: &Logger) -> Result<()> {
-        // This checks that the rule "meta skuid ic-http-adapter ip6 daddr ::1" was applied
-        // This is a hardcoded rule that is applied regardless of what is in the registry
-        // Hence a change in the registry won't affect this check
+        // This checks that the rule to block access from the ic-http-adapter to
+        // all locally-configured addressess was applied.
+        // This is a hardcoded rule that is applied regardless of what is in the registry.
+        // Hence a change in the registry won't affect this check.
         let script = r#"
             set -e
             ADAPTER_UID=$(id -u ic-http-adapter)
-            RULE_PATTERN="meta skuid $ADAPTER_UID ip6 daddr ::1"
+            RULE_PATTERN="meta skuid $ADAPTER_UID fib daddr type local"
 
             sudo nft list chain ip6 filter OUTPUT | grep -qF "$RULE_PATTERN"
         "#;
@@ -1126,6 +1157,125 @@ impl IcNodeSnapshot {
         self.block_on_bash_script(&script).context(format!(
             "Failed to insert egress {action} rule on node {node_id} for target {target}"
         ))
+    }
+
+    pub fn assert_metrics_values(&self, metrics_to_check: &BTreeMap<&str, u64>, port: u16) {
+        if metrics_to_check.is_empty() {
+            return;
+        }
+
+        block_on(async {
+            let metrics_fetcher = MetricsFetcher::new_with_port(
+                std::iter::once(self.clone()),
+                metrics_to_check.keys().map(ToString::to_string).collect(),
+                port,
+            );
+            let metrics = match metrics_fetcher.fetch::<u64>().await {
+                Ok(metrics) => metrics,
+                Err(e) => {
+                    info!(
+                        self.env.logger(),
+                        "Could not fetch replica metrics for node {}: {e:?}", self.node_id
+                    );
+                    return;
+                }
+            };
+            assert!(
+                !metrics.is_empty(),
+                "No error counters were found in metrics for node {} on port {port}",
+                self.node_id
+            );
+            for (name, value) in metrics {
+                let max_value = metrics_to_check
+                    .get(name.split('(').next().unwrap())
+                    .copied()
+                    .unwrap_or_default();
+                assert!(
+                    value[0] <= max_value,
+                    "The metric `{name}` on node {} exceeded the maximum allowed value: \
+                    {} > {max_value}. \
+                    If this is expected to happen in the test, \
+                    create `SystemTestGroup` with `remove_metrics_to_check(\"{name}\")` or \
+                    with `update_orchestrator_metrics_to_check(\"{name}\", $max_value)`",
+                    self.node_id,
+                    value[0],
+                );
+            }
+        });
+    }
+}
+
+pub struct CanisterInstaller<'a> {
+    node: &'a IcNodeSnapshot,
+    wasm: Vec<u8>,
+    arg: Option<Vec<u8>>,
+    cycles_amount: Option<u128>,
+    effective_canister_id: PrincipalId,
+}
+
+impl<'a> CanisterInstaller<'a> {
+    pub fn new<P>(node: &'a IcNodeSnapshot, wasm_name: P) -> Self
+    where
+        P: AsRef<Path>,
+    {
+        Self::new_with_raw_wasm(node, load_wasm(wasm_name))
+    }
+
+    pub fn new_with_raw_wasm(node: &'a IcNodeSnapshot, wasm: Vec<u8>) -> Self {
+        Self {
+            wasm,
+            arg: None,
+            cycles_amount: None,
+            effective_canister_id: node.effective_canister_id(),
+            node,
+        }
+    }
+
+    pub fn with_optional_arg(mut self, arg: Option<Vec<u8>>) -> Self {
+        self.arg = arg;
+
+        self
+    }
+
+    pub fn with_cycles_amount(mut self, cycles_amount: u128) -> Self {
+        self.cycles_amount = Some(cycles_amount);
+
+        self
+    }
+
+    pub fn with_effective_canister_id(mut self, effective_canister_id: PrincipalId) -> Self {
+        self.effective_canister_id = effective_canister_id;
+
+        self
+    }
+
+    pub fn block_on_install(self) -> Result<Principal> {
+        block_on(self.install())
+    }
+
+    pub async fn install(self) -> Result<Principal> {
+        let agent = self.node.build_default_agent_async().await;
+        // Create a canister.
+        let mgr = ManagementCanister::create(&agent);
+        let canister_id = mgr
+            .create_canister()
+            .as_provisional_create_with_amount(self.cycles_amount)
+            .with_effective_canister_id(self.effective_canister_id)
+            .call_and_wait()
+            .await
+            .map_err(|err| anyhow!("Couldn't create canister with provisional API: {err}"))?
+            .0;
+
+        let mut install_code = mgr.install_code(&canister_id, &self.wasm);
+        if let Some(arg) = self.arg {
+            install_code = install_code.with_raw_arg(arg)
+        }
+        install_code
+            .call_and_wait()
+            .await
+            .map_err(|err| anyhow!("Couldn't install canister: {err}"))?;
+
+        Ok(canister_id)
     }
 }
 
@@ -1352,19 +1502,19 @@ impl HasGroupSetup for TestEnv {
             match InfraProvider::read_attribute(self) {
                 InfraProvider::Farm => {
                     let farm_base_url = FarmBaseUrl::read_attribute(self);
-                    let farm = block_on(Farm::new(farm_base_url.into(), self.logger()));
+                    let farm = Farm::new(farm_base_url.into(), self.logger());
                     let group_spec = GroupSpec {
                         vm_allocation: None,
                         required_host_features: vec![],
                         preferred_network: None,
                         metadata: None,
                     };
-                    block_on(farm.create_group(
+                    farm.create_group(
                         &group_setup.group_base_name,
                         &group_setup.infra_group_name,
                         group_setup.group_timeout,
                         group_spec,
-                    ))
+                    )
                     .unwrap();
                 }
             };
@@ -1433,9 +1583,7 @@ impl HasIcName for IcNodeSnapshot {
 }
 
 pub fn get_dependency_path<P: AsRef<Path>>(p: P) -> PathBuf {
-    let runfiles =
-        std::env::var("RUNFILES").expect("Expected environment variable RUNFILES to be defined!");
-    Path::new(&runfiles).join(p)
+    p.as_ref().to_path_buf()
 }
 
 /// Return the (actual) path of the (runfiles-relative) artifact in environment variable `v`.
@@ -1492,6 +1640,26 @@ pub fn load_wasm<P: AsRef<Path>>(p: P) -> Vec<u8> {
     wasm_bytes
 }
 
+pub fn execute_bash_script_from_session(session: &Session, script: &str) -> Result<String> {
+    let mut channel = session.channel_session()?;
+    channel.exec("bash").map_err(|e| {
+        anyhow::anyhow!("Failed to execute bash on SSH channel: {:?}. This may occur during system reboot or network instability.", e)
+    })?;
+
+    channel.write_all(script.as_bytes())?;
+    channel.flush()?;
+    channel.send_eof()?;
+    let mut out = String::new();
+    channel.read_to_string(&mut out)?;
+    let mut err = String::new();
+    channel.stderr().read_to_string(&mut err)?;
+    let exit_status = channel.exit_status()?;
+    if exit_status != 0 {
+        bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out} Err: {err}");
+    }
+    Ok(out)
+}
+
 #[async_trait]
 pub trait SshSession: HasTestEnv {
     /// Return the address of the SSH server to connect to.
@@ -1499,8 +1667,23 @@ pub trait SshSession: HasTestEnv {
 
     /// Return an SSH session to the machine referenced from self authenticating with the given user.
     fn get_ssh_session(&self) -> Result<Session> {
-        get_ssh_session_from_env(&self.test_env(), self.get_host_ip()?)
-            .context("Failed to get SSH session")
+        let env = self.test_env();
+        let ip = self.get_host_ip()?;
+
+        get_ssh_session_from_env(&env, ip).context("Failed to get SSH session")
+    }
+
+    /// Return an SSH session to the machine referenced from self authenticating with the given user.
+    /// This is the async version of `get_ssh_session`.
+    async fn get_ssh_session_async(&self) -> Result<Session> {
+        let env = self.test_env();
+        let ip = self.get_host_ip()?;
+
+        tokio::task::spawn_blocking(move || {
+            get_ssh_session_from_env(&env, ip).context("Failed to get SSH session")
+        })
+        .await
+        .expect("Getting SSH session task panicked")
     }
 
     /// Convenience wrapper for `block_on_ssh_session_with_timeout` with a default timeout.
@@ -1529,39 +1712,26 @@ pub trait SshSession: HasTestEnv {
             &self.test_env().logger(),
             SSH_RETRY_TIMEOUT,
             RETRY_BACKOFF,
-            || async { self.get_ssh_session() }
+            || self.get_ssh_session_async()
         )
         .await
     }
 
     fn block_on_bash_script(&self, script: &str) -> Result<String> {
         let session = self.block_on_ssh_session()?;
-        self.block_on_bash_script_from_session(&session, script)
+        execute_bash_script_from_session(&session, script)
     }
 
     async fn block_on_bash_script_async(&self, script: &str) -> Result<String> {
         let session = self.block_on_ssh_session_async().await?;
-        self.block_on_bash_script_from_session(&session, script)
+        let script = script.to_string();
+        tokio::task::spawn_blocking(move || execute_bash_script_from_session(&session, &script))
+            .await
+            .expect("Executing bash script task panicked")
     }
 
     fn block_on_bash_script_from_session(&self, session: &Session, script: &str) -> Result<String> {
-        let mut channel = session.channel_session()?;
-        channel.exec("bash").map_err(|e| {
-            anyhow::anyhow!("Failed to execute bash on SSH channel: {:?}. This may occur during system reboot or network instability.", e)
-        })?;
-
-        channel.write_all(script.as_bytes())?;
-        channel.flush()?;
-        channel.send_eof()?;
-        let mut out = String::new();
-        channel.read_to_string(&mut out)?;
-        let mut err = String::new();
-        channel.stderr().read_to_string(&mut err)?;
-        let exit_status = channel.exit_status()?;
-        if exit_status != 0 {
-            bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out} Err: {err}");
-        }
-        Ok(out)
+        execute_bash_script_from_session(session, script)
     }
 
     /// Is it accessible via ssh with the `admin` user.
@@ -1581,6 +1751,9 @@ pub trait SshSession: HasTestEnv {
 }
 
 pub trait RetrieveIpv4Addr {
+    /// Try a number of times to retrieve the IPv4 address from the machine referenced from self.
+    fn block_on_ipv4_from_session(&self, session: &Session) -> Result<Ipv4Addr>;
+
     /// Try a number of times to retrieve the IPv4 address from the machine referenced from self.
     fn block_on_ipv4(&self) -> Result<Ipv4Addr>;
 }
@@ -1605,7 +1778,7 @@ impl HasMetricsUrl for IcNodeSnapshot {
         let node_record = self.raw_node_record();
         node_record.http.map(|me| {
             let mut url = IcNodeSnapshot::http_endpoint_to_url(&me);
-            let _ = url.set_port(Some(9090));
+            let _ = url.set_port(Some(REPLICA_METRICS_PORT));
             url
         })
     }
@@ -1804,8 +1977,7 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     }
 
     fn build_default_agent(&self) -> Agent {
-        let rt = Rt::new().expect("Could not create runtime");
-        rt.block_on(async move { self.build_default_agent_async().await })
+        block_on(self.build_default_agent_async())
     }
 
     fn with_default_agent<F, Fut, R>(&self, op: F) -> R
@@ -1813,8 +1985,7 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
         F: FnOnce(Agent) -> Fut + 'static,
         Fut: Future<Output = R>,
     {
-        let rt = Rt::new().expect("Could not create runtime");
-        rt.block_on(async move {
+        block_on(async move {
             let agent = self.build_default_agent_async().await;
             op(agent).await
         })
@@ -1967,16 +2138,54 @@ impl NnsInstallationBuilder {
     }
 }
 
-/// Set environment variable `env_name` to `file_path`
-/// or to wherever `file_path` points to in case it's a symlink.
-pub fn set_var_to_path<K: AsRef<OsStr>>(env_name: K, file_path: PathBuf) {
-    let path = if file_path.is_symlink() {
-        std::fs::read_link(file_path).unwrap()
-    } else {
-        file_path
-    };
-    // TODO: Audit that the environment access only happens in single-threaded code.
-    unsafe { std::env::set_var(env_name, path) };
+/// Installs the registry canister on the NNS subnet, initializing it with the testnet's topology.
+///
+/// An optional `customize` closure allows additional registry init parameters to be set. Any mutations
+/// will be added _after_ the initial mutations.
+pub fn install_registry_canister_with_testnet_topology(
+    env: &TestEnv,
+    customize: Option<impl FnOnce(&mut RegistryCanisterInitPayloadBuilder)>,
+) {
+    let node = env.get_first_healthy_nns_node_snapshot();
+    let url = node.get_public_url();
+    let prep_dir = env
+        .prep_dir(&node.ic_name())
+        .expect("Prep Dir does not exist");
+
+    let registry_local_store = prep_dir.registry_local_store_path();
+    let initial_mutations = read_initial_mutations_from_local_store_dir(&registry_local_store);
+
+    let mut builder = RegistryCanisterInitPayloadBuilder::new();
+    for mutation in initial_mutations {
+        builder.push_init_mutate_request(mutation);
+    }
+    if let Some(f) = customize {
+        f(&mut builder)
+    }
+
+    let registry_init_payload = builder.build();
+
+    let agent = InternalAgent::new(
+        url,
+        Sender::from_keypair(&ic_test_identity::TEST_IDENTITY_KEYPAIR),
+    );
+    let runtime = Runtime::Remote(RemoteTestRuntime {
+        agent,
+        effective_canister_id: REGISTRY_CANISTER_ID.into(),
+    });
+
+    block_on(async {
+        let mut canister = runtime
+            .create_canister_max_cycles_with_retries()
+            .await
+            .expect("Failed to create registry canister");
+        assert_eq!(
+            canister.canister_id(),
+            REGISTRY_CANISTER_ID,
+            "Failed to create registry canister at expected ID 0. Call this method before creating any other canisters."
+        );
+        itest_helpers::install_registry_canister(&mut canister, registry_init_payload).await;
+    });
 }
 
 pub trait HasRegistryVersion {
@@ -2050,11 +2259,10 @@ impl IcNodeContainer for SubnetSnapshot {
 
 /* ### VM Control ### */
 
-#[async_trait]
 pub trait VmControl {
-    async fn kill(&self);
-    async fn reboot(&self);
-    async fn start(&self);
+    fn kill(&self);
+    fn reboot(&self);
+    fn start(&self);
 }
 
 pub struct HostedVm {
@@ -2066,47 +2274,41 @@ pub struct HostedVm {
 /// VmControl enables a user to interact with VMs, i.e. change their state.
 /// All functions belonging to this trait crash if a respective operation is for any reason
 /// unsuccessful.
-#[async_trait]
 impl VmControl for HostedVm {
-    async fn kill(&self) {
+    fn kill(&self) {
         self.farm
             .destroy_vm(&self.group_name, &self.vm_name)
-            .await
             .expect("could not kill VM");
     }
 
-    async fn reboot(&self) {
+    fn reboot(&self) {
         self.farm
             .reboot_vm(&self.group_name, &self.vm_name)
-            .await
             .expect("could not reboot VM");
     }
 
-    async fn start(&self) {
+    fn start(&self) {
         self.farm
             .start_vm(&self.group_name, &self.vm_name)
-            .await
             .expect("could not start VM");
     }
 }
 
-#[async_trait]
 pub trait HasVm {
     /// Returns a handle used for controlling a VM, i.e. starting, stopping and rebooting.
-    async fn vm(&self) -> Box<dyn VmControl>;
+    fn vm(&self) -> Box<dyn VmControl>;
 }
 
-#[async_trait]
 impl<T> HasVm for T
 where
-    T: HasTestEnv + HasVmName + Sync,
+    T: HasTestEnv + HasVmName,
 {
     /// Returns a handle used for controlling a VM, i.e. starting, stopping and rebooting.
-    async fn vm(&self) -> Box<dyn VmControl> {
+    fn vm(&self) -> Box<dyn VmControl> {
         let env = self.test_env();
         let pot_setup = GroupSetup::read_attribute(&env);
         let farm_base_url = self.get_farm_url().unwrap();
-        let farm = Farm::new(farm_base_url, env.logger()).await;
+        let farm = Farm::new(farm_base_url, env.logger());
 
         let vm_name = self.vm_name();
         Box::new(HostedVm {
@@ -2121,11 +2323,18 @@ pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
     let tcp = TcpStream::connect_timeout(&SocketAddr::new(ip, 22), TCP_CONNECT_TIMEOUT)?;
     let mut sess = Session::new()?;
     sess.set_tcp_stream(tcp);
+    // Set a timeout for the SSH handshake and authentication to prevent
+    // indefinite hangs when the remote host accepts TCP but stalls during
+    // the SSH protocol exchange.
+    sess.set_timeout(30_000);
     sess.handshake()?;
     let priv_key_path = env
         .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
         .join(SSH_USERNAME);
     sess.userauth_pubkey_file(SSH_USERNAME, None, priv_key_path.as_path(), None)?;
+    // Clear the timeout so subsequent operations on this session
+    // (e.g. long-running commands) are not subject to the handshake timeout.
+    sess.set_timeout(0);
     Ok(sess)
 }
 
@@ -2236,6 +2445,27 @@ macro_rules! retry_with_msg_async_quiet {
             $timeout,
             $backoff,
             $f,
+        )
+    };
+}
+
+#[macro_export]
+macro_rules! retry_agent_on_transport_errors {
+    ($msg:expr, $log:expr, $timeout:expr, $backoff:expr, $f:expr) => {
+        $crate::retry_with_msg_async!($msg, $log, $timeout, $backoff, || async {
+            match $f.await {
+                Err(AgentError::TransportError(e)) => Err(anyhow::anyhow!("transport error: {e}")),
+                other => Ok(other),
+            }
+        })
+    };
+    ($msg:expr, $log:expr, $f:expr) => {
+        $crate::retry_agent_on_transport_errors!(
+            $msg,
+            $log,
+            std::time::Duration::from_secs(120),
+            std::time::Duration::from_secs(5),
+            $f
         )
     };
 }
@@ -2500,38 +2730,35 @@ where
         let env = self.test_env();
         let log = env.logger();
         let farm_base_url = self.get_farm_url().unwrap();
-        let farm = block_on(Farm::new(farm_base_url, log));
+        let farm = Farm::new(farm_base_url, log);
         let group_setup = GroupSetup::read_attribute(&env);
         let group_name = group_setup.infra_group_name;
-        block_on(farm.create_dns_records(&group_name, dns_records))
+        farm.create_dns_records(&group_name, dns_records)
             .expect("Failed to create DNS records")
     }
 }
 
-#[async_trait]
 pub trait CreatePlaynetDnsRecords {
     /// Creates DNS records under the suffix: `.ic{ix}.farm.dfinity.systems`
     /// where `ix` is the index of the acquired playnet.
     ///
     /// The records will be garbage collected some time after the group has expired.
     /// The suffix will be returned from this function such that the FQDNs can be constructed.
-    async fn create_playnet_dns_records(&self, dns_records: Vec<DnsRecord>) -> String;
+    fn create_playnet_dns_records(&self, dns_records: Vec<DnsRecord>) -> String;
 }
 
-#[async_trait]
 impl<T> CreatePlaynetDnsRecords for T
 where
-    T: HasTestEnv + std::marker::Sync,
+    T: HasTestEnv,
 {
-    async fn create_playnet_dns_records(&self, dns_records: Vec<DnsRecord>) -> String {
+    fn create_playnet_dns_records(&self, dns_records: Vec<DnsRecord>) -> String {
         let env = self.test_env();
         let log = env.logger();
         let farm_base_url = self.get_farm_url().unwrap();
-        let farm = Farm::new(farm_base_url, log).await;
+        let farm = Farm::new(farm_base_url, log);
         let group_setup = GroupSetup::read_attribute(&env);
         let group_name = group_setup.infra_group_name;
         farm.create_playnet_dns_records(&group_name, dns_records)
-            .await
             .expect("Failed to create playnet DNS records")
     }
 }
@@ -2550,10 +2777,10 @@ where
         let env = self.test_env();
         let log = env.logger();
         let farm_base_url = self.get_farm_url().unwrap();
-        let farm = block_on(Farm::new(farm_base_url, log));
+        let farm = Farm::new(farm_base_url, log);
         let group_setup = GroupSetup::read_attribute(&env);
         let group_name = group_setup.infra_group_name;
-        block_on(farm.acquire_playnet_certificate(&group_name))
+        farm.acquire_playnet_certificate(&group_name)
             .expect("Failed to acquire a certificate for a playnet")
     }
 }
@@ -2658,6 +2885,10 @@ pub fn scp_recv_from(
         || {
             let (mut remote_file, scp_file_stat) = session.scp_recv(from_remote)?;
             let size = scp_file_stat.size();
+            info!(
+                log,
+                "scp-ing remote {from_remote:?} of {size:?} B to local {to_local:?} ..."
+            );
             let mut to_file = std::fs::File::create(to_local)?;
             std::io::copy(&mut remote_file, &mut to_file)?;
             remote_file.send_eof()?;

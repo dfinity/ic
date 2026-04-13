@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.1.13
+
 ### Added
 
+- Add MetadataKey type.
 - Add ICRC-107 fee collector transaction type and schema.
 
 ## 0.1.12

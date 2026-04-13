@@ -11,7 +11,6 @@ DEPENDENCIES = [
     "@crate_index//:parking_lot",
     "@crate_index//:prometheus",
     "@crate_index//:slog",
-    "@crate_index//:tokio",
     "@crate_index//:tokio-metrics",
 ] + select({
     "@rules_rust//rust/platform:linux": [

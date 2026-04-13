@@ -94,6 +94,7 @@ rust_test(
         name = "index_ng_test" + conf["test_suffix"],
         timeout = "long",
         srcs = [
+            "tests/index_timer_backoff.rs",
             "tests/retrieve_blocks_from_ledger_interval.rs",
             "tests/tests.rs",
         ],
@@ -131,6 +132,7 @@ rust_test(
             "//rs/state_machine_tests",
             "//rs/test_utilities/load_wasm",
             "//rs/types/base_types",
+            "//rs/types/cycles",
             "//rs/types/types",
             "@crate_index//:candid",
             "@crate_index//:ic-agent",
@@ -224,6 +226,7 @@ rust_ic_test_suite_with_extra_srcs(
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/types/types",
         "@crate_index//:candid",
         "@crate_index//:ic-agent",

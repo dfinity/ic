@@ -155,11 +155,11 @@ pub fn api_status_test(env: TestEnv) {
 /* tag::catalog[]
 Title:: Boundary Nodes API Endpoints Test - Query
 
-Goal:: api/v2/query - install a counter canister and query it
+Goal:: api/v3/query - install a counter canister and query it
 
 end::catalog[] */
 pub fn api_query_test(env: TestEnv) {
-    let name = "api/v2/query - query counter";
+    let name = "api/v3/query - query counter";
     let logger = env.logger();
     info!(&logger, "Starting {name} test");
 
@@ -234,7 +234,7 @@ Goal:: api/v3/call - install a counter canister and update it
 
 end::catalog[] */
 pub fn api_sync_call_test(env: TestEnv) {
-    let name = "api/v3/call - update counter";
+    let name = "api/v4/call - update counter";
     let logger = env.logger();
     info!(&logger, "Starting {name} test");
 
@@ -266,11 +266,11 @@ pub fn api_sync_call_test(env: TestEnv) {
 /* tag::catalog[]
 Title:: Boundary Nodes API Endpoints Test - Read State Canister Path
 
-Goal:: api/v2/read_state canister path - install a counter canister and request the module hash of the canister from the state
+Goal:: api/v3/read_state canister path - install a counter canister and request the module hash of the canister from the state
 
 end::catalog[] */
 pub fn api_canister_read_state_test(env: TestEnv) {
-    let name = "api/v2/read state - canister path";
+    let name = "api/v3/read state - canister path";
     let logger = env.logger();
     info!(&logger, "Starting {name} test");
 
@@ -296,11 +296,11 @@ pub fn api_canister_read_state_test(env: TestEnv) {
 /* tag::catalog[]
 Title:: Boundary Nodes API Endpoints Test - Read State Subnet Path
 
-Goal:: api/v2/read_state subnet path - request the subnet metrics from the certified state
+Goal:: api/v3/read_state subnet path - request the subnet metrics from the certified state
 
 end::catalog[] */
 pub fn api_subnet_read_state_test(env: TestEnv) {
-    let name = "api/v2/read state - subnet path";
+    let name = "api/v3/read state - subnet path";
     let logger = env.logger();
     info!(&logger, "Starting {name} test");
 

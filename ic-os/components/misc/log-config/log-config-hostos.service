@@ -3,7 +3,7 @@ Description=Log config partition
 
 [Service]
 Type=oneshot
-ExecStart=/opt/ic/bin/log-config.sh hostos
+ExecStart=/opt/ic/bin/config_tool dump-os-config --os-type HostOS
 RemainAfterExit=true
 
 [Install]

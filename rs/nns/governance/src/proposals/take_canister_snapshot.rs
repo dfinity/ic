@@ -1,6 +1,9 @@
 use crate::{
     pb::v1::{GovernanceError, TakeCanisterSnapshot, Topic},
-    proposals::{call_canister::CallCanister, invalid_proposal_error, topic_to_manage_canister},
+    proposals::{
+        call_canister::CallCanister, invalid_proposal_error, self_describing::DocumentedAction,
+        topic_to_manage_canister,
+    },
 };
 use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -30,6 +33,9 @@ impl TakeCanisterSnapshot {
 }
 
 impl CallCanister for TakeCanisterSnapshot {
+    // TODO: Use a typed reply instead of () so that the result is recorded.
+    type Reply = ();
+
     fn canister_and_function(&self) -> Result<(CanisterId, &str), GovernanceError> {
         Ok((ROOT_CANISTER_ID, "take_canister_snapshot"))
     }
@@ -56,3 +62,15 @@ pub fn convert_take_canister_snapshot_from_proposal_to_root_request(
         replace_snapshot,
     })
 }
+
+impl DocumentedAction for TakeCanisterSnapshot {
+    const NAME: &'static str = "Take Canister Snapshot";
+    const DESCRIPTION: &'static str = "Create a snapshot of a canister controlled by the \
+        NNS. The snapshot saves the canister's current stable memory, heap memory, data, and \
+        Wasm module. The snapshot can be loaded later using a Load Canister Snapshot proposal, \
+        rolling the canister back to the state saved within the snapshot.";
+}
+
+#[cfg(test)]
+#[path = "take_canister_snapshot_tests.rs"]
+mod tests;

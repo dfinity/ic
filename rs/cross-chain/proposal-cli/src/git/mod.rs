@@ -23,7 +23,7 @@ impl<const N: usize> FromStr for Hash<N> {
                 s.len()
             ));
         }
-        let mut bytes = [0u8; N];
+        let mut bytes = [0_u8; N];
         hex::decode_to_slice(s, &mut bytes).map_err(|e| format!("Invalid hex string: {e}"))?;
         Ok(Self(bytes))
     }

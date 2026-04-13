@@ -24,6 +24,7 @@ pub(crate) mod testing {
     use tokio::sync::watch::{Receiver, Sender, channel};
 
     /// Mock implementation that records the notifications.
+    #[derive(Clone)]
     pub struct MockSystemdNotifier {
         ready: (Sender<bool>, Receiver<bool>),
     }
