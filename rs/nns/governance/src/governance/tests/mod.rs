@@ -1805,8 +1805,6 @@ fn test_maybe_set_eight_year_gang_bonus_base() {
 #[test]
 fn test_post_upgrade_migrates_neuron_minimum_dissolve_delay_to_vote_seconds() {
     let _mission70 = crate::temporarily_enable_mission_70_voting_rewards();
-    let two_weeks_seconds = 14 * ONE_DAY_SECONDS;
-
     // Simulate the old production state: 6 months.
     let mut heap_data = HeapGovernanceData {
         economics: Some(NetworkEconomics {
@@ -1829,7 +1827,12 @@ fn test_post_upgrade_migrates_neuron_minimum_dissolve_delay_to_vote_seconds() {
         .as_ref()
         .unwrap()
         .neuron_minimum_dissolve_delay_to_vote_seconds;
-    assert_eq!(actual, Some(two_weeks_seconds));
+    assert_eq!(
+        actual,
+        Some(
+            VotingPowerEconomics::MISSION_70_DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS
+        ),
+    );
 }
 
 #[test]

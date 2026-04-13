@@ -4806,9 +4806,6 @@ impl Governance {
             return;
         }
 
-        let two_weeks_seconds =
-            VotingPowerEconomics::MISSION_70_DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
-
         let Some(voting_power_economics) = heap_data
             .economics
             .as_mut()
@@ -4822,25 +4819,26 @@ impl Governance {
             return;
         };
 
+        let target =
+            VotingPowerEconomics::MISSION_70_DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
         let current = voting_power_economics
             .neuron_minimum_dissolve_delay_to_vote_seconds
             .unwrap_or(VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS);
 
         assert!(
-            current >= two_weeks_seconds,
+            current >= target,
             "neuron_minimum_dissolve_delay_to_vote_seconds ({}) is unexpectedly below 2 weeks ({})",
             current,
-            two_weeks_seconds,
+            target,
         );
 
-        if current > two_weeks_seconds {
+        if current > target {
             println!(
                 "{}Migrating neuron_minimum_dissolve_delay_to_vote_seconds from {} to {} \
                  (2 weeks).",
-                LOG_PREFIX, current, two_weeks_seconds,
+                LOG_PREFIX, current, target,
             );
-            voting_power_economics.neuron_minimum_dissolve_delay_to_vote_seconds =
-                Some(two_weeks_seconds);
+            voting_power_economics.neuron_minimum_dissolve_delay_to_vote_seconds = Some(target);
         }
     }
 
