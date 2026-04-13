@@ -5498,7 +5498,6 @@ dependencies = [
  "ic_os_logging",
  "itertools 0.12.1",
  "libcryptsetup-rs",
- "libcryptsetup-rs-sys",
  "nix 0.24.3",
  "parking_lot",
  "prometheus",
