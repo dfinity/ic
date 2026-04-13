@@ -391,6 +391,7 @@ impl SchedulerImpl {
                 )
                 .is_err()
             {
+                // FIXME: Drop the canister from the schedule (unless it has heap delta or install code debits).
                 continue;
             }
 

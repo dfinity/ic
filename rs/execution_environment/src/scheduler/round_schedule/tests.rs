@@ -5,16 +5,24 @@ use ic_base_types::{CanisterId, NumBytes};
 use ic_config::flag_status::FlagStatus;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::execution_state::{
+    ExecutionState, ExportedFunctions, Memory, WasmBinary, WasmMetadata,
+};
 use ic_replicated_state::canister_state::system_state::PausedExecutionId;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{CanisterMetrics, CanisterPriority, ExecutionTask, ReplicatedState};
 use ic_test_utilities_state::get_running_canister;
 use ic_test_utilities_types::messages::IngressBuilder;
 use ic_types::messages::{CanisterMessageOrTask, CanisterTask};
+use ic_types::methods::{SystemMethod, WasmMethod};
 use ic_types::{AccumulatedPriority, ComputeAllocation, ExecutionRound, LongExecutionMode};
 use ic_types_test_utils::ids::{canister_test_id, subnet_test_id};
+use ic_wasm_types::CanisterModule;
+use itertools::Itertools;
 use maplit::btreeset;
 use more_asserts::{assert_gt, assert_le};
+use proptest::prelude::*;
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 /// Fixture for testing `RoundSchedule` in isolation: a `RoundSchedule` and a
@@ -134,6 +142,28 @@ impl RoundScheduleFixture {
         iteration
     }
 
+    /// Calls `partition_canisters_to_cores` on the real canister states and
+    /// immediately puts them back. Returns the per-core canister ID assignment.
+    fn partition_to_cores(&mut self, iteration: &IterationSchedule) -> Vec<Vec<CanisterId>> {
+        let canisters = self.state.take_canister_states();
+        let (partitioned, inactive) = iteration.partition_canisters_to_cores(canisters);
+        let mut all_canisters = inactive;
+        let cores: Vec<Vec<CanisterId>> = partitioned
+            .into_iter()
+            .map(|core| {
+                core.into_iter()
+                    .map(|cs| {
+                        let id = cs.canister_id();
+                        all_canisters.insert(id, cs);
+                        id
+                    })
+                    .collect()
+            })
+            .collect();
+        self.state.put_canister_states(all_canisters);
+        cores
+    }
+
     /// Sets the scheduling priority for an existing canister.
     fn set_priority(&mut self, canister_id: CanisterId, priority: CanisterPriority) {
         assert!(self.state.canister_state(&canister_id).is_some());
@@ -180,8 +210,18 @@ impl RoundScheduleFixture {
     /// `next_execution()` returns `StartNew`.
     fn push_input(&mut self, canister_id: CanisterId) {
         let canister = self.canister_state(&canister_id);
-        let ingress = IngressBuilder::new().receiver(canister_id).build();
-        canister.system_state.queues_mut().push_ingress(ingress);
+        if !canister.has_input() {
+            let ingress = IngressBuilder::new().receiver(canister_id).build();
+            canister.system_state.queues_mut().push_ingress(ingress);
+        }
+    }
+
+    fn pop_input(&mut self, canister_id: CanisterId) {
+        self.canister_state(&canister_id).pop_input();
+    }
+
+    fn has_input(&self, canister_id: CanisterId) -> bool {
+        self.state.canister_state(&canister_id).unwrap().has_input()
     }
 
     /// Adds a paused long execution to the canister's task queue.
@@ -206,26 +246,58 @@ impl RoundScheduleFixture {
         );
     }
 
-    /// Sets the heap delta debit for an already-added canister (for rate-limit
-    /// tests). The canister must exist.
-    fn set_heap_delta_debit(&mut self, canister_id: CanisterId, bytes: NumBytes) {
+    /// Returns true if the canister has a paused execution, false otherwise.
+    fn has_long_execution(&mut self, canister_id: CanisterId) -> bool {
+        self.canister_state(&canister_id)
+            .system_state
+            .task_queue
+            .has_paused_or_aborted_task()
+    }
+
+    /// Adds heap delta debit for an existing canister (for rate-limit tests).
+    fn add_heap_delta_debit(&mut self, canister_id: CanisterId, bytes: NumBytes) {
         self.canister_state(&canister_id)
             .scheduler_state
-            .heap_delta_debit = bytes;
+            .heap_delta_debit += bytes;
         if bytes.get() > 0 {
             self.state.canister_priority_mut(canister_id);
         }
     }
 
-    /// Sets the install code instruction debit for an already-added canister (for
-    /// rate-limit tests). The canister must exist.
-    fn set_install_code_debit(&mut self, canister_id: CanisterId, instructions: NumInstructions) {
+    /// Adds install code instruction debit for an existing canister (for
+    /// rate-limit tests).
+    fn add_install_code_debit(&mut self, canister_id: CanisterId, instructions: NumInstructions) {
         self.canister_state(&canister_id)
             .scheduler_state
             .install_code_debit = instructions;
         if instructions.get() > 0 {
             self.state.canister_priority_mut(canister_id);
         }
+    }
+
+    /// Sets the compute allocation for an existing canister.
+    fn set_compute_allocation(&mut self, canister_id: CanisterId, percent: u64) {
+        self.canister_state(&canister_id)
+            .system_state
+            .compute_allocation = ComputeAllocation::try_from(percent).unwrap();
+    }
+
+    /// Sets up an execution state that exports the heartbeat method. This makes
+    /// `has_heartbeat()` return true, causing `finish_round` to treat the canister
+    /// as always active (even with no input).
+    fn set_heartbeat_export(&mut self, canister_id: CanisterId) {
+        let exports = ExportedFunctions::new(BTreeSet::from([WasmMethod::System(
+            SystemMethod::CanisterHeartbeat,
+        )]));
+        self.canister_state(&canister_id).execution_state = Some(ExecutionState::new(
+            "NOT_USED".into(),
+            WasmBinary::new(CanisterModule::new(vec![])),
+            exports,
+            Memory::new_for_testing(),
+            Memory::new_for_testing(),
+            vec![],
+            WasmMetadata::default(),
+        ));
     }
 
     fn scheduled_canisters(&self) -> &BTreeSet<CanisterId> {
@@ -578,7 +650,7 @@ fn start_iteration_with_heap_delta_rate_limit() {
             .build(),
     );
     let canister_id = fixture.canister_with_input();
-    fixture.set_heap_delta_debit(canister_id, limit);
+    fixture.add_heap_delta_debit(canister_id, limit);
 
     let iteration = fixture.start_iteration(true);
 
@@ -813,10 +885,7 @@ fn finish_round_idle_at_zero_dropped_from_schedule() {
     let canister_id = fixture.canister_with_input();
     fixture.start_iteration(true);
     // Simulate "canister ran and consumed its input".
-    fixture
-        .canister_state(&canister_id)
-        .system_state
-        .pop_input();
+    fixture.pop_input(canister_id);
     fixture.end_iteration(
         &btreeset! {canister_id},
         &btreeset! {canister_id},
@@ -888,9 +957,9 @@ fn finish_round_apply_priority_credit() {
 fn finish_round_grant_heap_delta_and_install_code_credits() {
     let mut fixture = RoundScheduleFixture::new();
     let canister_a = fixture.canister_with_input();
-    fixture.set_heap_delta_debit(canister_a, NumBytes::new(100));
+    fixture.add_heap_delta_debit(canister_a, NumBytes::new(100));
     let canister_b = fixture.canister();
-    fixture.set_install_code_debit(canister_b, NumInstructions::new(200));
+    fixture.add_install_code_debit(canister_b, NumInstructions::new(200));
     fixture.start_iteration(true);
 
     fixture.finish_round(ExecutionRound::new(1));
@@ -930,5 +999,524 @@ fn finish_round_grant_heap_delta_and_install_code_credits() {
             .canister_install_code_debits
             .get_sample_sum(),
         200.0
+    );
+}
+
+/// Canisters with a heartbeat export and no input behave identically to canisters
+/// with an input in `finish_round`: both stay in the subnet schedule and receive
+/// free allocation.
+#[test]
+fn finish_round_heartbeat_treated_same_as_input() {
+    let round_schedule = RoundScheduleBuilder::new().with_cores(2).build();
+    let mut fixture = RoundScheduleFixture::with_round_schedule(round_schedule);
+
+    // Canister A has input, canister B has heartbeat export (but no input).
+    let canister_a = fixture.canister_with_input();
+    let canister_b = fixture.canister();
+    fixture.set_heartbeat_export(canister_b);
+    // Give B an input so it gets scheduled, then we'll pop it before finish_round.
+    fixture.push_input(canister_b);
+
+    fixture.start_iteration(true);
+    // Simulate execution: both canisters consume their input.
+    fixture.pop_input(canister_a);
+    fixture.pop_input(canister_b);
+    fixture.end_iteration(
+        &btreeset! {canister_a, canister_b},
+        &btreeset! {canister_a, canister_b},
+        &btreeset! {},
+    );
+
+    // Push a new input to A so it appears active; B has no input but has heartbeat.
+    fixture.push_input(canister_a);
+
+    fixture.finish_round(ExecutionRound::new(1));
+
+    // Both should remain in the subnet schedule.
+    let in_schedule = |id: &CanisterId| {
+        fixture
+            .state
+            .metadata
+            .subnet_schedule
+            .iter()
+            .any(|(c, _)| c == id)
+    };
+    assert!(
+        in_schedule(&canister_a),
+        "canister with input should stay in schedule"
+    );
+    assert!(
+        in_schedule(&canister_b),
+        "canister with heartbeat should stay in schedule"
+    );
+
+    // Both should have the same accumulated priority (symmetric treatment).
+    let ap_a = fixture
+        .canister_priority(&canister_a)
+        .accumulated_priority
+        .get();
+    let ap_b = fixture
+        .canister_priority(&canister_b)
+        .accumulated_priority
+        .get();
+    assert_eq!(
+        ap_a, ap_b,
+        "heartbeat canister should get same priority as input canister"
+    );
+}
+
+// === Multi-round proptests ===
+
+const HEAP_DELTA_RATE_LIMIT: NumBytes = NumBytes::new(1000);
+
+/// Cyclical rate-limiting pattern.
+#[derive(Clone, Debug)]
+struct RateLimitPattern {
+    /// Number of consecutive rate-limited sim_rounds.
+    limited_rounds: usize,
+    /// Number of consecutive non-rate-limited sim_rounds.
+    unlimited_rounds: usize,
+}
+
+/// Describes a class of canisters that share the same scheduling behavior.
+///
+/// The activity cycle is indexed by round number. The rate limiting pattern is
+/// indexed by the number of rounds executed.
+#[derive(Clone, Debug)]
+struct CanisterArchetype {
+    /// Compute allocation in percent (0-100).
+    compute_allocation: u64,
+    /// Number of consecutive active sim_rounds per cycle.
+    active_rounds: usize,
+    /// Number of consecutive inactive sim_rounds per cycle.
+    inactive_rounds: usize,
+    /// Whether or not the canister executes long messages.
+    has_long_execution: bool,
+    /// Whether or not the canister consumes all its inputs when executed (and not
+    /// in a long execution).
+    consumes_all_inputs: bool,
+    /// Optional rate-limiting cycle.
+    rate_limiting: Option<RateLimitPattern>,
+    /// Whether this canister is treated as having low cycle balance (skipped
+    /// during execution but message consumed).
+    low_cycles: bool,
+}
+
+impl CanisterArchetype {
+    fn activity_cycle(&self) -> usize {
+        self.active_rounds + self.inactive_rounds
+    }
+
+    fn is_new_cycle(&self, round: usize) -> bool {
+        round % self.activity_cycle() == 0
+    }
+
+    fn heap_delta_produced(&self, round: usize) -> NumBytes {
+        if let Some(ref rl) = self.rate_limiting {
+            if round % (rl.limited_rounds + rl.unlimited_rounds) == 0 {
+                return HEAP_DELTA_RATE_LIMIT * rl.limited_rounds as u64;
+            }
+        }
+        NumBytes::new(0)
+    }
+
+    fn expected_full_rounds(&self, num_rounds: usize) -> usize {
+        let expected_rounds_from_ca = num_rounds * self.compute_allocation as usize / 100;
+        if let Some(ref rl) = self.rate_limiting {
+            expected_rounds_from_ca * rl.unlimited_rounds
+                / (rl.limited_rounds + rl.unlimited_rounds)
+        } else {
+            expected_rounds_from_ca
+        }
+    }
+}
+
+/// Per-canister mutable state tracked across the simulation.
+struct CanisterSim {
+    canister_id: CanisterId,
+    archetype: CanisterArchetype,
+
+    /// Execution rounds left in the current cycle.
+    ///
+    /// These could be small messages or a continued long execution, depending on
+    /// the archetype's `has_long_execution`.
+    current_cycle_rounds_left: usize,
+
+    /// Not yet applied heap delta debit.
+    ///
+    /// We cannot apply heap delta in the middle of a long execution, so we collect
+    /// it here and apply it upon completion.
+    heap_delta_debit: NumBytes,
+
+    /// Enqueued inputs, as number of rounds needed to execute.
+    ///
+    /// These could be small messages or single long executions, depending on the
+    /// archetype's `has_long_execution`.
+    inputs: VecDeque<usize>,
+
+    /// Number of times the canister got a full execution.
+    full_rounds: usize,
+}
+
+impl CanisterSim {
+    fn is_active(&self) -> bool {
+        self.current_cycle_rounds_left > 0 || !self.inputs.is_empty()
+    }
+
+    fn produce_heap_delta_debit(&mut self, round: usize) {
+        self.heap_delta_debit += self.archetype.heap_delta_produced(round);
+    }
+}
+
+// --- Proptest strategies ---
+
+prop_compose! {
+    fn arb_rate_limit_pattern()(
+        limited in 1..4_usize,
+        unlimited in 1..6_usize,
+    ) -> RateLimitPattern {
+        RateLimitPattern { limited_rounds: limited, unlimited_rounds: unlimited }
+    }
+}
+
+prop_compose! {
+    fn arb_archetype()(
+        compute_allocation in 0..50_u64,
+        active_rounds in 1..8_usize,
+        inactive_raw in -2..5_i16,
+        mut has_long_execution in proptest::bool::ANY,
+        mut consumes_all_inputs in proptest::bool::ANY,
+        rate_limiting in proptest::option::of(arb_rate_limit_pattern()),
+        low_cycles in proptest::bool::weighted(0.2),
+    ) -> CanisterArchetype {
+        // Low cycle balance canisters always consume all inputs and never do long
+        // executions.
+        consumes_all_inputs |= low_cycles;
+        has_long_execution &= !low_cycles;
+
+        CanisterArchetype {
+            compute_allocation,
+            active_rounds,
+            inactive_rounds: inactive_raw.max(0) as usize,
+            has_long_execution,
+            consumes_all_inputs,
+            rate_limiting,
+            low_cycles,
+        }
+    }
+}
+
+prop_compose! {
+    fn arb_archetype_with_count()(
+        archetype in arb_archetype(),
+        count in 1..8_usize,
+    ) -> (CanisterArchetype, usize) {
+        (archetype, count)
+    }
+}
+
+/// Runs a multi-round simulation using `RoundScheduleFixture`, returning the
+/// per-canister simulation state after all rounds.
+fn run_multi_round_simulation(
+    scheduler_cores: usize,
+    num_rounds: usize,
+    archetypes: &[(CanisterArchetype, usize)],
+) -> (RoundScheduleFixture, Vec<CanisterSim>) {
+    const CANISTER_IDX: Option<usize> = None;
+
+    let mut fixture = RoundScheduleFixture::new();
+
+    let mut sims: Vec<CanisterSim> = Vec::new();
+    let mut id_to_sim = BTreeMap::new();
+    for (archetype, count) in archetypes {
+        for _ in 0..*count {
+            let canister_id = fixture.canister();
+            fixture.set_compute_allocation(canister_id, archetype.compute_allocation);
+            id_to_sim.insert(canister_id, sims.len());
+            sims.push(CanisterSim {
+                canister_id,
+                archetype: archetype.clone(),
+                current_cycle_rounds_left: 0,
+                heap_delta_debit: NumBytes::new(0),
+                inputs: VecDeque::new(),
+                full_rounds: 0,
+            });
+        }
+    }
+
+    for round in 0..num_rounds {
+        fixture.round_schedule = RoundScheduleBuilder::new()
+            .with_cores(scheduler_cores)
+            .with_heap_delta_rate_limit(HEAP_DELTA_RATE_LIMIT)
+            .build();
+
+        // --- Setup phase: prepare canister state based round and inputs ---
+        for (idx, sim) in sims.iter_mut().enumerate() {
+            let canister_id = sim.canister_id;
+
+            // Every new cycle, enqueue `active_rounds` worth of work.
+            if sim.archetype.is_new_cycle(round) {
+                sim.inputs.push_back(sim.archetype.active_rounds);
+            }
+
+            if sim.current_cycle_rounds_left == 0 {
+                // No cycle in progress.
+                if let Some(cycle_rounds) = sim.inputs.pop_front() {
+                    // We have backlog, begin the next cycle.
+                    fixture.push_input(canister_id);
+                    sim.current_cycle_rounds_left = cycle_rounds;
+
+                    if Some(idx) == CANISTER_IDX {
+                        println!(
+                            "round {round}, canister {idx}: starting cycle with {cycle_rounds} rounds"
+                        );
+                    }
+                } else {
+                    // No more work, ensure no input.
+                    fixture.pop_input(canister_id);
+                }
+            } else if !sim.archetype.has_long_execution {
+                // Active new execution canister, ensure it has an input.
+                fixture.push_input(canister_id);
+            }
+        }
+
+        // --- start_iteration ---
+        let iteration = fixture.start_iteration(true);
+
+        // --- Simulate core assignment and execution ---
+        let core_schedules = fixture.partition_to_cores(&iteration);
+        let mut executed_canisters = BTreeSet::new();
+        let mut canisters_with_completed_messages = BTreeSet::new();
+        let mut low_cycle_balance_canisters = BTreeSet::new();
+
+        for core_schedule in &core_schedules {
+            for canister_id in core_schedule {
+                let idx = id_to_sim[canister_id];
+                let sim = &mut sims[idx];
+
+                // Advance cycle by one round: the canister actually executed.
+                sim.current_cycle_rounds_left -= 1;
+
+                if fixture.has_long_execution(*canister_id) {
+                    debug_assert!(!sim.archetype.low_cycles);
+
+                    executed_canisters.insert(*canister_id);
+                    if sim.current_cycle_rounds_left == 0 {
+                        fixture.remove_long_execution(*canister_id);
+                        canisters_with_completed_messages.insert(*canister_id);
+
+                        // If we have a backlog, reflect it in the input queue.
+                        if !sim.inputs.is_empty() {
+                            fixture.push_input(*canister_id);
+                        }
+                    } else {
+                        // Complete slice consumed all instructions, no more executions on this core.
+                        break;
+                    }
+                } else if fixture.has_input(*canister_id) {
+                    if sim.archetype.low_cycles {
+                        // Low cycles. Pop the input and produce a reject response.
+                        fixture.pop_input(*canister_id);
+                        low_cycle_balance_canisters.insert(*canister_id);
+                    } else {
+                        // New execution.
+                        executed_canisters.insert(*canister_id);
+                        canisters_with_completed_messages.insert(*canister_id);
+
+                        // Transition to long execution if the archetype says so.
+                        if sim.archetype.has_long_execution && sim.current_cycle_rounds_left > 0 {
+                            fixture.pop_input(*canister_id);
+                            fixture.add_long_execution(*canister_id);
+                            // We've just executed a full slice and consumed the instruction budget.
+                            break;
+                        }
+
+                        if !sim.is_active() || sim.archetype.consumes_all_inputs {
+                            // No more work or canister consumes all inputs every round.
+                            fixture.pop_input(*canister_id);
+                        } else {
+                            // Some inputs are left, we presumably ran out of instructions.
+                            break;
+                        }
+                    }
+                } else {
+                    panic!("canister {idx} scheduled without input or long execution");
+                }
+            }
+        }
+
+        // --- end_iteration ---
+        fixture.end_iteration(
+            &executed_canisters,
+            &canisters_with_completed_messages,
+            &low_cycle_balance_canisters,
+        );
+
+        // --- finish_round ---
+        let current_round = ExecutionRound::new(round as u64);
+        fixture.finish_round(current_round);
+
+        if CANISTER_IDX.is_some() {
+            println!(
+                "round {round}: fully executed canisters: {:?}",
+                fixture
+                    .fully_executed_canisters()
+                    .iter()
+                    .map(|c| id_to_sim[c])
+                    .sorted()
+                    .collect::<Vec<_>>()
+            );
+            println!(
+                "round {round}: canister priorities: {:?}",
+                fixture
+                    .state
+                    .metadata
+                    .subnet_schedule
+                    .iter()
+                    .map(|(canister_id, p)| (
+                        id_to_sim[canister_id],
+                        p.accumulated_priority.get() / MULTIPLIER
+                    ))
+                    .collect::<Vec<_>>()
+            );
+        }
+
+        for canister_id in fixture.fully_executed_canisters().clone() {
+            let sim = &mut sims[id_to_sim[&canister_id]];
+            sim.produce_heap_delta_debit(round);
+            if sim.heap_delta_debit.get() > 0 && !fixture.has_long_execution(canister_id) {
+                fixture.add_heap_delta_debit(canister_id, sim.heap_delta_debit);
+                sim.heap_delta_debit = NumBytes::new(0);
+            }
+
+            sim.full_rounds += 1;
+        }
+    }
+
+    (fixture, sims)
+}
+
+/// Asserts the post-simulation invariants.
+fn assert_multi_round_invariants(
+    fixture: &RoundScheduleFixture,
+    sims: &[CanisterSim],
+    num_rounds: usize,
+) -> Result<(), TestCaseError> {
+    println!(
+        "executed rounds: {:?}",
+        sims.iter().map(|s| s.full_rounds).collect::<Vec<_>>()
+    );
+    println!(
+        "canister priorities: {:?}",
+        sims.iter()
+            .map(|sim| fixture
+                .state
+                .canister_priority(&sim.canister_id)
+                .accumulated_priority
+                .get()
+                / MULTIPLIER)
+            .collect::<Vec<_>>()
+    );
+
+    // The positive side of accumulated_priority is capped at AP_ROUNDS_MAX *
+    // 100% = 500% by finish_round (via the free allocation cap). Negative AP can
+    // grow arbitrarily: it simply means the canister got to execute more than its
+    // share (because spare compute was available) and will be deprioritized later.
+    let ap_upper_bound = 50 * 100 * MULTIPLIER;
+    for (i, sim) in sims.iter().enumerate() {
+        let canister_priority = fixture.state.metadata.subnet_schedule.get(&sim.canister_id);
+        assert!(
+            canister_priority.accumulated_priority.get() <= ap_upper_bound,
+            "canister {i}: accumulated_priority {} exceeds upper bound",
+            canister_priority.accumulated_priority.get() / MULTIPLIER,
+        );
+    }
+
+    // Sanity check: always-active canisters that also keep an input at the end
+    // of each round should never be dropped from the schedule. Their
+    // last_full_execution_round must be positive by the end of the simulation.
+    for (i, sim) in sims.iter().enumerate() {
+        let canister_id = sim.canister_id;
+        let canister_priority = fixture.state.metadata.subnet_schedule.get(&canister_id);
+
+        // If (and only if) the canister has a backlog, check that it got executed as
+        // much as its compute allocation and rate limiting allow.
+        if sim.inputs.len() > 1 {
+            let executed_rounds = sim.full_rounds as i64;
+            let credit_rounds = canister_priority.accumulated_priority.get() / MULTIPLIER / 100;
+            let expected_rounds = sim.archetype.expected_full_rounds(num_rounds);
+            prop_assert!(
+                executed_rounds + credit_rounds + 1 >= expected_rounds as i64,
+                "canister {i}: executed_rounds {executed_rounds} + credit_rounds {credit_rounds} < expected_rounds {expected_rounds}",
+            );
+        }
+    }
+
+    Ok(())
+}
+
+#[test_strategy::proptest(ProptestConfig { cases: 400, max_shrink_iters: 0, ..ProptestConfig::default() })]
+fn multi_round_priority_invariants(
+    #[strategy(2..6_usize)] scheduler_cores: usize,
+    #[strategy(200..800_usize)] num_rounds: usize,
+    #[strategy(proptest::collection::vec(arb_archetype_with_count(), 2..=5))]
+    archetype_configs: Vec<(CanisterArchetype, usize)>,
+) {
+    let total_compute: u64 = archetype_configs
+        .iter()
+        .map(|(a, c)| a.compute_allocation * *c as u64)
+        .sum();
+    let capacity = ((scheduler_cores - 1) * 100) as u64;
+    prop_assume!(total_compute < capacity);
+
+    let (fixture, sims) =
+        run_multi_round_simulation(scheduler_cores, num_rounds, &archetype_configs);
+    assert_multi_round_invariants(&fixture, &sims, num_rounds)?;
+}
+
+#[test_strategy::proptest(ProptestConfig { cases: 20, max_shrink_iters: 0, ..ProptestConfig::default() })]
+fn multi_round_all_active_proportional_scheduling(
+    #[strategy(2..6_usize)] scheduler_cores: usize,
+    #[strategy(proptest::collection::vec(0..50_u64, 2..=10))] allocations: Vec<u64>,
+) {
+    let total: u64 = allocations.iter().sum();
+    let capacity = ((scheduler_cores - 1) * 100) as u64;
+    prop_assume!(total < capacity);
+
+    let archetype_configs: Vec<(CanisterArchetype, usize)> = allocations
+        .into_iter()
+        .map(|ca| {
+            (
+                CanisterArchetype {
+                    compute_allocation: ca,
+                    active_rounds: 1,
+                    inactive_rounds: 0,
+                    has_long_execution: false,
+                    consumes_all_inputs: true,
+                    rate_limiting: None,
+                    low_cycles: false,
+                },
+                1,
+            )
+        })
+        .collect();
+
+    let num_canisters = archetype_configs.len();
+    let num_rounds = num_canisters * 10;
+
+    let (fixture, _sims) =
+        run_multi_round_simulation(scheduler_cores, num_rounds, &archetype_configs);
+
+    let sum_ap: i64 = fixture
+        .state
+        .metadata
+        .subnet_schedule
+        .iter()
+        .map(|(_, p)| p.accumulated_priority.get())
+        .sum();
+    prop_assert!(
+        sum_ap.abs() <= num_canisters as i64,
+        "final sum(AP) = {sum_ap}"
     );
 }
