@@ -33,7 +33,13 @@ PocketIC supports configurable subnet topologies.
 
 #### Scenario: Configure subnet types
 - **WHEN** creating an instance with `ExtendedSubnetConfigSet`
-- **THEN** the instance can include system subnets, application subnets, and NNS subnets
+- **THEN** the instance can include system subnets, application subnets, NNS subnets, and specialized subnets
+- **AND** supported subnet kinds include: NNS, SNS, II, Fiduciary, Bitcoin, TestThresholdKeys, System, Application, CloudEngine, VerifiedApplication
+
+#### Scenario: Configure test threshold keys subnet
+- **WHEN** creating an instance with `test_threshold_keys: true` or using `with_test_threshold_keys_subnet()`
+- **THEN** a dedicated subnet is created with test threshold key configurations (Schnorr and ECDSA)
+- **AND** this subnet is separate from II/Fiduciary subnets which hold production key configurations
 
 #### Scenario: Configure initial time
 - **WHEN** an initial time is specified in the instance configuration
