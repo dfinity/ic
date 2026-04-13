@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - The function `PocketIcBuilder::disable_ingress_validation` to specify that ingress validation
   should be disabled for mainnet-like endpoints `/instances/<instance_id>/api/...` of the instance.
+- The function `PocketIcBuilder::with_test_threshold_keys_subnet` to create a test threshold keys subnet.
 
 
 
