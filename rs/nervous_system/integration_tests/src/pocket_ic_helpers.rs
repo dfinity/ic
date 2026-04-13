@@ -1298,14 +1298,21 @@ pub mod nns {
             pocket_ic: &PocketIc,
             key: impl AsRef<str>,
         ) -> T {
-            let response = get_value(pocket_ic, key, None).await.unwrap();
-            let bytes = match response.content.unwrap() {
+            let key = key.as_ref();
+            let response = get_value(pocket_ic, key, None)
+                .await
+                .expect(&format!("failed to fetch registry value for key `{key}`"));
+            let bytes = match response
+                .content
+                .expect(&format!("registry response for key `{key}` had no content"))
+            {
                 Content::Value(bytes) => bytes,
                 Content::LargeValueChunkKeys(_) => {
-                    panic!("Unexpected large value chunk keys in registry response")
+                    panic!("unexpected large value chunk keys for key `{key}`")
                 }
             };
-            T::decode(bytes.as_slice()).unwrap()
+            T::decode(bytes.as_slice())
+                .expect(&format!("failed to decode registry value for key `{key}`"))
         }
     }
 
