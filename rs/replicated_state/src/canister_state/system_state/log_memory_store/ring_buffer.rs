@@ -167,11 +167,11 @@ impl RingBuffer {
         // Write header and index ONCE at the end.
         self.io.save_header(&h);
         self.io.save_index_table(&index_table);
-        println!(
-            "ABC LMS append total added size: {total_added_size} bytes_used: {} capacity: {}",
-            h.data_size.get(),
-            h.data_capacity.get()
-        );
+        // println!(
+        //     "ABC LMS append total added size: {total_added_size} bytes_used: {} capacity: {}",
+        //     h.data_size.get(),
+        //     h.data_capacity.get()
+        // );
     }
 
     /// Evicts oldest records from the front until `added_size` fits.

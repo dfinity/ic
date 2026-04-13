@@ -2146,10 +2146,10 @@ fn test_canister_resize_up_preserves_logs() {
             .with_log_memory_limit(log_memory_limit)
             .build(),
     );
-    println!("ABC update_settings duration: {:?}", start.elapsed());
+    //println!("ABC update_settings duration: {:?}", start.elapsed());
     let balance_after = env.cycle_balance(canister_id);
     assert_gt!(balance_before, balance_after);
-    println!("ABC resize cost: {}", balance_before - balance_after);
+    //println!("ABC resize cost: {}", balance_before - balance_after);
 
     // After resizing.
     let logs_after = fetch_log_records_intercanister(&env, universal_canister, canister_id, cycles);
@@ -2229,15 +2229,15 @@ fn test_canister_resize_down_preserves_logs() {
             .with_log_memory_limit(log_memory_limit - 1)
             .build(),
     );
-    println!("ABC update_settings duration: {:?}", start.elapsed());
+    //println!("ABC update_settings duration: {:?}", start.elapsed());
     let balance_after = env.cycle_balance(canister_id);
     assert_gt!(balance_before, balance_after);
-    println!("ABC resize cost: {}", balance_before - balance_after);
+    //println!("ABC resize cost: {}", balance_before - balance_after);
 
     // Snapshot metrics AFTER the resize.
     let sum_after = update_settings_duration_sum(&env);
     let resize_duration_seconds = sum_after - sum_before;
-    println!("ABC Resize update_settings duration: {resize_duration_seconds:.6}s");
+    //println!("ABC Resize update_settings duration: {resize_duration_seconds:.6}s");
 
     // After resizing.
     let logs_after = fetch_log_records_intercanister(&env, universal_canister, canister_id, cycles);

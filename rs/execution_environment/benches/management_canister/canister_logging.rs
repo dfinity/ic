@@ -97,11 +97,11 @@ pub fn canister_logging_benchmark(c: &mut Criterion) {
         "canisters:1/from:2MiB/to:-1",
         (1, 2 * MIB, 2 * MIB - 1, 0),
     );
-    run_bench_resize_canister_log(
-        &mut group,
-        "canisters:1/from:-1/to:2MiB",
-        (1, 2 * MIB - 1, 2 * MIB, 0),
-    );
+    // run_bench_resize_canister_log(
+    //     &mut group,
+    //     "canisters:1/from:-1/to:2MiB",
+    //     (1, 2 * MIB - 1, 2 * MIB, 0),
+    // );
 }
 
 criterion_group!(benchmarks, canister_logging_benchmark);
