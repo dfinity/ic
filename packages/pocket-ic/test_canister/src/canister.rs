@@ -227,18 +227,15 @@ async fn sign_with_ecdsa(
             name,
         },
     };
-    Ok(
-        ic_cdk::api::call::call_with_payment128::<_, (SignWithEcdsaResponse,)>(
-            Principal::management_canister(),
-            "sign_with_ecdsa",
-            (arg,),
-            fee,
-        )
-        .await
-        .map_err(|(code, msg)| format!("Reject code: {code:?}; Reject message: {msg}"))?
-        .0
-        .signature,
+    let (res,): (SignWithEcdsaResponse,) = ic_cdk::api::call::call_with_payment128(
+        Principal::management_canister(),
+        "sign_with_ecdsa",
+        (arg,),
+        fee,
     )
+    .await
+    .map_err(|(code, msg)| format!("Reject code: {code:?}; Reject message: {msg}"))?;
+    Ok(res.signature)
 }
 
 // vetKd interface
