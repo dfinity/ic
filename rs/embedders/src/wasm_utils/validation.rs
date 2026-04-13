@@ -11,7 +11,8 @@ use ic_types::{MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions};
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
 use std::{
     cmp,
-    collections::{BTreeMap, HashMap, HashSet}, num::NonZero,
+    collections::{BTreeMap, HashMap, HashSet},
+    num::NonZero,
 };
 
 use crate::wasmtime_embedder::{
