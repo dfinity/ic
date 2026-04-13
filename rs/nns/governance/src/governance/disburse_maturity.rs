@@ -560,12 +560,15 @@ async fn try_finalize_maturity_disbursement(
 ) -> Result<(), FinalizeMaturityDisbursementError> {
     let (maturity_disbursement_finalization, now_seconds) = governance.with_borrow(|governance| {
         let now_seconds = governance.env.now();
+        let maturity_modulation = governance
+            .heap_data
+            .icp_xdr_rate_history
+            .as_ref()
+            .and_then(|h| h.current_maturity_modulation_permyriad);
         let maturity_disbursement_finalization = next_maturity_disbursement_to_finalize(
             &governance.neuron_store,
             &governance.heap_data.in_flight_commands,
-            governance
-                .heap_data
-                .cached_daily_maturity_modulation_basis_points,
+            maturity_modulation,
             now_seconds,
         );
         (maturity_disbursement_finalization, now_seconds)

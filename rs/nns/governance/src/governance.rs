@@ -6419,7 +6419,11 @@ impl Governance {
         }
 
         let now_seconds = self.env.now();
-        let maturity_modulation = match self.heap_data.cached_daily_maturity_modulation_basis_points
+        let maturity_modulation = match self
+            .heap_data
+            .icp_xdr_rate_history
+            .as_ref()
+            .and_then(|h| h.current_maturity_modulation_permyriad)
         {
             None => return,
             Some(value) => value,
