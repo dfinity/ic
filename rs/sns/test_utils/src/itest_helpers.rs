@@ -352,6 +352,13 @@ pub fn populate_canister_ids(
         swap.nns_governance_canister_id = NNS_GOVERNANCE_CANISTER_ID.to_string();
         swap.icp_ledger_canister_id = ICP_LEDGER_CANISTER_ID.to_string();
     }
+
+    // Index
+    {
+        if let Some(IndexArg::Init(ref mut init_arg)) = sns_canister_init_payloads.index_ng {
+            init_arg.ledger_id = ledger_canister_id.0;
+        }
+    }
 }
 
 /// All the SNS canisters
