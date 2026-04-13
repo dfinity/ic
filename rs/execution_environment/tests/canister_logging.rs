@@ -163,7 +163,7 @@ fn fetch_log_records(
     sender: PrincipalId,
     canister_id: CanisterId,
 ) -> Vec<CanisterLogRecord> {
-    let reply = fetch_canister_logs(env, sender, canister_id);
+    let reply = fetch_canister_logs_query(env, sender, canister_id);
     FetchCanisterLogsResponse::decode(&get_reply(reply))
         .unwrap()
         .canister_log_records
