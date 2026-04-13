@@ -158,7 +158,7 @@ fn select_dealings_for_payload(
 
     // Only select dealings for configs that still have capacity left,
     // and whose dealer has no dealing on chain yet.
-    let mut prioritized_candidates: Vec<_> = dkg_pool
+    let mut selected_candidates: Vec<_> = dkg_pool
         .get_validated()
         .filter(|msg| {
             let Some(cap) = remaining_capacity.get_mut(&msg.content.dkg_id) else {
@@ -176,6 +176,11 @@ fn select_dealings_for_payload(
         })
         .collect();
 
+    // If there are less than or equal to the max dealings per block, return all candidates.
+    if selected_candidates.len() <= max_dealings_per_block {
+        return selected_candidates.into_iter().cloned().collect();
+    }
+
     // Count the number of (completed) remote target IDs with no remaining capacity.
     let remote_target_ids_with_no_capacity = remaining_remote_target_capacity
         .values()
@@ -188,27 +193,26 @@ fn select_dealings_for_payload(
     // 1. Prioritize remote DKGs first, if requested, otherwise prioritize local DKGs.
     // 2. For remote targets, prioritize dealings for targets that are closer to their threshold.
     // 3. Use the target subnet as a tie-breaker.
-    prioritized_candidates.sort_unstable_by_key(|msg| match msg.content.dkg_id.target_subnet {
-        NiDkgTargetSubnet::Local => (
-            prioritize_remote,
-            usize::MAX,
-            &msg.content.dkg_id.target_subnet,
-        ),
-        NiDkgTargetSubnet::Remote(target_id) => (
-            !prioritize_remote,
-            remaining_remote_target_capacity
-                .get(&target_id)
-                .copied()
-                .unwrap_or(usize::MAX),
-            &msg.content.dkg_id.target_subnet,
-        ),
-    });
+    let (prioritized, _, _) =
+        selected_candidates.select_nth_unstable_by_key(max_dealings_per_block, |msg| {
+            match msg.content.dkg_id.target_subnet {
+                NiDkgTargetSubnet::Local => (
+                    prioritize_remote,
+                    usize::MAX,
+                    &msg.content.dkg_id.target_subnet,
+                ),
+                NiDkgTargetSubnet::Remote(target_id) => (
+                    !prioritize_remote,
+                    remaining_remote_target_capacity
+                        .get(&target_id)
+                        .copied()
+                        .unwrap_or(usize::MAX),
+                    &msg.content.dkg_id.target_subnet,
+                ),
+            }
+        });
 
-    prioritized_candidates
-        .into_iter()
-        .take(max_dealings_per_block)
-        .cloned()
-        .collect()
+    prioritized.into_iter().map(|msg| msg.clone()).collect()
 }
 
 /// Creates a summary payload for the given parent and registry_version.
@@ -2145,20 +2149,31 @@ mod tests {
                 .collect(),
         };
 
+        let selected = select_dealings_for_payload(&configs, &HashSet::new(), &pool, 2);
+        assert_eq!(selected.len(), 2);
+        assert!(selected.iter().all(|msg| msg.content.dkg_id == remote_id));
+        assert_eq!(
+            BTreeSet::from_iter(selected.iter().map(|msg| msg.signature.signer)),
+            BTreeSet::from_iter((3..5).map(node_test_id))
+        );
+
         let selected = select_dealings_for_payload(&configs, &HashSet::new(), &pool, 10);
 
         // 2 remote + 2 local (both capped at collection_threshold)
         assert_eq!(selected.len(), 4);
-        // First 2 should be remote (prioritized)
-        assert_eq!(selected[0].content.dkg_id, remote_id);
-        assert_eq!(selected[1].content.dkg_id, remote_id);
-        assert_eq!(selected[0].signature.signer, node_test_id(3));
-        assert_eq!(selected[1].signature.signer, node_test_id(4));
-        // Next 2 should be local
-        assert_eq!(selected[2].content.dkg_id, local_id);
-        assert_eq!(selected[3].content.dkg_id, local_id);
-        assert_eq!(selected[2].signature.signer, node_test_id(0));
-        assert_eq!(selected[3].signature.signer, node_test_id(1));
+        assert_eq!(
+            BTreeSet::from_iter(
+                selected
+                    .iter()
+                    .map(|msg| (msg.content.dkg_id.clone(), msg.signature.signer))
+            ),
+            BTreeSet::from_iter([
+                (remote_id.clone(), node_test_id(3)),
+                (remote_id.clone(), node_test_id(4)),
+                (local_id.clone(), node_test_id(0)),
+                (local_id.clone(), node_test_id(1))
+            ])
+        );
     }
 
     #[test]
@@ -2197,11 +2212,16 @@ mod tests {
             ],
         };
 
-        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 10);
-
-        assert_eq!(selected.len(), 2);
+        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 1);
+        assert_eq!(selected.len(), 1);
         assert_eq!(selected[0].content.dkg_id, remote_low_remaining_id);
-        assert_eq!(selected[1].content.dkg_id, remote_high_remaining_id);
+
+        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 10);
+        assert_eq!(selected.len(), 2);
+        assert_eq!(
+            BTreeSet::from_iter(selected.iter().map(|msg| msg.content.dkg_id.clone())),
+            BTreeSet::from_iter([remote_low_remaining_id, remote_high_remaining_id])
+        );
     }
 
     #[test]
@@ -2251,9 +2271,20 @@ mod tests {
         // We should also include remote, once local is capped at collection_threshold.
         let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 10);
         assert_eq!(selected.len(), 3);
-        assert_eq!(selected[0].content.dkg_id, local_id);
-        assert_eq!(selected[1].content.dkg_id, local_id);
-        assert_eq!(selected[2].content.dkg_id, remote_active_id);
+        assert_eq!(
+            selected
+                .iter()
+                .filter(|msg| msg.content.dkg_id == local_id)
+                .count(),
+            2
+        );
+        assert_eq!(
+            selected
+                .iter()
+                .filter(|msg| msg.content.dkg_id == remote_active_id)
+                .count(),
+            1
+        );
     }
 
     #[test]
@@ -2335,7 +2366,36 @@ mod tests {
 
         let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 10);
         assert_eq!(selected.len(), 2);
-        assert_eq!(selected[0].content.dkg_id, remote_high_id);
-        assert_eq!(selected[1].content.dkg_id, local_low_id);
+        assert_eq!(
+            BTreeSet::from_iter(selected.iter().map(|msg| msg.content.dkg_id.clone())),
+            BTreeSet::from_iter([remote_high_id, local_low_id])
+        );
+    }
+
+    #[test]
+    fn test_select_dealings_returns_empty_when_preselection_finds_no_candidates() {
+        let local_id = local_dkg_id(NiDkgTag::LowThreshold);
+
+        // collection_threshold = 2
+        let configs: BTreeMap<_, _> =
+            [(local_id.clone(), make_test_config(local_id.clone(), 1))].into();
+
+        // Capacity for this config is already exhausted on chain.
+        let dealers_from_chain: HashSet<_> = [
+            (local_id.clone(), node_test_id(0)),
+            (local_id.clone(), node_test_id(1)),
+        ]
+        .into();
+
+        // Pool contains dealings, but all must be filtered out by pre-selection.
+        let pool = TestDkgPool {
+            messages: vec![
+                create_dealing(2, local_id.clone()),
+                create_dealing(3, local_id.clone()),
+            ],
+        };
+
+        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 10);
+        assert!(selected.is_empty());
     }
 }
