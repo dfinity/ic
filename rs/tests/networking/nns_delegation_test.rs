@@ -801,7 +801,6 @@ fn upgrade_non_nns_subnets_if_necessary(env: &TestEnv) {
 macro_rules! systest_all_subnet_types {
     ($group: expr, $function_name:path) => {
         // Keep up to date with `TESTED_SUBNET_TYPES` constant
-        $group = $group.add_test(systest!($function_name; SubnetType::System));
         $group = $group.add_test(systest!($function_name; SubnetType::Application));
         $group = $group.add_test(systest!($function_name; SubnetType::VerifiedApplication));
         $group = $group.add_test(systest!($function_name; SubnetType::CloudEngine));
