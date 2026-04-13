@@ -54,7 +54,6 @@ jobs:
           echo "DOWNLOAD_PREFIX=${DOWNLOAD_PREFIX}" >> "$GITHUB_ENV"
 
       - name: Collect Canister Artifacts
-        if: ${{ github.event_name == 'push' || github.event.inputs.dry-run == 'false' }}
         run: |
           set -euxo pipefail
 
