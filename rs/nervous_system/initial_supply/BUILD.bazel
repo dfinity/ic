@@ -4,7 +4,7 @@ package(default_visibility = ["//rs/nervous_system:default_visibility"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//packages/icrc-ledger-types",
+    "//packages/icrc-ledger-types:icrc_ledger_types_no_storable",
     "//rs/nervous_system/runtime",
     "//rs/types/base_types",
     "@crate_index//:candid",
