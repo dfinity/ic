@@ -2300,7 +2300,7 @@ fn test_canister_log_resize_rejected_insufficient_cycles() {
     let _ = env.update_settings(
         &canister_id,
         CanisterSettingsArgsBuilder::new()
-            .with_freezing_threshold(10u64.pow(15))
+            .with_freezing_threshold(10_u64.pow(15))
             .build(),
     );
 
