@@ -1328,7 +1328,7 @@ fn test_list_canisters_success() {
 
     // Insert three canisters: IDs 5 and 6 are consecutive (should coalesce),
     // then ID 10 after a gap (its own range).
-    for raw_id in [5u64, 6, 10] {
+    for raw_id in [5_u64, 6, 10] {
         test.state_mut().put_canister_state(
             CanisterStateBuilder::new()
                 .with_canister_id(CanisterId::from(raw_id))
@@ -1345,12 +1345,12 @@ fn test_list_canisters_success() {
         response.canisters,
         vec![
             CanisterIdRange {
-                start: CanisterId::from(5u64),
-                end: CanisterId::from(6u64),
+                start: CanisterId::from(5_u64),
+                end: CanisterId::from(6_u64),
             },
             CanisterIdRange {
-                start: CanisterId::from(10u64),
-                end: CanisterId::from(10u64),
+                start: CanisterId::from(10_u64),
+                end: CanisterId::from(10_u64),
             },
         ]
     );
