@@ -1,3 +1,4 @@
+use crate::governance::NEURON_MINIMUM_DISSOLVE_DELAY_TO_PROPOSE_SECONDS;
 use crate::pb::v1::{
     NetworkEconomics, NeuronsFundEconomics, NeuronsFundMatchedFundingCurveCoefficients,
     VotingPowerEconomics,
@@ -377,6 +378,14 @@ impl VotingPowerEconomics {
                     "neuron_minimum_dissolve_delay_to_vote_seconds ({:?}) must be between two \
                      weeks and six months.",
                     self.neuron_minimum_dissolve_delay_to_vote_seconds
+                );
+                defects.push(defect);
+            }
+            if delay > NEURON_MINIMUM_DISSOLVE_DELAY_TO_PROPOSE_SECONDS {
+                let defect = format!(
+                    "neuron_minimum_dissolve_delay_to_vote_seconds ({}) must not exceed \
+                     NEURON_MINIMUM_DISSOLVE_DELAY_TO_PROPOSE_SECONDS ({}).",
+                    delay, NEURON_MINIMUM_DISSOLVE_DELAY_TO_PROPOSE_SECONDS,
                 );
                 defects.push(defect);
             }
