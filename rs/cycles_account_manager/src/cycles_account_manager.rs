@@ -1189,6 +1189,7 @@ impl CyclesAccountManager {
     /// for the given number of instructions. This matches exactly what
     /// `refund_unused_execution_cycles` refunds, so callers can compute the net
     /// charge as `prepaid - variable_execution_cost(instructions_to_refund)`.
+    #[doc(hidden)]
     pub fn variable_execution_cost(
         &self,
         num_instructions: NumInstructions,
