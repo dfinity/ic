@@ -294,7 +294,7 @@ impl QueryHandlerMetrics {
             subnet_query_message_response_bytes: metrics_registry.histogram_vec(
                 "execution_subnet_query_message_response_bytes",
                 "Response size in bytes of a successful subnet query message execution.",
-                decimal_buckets(0, 7),
+                decimal_buckets_with_zero(0, 7),
                 &["method_name"],
             ),
         }
