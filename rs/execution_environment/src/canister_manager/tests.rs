@@ -25,7 +25,7 @@ use ic_config::{
         SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
     },
     flag_status::FlagStatus,
-    subnet_config::SchedulerConfig,
+    subnet_config::{CANISTER_CREATION_FEE, SchedulerConfig},
 };
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::{
@@ -7263,7 +7263,7 @@ fn create_canister_free() {
             .canister_metrics()
             .consumed_cycles()
             .get(),
-        0
+        CANISTER_CREATION_FEE.get()
     );
     assert_eq!(canister.system_state.balance(), *INITIAL_CYCLES);
 }
@@ -7296,7 +7296,7 @@ fn create_canister_as_subnet_admin_succeeds_on_free_cost_schedule() {
             .canister_metrics()
             .consumed_cycles()
             .get(),
-        0
+        CANISTER_CREATION_FEE.get()
     );
     assert_eq!(canister.system_state.balance(), Cycles::new(0));
 }

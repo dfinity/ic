@@ -662,14 +662,14 @@ fn threshold_signature_agreements_metric_is_updated() {
     test.inject_call_to_ic00(
         Method::SignWithECDSA,
         ecdsa_payload.clone(),
-        test.ecdsa_signature_fee(),
+        test.ecdsa_signature_fee().real(),
         canister_id,
         InputQueueType::RemoteSubnet,
     );
     test.inject_call_to_ic00(
         Method::SignWithECDSA,
         ecdsa_payload,
-        test.ecdsa_signature_fee(),
+        test.ecdsa_signature_fee().real(),
         canister_id,
         InputQueueType::RemoteSubnet,
     );
@@ -844,180 +844,193 @@ fn threshold_signature_agreements_metric_is_updated() {
 
 #[test]
 fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
-    let key_id = make_ecdsa_key_id(0);
-    let mut test = SchedulerTestBuilder::new()
-        .with_chain_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
-        .build();
+    for cost_schedule in [
+        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        let key_id = make_ecdsa_key_id(0);
+        let mut test = SchedulerTestBuilder::new()
+            .with_chain_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
+            .with_cost_schedule(cost_schedule)
+            .build();
 
-    let fee = test.ecdsa_signature_fee();
-    let payment = fee;
+        let fee = test.ecdsa_signature_fee();
+        let payment = fee.real();
 
-    let canister_id = test.create_canister();
+        let canister_id = test.create_canister();
 
-    test.scheduler().state_metrics.observe(
-        test.scheduler().own_subnet_id,
-        test.state(),
-        0.into(),
-        &no_op_logger(),
-    );
+        test.scheduler().state_metrics.observe(
+            test.scheduler().own_subnet_id,
+            test.state(),
+            0.into(),
+            &no_op_logger(),
+        );
 
-    let consumed_cycles_before = NominalCycles::new(
-        fetch_gauge(
-            test.metrics_registry(),
-            "replicated_state_consumed_cycles_since_replica_started",
-        )
-        .unwrap() as u128,
-    );
+        let consumed_cycles_before = NominalCycles::new(
+            fetch_gauge(
+                test.metrics_registry(),
+                "replicated_state_consumed_cycles_since_replica_started",
+            )
+            .unwrap() as u128,
+        );
 
-    test.inject_call_to_ic00(
-        Method::SignWithECDSA,
-        Encode!(&SignWithECDSAArgs {
-            message_hash: [0; 32],
-            derivation_path: DerivationPath::new(Vec::new()),
-            key_id,
-        })
-        .unwrap(),
-        payment,
-        canister_id,
-        InputQueueType::RemoteSubnet,
-    );
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
+        test.inject_call_to_ic00(
+            Method::SignWithECDSA,
+            Encode!(&SignWithECDSAArgs {
+                message_hash: [0; 32],
+                derivation_path: DerivationPath::new(Vec::new()),
+                key_id,
+            })
+            .unwrap(),
+            payment,
+            canister_id,
+            InputQueueType::RemoteSubnet,
+        );
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // Check that the SubnetCallContextManager contains the request.
-    let sign_with_ecdsa_contexts = &test
-        .state()
-        .metadata
-        .subnet_call_context_manager
-        .sign_with_ecdsa_contexts();
-    assert_eq!(sign_with_ecdsa_contexts.len(), 1);
+        // Check that the SubnetCallContextManager contains the request.
+        let sign_with_ecdsa_contexts = &test
+            .state()
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_ecdsa_contexts();
+        assert_eq!(sign_with_ecdsa_contexts.len(), 1);
 
-    test.scheduler().state_metrics.observe(
-        test.scheduler().own_subnet_id,
-        test.state(),
-        0.into(),
-        &no_op_logger(),
-    );
-    let consumed_cycles_after = NominalCycles::new(
-        fetch_gauge(
-            test.metrics_registry(),
-            "replicated_state_consumed_cycles_since_replica_started",
-        )
-        .unwrap() as u128,
-    );
+        test.scheduler().state_metrics.observe(
+            test.scheduler().own_subnet_id,
+            test.state(),
+            0.into(),
+            &no_op_logger(),
+        );
+        let consumed_cycles_after = NominalCycles::new(
+            fetch_gauge(
+                test.metrics_registry(),
+                "replicated_state_consumed_cycles_since_replica_started",
+            )
+            .unwrap() as u128,
+        );
 
-    assert_eq!(
-        consumed_cycles_before + NominalCycles::new(fee.get()),
-        consumed_cycles_after
-    );
+        assert_eq!(
+            consumed_cycles_before + fee.nominal(),
+            consumed_cycles_after
+        );
 
-    assert_eq!(
-        fetch_gauge_vec(
-            test.metrics_registry(),
-            "replicated_state_consumed_cycles_from_replica_start",
-        ),
-        metric_vec(&[(&[("use_case", "ECDSAOutcalls")], fee.get() as f64),]),
-    );
+        assert_eq!(
+            fetch_gauge_vec(
+                test.metrics_registry(),
+                "replicated_state_consumed_cycles_from_replica_start",
+            ),
+            metric_vec(&[(&[("use_case", "ECDSAOutcalls")], fee.nominal().get() as f64),]),
+        );
+    }
 }
 
 #[test]
 fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
-    let mut test = SchedulerTestBuilder::new().build();
-    let caller_canister = test.create_canister();
+    for cost_schedule in [
+        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        let mut test = SchedulerTestBuilder::new()
+            .with_cost_schedule(cost_schedule)
+            .build();
+        let caller_canister = test.create_canister();
 
-    test.state_mut().metadata.own_subnet_features.http_requests = true;
+        test.state_mut().metadata.own_subnet_features.http_requests = true;
 
-    test.scheduler().state_metrics.observe(
-        test.scheduler().own_subnet_id,
-        test.state(),
-        0.into(),
-        &no_op_logger(),
-    );
+        test.scheduler().state_metrics.observe(
+            test.scheduler().own_subnet_id,
+            test.state(),
+            0.into(),
+            &no_op_logger(),
+        );
 
-    let consumed_cycles_before = NominalCycles::new(
-        fetch_gauge(
-            test.metrics_registry(),
-            "replicated_state_consumed_cycles_since_replica_started",
-        )
-        .unwrap() as u128,
-    );
+        let consumed_cycles_before = NominalCycles::new(
+            fetch_gauge(
+                test.metrics_registry(),
+                "replicated_state_consumed_cycles_since_replica_started",
+            )
+            .unwrap() as u128,
+        );
 
-    // Create payload of the request.
-    let url = "https://".to_string();
-    let response_size_limit = 1000_u64;
-    let transform_method_name = "transform".to_string();
-    let transform_context = vec![0, 1, 2];
-    let args = CanisterHttpRequestArgs {
-        url,
-        max_response_bytes: Some(response_size_limit),
-        headers: BoundedHttpHeaders::new(vec![]),
-        body: None,
-        method: HttpMethod::GET,
-        transform: Some(TransformContext {
-            function: TransformFunc(candid::Func {
-                principal: caller_canister.get().0,
-                method: transform_method_name,
+        // Create payload of the request.
+        let url = "https://".to_string();
+        let response_size_limit = 1000_u64;
+        let transform_method_name = "transform".to_string();
+        let transform_context = vec![0, 1, 2];
+        let args = CanisterHttpRequestArgs {
+            url,
+            max_response_bytes: Some(response_size_limit),
+            headers: BoundedHttpHeaders::new(vec![]),
+            body: None,
+            method: HttpMethod::GET,
+            transform: Some(TransformContext {
+                function: TransformFunc(candid::Func {
+                    principal: caller_canister.get().0,
+                    method: transform_method_name,
+                }),
+                context: transform_context,
             }),
-            context: transform_context,
-        }),
-        is_replicated: None,
-        pricing_version: None,
-    };
+            is_replicated: None,
+            pricing_version: None,
+        };
 
-    // Create request to `HttpRequest` method.
-    let payment = Cycles::new(1_000_000_000);
-    let payload = args.encode();
-    test.inject_call_to_ic00(
-        Method::HttpRequest,
-        payload,
-        payment,
-        caller_canister,
-        InputQueueType::RemoteSubnet,
-    );
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
+        // Create request to `HttpRequest` method.
+        let payment = Cycles::new(1_000_000_000);
+        let payload = args.encode();
+        test.inject_call_to_ic00(
+            Method::HttpRequest,
+            payload,
+            payment,
+            caller_canister,
+            InputQueueType::RemoteSubnet,
+        );
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // Check that the SubnetCallContextManager contains the request.
-    let canister_http_request_contexts = &test
-        .state()
-        .metadata
-        .subnet_call_context_manager
-        .canister_http_request_contexts;
-    assert_eq!(canister_http_request_contexts.len(), 1);
+        // Check that the SubnetCallContextManager contains the request.
+        let canister_http_request_contexts = &test
+            .state()
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts;
+        assert_eq!(canister_http_request_contexts.len(), 1);
 
-    let http_request_context = canister_http_request_contexts
-        .get(&CallbackId::from(0))
-        .unwrap();
+        let http_request_context = canister_http_request_contexts
+            .get(&CallbackId::from(0))
+            .unwrap();
 
-    let fee = test.http_request_fee(
-        http_request_context.variable_parts_size(),
-        Some(NumBytes::from(response_size_limit)),
-    );
+        let fee = test.http_request_fee(
+            http_request_context.variable_parts_size(),
+            Some(NumBytes::from(response_size_limit)),
+        );
 
-    test.scheduler().state_metrics.observe(
-        test.scheduler().own_subnet_id,
-        test.state(),
-        0.into(),
-        &no_op_logger(),
-    );
-    let consumed_cycles_after = NominalCycles::new(
-        fetch_gauge(
-            test.metrics_registry(),
-            "replicated_state_consumed_cycles_since_replica_started",
-        )
-        .unwrap() as u128,
-    );
+        test.scheduler().state_metrics.observe(
+            test.scheduler().own_subnet_id,
+            test.state(),
+            0.into(),
+            &no_op_logger(),
+        );
+        let consumed_cycles_after = NominalCycles::new(
+            fetch_gauge(
+                test.metrics_registry(),
+                "replicated_state_consumed_cycles_since_replica_started",
+            )
+            .unwrap() as u128,
+        );
 
-    assert_eq!(
-        consumed_cycles_before + NominalCycles::new(fee.get()),
-        consumed_cycles_after
-    );
+        assert_eq!(
+            consumed_cycles_before + fee.nominal(),
+            consumed_cycles_after
+        );
 
-    assert_eq!(
-        fetch_gauge_vec(
-            test.metrics_registry(),
-            "replicated_state_consumed_cycles_from_replica_start",
-        ),
-        metric_vec(&[(&[("use_case", "HTTPOutcalls")], fee.get() as f64),]),
-    );
+        assert_eq!(
+            fetch_gauge_vec(
+                test.metrics_registry(),
+                "replicated_state_consumed_cycles_from_replica_start",
+            ),
+            metric_vec(&[(&[("use_case", "HTTPOutcalls")], fee.nominal().get() as f64),]),
+        );
+    }
 }
 
 #[test]
@@ -1081,104 +1094,172 @@ fn http_outcalls_free() {
         http_request_context.variable_parts_size(),
         Some(NumBytes::from(response_size_limit)),
     );
-    assert_eq!(fee, Cycles::new(0));
+    assert_eq!(fee.real(), Cycles::new(0));
     let cycles_after = test.canister_state(caller_canister).system_state.balance();
     assert_eq!(cycles_before, cycles_after);
 }
 
 #[test]
-fn consumed_cycles_are_updated_from_valid_canisters() {
-    let mut test = SchedulerTestBuilder::new().build();
-
-    let canister_id = test.create_canister_with(
-        Cycles::from(5_000_000_000_000_u128),
-        ComputeAllocation::zero(),
-        MemoryAllocation::default(),
-        None,
-        None,
-        None,
-    );
-
-    let consumed_cycles = CompoundCycles::<Instructions>::new(
-        Cycles::from(1000_u128),
+fn consumed_cycles_for_instructions_are_updated_from_valid_canisters() {
+    for cost_schedule in [
         CanisterCyclesCostSchedule::Normal,
-    );
-    test.canister_state_mut(canister_id)
-        .system_state
-        .consume_cycles(consumed_cycles);
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        let mut test = SchedulerTestBuilder::new()
+            .with_cost_schedule(cost_schedule)
+            .build();
 
-    test.scheduler().state_metrics.observe(
-        test.scheduler().own_subnet_id,
-        test.state(),
-        0.into(),
-        &no_op_logger(),
-    );
+        let canister_id = test.create_canister_with(
+            Cycles::from(5_000_000_000_000_u128),
+            ComputeAllocation::zero(),
+            MemoryAllocation::default(),
+            None,
+            None,
+            None,
+        );
 
-    assert_eq!(
-        fetch_gauge_vec(
-            test.metrics_registry(),
-            "replicated_state_consumed_cycles_from_replica_start",
-        ),
-        metric_vec(&[(
-            &[("use_case", "Instructions")],
-            consumed_cycles.nominal().get() as f64
-        ),]),
-    );
+        let removed_cycles =
+            CompoundCycles::<Instructions>::new(Cycles::from(1000_u128), cost_schedule);
+        test.canister_state_mut(canister_id)
+            .system_state
+            .consume_cycles(removed_cycles);
+
+        test.scheduler().state_metrics.observe(
+            test.scheduler().own_subnet_id,
+            test.state(),
+            0.into(),
+            &no_op_logger(),
+        );
+
+        assert_eq!(
+            fetch_gauge_vec(
+                test.metrics_registry(),
+                "replicated_state_consumed_cycles_from_replica_start",
+            ),
+            metric_vec(&[(
+                &[("use_case", "Instructions")],
+                removed_cycles.nominal().get() as f64
+            ),]),
+        );
+    }
+}
+
+#[test]
+fn consumed_cycles_for_resource_allocations_are_updated_from_valid_canisters() {
+    for cost_schedule in [
+        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        let mut test = SchedulerTestBuilder::new()
+            .with_cost_schedule(cost_schedule)
+            .build();
+
+        let compute_allocation = ComputeAllocation::try_from(20).unwrap();
+        let memory_allocation = NumBytes::from(10_000_000);
+        test.create_canister_with(
+            Cycles::from(5_000_000_000_000_u128),
+            compute_allocation,
+            MemoryAllocation::from(memory_allocation),
+            None,
+            None,
+            None,
+        );
+
+        // Advance time by a few minutes and charge for resource allocations.
+        let duration = Duration::from_secs(5 * 60);
+        test.advance_time(duration);
+        test.charge_for_resource_allocations();
+
+        test.scheduler().state_metrics.observe(
+            test.scheduler().own_subnet_id,
+            test.state(),
+            0.into(),
+            &no_op_logger(),
+        );
+
+        assert_eq!(
+            fetch_gauge_vec(
+                test.metrics_registry(),
+                "replicated_state_consumed_cycles_from_replica_start",
+            ),
+            metric_vec(&[
+                (
+                    &[("use_case", "Memory")],
+                    test.memory_cost(memory_allocation, duration)
+                        .nominal()
+                        .get() as f64
+                ),
+                (
+                    &[("use_case", "ComputeAllocation")],
+                    test.compute_allocation_cost(compute_allocation, duration)
+                        .nominal()
+                        .get() as f64,
+                ),
+            ]),
+        );
+    }
 }
 
 #[test]
 fn consumed_cycles_are_updated_from_deleted_canisters() {
-    let mut test = SchedulerTestBuilder::new().build();
-    let initial_balance = Cycles::from(5_000_000_000_000_u128);
-    let canister_id = test.create_canister_with(
-        initial_balance,
-        ComputeAllocation::zero(),
-        MemoryAllocation::default(),
-        None,
-        None,
-        Some(CanisterStatusType::Stopped),
-    );
-
-    let consumed_cycles = CompoundCycles::<Instructions>::new(
-        Cycles::from(1000_u128),
+    for cost_schedule in [
         CanisterCyclesCostSchedule::Normal,
-    );
-    test.canister_state_mut(canister_id)
-        .system_state
-        .consume_cycles(consumed_cycles);
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        let mut test = SchedulerTestBuilder::new()
+            .with_cost_schedule(cost_schedule)
+            .build();
+        let initial_balance = Cycles::from(5_000_000_000_000_u128);
+        let canister_id = test.create_canister_with(
+            initial_balance,
+            ComputeAllocation::zero(),
+            MemoryAllocation::default(),
+            None,
+            None,
+            Some(CanisterStatusType::Stopped),
+        );
 
-    test.inject_call_to_ic00(
-        Method::DeleteCanister,
-        CanisterIdRecord::from(canister_id).encode(),
-        Cycles::from(1_000_000_000_000_u128),
-        CanisterId::try_from(user_test_id(1).get()).unwrap(),
-        InputQueueType::RemoteSubnet,
-    );
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
+        let removed_cycles =
+            CompoundCycles::<Instructions>::new(Cycles::from(1000_u128), cost_schedule);
+        test.canister_state_mut(canister_id)
+            .system_state
+            .consume_cycles(removed_cycles);
 
-    test.scheduler().state_metrics.observe(
-        test.scheduler().own_subnet_id,
-        test.state(),
-        0.into(),
-        &no_op_logger(),
-    );
+        test.inject_call_to_ic00(
+            Method::DeleteCanister,
+            CanisterIdRecord::from(canister_id).encode(),
+            Cycles::from(1_000_000_000_000_u128),
+            CanisterId::try_from(user_test_id(1).get()).unwrap(),
+            InputQueueType::RemoteSubnet,
+        );
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    assert_eq!(
-        fetch_gauge_vec(
-            test.metrics_registry(),
-            "replicated_state_consumed_cycles_from_replica_start",
-        ),
-        metric_vec(&[
-            (
-                &[("use_case", "Instructions")],
-                consumed_cycles.nominal().get() as f64
+        test.scheduler().state_metrics.observe(
+            test.scheduler().own_subnet_id,
+            test.state(),
+            0.into(),
+            &no_op_logger(),
+        );
+
+        assert_eq!(
+            fetch_gauge_vec(
+                test.metrics_registry(),
+                "replicated_state_consumed_cycles_from_replica_start",
             ),
-            (
-                &[("use_case", "DeletedCanisters")],
-                (initial_balance.get() - consumed_cycles.nominal().get()) as f64
-            )
-        ]),
-    );
+            metric_vec(&[
+                (
+                    &[("use_case", "Instructions")],
+                    removed_cycles.nominal().get() as f64
+                ),
+                // All cycles that remain in the canister's balance are lost when
+                // the canister is deleted.
+                (
+                    &[("use_case", "DeletedCanisters")],
+                    (initial_balance - removed_cycles.real()).get() as f64
+                )
+            ]),
+        );
+    }
 }
 
 #[test]

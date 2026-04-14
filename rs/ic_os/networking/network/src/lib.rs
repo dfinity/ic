@@ -1,3 +1,7 @@
+//! Generates systemd-networkd configuration files for SetupOS and HostOS from
+//! the IC-OS network settings. Resolves the management MAC address from IPMI
+//! or config overrides.
+
 use std::path::Path;
 use std::process::Command;
 

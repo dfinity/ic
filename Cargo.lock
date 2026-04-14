@@ -5500,6 +5500,7 @@ dependencies = [
  "libcryptsetup-rs",
  "nix 0.24.3",
  "parking_lot",
+ "prometheus",
  "rand 0.8.5",
  "sev",
  "sev_guest",
