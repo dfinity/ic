@@ -4079,9 +4079,12 @@ impl From<api::TakeCanisterSnapshot> for pb::TakeCanisterSnapshot {
 
 impl From<pb::MaturityModulation> for api::MaturityModulation {
     fn from(item: pb::MaturityModulation) -> Self {
+        const SECONDS_PER_DAY: u64 = 86_400;
         Self {
             current_value_permyriad: item.current_value_permyriad,
-            updated_at_days_since_epoch: item.updated_at_days_since_epoch,
+            updated_at_timestamp_seconds: item
+                .updated_at_days_since_epoch
+                .map(|days| days * SECONDS_PER_DAY),
         }
     }
 }

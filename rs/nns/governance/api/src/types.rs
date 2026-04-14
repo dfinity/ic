@@ -4744,7 +4744,7 @@ pub type CreateNeuronResponse = Result<CreatedNeuron, GovernanceError>;
 )]
 pub struct MaturityModulation {
     pub current_value_permyriad: Option<i32>,
-    pub updated_at_days_since_epoch: Option<u64>,
+    pub updated_at_timestamp_seconds: Option<u64>,
 }
 
 #[derive(

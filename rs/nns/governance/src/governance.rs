@@ -1,4 +1,4 @@
- #![allow(deprecated)]
+#![allow(deprecated)]
 use crate::{
     are_nf_fund_proposals_disabled, are_performance_based_rewards_enabled,
     are_subnet_splitting_proposals_enabled, decoder_config,
