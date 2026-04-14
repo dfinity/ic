@@ -6273,9 +6273,6 @@ impl Governance {
                     GovernanceError::from(e),
                 ),
             }
-        // Try to update maturity modulation (once per day).
-        } else if self.should_update_maturity_modulation() {
-            self.update_maturity_modulation().await;
         } else {
             // This is the lowest-priority async task. All other tasks should have their own
             // `else if`, like the ones above.
@@ -6289,48 +6286,6 @@ impl Governance {
         }
 
         self.maybe_gc();
-    }
-
-    fn should_update_maturity_modulation(&self) -> bool {
-        // Check if we're already updating the neuron maturity modulation.
-        let now_seconds = self.env.now();
-        let last_updated = self
-            .heap_data
-            .maturity_modulation_last_updated_at_timestamp_seconds;
-        last_updated.is_none() || last_updated.unwrap() + ONE_DAY_SECONDS <= now_seconds
-    }
-
-    async fn update_maturity_modulation(&mut self) {
-        if !self.should_update_maturity_modulation() {
-            return;
-        };
-
-        let now_seconds = self.env.now();
-        let maturity_modulation = match self.cmc.neuron_maturity_modulation().await {
-            Ok(maturity_modulation) => maturity_modulation,
-            Err(err) => {
-                let silence_message =
-                    err.contains("Canister rkp4c-7iaaa-aaaaa-aaaca-cai not found");
-                if !silence_message {
-                    println!(
-                        "{}Couldn't update maturity modulation. Error: {}",
-                        LOG_PREFIX, err
-                    );
-                }
-                return;
-            }
-        };
-        println!(
-            "{}Updated daily maturity modulation rate to (in basis points): {}, at: {}. Last updated: {:?}",
-            LOG_PREFIX,
-            maturity_modulation,
-            now_seconds,
-            self.heap_data
-                .maturity_modulation_last_updated_at_timestamp_seconds,
-        );
-        self.heap_data.cached_daily_maturity_modulation_basis_points = Some(maturity_modulation);
-        self.heap_data
-            .maturity_modulation_last_updated_at_timestamp_seconds = Some(now_seconds);
     }
 
     fn should_refresh_xdr_rate(&self) -> bool {
