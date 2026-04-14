@@ -9231,15 +9231,24 @@ fn max_certified_height_deferred_when_cert_arrives_before_state() {
             max_certified_height_tx,
         );
 
+        // Set fast_forward_height so that height 1 is in the range of heights to certify.
+        sm.update_fast_forward_height(Height::new(2));
+
         // Deliver a certification for height 1 before the state at height 1 is committed.
         // This stores the certification in `states.certifications` (deferred path).
         // The hash is fake so this cert will never match a real committed state,
         // but it is sufficient to verify that the receiver does not fire prematurely.
         let fake_cert = fake_certification_for_height(Height::new(1));
-        sm.deliver_state_certification(fake_cert);
+        sm.deliver_state_certification(fake_cert.clone());
 
-        // The certification is stored for later but the height is not yet certified —
-        // the receiver must not fire.
+        // The certification is stored in `states.certifications` but the height is not yet
+        // certified — the receiver must not fire.
+        assert_eq!(sm.certifications_metadata_heights(), vec![]);
+        assert_eq!(
+            sm.certifications().keys().cloned().collect::<Vec<_>>(),
+            vec![Height::new(1)]
+        );
+        assert_eq!(sm.certifications().get(&Height::new(1)), Some(&fake_cert));
         assert!(
             !max_certified_height_rx.has_changed().unwrap(),
             "receiver must not fire when the state has not been committed yet"
