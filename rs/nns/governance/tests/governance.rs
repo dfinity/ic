@@ -2912,9 +2912,9 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
             actual_timestamp_seconds: fake_driver.now(),
             settled_proposals: vec![],
             distributed_e8s_equivalent: 0,
-            total_available_e8s_equivalent: 214633,
+            total_available_e8s_equivalent: 213924,
             rounds_since_last_distribution: Some(1),
-            latest_round_available_e8s_equivalent: Some(214633)
+            latest_round_available_e8s_equivalent: Some(213924)
         }
     );
 
@@ -6427,7 +6427,7 @@ async fn test_staked_maturity() {
     // Neuron should get the maturity equivalent of 5 days as staked maturity.
     assert_eq!(
         neuron.staked_maturity_e8s_equivalent.unwrap(),
-        34_746_917_963_341,
+        34_632_006_896_060,
     );
     assert_eq!(neuron.maturity_e8s_equivalent, 0);
 
@@ -6462,7 +6462,7 @@ async fn test_staked_maturity() {
             assert_eq!(neuron.maturity_e8s_equivalent, 0);
             assert_eq!(
                 neuron.staked_maturity_e8s_equivalent,
-                Some(34_746_917_963_341),
+                Some(34_632_006_896_060),
             );
 
             // Configure the neuron to auto-stake any future maturity.
@@ -6488,7 +6488,7 @@ async fn test_staked_maturity() {
         .neuron_store
         .with_neuron(&id, |neuron| neuron.clone())
         .expect("Neuron not found");
-    assert_eq!(neuron.maturity_e8s_equivalent, 34_746_917_963_341);
+    assert_eq!(neuron.maturity_e8s_equivalent, 34_632_006_896_060);
     assert_eq!(neuron.staked_maturity_e8s_equivalent, None);
 }
 
@@ -14398,7 +14398,7 @@ fn total_supply_for_target_voting_rewards_pot_at_genesis(
         // to 5% (prior to Mission 70 changes).
         / 0.1
         // To compensate for the Mission 70 voting rewards adjustment.
-        / 0.635;
+        / 0.6329;
 
     Tokens::from_e8s(result.ceil() as u64)
 }
