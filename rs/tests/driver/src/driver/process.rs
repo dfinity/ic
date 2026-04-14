@@ -4,12 +4,14 @@ use nix::{
 };
 use slog::{Logger, info};
 use std::process::{Command, ExitStatus, Stdio};
+use std::time::Duration;
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, BufReader},
     process::{Child, Command as AsyncCommand},
     select,
     sync::watch::{Receiver, channel},
     task::{self, JoinHandle},
+    time::timeout,
 };
 
 pub trait KillFn: FnOnce() + Send + Sync {}
@@ -107,7 +109,18 @@ impl Process {
                     }
                 }
                 _ = kill_watch.changed() => {
-                    info!(log, "({}|{:?}): Kill received.", task_id, channel_tag);
+                    info!(log, "({}|{:?}): Kill received. Draining remaining output ...", task_id, channel_tag);
+                    // Drain any remaining buffered lines before returning.
+                    // Use a short timeout to avoid blocking on grandchild
+                    // processes that keep the pipe open after the child is killed.
+                    let drain_timeout = Duration::from_secs(1);
+                    let _ = timeout(drain_timeout, async {
+                        while let Ok(Some(line)) = lines.next_line().await {
+                            let task_id: String = format!("{task_id}");
+                            let output_channel: String = format!("{channel_tag:?}");
+                            info!(log, "{}", line; "task_id" => task_id, "output_channel" => output_channel);
+                        }
+                    }).await;
                     return;
                 }
             }
