@@ -62,7 +62,7 @@ pub(crate) fn check_response_consistency(
     }
 
     // Check the is_reject flag matches the response content type
-    let calculated_is_reject = matches!(content.content, CanisterHttpResponseContent::Reject(_));
+    let calculated_is_reject = content.content.is_reject();
     if calculated_is_reject != metadata.is_reject {
         return Err(InvalidCanisterHttpPayloadReason::IsRejectMismatch {
             metadata_is_reject: metadata.is_reject,
@@ -119,10 +119,7 @@ pub(crate) fn validate_flexible_response_with_proof(
         });
     }
 
-    let calculated_is_reject = matches!(
-        response_with_proof.response.content,
-        CanisterHttpResponseContent::Reject(_)
-    );
+    let calculated_is_reject = response_with_proof.response.content.is_reject();
     if calculated_is_reject != response_with_proof.proof.content.is_reject {
         return Err(InvalidCanisterHttpPayloadReason::IsRejectMismatch {
             metadata_is_reject: response_with_proof.proof.content.is_reject,

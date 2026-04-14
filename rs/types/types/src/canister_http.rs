@@ -832,6 +832,12 @@ pub enum CanisterHttpResponseContent {
     Reject(CanisterHttpReject),
 }
 
+impl CanisterHttpResponseContent {
+    pub fn is_reject(&self) -> bool {
+        matches!(self, CanisterHttpResponseContent::Reject(_))
+    }
+}
+
 impl CountBytes for CanisterHttpResponseContent {
     fn count_bytes(&self) -> usize {
         match self {

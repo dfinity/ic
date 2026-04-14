@@ -1393,7 +1393,7 @@ fn test_response_and_metadata_with_content(
         id: response.id,
         content_hash: crypto_hash(&response),
         content_size: response.content.count_bytes() as u32,
-        is_reject: matches!(response.content, CanisterHttpResponseContent::Reject(_)),
+        is_reject: response.content.is_reject(),
         registry_version: RegistryVersion::new(1),
         replica_version: ReplicaVersion::default(),
     };

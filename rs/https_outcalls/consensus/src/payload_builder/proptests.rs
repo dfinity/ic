@@ -172,7 +172,7 @@ fn prop_response_with_shares(
             id: response.id,
             content_hash: crypto_hash(&response),
             content_size: response.content.count_bytes() as u32,
-            is_reject: matches!(response.content, CanisterHttpResponseContent::Reject(_)),
+            is_reject: response.content.is_reject(),
             registry_version: RegistryVersion::new(1),
             replica_version: ReplicaVersion::default(),
         };

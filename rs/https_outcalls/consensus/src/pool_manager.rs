@@ -368,10 +368,7 @@ impl CanisterHttpPoolManagerImpl {
                         registry_version,
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
-                        is_reject: matches!(
-                            response.content,
-                            CanisterHttpResponseContent::Reject(_)
-                        ),
+                        is_reject: response.content.is_reject(),
                         replica_version: ReplicaVersion::default(),
                     };
                     let signature = if let Ok(signature) = self
@@ -524,9 +521,7 @@ impl CanisterHttpPoolManagerImpl {
                             ));
                         }
 
-                        if share.content.is_reject
-                            != matches!(response.content, CanisterHttpResponseContent::Reject(_))
-                        {
+                        if share.content.is_reject != response.content.is_reject() {
                             return Some(CanisterHttpChangeAction::HandleInvalid(
                                 share.clone(),
                                 "is_reject does not match the response content".to_string(),
