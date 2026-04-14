@@ -474,7 +474,7 @@ mod tests {
     use crate::{
         common::test_helpers::{
             add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
-            prepare_registry_with_nodes,
+            prepare_registry_with_nodes_and_reward_type,
         },
         flags::{temporarily_disable_subnet_splitting, temporarily_enable_subnet_splitting},
         mutations::routing_table::routing_table_into_registry_mutation,
@@ -482,6 +482,7 @@ mod tests {
     use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
     use ic_protobuf::registry::{
         crypto::v1::PublicKey,
+        node::v1::NodeRewardType,
         subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb},
     };
     use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
@@ -797,7 +798,16 @@ mod tests {
 
         // Add nodes to the registry
         let (mutate_request, source_node_ids_and_dkg_pks) =
-            prepare_registry_with_nodes(1, FAKE_NODE_IDS_IN_THE_REGISTRY.len() as u64);
+            prepare_registry_with_nodes_and_reward_type(
+                1,
+                FAKE_NODE_IDS_IN_THE_REGISTRY.len() as u64,
+                // There is an invariant that ensures that all cloud engine nodes have reward type 4
+                if source_subnet_info.subnet_type == SubnetType::CloudEngine {
+                    NodeRewardType::Type4
+                } else {
+                    NodeRewardType::Type1
+                },
+            );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
         let node_infos: BTreeMap<_, _> = FAKE_NODE_IDS_IN_THE_REGISTRY
             .iter()

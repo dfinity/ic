@@ -10,16 +10,18 @@ use ic_config::{
 use ic_embedders::wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_execution_environment::units::{GIB, MIB};
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterMetadataRequest, CanisterMetadataResponse, CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder, CanisterStatusResultV2, CreateCanisterArgs, DerivationPath,
-    EcdsaKeyId, EmptyBlob, IC_00, LoadCanisterSnapshotArgs, MasterPublicKeyId, Method, Payload,
-    SignWithECDSAArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
+    CanisterIdRecord, CanisterInstallModeV2, CanisterMetadataRequest, CanisterMetadataResponse,
+    CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2, CreateCanisterArgs,
+    DerivationPath, EcdsaKeyId, EmptyBlob, IC_00, InstallCodeArgsV2, LoadCanisterSnapshotArgs,
+    MasterPublicKeyId, Method, Payload, SignWithECDSAArgs, TakeCanisterSnapshotArgs,
+    UpdateSettingsArgs,
 };
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
     ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
 };
+use ic_test_utilities_execution_environment::get_reply;
 use ic_test_utilities_metrics::{
     fetch_gauge, fetch_histogram_vec_stats, fetch_int_counter, labels,
 };
@@ -2993,4 +2995,129 @@ fn maximum_state_delta() {
         env.tick();
     }
     assert!(has_completed(&env, &msg_id));
+}
+
+/// This test ensures that subnet messages are not executed out-of-order on an aborted canister.
+/// The runbook:
+/// - create a universal canister used as a proxy canister;
+/// - create a canister (to be aborted later) via the proxy canister;
+/// - start installing (universal canister) code to the canister (to be aborted later)
+///   performing a lot of instructions in the init hook;
+/// - send a `canister_status` call for the canister (to be aborted later) via the proxy canister;
+/// - abort installing code by creating a checkpoint;
+/// - ensure that the `canister_status` call was not executed on the aborted canister;
+/// - ensure that installing code and the `canister_status` call eventually complete.
+#[test]
+fn no_subnet_message_reordering() {
+    let sm = StateMachine::new();
+
+    // We create a proxy canister that controls the canister to be aborted later
+    // and sends subnet messages with that canister (to be aborter later)
+    // as the effective canister.
+    let proxy = sm
+        .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None)
+        .unwrap();
+
+    // We create the canister (to be aborted later) via the proxy canister.
+    let create_canister_args = CreateCanisterArgs {
+        settings: None,
+        sender_canister_version: None,
+    };
+    let res = sm.execute_ingress(
+        proxy,
+        "update",
+        wasm()
+            .call_simple(
+                CanisterId::ic_00(),
+                "create_canister",
+                call_args().other_side(Encode!(&create_canister_args).unwrap()),
+            )
+            .build(),
+    );
+    let canister_id = CanisterIdRecord::decode(&get_reply(res))
+        .unwrap()
+        .get_canister_id();
+
+    // We start installing code to the canister (to be aborted later) via the proxy canister.
+    // We make the canister init hook perform a lot of instructions so that installing code gets paused and can be aborted later.
+    let install_code_args = InstallCodeArgsV2 {
+        mode: CanisterInstallModeV2::Install,
+        canister_id: canister_id.get(),
+        wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
+        arg: wasm()
+            .instruction_counter_is_at_least(100_000_000_000)
+            .build(),
+        sender_canister_version: None,
+    };
+    let install_msg_id = sm.send_ingress(
+        PrincipalId::new_anonymous(),
+        proxy,
+        "update",
+        wasm()
+            .call_simple(
+                CanisterId::ic_00(),
+                "install_code",
+                call_args().other_side(Encode!(&install_code_args).unwrap()),
+            )
+            .build(),
+    );
+    let assert_install_processing = || {
+        match sm.ingress_status(&install_msg_id) {
+            IngressStatus::Known {
+                state: IngressState::Processing,
+                ..
+            } => (),
+            status => panic!("Unexpected status: {:?}", status),
+        };
+    };
+
+    // We execute a few rounds: install code starts executing and gets paused.
+    for _ in 0..5 {
+        sm.tick();
+    }
+    assert_install_processing();
+
+    // We send a `canister_status` call for the canister (to be aborted later) via the proxy canister.
+    // This subnet message must not be executed on the paused/aborted canister
+    // since that would be an out-of-order subnet message execution.
+    let canister_id_record: CanisterIdRecord = canister_id.into();
+    let status_msg_id = sm.send_ingress(
+        PrincipalId::new_anonymous(),
+        proxy,
+        "update",
+        wasm()
+            .call_simple(
+                CanisterId::ic_00(),
+                "canister_status",
+                call_args().other_side(Encode!(&canister_id_record).unwrap()),
+            )
+            .build(),
+    );
+
+    // We trigger a checkpoint to abort installing code.
+    sm.checkpointed_tick();
+
+    // Execute a few arounds after the checkpoint
+    // so that the call to `canister_status` via the proxy canister could complete
+    // if it was executed on an aborted canister.
+    for _ in 0..5 {
+        sm.tick();
+    }
+    assert_install_processing();
+
+    // The call to `canister_status` via the proxy canister must not be completed yet
+    // because it must not run on an aborted canister.
+    match sm.ingress_status(&status_msg_id) {
+        IngressStatus::Known {
+            state: IngressState::Processing,
+            ..
+        } => (),
+        status => panic!("Unexpected status: {:?}", status),
+    };
+
+    // Eventually both subnet messages should complete (and succeed).
+    let res = sm.await_ingress(install_msg_id, 100);
+    let _ = get_reply(res);
+    let res = sm.await_ingress(status_msg_id, 100);
+    let _ = get_reply(res);
 }

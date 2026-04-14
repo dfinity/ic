@@ -176,7 +176,17 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
                             .map(|ingress| ingress.into())
                             .collect()
                     }
-                    _ => Vec::new(),
+                    Some(SubCommand::OverwriteSubnetListWithSingleton) => {
+                        cmd_overwrite_subnet_list_with_singleton(agent, player, time)
+                            .unwrap()
+                            .into_iter()
+                            .map(|ingress| ingress.into())
+                            .collect()
+                    }
+                    Some(SubCommand::UpdateRegistryLocalStore)
+                    | Some(SubCommand::GetRecoveryCup(_))
+                    | Some(SubCommand::RestoreFromBackup(_))
+                    | None => Vec::new(),
                 }
             };
 

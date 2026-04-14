@@ -16,6 +16,7 @@ use ic_test_utilities_metrics::{HistogramStats, fetch_histogram_vec_stats, label
 use ic_test_utilities_state::get_running_canister;
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::time::UNIX_EPOCH;
+use ic_types_cycles::CompoundCycles;
 use ic_types_test_utils::ids::canister_test_id;
 
 #[test]
@@ -632,7 +633,10 @@ mod can_execute_subnet_msg_tests {
 
         test.enqueue_task(ExecutionTask::AbortedExecution {
             input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
-            prepaid_execution_cycles: Cycles::zero(),
+            prepaid_execution_cycles: CompoundCycles::new(
+                Cycles::zero(),
+                CanisterCyclesCostSchedule::Normal,
+            ),
         });
         test.inject_call(Method::StopCanister, &CanisterIdRecord::from(test.canister));
 
@@ -647,7 +651,10 @@ mod can_execute_subnet_msg_tests {
 
         test.enqueue_task(ExecutionTask::AbortedExecution {
             input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
-            prepaid_execution_cycles: Cycles::zero(),
+            prepaid_execution_cycles: CompoundCycles::new(
+                Cycles::zero(),
+                CanisterCyclesCostSchedule::Normal,
+            ),
         });
         test.inject_canister_status_call(test.canister);
 

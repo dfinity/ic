@@ -44,6 +44,7 @@ const RETRY_INTERVAL: Duration = Duration::from_secs(5);
 #[derive(Debug)]
 pub struct IcGatewayVm {
     universal_vm: UniversalVm,
+    enp2s0_config: Option<String>,
 }
 
 /// Represents a deployed IC HTTP Gateway VM.
@@ -91,7 +92,10 @@ impl IcGatewayVm {
                 "IC_GATEWAY_UVM_CONFIG_IMAGE_PATH",
             ))
             .enable_ipv4();
-        Self { universal_vm }
+        Self {
+            universal_vm,
+            enp2s0_config: None,
+        }
     }
 
     pub fn with_required_host_features(mut self, required_host_features: Vec<HostFeature>) -> Self {
@@ -103,6 +107,19 @@ impl IcGatewayVm {
 
     pub fn disable_ipv4(mut self) -> Self {
         self.universal_vm.has_ipv4 = false;
+        self
+    }
+
+    pub fn with_ipv4_config(mut self, address: &str, gateway: &str) -> Self {
+        self.enp2s0_config = Some(format!(
+            "\
+[Match]
+Name=enp2s0
+
+[Network]
+Address={address}
+Gateway={gateway}"
+        ));
         self
     }
 
@@ -118,12 +135,31 @@ impl IcGatewayVm {
 
         let vm_ipv6: Ipv6Addr = allocated_vm.ipv6;
 
-        // Handle playnet configuration and DNS records
-        let vm_ipv4: Option<Ipv4Addr> = self
-            .universal_vm
-            .has_ipv4
-            .then(|| deployed_vm.block_on_ipv4())
-            .transpose()?;
+        let vm_ipv4: Option<Ipv4Addr> = if self.universal_vm.has_ipv4 {
+            let session = deployed_vm.block_on_ssh_session()?;
+            if let Some(enp2s0_config) = self.enp2s0_config.as_ref() {
+                info!(
+                    logger,
+                    "Configuring enp2s0 network interface for VM: {}", self.universal_vm.name
+                );
+                let _out = deployed_vm.block_on_bash_script_from_session(
+                    &session,
+                    &format!(
+                        "\
+set -e
+sudo mkdir -p /run/systemd/network
+echo '{enp2s0_config}' | sudo tee /run/systemd/network/00-enp2s0.network > /dev/null
+sudo networkctl reload
+sudo networkctl reconfigure enp2s0
+                "
+                    ),
+                )?;
+            }
+            let ipv4 = deployed_vm.block_on_ipv4_from_session(&session)?;
+            Some(ipv4)
+        } else {
+            None
+        };
 
         let playnet = self.load_or_create_playnet(env, vm_ipv6, vm_ipv4)?;
         let ic_gateway_fqdn = playnet.playnet_cert.playnet.clone();

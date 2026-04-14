@@ -535,7 +535,10 @@ impl From<&SignWithThresholdContext> for pb_metadata::SignWithThresholdContext {
             request: Some((&context.request).into()),
             args: Some((&context.args).into()),
             derivation_path_vec: context.derivation_path.to_vec(),
-            pseudo_random_id: context.pseudo_random_id.to_vec(),
+            deprecated_pseudo_random_id: context
+                .deprecated_pseudo_random_id
+                .map(|id| id.to_vec())
+                .unwrap_or_default(),
             batch_time: context.batch_time.as_nanos_since_unix_epoch(),
             nonce: context.nonce.map(|n| n.to_vec()),
         }
@@ -553,7 +556,10 @@ impl TryFrom<pb_metadata::SignWithThresholdContext> for SignWithThresholdContext
             request,
             args,
             derivation_path: Arc::new(context.derivation_path_vec),
-            pseudo_random_id: try_into_array_pseudo_random_id(context.pseudo_random_id)?,
+            deprecated_pseudo_random_id: try_into_array_pseudo_random_id(
+                context.deprecated_pseudo_random_id,
+            )
+            .ok(),
             batch_time: Time::from_nanos_since_unix_epoch(context.batch_time),
             nonce: context.nonce.map(try_into_array_nonce).transpose()?,
         })

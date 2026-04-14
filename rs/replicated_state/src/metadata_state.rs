@@ -531,6 +531,18 @@ impl SystemMetadata {
         &self.streams
     }
 
+    /// Returns the size of this subnet, `None` if `network_topology` is not
+    /// populated.
+    pub fn own_subnet_size(&self) -> Option<usize> {
+        self.network_topology.get_subnet_size(&self.own_subnet_id)
+    }
+
+    /// Returns the cost schedule of this subnet, `None` if `network_topology` is
+    /// not populated.
+    pub fn own_cost_schedule(&self) -> Option<CanisterCyclesCostSchedule> {
+        self.network_topology.get_cost_schedule(&self.own_subnet_id)
+    }
+
     /// One-off initialization: populate `canister_allocation_ranges` with the only
     /// `[N * 2^20, (N+1) * 2^20 - 1]` range fully hosted by the subnet as per the
     /// routing table; and initialize `last_generated_canister_id` based on

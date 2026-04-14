@@ -118,6 +118,7 @@ pub fn prepare_registry_with_nodes_and_node_operator_id(
         nodes,
         node_operator_id,
         false, // with_chip_id
+        NodeRewardType::Type1,
     )
 }
 
@@ -131,6 +132,22 @@ pub fn prepare_registry_with_nodes_and_chip_id(
         nodes,
         PrincipalId::new_user_test_id(999),
         true,
+        NodeRewardType::Type1,
+    )
+}
+
+/// Same as above, just with the possibility to have a node reward type.
+pub fn prepare_registry_with_nodes_and_reward_type(
+    start_mutation_id: u8,
+    nodes: u64,
+    node_reward_type: NodeRewardType,
+) -> (RegistryAtomicMutateRequest, BTreeMap<NodeId, PublicKey>) {
+    prepare_registry_raw(
+        start_mutation_id,
+        nodes,
+        PrincipalId::new_user_test_id(999),
+        false, // with_chip_id
+        node_reward_type,
     )
 }
 
@@ -139,6 +156,7 @@ pub fn prepare_registry_raw(
     nodes: u64,
     node_operator_id: PrincipalId,
     with_chip_id: bool,
+    node_reward_type: NodeRewardType,
 ) -> (RegistryAtomicMutateRequest, BTreeMap<NodeId, PublicKey>) {
     // Prepare a transaction to add the nodes to the registry
     let mut mutations = Vec::<RegistryMutation>::default();
@@ -161,7 +179,7 @@ pub fn prepare_registry_raw(
                 node_operator_id: node_operator_id.into_vec(),
                 // Preset this field to Some(), in order to allow seamless creation of ApiBoundaryNodeRecord if needed.
                 domain: Some(format!("node{effective_id}.example.com")),
-                node_reward_type: Some(NodeRewardType::Type1 as i32),
+                node_reward_type: Some(node_reward_type as i32),
                 chip_id: if with_chip_id {
                     Some(format!("chip-id-{effective_id}").into_bytes())
                 } else {
