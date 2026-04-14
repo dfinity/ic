@@ -2064,17 +2064,6 @@ fn test_large_delta_log_in_single_execution() {
     assert_eq!(logs.len(), message_count as usize);
 }
 
-/*
-TODO: remove debug code
-
-$ ./ci/container/container-run.sh
-$ bazel test \
-  //rs/execution_environment:execution_environment_misc_integration_tests/canister_logging_test \
-  --test_output=streamed \
-  --test_arg=--nocapture \
-  --test_arg=test_canister_resize_up_preserves_logs
-
-*/
 #[test]
 fn test_canister_resize_up_preserves_logs() {
     if !LOG_MEMORY_STORE_FEATURE_ENABLED {
@@ -2125,35 +2114,20 @@ fn test_canister_resize_up_preserves_logs() {
 
     // Resize log memory store.
     let balance_before = env.cycle_balance(canister_id);
-    //let start = std::time::Instant::now();
     let _ = env.update_settings(
         &canister_id,
         CanisterSettingsArgsBuilder::new()
             .with_log_memory_limit(log_memory_limit)
             .build(),
     );
-    //println!("ABC update_settings duration: {:?}", start.elapsed());
     let balance_after = env.cycle_balance(canister_id);
     assert_gt!(balance_before, balance_after);
-    //println!("ABC resize cost: {}", balance_before - balance_after);
 
     // After resizing.
     let logs_after = fetch_log_records_intercanister(&env, universal_canister, canister_id, cycles);
     assert_eq!(logs_before.len(), logs_after.len());
     assert_eq!(logs_before, logs_after);
 }
-
-/*
-TODO: remove debug code
-
-$ ./ci/container/container-run.sh
-$ bazel test \
-  //rs/execution_environment:execution_environment_misc_integration_tests/canister_logging_test \
-  --test_output=streamed \
-  --test_arg=--nocapture \
-  --test_arg=test_canister_resize_down_preserves_logs
-
-*/
 
 #[test]
 fn test_canister_resize_down_preserves_logs() {

@@ -20,9 +20,7 @@ use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::wasm_utils::decoding::decode_wasm;
 use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_interfaces::execution_environment::{
-    CanisterOutOfCyclesError, MessageMemoryUsage, SubnetAvailableMemory,
-};
+use ic_interfaces::execution_environment::{MessageMemoryUsage, SubnetAvailableMemory};
 use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use ic_logger::{ReplicaLogger, error, fatal, info};
 use ic_management_canister_types_private::{
@@ -548,15 +546,11 @@ impl CanisterManager {
                 .real();
             // Check the canister can afford the resize without freezing.
             if canister_cycles_balance < threshold + log_resize_cycles {
-                return Err(CanisterManagerError::LogResizeNotEnoughCycles(
-                    CanisterOutOfCyclesError {
-                        canister_id: CanisterId::unchecked_from_principal(PrincipalId::default()),
-                        available: canister_cycles_balance,
-                        threshold,
-                        requested: log_resize_cycles,
-                        reveal_top_up: false,
-                    },
-                ));
+                return Err(CanisterManagerError::LogResizeNotEnoughCycles {
+                    available: canister_cycles_balance,
+                    threshold,
+                    requested: log_resize_cycles,
+                });
             }
         }
 
@@ -747,7 +741,11 @@ impl CanisterManager {
                     subnet_size,
                     cost_schedule,
                 )
-                .map_err(CanisterManagerError::LogResizeNotEnoughCycles)?;
+                .map_err(|err| CanisterManagerError::LogResizeNotEnoughCycles {
+                    available: err.available,
+                    threshold: err.threshold,
+                    requested: err.requested,
+                })?;
             round_limits.instructions -= as_round_instructions(log_resize_instructions);
         }
 
