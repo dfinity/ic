@@ -299,9 +299,8 @@ async fn upgrade_to(
     );
 
     // Concurrently assert that all orchestrators shut down gracefully
-    try_join_all(healthy_nodes.iter().map(|node| {
-        let node_cl = node.clone();
-        tokio::task::spawn_blocking(move || assert_orchestrator_stopped_gracefully(&node_cl))
+    try_join_all(healthy_nodes.iter().cloned().map(|node| {
+        tokio::task::spawn_blocking(move || assert_orchestrator_stopped_gracefully(&node))
     }))
     .await
     .unwrap();
