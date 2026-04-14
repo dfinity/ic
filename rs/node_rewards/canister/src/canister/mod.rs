@@ -128,8 +128,8 @@ impl NodeRewardsCanister {
         let subnets_list: Vec<SubnetId> = registry_querier
             .subnets_list(version)?
             .into_iter()
-            .filter(|subnet_id| {
-                match registry_querier.get_subnet_record(*subnet_id, version) {
+            .filter(
+                |subnet_id| match registry_querier.get_subnet_record(*subnet_id, version) {
                     Ok(Some(record)) if record.subnet_type() == SubnetType::CloudEngine => {
                         ic_cdk::println!(
                             "Excluding cloud engine subnet {} from metrics collection",
@@ -138,8 +138,8 @@ impl NodeRewardsCanister {
                         false
                     }
                     _ => true,
-                }
-            })
+                },
+            )
             .collect();
         let last_day_synced: NaiveDate =
             metrics_manager.update_subnets_metrics(subnets_list).await?;
