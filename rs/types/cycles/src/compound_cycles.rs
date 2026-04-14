@@ -84,7 +84,8 @@ pub struct CompoundCycles<T: CyclesUseCaseKind> {
 impl<T: CyclesUseCaseKind> CompoundCycles<T> {
     pub fn new(amount: Cycles, cost_schedule: CanisterCyclesCostSchedule) -> Self {
         let use_case = T::cycles_use_case();
-        let amount = match (use_case, cost_schedule) {
+        let nominal = NominalCycles::new_private(amount.get());
+        let real = match (use_case, cost_schedule) {
             (_, CanisterCyclesCostSchedule::Normal)
             // NonConsumed represents the amounts attached on inter-canister
             // calls and it's removed from a canister's balance regardless of
@@ -113,8 +114,8 @@ impl<T: CyclesUseCaseKind> CompoundCycles<T> {
             | (CyclesUseCase::VetKd, CanisterCyclesCostSchedule::Free) => Cycles::zero(),
         };
         Self {
-            real: amount,
-            nominal: NominalCycles::new_private(amount.get()),
+            real,
+            nominal,
             _cycles_use_case_marker: PhantomData,
         }
     }
