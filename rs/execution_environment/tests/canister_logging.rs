@@ -2139,7 +2139,7 @@ fn test_canister_resize_up_preserves_logs() {
 
     // Resize log memory store.
     let balance_before = env.cycle_balance(canister_id);
-    let start = std::time::Instant::now();
+    //let start = std::time::Instant::now();
     let _ = env.update_settings(
         &canister_id,
         CanisterSettingsArgsBuilder::new()
@@ -2222,7 +2222,7 @@ fn test_canister_resize_down_preserves_logs() {
 
     // Resize log memory store.
     let balance_before = env.cycle_balance(canister_id);
-    let start = std::time::Instant::now();
+    //let start = std::time::Instant::now();
     let _ = env.update_settings(
         &canister_id,
         CanisterSettingsArgsBuilder::new()
@@ -2236,7 +2236,7 @@ fn test_canister_resize_down_preserves_logs() {
 
     // Snapshot metrics AFTER the resize.
     let sum_after = update_settings_duration_sum(&env);
-    let resize_duration_seconds = sum_after - sum_before;
+    //let resize_duration_seconds = sum_after - sum_before;
     //println!("ABC Resize update_settings duration: {resize_duration_seconds:.6}s");
 
     // After resizing.
