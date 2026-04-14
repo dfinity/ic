@@ -2793,12 +2793,12 @@ impl StateMachine {
                     self.tick_with_config(payload);
 
                     for tick in 0..MAX_TICKS {
-                        match self.ingress_status(ingress_id) {
-                            IngressStatus::Known {
-                                state: IngressState::Completed(_) | IngressState::Failed(_),
-                                ..
-                            } => break,
-                            _ => {}
+                        if let IngressStatus::Known {
+                            state: IngressState::Completed(_) | IngressState::Failed(_),
+                            ..
+                        } = self.ingress_status(ingress_id)
+                        {
+                            break;
                         }
                         assert!(
                             tick < MAX_TICKS - 1,
@@ -2959,15 +2959,6 @@ impl StateMachine {
                 panic!("Management canister is not involved; use next_sender_in_queue");
             }
         }
-    }
-
-    fn has_loopback_messages(&self) -> bool {
-        let state = self.get_latest_state();
-        let subnet_id = self.get_subnet_id();
-        state
-            .streams()
-            .get(&subnet_id)
-            .is_some_and(|s| !s.messages().is_empty())
     }
 
     fn has_loopback_message_for(&self, receiver: CanisterId) -> bool {
