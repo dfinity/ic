@@ -600,7 +600,8 @@ fn registry_unavailable_validation() {
 /// the existing helper functions
 #[test]
 fn feature_disabled_validation() {
-    let validation_result = run_non_flexible_validation_test(false, |_, _| {}, &default_validation_context());
+    let validation_result =
+        run_non_flexible_validation_test(false, |_, _| {}, &default_validation_context());
     match validation_result {
         Err(ValidationError::ValidationFailed(
             PayloadValidationFailure::CanisterHttpPayloadValidationFailed(
