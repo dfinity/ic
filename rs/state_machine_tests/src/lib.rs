@@ -1121,7 +1121,6 @@ pub struct StateMachine {
     consensus_pool_cache: Arc<FakeConsensusPoolCache>,
     canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
     canister_http_payload_builder: Arc<CanisterHttpPayloadBuilderImpl>,
-    certified_height_tx: watch::Sender<Height>,
     pub ingress_watcher_handle: IngressWatcherHandle,
     /// A drop guard to gracefully cancel the ingress watcher task.
     _ingress_watcher_drop_guard: tokio_util::sync::DropGuard,
@@ -1743,10 +1742,6 @@ impl StateMachine {
         self.certify_latest_state();
         let certified_height = self.state_manager.latest_certified_height();
 
-        self.certified_height_tx
-            .send(certified_height)
-            .expect("Ingress watcher is running");
-
         let state = self
             .state_manager
             .get_state_at(certified_height)
@@ -1967,6 +1962,11 @@ impl StateMachine {
             ..Default::default()
         };
 
+        // Setup ingress watcher for synchronous call endpoint.
+        let (completed_execution_messages_tx, completed_execution_messages_rx) =
+            mpsc::channel(COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE);
+        let (certified_height_tx, certified_height_rx) = watch::channel(Height::from(0));
+
         let state_manager_impl = StateManagerImpl::new(
             Arc::new(FakeVerifier),
             subnet_id,
@@ -1976,7 +1976,7 @@ impl StateMachine {
             &sm_config,
             None,
             malicious_flags.clone(),
-            tokio::sync::watch::channel(Height::from(0)).0,
+            certified_height_tx,
         );
         let state_manager = Arc::new(StateMachineStateManager {
             inner: state_manager_impl,
@@ -2024,11 +2024,6 @@ impl StateMachine {
         ));
 
         let chain_key_payload_builder = Arc::new(MockBatchPayloadBuilder::new().expect_noop());
-
-        // Setup ingress watcher for synchronous call endpoint.
-        let (completed_execution_messages_tx, completed_execution_messages_rx) =
-            mpsc::channel(COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE);
-        let (certified_height_tx, certified_height_rx) = watch::channel(Height::from(0));
 
         let cancellation_token = tokio_util::sync::CancellationToken::new();
         let cancellation_token_clone = cancellation_token.clone();
@@ -2272,7 +2267,6 @@ impl StateMachine {
             transform_handler: Arc::new(Mutex::new(execution_services.transform_execution_service)),
             ingress_watcher_handle,
             _ingress_watcher_drop_guard: ingress_watcher_drop_guard,
-            certified_height_tx,
             runtime,
             // Note: state machine tests are commonly used for testing
             // canisters, such tests usually don't rely on any persistence.
