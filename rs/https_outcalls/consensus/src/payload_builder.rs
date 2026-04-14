@@ -679,10 +679,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 )
                 .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
-                if matches!(
-                    response_with_proof.response.content,
-                    CanisterHttpResponseContent::Reject(_)
-                ) {
+                if response_with_proof.response.content.is_reject() {
                     return invalid_artifact(
                         InvalidCanisterHttpPayloadReason::FlexibleRejectNotAllowedInOkResponses {
                             callback_id,
@@ -743,10 +740,7 @@ impl CanisterHttpPayloadBuilderImpl {
                         )
                         .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
-                        if !matches!(
-                            response_with_proof.response.content,
-                            CanisterHttpResponseContent::Reject(_)
-                        ) {
+                        if !response_with_proof.response.content.is_reject() {
                             return invalid_artifact(
                                 InvalidCanisterHttpPayloadReason::FlexibleRejectExpectedInErrorResponse(
                                     callback_id,
