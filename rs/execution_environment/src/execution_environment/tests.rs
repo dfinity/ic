@@ -2273,6 +2273,7 @@ fn create_canister_xnet_called_from_nns() {
 fn setup_initial_dkg_sender_on_nns() {
     let own_subnet = subnet_test_id(1);
     let nns_subnet = subnet_test_id(2);
+    let other_subnet = subnet_test_id(3);
     let nns_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
@@ -2281,7 +2282,7 @@ fn setup_initial_dkg_sender_on_nns() {
         .with_caller(nns_subnet, nns_canister)
         .build();
     let nodes = vec![node_test_id(1)];
-    for subnet_id in [None, Some(own_subnet)] {
+    for subnet_id in [None, Some(own_subnet), Some(other_subnet), Some(nns_subnet)] {
         let args =
             ic00::SetupInitialDKGArgs::new(nodes.clone(), RegistryVersion::new(1), subnet_id);
         test.inject_call_to_ic00(
@@ -2306,7 +2307,7 @@ fn setup_initial_dkg_sender_not_on_nns() {
         .with_caller(other_subnet, other_canister)
         .build();
     let nodes = vec![node_test_id(1)];
-    for subnet_id in [None, Some(own_subnet)] {
+    for subnet_id in [None, Some(own_subnet), Some(other_subnet), Some(nns_subnet)] {
         let args =
             ic00::SetupInitialDKGArgs::new(nodes.clone(), RegistryVersion::new(1), subnet_id);
         test.inject_call_to_ic00(
@@ -2316,7 +2317,7 @@ fn setup_initial_dkg_sender_not_on_nns() {
         );
     }
     test.execute_all();
-    assert_eq!(test.xnet_messages().len(), 2);
+    assert_eq!(test.xnet_messages().len(), 4);
     for response in test.xnet_messages().iter() {
         assert_eq!(
             response.clone(),

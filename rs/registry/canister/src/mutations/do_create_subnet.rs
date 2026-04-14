@@ -268,7 +268,7 @@ pub struct CreateSubnetPayload {
 
     pub subnet_id_override: Option<PrincipalId>,
     /// Optional subnet that should handle `setup_initial_dkg`.
-    /// If not set, the request is handled by the NNS subnet as before.
+    /// If not set, the request is handled by the NNS subnet.
     pub initial_dkg_subnet_id: Option<SubnetId>,
 
     pub max_ingress_bytes_per_message: u64,

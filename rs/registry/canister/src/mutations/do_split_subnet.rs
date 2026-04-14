@@ -117,7 +117,7 @@ impl Registry {
             let request = SetupInitialDKGArgs::new(
                 nodes,
                 RegistryVersion::new(pre_call_registry_version),
-                None, // Initial DKG request is answered by the NNS subnet
+                None, // Initial DKG request is handled by the NNS subnet
             );
             let raw_response = call(
                 CanisterId::ic_00(),
