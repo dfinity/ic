@@ -265,6 +265,7 @@ impl CanisterQueuesLoopDetector {
 
 pub mod testing {
     use super::InputSchedule;
+    use crate::replicated_state::InputSource;
     use ic_types::CanisterId;
     use std::collections::VecDeque;
 
@@ -275,6 +276,9 @@ pub mod testing {
 
         /// Publicly exposes the remote subnet input_schedule.
         fn remote_sender_schedule(&self) -> &VecDeque<CanisterId>;
+
+        /// Sets which input source the scheduler will try next.
+        fn set_next_input_source(&mut self, source: InputSource);
     }
 
     impl InputScheduleTesting for InputSchedule {
@@ -284,6 +288,10 @@ pub mod testing {
 
         fn remote_sender_schedule(&self) -> &VecDeque<CanisterId> {
             &self.remote_sender_schedule
+        }
+
+        fn set_next_input_source(&mut self, source: InputSource) {
+            self.next_input_source = source;
         }
     }
 }

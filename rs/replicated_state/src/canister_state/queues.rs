@@ -1988,6 +1988,7 @@ pub fn memory_usage_of_request(req: &Request) -> MessageMemoryUsage {
 pub mod testing {
     use super::input_schedule::testing::InputScheduleTesting;
     use super::{CanisterQueues, MessageStore};
+    use crate::replicated_state::InputSource;
     use crate::{InputQueueType, StateError};
     use ic_types::messages::{Request, RequestOrResponse, Response};
     use ic_types::{CanisterId, Time};
@@ -2018,6 +2019,9 @@ pub mod testing {
 
         /// Publicly exposes the remote sender input_schedule.
         fn remote_sender_schedule(&self) -> &VecDeque<CanisterId>;
+
+        /// Sets which input source the scheduler will try next.
+        fn set_next_input_source(&mut self, source: InputSource);
 
         /// Returns an iterator over the raw contents of the output queue to
         /// `canister_id`; or `None` if no such output queue exists.
@@ -2054,6 +2058,10 @@ pub mod testing {
 
         fn remote_sender_schedule(&self) -> &VecDeque<CanisterId> {
             self.input_schedule.remote_sender_schedule()
+        }
+
+        fn set_next_input_source(&mut self, source: InputSource) {
+            self.input_schedule.set_next_input_source(source);
         }
 
         fn output_queue_iter_for_testing(

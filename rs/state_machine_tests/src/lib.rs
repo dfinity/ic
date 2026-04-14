@@ -116,7 +116,7 @@ use ic_registry_subnet_features::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CheckpointLoadingMetrics, Memory, PageMap, ReplicatedState,
+    CheckpointLoadingMetrics, InputSource, Memory, PageMap, ReplicatedState,
     canister_state::{
         NextExecution, NumWasmPages, WASM_PAGE_SIZE_IN_BYTES,
         canister_snapshots::CanisterSnapshots, execution_state::NextScheduledMethod,
@@ -125,7 +125,7 @@ use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
     page_map::Buffer,
     replicated_state::ReplicatedStateMessageRouting,
-    testing::{CanisterQueuesTesting, ReplicatedStateTesting},
+    testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_state_manager::StateManagerImpl;
@@ -303,8 +303,9 @@ impl Scheduler for FlexibleOrderingScheduler {
                 .accumulated_priority = AccumulatedPriority::new(i64::MAX / 4);
         }
 
-        // Safe to restore: no new messages land in subnet_queues during
+        // Assumption: no new messages land in subnet_queues during
         // execute_round — they stay in output until build_streams.
+        // Fragile if the scheduler changes to induct into subnet_queues.
         let suppress = *self.suppress_subnet_messages.read().unwrap();
         let saved_subnet_queues = if suppress {
             Some(std::mem::take(state.subnet_queues_mut()))
@@ -2064,6 +2065,7 @@ impl StateMachine {
             // Cap install_code_slice so it doesn't inflate the subtraction.
             sc.max_instructions_per_install_code_slice = sc.max_instructions_per_slice;
             sc.max_instructions_per_round = sc.max_instructions_per_slice;
+            // Zero-cost subnet messages may bypass this; suppress is the primary guard.
             sc.subnet_messages_per_round_instruction_limit = ic_types::NumInstructions::from(1);
         }
         if let Some(ecdsa_signature_fee) = ecdsa_signature_fee {
@@ -2740,8 +2742,10 @@ impl StateMachine {
         *self.suppress_subnet_messages.write().unwrap() = suppress;
     }
 
-    /// Reset flexible ordering state so subsequent tick()/execute_ingress()
-    /// calls pass through the scheduler without priority boost or suppression.
+    /// Reset per-round ordering state (priority boost and subnet suppression)
+    /// so subsequent tick()/execute_ingress() pass through normally. The
+    /// scheduler config (budget, cores) remains — it's a permanent choice
+    /// but does not break normal calls (just one message per round per tick).
     pub fn clear_flexible_ordering(&self) {
         self.set_ordering_target(None);
         self.set_suppress_subnet_messages(false);
@@ -2774,7 +2778,7 @@ impl StateMachine {
     pub fn execute_with_ordering(&self, ordering: MessageOrdering) {
         assert!(
             self.flexible_ordering,
-            "call with_flexible_ordering() first"
+            "build the StateMachine with with_flexible_ordering()"
         );
         const MAX_TICKS: usize = 100;
 
@@ -2794,10 +2798,6 @@ impl StateMachine {
                                 state: IngressState::Completed(_) | IngressState::Failed(_),
                                 ..
                             } => break,
-                            IngressStatus::Known {
-                                state: IngressState::Processing,
-                                ..
-                            } if !self.has_in_flight_work(target) => break,
                             _ => {}
                         }
                         assert!(
@@ -2813,6 +2813,7 @@ impl StateMachine {
                 OrderedMessage::Ingress(target, ref ingress_id) => {
                     self.set_suppress_subnet_messages(true);
                     self.set_next_scheduled_method(target, NextScheduledMethod::Message);
+                    self.set_next_input_source(target, InputSource::Ingress);
                     self.set_ordering_target(Some(target));
                     let signed = self.take_buffered_ingress(ingress_id);
                     let payload = PayloadBuilder::new()
@@ -2843,6 +2844,8 @@ impl StateMachine {
                     );
                     self.set_suppress_subnet_messages(false);
                     self.tick();
+                    // Re-suppress before DTS: install_code DTS ticks should
+                    // not drain additional subnet messages.
                     self.set_suppress_subnet_messages(true);
                     self.complete_dts(source, MAX_TICKS);
                 }
@@ -2855,6 +2858,7 @@ impl StateMachine {
                     );
                     self.set_suppress_subnet_messages(true);
                     self.set_next_scheduled_method(target, NextScheduledMethod::Message);
+                    self.set_next_input_source(target, InputSource::RemoteSubnet);
                     self.set_ordering_target(Some(target));
                     self.tick();
                     self.complete_dts(target, MAX_TICKS);
@@ -2863,6 +2867,7 @@ impl StateMachine {
                 OrderedMessage::Request { source, target }
                 | OrderedMessage::Response { source, target } => {
                     self.set_suppress_subnet_messages(true);
+                    self.set_next_input_source(target, InputSource::LocalSubnet);
                     assert!(
                         self.next_sender_in_queue(source, target),
                         "Message from {} not next in {}'s queue",
@@ -2890,6 +2895,19 @@ impl StateMachine {
             .commit_and_certify(state, CertificationScope::Metadata, None);
     }
 
+    fn set_next_input_source(&self, canister_id: CanisterId, source: InputSource) {
+        let (_, mut state) = self.state_manager.take_tip();
+        let canister = state
+            .canister_state_make_mut(&canister_id)
+            .unwrap_or_else(|| panic!("Canister {} not found", canister_id));
+        canister
+            .system_state
+            .queues_mut()
+            .set_next_input_source(source);
+        self.state_manager
+            .commit_and_certify(state, CertificationScope::Metadata, None);
+    }
+
     fn complete_dts(&self, canister_id: CanisterId, max_ticks: usize) {
         for tick in 0..max_ticks {
             match self
@@ -2905,22 +2923,6 @@ impl StateMachine {
             }
             assert!(tick < max_ticks - 1, "DTS on {} stuck", canister_id);
         }
-    }
-
-    fn has_in_flight_work(&self, canister: CanisterId) -> bool {
-        let state = self.get_latest_state();
-
-        if let Some(c) = state.canister_state(&canister) {
-            if c.system_state.queues().has_output() || c.system_state.queues().has_input() {
-                return true;
-            }
-            match c.next_execution() {
-                NextExecution::ContinueLong | NextExecution::ContinueInstallCode => return true,
-                _ => {}
-            }
-        }
-
-        self.has_loopback_messages() || state.subnet_queues().has_input()
     }
 
     /// Checks that `source` is the next sender in `target`'s local input schedule.
@@ -2940,21 +2942,23 @@ impl StateMachine {
     fn next_sender_in_subnet_queue(&self, source: CanisterId, target: CanisterId) -> bool {
         let state = self.get_latest_state();
 
-        let in_schedule = match (source, target) {
-            (IC_00, _) => {
-                // IC_00 response: lands in remote schedule because IC_00's
-                // principal doesn't match own_subnet_id or any canister.
+        match (source, target) {
+            (IC_00, target) => {
+                // IC_00 response: lands in remote schedule.
                 state.subnet_queues().remote_sender_schedule().front() == Some(&IC_00)
+                    || self.has_loopback_message_for(target)
             }
             (source, IC_00) => {
-                // Request to IC_00 from a canister
+                // Request to IC_00: receiver in loopback is the subnet ID.
                 state.subnet_queues().local_sender_schedule().front() == Some(&source)
+                    || self.has_loopback_message_for(CanisterId::unchecked_from_principal(
+                        self.get_subnet_id().get(),
+                    ))
             }
             (_, _) => {
                 panic!("Management canister is not involved; use next_sender_in_queue");
             }
-        };
-        in_schedule || self.has_loopback_messages()
+        }
     }
 
     fn has_loopback_messages(&self) -> bool {
@@ -2964,6 +2968,17 @@ impl StateMachine {
             .streams()
             .get(&subnet_id)
             .is_some_and(|s| !s.messages().is_empty())
+    }
+
+    fn has_loopback_message_for(&self, receiver: CanisterId) -> bool {
+        let state = self.get_latest_state();
+        let subnet_id = self.get_subnet_id();
+        state.streams().get(&subnet_id).is_some_and(|s| {
+            s.messages()
+                .iter()
+                .next()
+                .is_some_and(|(_, msg)| msg.receiver() == receiver)
+        })
     }
 
     pub fn mock_canister_http_response(
