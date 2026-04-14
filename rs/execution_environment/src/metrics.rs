@@ -316,10 +316,18 @@ impl QueryHandlerMetrics {
             .with_label_values(&[method_name_label.as_str(), status_label])
             .observe(duration);
 
-        if let Ok(WasmResult::Reply(bytes)) = result {
-            self.subnet_query_message_response_bytes
-                .with_label_values(&[method_name_label.as_str()])
-                .observe(bytes.len() as f64);
+        match result {
+            Ok(WasmResult::Reply(bytes)) => {
+                self.subnet_query_message_response_bytes
+                    .with_label_values(&[method_name_label.as_str()])
+                    .observe(bytes.len() as f64);
+            }
+            Ok(WasmResult::Reject(message)) => {
+                self.subnet_query_message_response_bytes
+                    .with_label_values(&[method_name_label.as_str()])
+                    .observe(message.len() as f64);
+            }
+            Err(_) => {}
         }
     }
 }
