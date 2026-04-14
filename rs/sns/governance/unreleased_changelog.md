@@ -9,8 +9,6 @@ on the process that this file is part of, see
 
 ## Added
 
-- Support for `snapshot_visibility` in `ManageDappCanisterSettings` proposals.
-
 ## Changed
 
 ## Deprecated

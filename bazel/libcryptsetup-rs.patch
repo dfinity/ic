@@ -1,0 +1,30 @@
+# Fixes CryptKeyslotHandle::get_pbkdf() segfault for type Argon2I/Argon2Id keyslots
+# See: https://github.com/stratis-storage/libcryptsetup-rs/issues/473
+diff --git a/src/settings.rs b/src/settings.rs
+--- a/src/settings.rs
++++ b/src/settings.rs
+@@ -37,7 +37,11 @@ impl TryFrom<libcryptsetup_rs_sys::crypt_pbkdf_type> for CryptPbkdfType {
+         Ok(CryptPbkdfType {
+             type_: CryptKdf::from_ptr(type_.type_)?,
+-            hash: String::from(from_str_ptr!(type_.hash)?),
++            hash: if type_.hash.is_null() {
++                String::new()
++            } else {
++                String::from(from_str_ptr!(type_.hash)?)
++            },
+             time_ms: type_.time_ms,
+             iterations: type_.iterations,
+             max_memory_kb: type_.max_memory_kb,
+@@ -51,7 +55,11 @@ impl<'a> TryFrom<&'a libcryptsetup_rs_sys::crypt_pbkdf_type> for CryptPbkdfType {
+     fn try_from(v: &'a libcryptsetup_rs_sys::crypt_pbkdf_type) -> Result<Self, Self::Error> {
+         Ok(CryptPbkdfType {
+             type_: CryptKdf::from_ptr(v.type_)?,
+-            hash: from_str_ptr!(v.hash)?.to_string(),
++            hash: if v.hash.is_null() {
++                String::new()
++            } else {
++                from_str_ptr!(v.hash)?.to_string()
++            },
+             time_ms: v.time_ms,
+             iterations: v.iterations,
+             max_memory_kb: v.max_memory_kb,

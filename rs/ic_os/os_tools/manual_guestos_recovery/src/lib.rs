@@ -1,3 +1,7 @@
+//! Interactive TUI application for manual GuestOS recovery. Prompts the operator
+//! for a recovery version and hash prefix, downloads and verifies recovery
+//! artifacts, and installs the recovery GuestOS image.
+
 pub mod recovery_utils;
 mod ui;
 

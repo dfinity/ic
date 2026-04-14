@@ -237,8 +237,7 @@ fn dts_long_execution_aborted_after_checkpoint() {
 
     // After completion, there is no paused or aborted execution. And the priority
     // credit is again zero.
-    assert!(!test.canister_state(canister).has_paused_execution());
-    assert!(!test.canister_state(canister).has_aborted_execution());
+    assert!(!test.canister_state(canister).has_long_execution());
     assert_eq!(
         test.state()
             .canister_priority(&canister)
@@ -455,7 +454,7 @@ fn filter_after_long_executions() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     for canister in test.state().canisters_iter() {
         assert_eq!(canister.system_state.canister_metrics().executed(), 2);
-        assert!(!canister.has_paused_execution());
+        assert!(!canister.has_long_execution());
     }
 }
 
@@ -609,8 +608,7 @@ fn dts_resume_install_code_after_abort() {
     }
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    assert!(!test.canister_state(canister).has_paused_install_code());
-    assert!(!test.canister_state(canister).has_aborted_install_code());
+    assert!(!test.canister_state(canister).has_long_install_code());
 
     // After 1 + 9 rounds we had a paused install code.
     assert_eq!(
@@ -667,7 +665,6 @@ fn dts_resume_long_execution_after_abort() {
     assert_eq!(execution_stats(&test, canister), (1, true));
 
     test.execute_round(ExecutionRoundType::CheckpointRound);
-    assert!(!test.canister_state(canister).has_paused_execution());
     assert!(test.canister_state(canister).has_aborted_execution());
     assert_eq!(execution_stats(&test, canister), (2, true));
 

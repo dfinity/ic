@@ -570,6 +570,7 @@ impl CallContextBuilder {
             Cycles::zero(),
             self.time,
             Default::default(),
+            None,
         )
     }
 }
@@ -864,6 +865,7 @@ pub fn register_callback(
             Cycles::zero(),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
 
