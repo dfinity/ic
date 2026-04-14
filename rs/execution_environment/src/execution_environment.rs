@@ -342,14 +342,14 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
         let memory_usage = canister.memory_usage();
         let message_memory_usage = canister.message_memory_usage();
         let res = self.cycles_account_manager.consume_cycles(
-        &mut canister.system_state,
-        memory_usage,
-        message_memory_usage,
-        self.consumed_cycles,
-        subnet_size,
-        cost_schedule,
-        true, /* we only log the error, but do not return it to the user => do reveal top up balance */
-      );
+            &mut canister.system_state,
+            memory_usage,
+            message_memory_usage,
+            self.consumed_cycles,
+            subnet_size,
+            cost_schedule,
+            true, /* we only log the error, but do not return it to the user => do reveal top up balance */
+        );
         if let Err(err) = res {
             failed_charge.inc();
             error!(
