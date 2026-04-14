@@ -12764,6 +12764,7 @@ dependencies = [
  "slog",
  "tempfile",
  "thiserror 2.0.18",
+ "tokio",
  "url",
  "x509-cert",
 ]
@@ -14680,6 +14681,7 @@ dependencies = [
  "strum 0.26.3",
  "tempfile",
  "test-strategy 0.4.5",
+ "tokio",
  "tree-deserializer",
  "uuid",
 ]
