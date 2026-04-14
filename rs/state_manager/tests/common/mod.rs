@@ -573,6 +573,7 @@ fn state_manager_with_verifier_result(
         &config,
         None,
         ic_types::malicious_flags::MaliciousFlags::default(),
+        tokio::sync::watch::channel(Height::from(0)).0,
     );
     (state_manager, tmp)
 }
@@ -627,6 +628,7 @@ fn state_manager_test_with_state_sync_and_verifier_result<
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
+            tokio::sync::watch::channel(Height::from(0)).0,
         ));
         f(&metrics_registry, sm.clone(), StateSync::new(sm, log));
     })
@@ -665,6 +667,7 @@ where
                 &config,
                 starting_height,
                 ic_types::malicious_flags::MaliciousFlags::default(),
+                tokio::sync::watch::channel(Height::from(0)).0,
             ));
             let state_sync = StateSync::new(state_manager.clone(), log.clone());
 
@@ -723,6 +726,7 @@ where
                 &config,
                 starting_height,
                 ic_types::malicious_flags::MaliciousFlags::default(),
+                tokio::sync::watch::channel(Height::from(0)).0,
             );
 
             (metrics_registry, state_manager)
@@ -785,6 +789,7 @@ where
                 &config,
                 starting_height,
                 ic_types::malicious_flags::MaliciousFlags::default(),
+                tokio::sync::watch::channel(Height::from(0)).0,
             );
 
             (metrics_registry, state_manager)

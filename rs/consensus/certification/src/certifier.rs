@@ -31,7 +31,6 @@ use ic_types::{
 };
 use prometheus::{Histogram, IntCounter, IntGauge};
 use std::{cell::RefCell, collections::BTreeSet, sync::Arc, time::Instant};
-use tokio::sync::watch;
 
 struct CertifierMetrics {
     shares_created: IntCounter,
@@ -50,7 +49,6 @@ pub struct CertifierImpl {
     metrics: CertifierMetrics,
     /// The highest height that has been purged. Used to avoid redundant purging.
     highest_purged_height: RefCell<Height>,
-    max_certified_height_tx: watch::Sender<Height>,
     log: ReplicaLogger,
 }
 
@@ -151,16 +149,6 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
                         .deliver_state_certification(certification);
                     self.metrics.last_certified_height.set(height.get() as i64);
                     debug!(&self.log, "Delivered certification for height {}", height);
-
-                    self.max_certified_height_tx.send_if_modified(|h| {
-                        if height > *h {
-                            *h = height;
-                            true
-                        } else {
-                            false
-                        }
-                    });
-
                     true
                 }
                 None => false,
@@ -283,7 +271,6 @@ impl CertifierImpl {
         consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
-        max_certified_height_tx: watch::Sender<Height>,
     ) -> Self {
         let membership = Arc::new(Membership::new(
             consensus_pool_cache.clone(),
@@ -318,7 +305,6 @@ impl CertifierImpl {
             },
             log,
             highest_purged_height: RefCell::new(Height::from(1)),
-            max_certified_height_tx,
         }
     }
 
@@ -763,8 +749,6 @@ mod tests {
                     ..
                 } = dependencies(pool_config.clone(), 1);
 
-                let (max_certified_height_tx, _) = watch::channel(Height::from(0));
-
                 let certifier = CertifierImpl::new(
                     replica_config,
                     registry,
@@ -773,7 +757,6 @@ mod tests {
                     pool.get_cache(),
                     MetricsRegistry::new(),
                     log,
-                    max_certified_height_tx,
                 );
 
                 let mut cert = if let CertificationMessage::Certification(cert) =
@@ -810,8 +793,6 @@ mod tests {
                     ic_logger::replica_logger::no_op_logger(),
                     metrics_registry.clone(),
                 );
-                let (max_certified_height_tx, _) = watch::channel(Height::from(0));
-
                 let certifier = CertifierImpl::new(
                     replica_config,
                     registry,
@@ -820,7 +801,6 @@ mod tests {
                     pool.get_cache(),
                     metrics_registry.clone(),
                     log,
-                    max_certified_height_tx,
                 );
                 let bouncer_factory = CertifierBouncer::new(&metrics_registry, pool.get_cache());
 
@@ -874,7 +854,6 @@ mod tests {
                 pool.advance_round_normal_operation_n(6);
                 add_expectations(state_manager.clone(), 1, 4);
                 let metrics_registry = MetricsRegistry::new();
-                let (max_certified_height_tx, _) = watch::channel(Height::from(0));
                 let mut cert_pool = CertificationPoolImpl::new(
                     replica_config.node_id,
                     pool_config,
@@ -889,7 +868,6 @@ mod tests {
                     pool.get_cache(),
                     metrics_registry,
                     log,
-                    max_certified_height_tx,
                 );
 
                 // generate a certifications for heights 1, 2 and 4
@@ -1018,8 +996,6 @@ mod tests {
                 ic_logger::replica_logger::no_op_logger(),
                 metrics_registry.clone(),
             );
-            let (max_certified_height_tx, _) = watch::channel(Height::from(0));
-
             with_test_replica_logger(|log| {
                 let certifier = CertifierImpl::new(
                     replica_config,
@@ -1029,7 +1005,6 @@ mod tests {
                     pool.get_cache(),
                     metrics_registry,
                     log,
-                    max_certified_height_tx,
                 );
 
                 std::iter::empty()
@@ -1102,8 +1077,6 @@ mod tests {
                 ic_logger::replica_logger::no_op_logger(),
                 metrics_registry.clone(),
             );
-            let (max_certified_height_tx, _) = watch::channel(Height::from(0));
-
             with_test_replica_logger(|log| {
                 let certifier = CertifierImpl::new(
                     replica_config,
@@ -1113,7 +1086,6 @@ mod tests {
                     pool.get_cache(),
                     metrics_registry,
                     log,
-                    max_certified_height_tx,
                 );
 
                 std::iter::empty()
@@ -1178,8 +1150,6 @@ mod tests {
                 ic_logger::replica_logger::no_op_logger(),
                 metrics_registry.clone(),
             );
-            let (max_certified_height_tx, _) = watch::channel(Height::from(0));
-
             with_test_replica_logger(|log| {
                 let certifier = CertifierImpl::new(
                     replica_config,
@@ -1189,7 +1159,6 @@ mod tests {
                     pool.get_cache(),
                     metrics_registry,
                     log,
-                    max_certified_height_tx,
                 );
 
                 let shares = certifier.sign(
@@ -1247,8 +1216,6 @@ mod tests {
                 // make the mock state manager return empty hashes for heights 3, 4 and 5
                 add_expectations(state_manager.clone(), 3, 5);
                 let metrics_registry = MetricsRegistry::new();
-                let (max_certified_height_tx, _) = watch::channel(Height::from(0));
-
                 let certifier = CertifierImpl::new(
                     replica_config.clone(),
                     registry,
@@ -1257,7 +1224,6 @@ mod tests {
                     pool.get_cache(),
                     metrics_registry.clone(),
                     log,
-                    max_certified_height_tx,
                 );
                 let mut cert_pool = CertificationPoolImpl::new(
                     replica_config.node_id,
@@ -1428,8 +1394,6 @@ mod tests {
                 ic_logger::replica_logger::no_op_logger(),
                 metrics_registry.clone(),
             );
-            let (max_certified_height_tx, _) = watch::channel(Height::from(0));
-
             with_test_replica_logger(|log| {
                 let certifier = CertifierImpl::new(
                     replica_config,
@@ -1439,7 +1403,6 @@ mod tests {
                     pool.get_cache(),
                     metrics_registry,
                     log,
-                    max_certified_height_tx,
                 );
 
                 std::iter::empty()
@@ -1501,144 +1464,6 @@ mod tests {
         })
     }
 
-    /// Test that the certifier always transmits the highest certified height that
-    /// has been seen so far. I.e. always transmit the global maximum height.
-    /// Test scenario:
-    /// 1. Certifier receives certifications for heights 1, 2, 3.
-    ///     - Certifier should transmit height 3.
-    /// 2. Certifier receives certification for height 4.
-    ///    - Certifier should transmit height 4.
-    /// 3. Certifier receives certifications for heights 4, 3, 2, 1.
-    ///   - Certifier should not transmit any height, as none of the heights are higher
-    ///     than the last transmitted height.
-    #[test]
-    fn test_certified_heights_are_transmitted() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|log| {
-                let Dependencies {
-                    pool,
-                    replica_config,
-                    registry,
-                    crypto,
-                    state_manager,
-                    ..
-                } = dependencies(pool_config.clone(), 4);
-
-                let metrics_registry = MetricsRegistry::new();
-                let (max_certified_height_tx, mut max_certified_height_rx) =
-                    watch::channel(Height::from(0));
-                let cert_pool = CertificationPoolImpl::new(
-                    replica_config.node_id,
-                    pool_config,
-                    ic_logger::replica_logger::no_op_logger(),
-                    metrics_registry.clone(),
-                );
-
-                for height in 1..=4 {
-                    cert_pool
-                        .validated
-                        .insert(CertificationMessage::Certification(Certification {
-                            height: Height::from(height),
-                            height_witness: Some(Witness::new_for_testing_with_height()),
-                            signed: Signed {
-                                content: gen_content(Height::from(height)),
-                                signature: ThresholdSignature::fake(),
-                            },
-                        }));
-                }
-
-                let certifier = CertifierImpl::new(
-                    replica_config,
-                    registry,
-                    crypto,
-                    state_manager.clone(),
-                    pool.get_cache(),
-                    metrics_registry,
-                    log,
-                    max_certified_height_tx,
-                );
-
-                // We expect deliver_state_certification() to be called 8 times since we call
-                // CertifierImpl::on_state_change 3 times with 8 heights in total:
-                // We mock the certified heights [1, 2, 3], [4], [4, 3, 2, 1] which are in total 8 heights.
-                // I.e. the certifier should deliver the state certification 8 times.
-                state_manager
-                    .get_mut()
-                    .expect_deliver_state_certification()
-                    .times(8)
-                    .return_const(());
-
-                let state_hashes = |heights: Vec<u64>| {
-                    heights
-                        .into_iter()
-                        .map(|h| StateHashMetadata {
-                            height: Height::from(h),
-                            hash: CryptoHashOfPartialState::from(CryptoHash(Vec::new())),
-                            height_witness: Witness::new_for_testing_with_height(),
-                        })
-                        .collect::<Vec<_>>()
-                };
-
-                // We mock the state manager to return the heights
-                // of the states that are certified. The CertifierImpl
-                // should transmit the highest height that it has seen
-                // each time it sees a new height it certifies by delivering it
-                // to the state manager.
-                state_manager
-                    .get_mut()
-                    .expect_list_state_hashes_to_certify()
-                    .times(1)
-                    .return_const(state_hashes(vec![1, 2, 3]));
-                state_manager
-                    .get_mut()
-                    .expect_list_state_heights_to_certify()
-                    .times(1)
-                    .return_const(vec![]);
-
-                certifier.on_state_change(&cert_pool);
-                assert_eq!(
-                    *max_certified_height_rx.borrow_and_update(),
-                    Height::from(3)
-                );
-
-                // New max height is 4, so it should be transmitted
-                state_manager
-                    .get_mut()
-                    .expect_list_state_hashes_to_certify()
-                    .times(1)
-                    .return_const(state_hashes(vec![4]));
-                state_manager
-                    .get_mut()
-                    .expect_list_state_heights_to_certify()
-                    .times(1)
-                    .return_const(vec![]);
-                certifier.on_state_change(&cert_pool);
-                assert_eq!(
-                    *max_certified_height_rx.borrow_and_update(),
-                    Height::from(4),
-                    "Expected height 4 to be transmitted as it is higher than previous transmitted heights"
-                );
-
-                // None of these heights are higher than the last transmitted height
-                state_manager
-                    .get_mut()
-                    .expect_list_state_hashes_to_certify()
-                    .times(1)
-                    .return_const(state_hashes(vec![4, 3, 2, 1]));
-                state_manager
-                    .get_mut()
-                    .expect_list_state_heights_to_certify()
-                    .times(1)
-                    .return_const(vec![]);
-                certifier.on_state_change(&cert_pool);
-                assert!(
-                    !max_certified_height_rx.has_changed().unwrap(),
-                    "No new height should be sent if they are lower than a previously sent height."
-                );
-            })
-        })
-    }
-
     /// Test that the certifier delivers certification requested by the state manager
     /// via the function `StateManager::list_state_heights_to_certify`.
     /// Test scenario:
@@ -1660,8 +1485,6 @@ mod tests {
                 } = dependencies(pool_config.clone(), 4);
 
                 let metrics_registry = MetricsRegistry::new();
-                let (max_certified_height_tx, _max_certified_height_rx) =
-                    watch::channel(Height::from(0));
                 let cert_pool = CertificationPoolImpl::new(
                     replica_config.node_id,
                     pool_config,
@@ -1690,7 +1513,6 @@ mod tests {
                     pool.get_cache(),
                     metrics_registry,
                     log,
-                    max_certified_height_tx,
                 );
 
                 // We expect deliver_state_certification() to be called 2 times for heights 3 and 4.

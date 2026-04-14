@@ -1976,6 +1976,7 @@ impl StateMachine {
             &sm_config,
             None,
             malicious_flags.clone(),
+            tokio::sync::watch::channel(Height::from(0)).0,
         );
         let state_manager = Arc::new(StateMachineStateManager {
             inner: state_manager_impl,

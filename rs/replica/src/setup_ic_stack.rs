@@ -165,6 +165,7 @@ pub fn construct_ic_stack(
     // ---------- REPLICATED STATE DEPS FOLLOW ----------
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
     let verifier = Arc::new(VerifierImpl::new(crypto.clone()));
+    let (max_certified_height_tx, max_certified_height_rx) = watch::channel(Height::from(0));
     let state_manager = Arc::new(StateManagerImpl::new(
         verifier,
         subnet_id,
@@ -177,6 +178,7 @@ pub fn construct_ic_stack(
         // Hence the need of the dependency on consensus here.
         Some(consensus_pool_cache.starting_height()),
         config.malicious_behavior.malicious_flags.clone(),
+        max_certified_height_tx,
     ));
     // ---------- EXECUTION DEPS FOLLOW ----------
 
@@ -304,7 +306,6 @@ pub fn construct_ic_stack(
     );
     // ---------- CONSENSUS AND P2P DEPS FOLLOW ----------
     let state_sync = StateSync::new(state_manager.clone(), log.clone());
-    let (max_certified_height_tx, max_certified_height_rx) = watch::channel(Height::from(0));
 
     let (ingress_throttler, ingress_tx, p2p_runner) = setup_consensus_and_p2p(
         log,
@@ -335,7 +336,6 @@ pub fn construct_ic_stack(
         execution_services.cycles_account_manager,
         canister_http_adapter_client,
         config.nns_registry_replicator.poll_delay_duration_ms,
-        max_certified_height_tx,
     );
 
     // ---------- PUBLIC ENDPOINT DEPS FOLLOW ----------

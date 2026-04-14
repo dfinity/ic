@@ -89,6 +89,7 @@ use std::{
     sync::Mutex,
 };
 use tempfile::tempfile;
+use tokio::sync::watch;
 use uuid::Uuid;
 
 /// The number of threads that state manager starts to construct checkpoints.
@@ -959,6 +960,7 @@ pub struct StateManagerImpl {
     latest_height_update_time: Arc<Mutex<Instant>>,
     /// The height at which this StateManager was started. Set once during initialization and never modified.
     started_height: Height,
+    max_certified_height_tx: watch::Sender<Height>,
 }
 
 #[cfg(debug_assertions)]
@@ -1324,6 +1326,7 @@ impl StateManagerImpl {
         config: &Config,
         starting_height: Option<Height>,
         malicious_flags: MaliciousFlags,
+        max_certified_height_tx: watch::Sender<Height>,
     ) -> Self {
         let metrics = StateManagerMetrics::new(metrics_registry, log.clone());
 
@@ -1638,6 +1641,7 @@ impl StateManagerImpl {
             malicious_flags,
             latest_height_update_time: Arc::new(Mutex::new(Instant::now())),
             started_height,
+            max_certified_height_tx,
         }
     }
 
@@ -3117,6 +3121,14 @@ impl StateManager for StateManagerImpl {
             self.metrics
                 .latest_certified_height
                 .set(latest_certified as i64);
+            self.max_certified_height_tx.send_if_modified(|h| {
+                if certification_height > *h {
+                    *h = certification_height;
+                    true
+                } else {
+                    false
+                }
+            });
 
             if let Some((_, certification_requested_at)) = metadata.hash_tree {
                 self.metrics
@@ -3470,6 +3482,18 @@ impl StateManager for StateManagerImpl {
             let prev_hash = &certification.signed.content.hash.clone().get();
             assert_prev_hash_matches(prev_hash);
             certification_metadata.certification = Some(certification.clone());
+            let latest_certified = update_latest_height(&self.latest_certified_height, height);
+            self.metrics
+                .latest_certified_height
+                .set(latest_certified as i64);
+            self.max_certified_height_tx.send_if_modified(|h| {
+                if height > *h {
+                    *h = height;
+                    true
+                } else {
+                    false
+                }
+            });
         }
 
         if !states
