@@ -206,7 +206,9 @@ pub(crate) fn verify_luks_parameters(crypt_device: &mut CryptDevice) -> Result<(
                     .get_pbkdf(key_slot)
                     .with_context(|| format!("Failed to get PBKDF type for keyslot {key_slot}"))?;
                 ensure!(
-                    pbkdf.type_ == PBKDF_TYPE,
+                    // Because of NODE-1939, we fall back to Argon2id when changing the passphrase
+                    // after an upgrade.
+                    pbkdf.type_ == PBKDF_TYPE || pbkdf.type_ == CryptKdf::Argon2Id,
                     "Unexpected keyslot PBKDF type: {:?}",
                     pbkdf.type_
                 );
