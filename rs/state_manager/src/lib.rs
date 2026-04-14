@@ -3482,18 +3482,6 @@ impl StateManager for StateManagerImpl {
             let prev_hash = &certification.signed.content.hash.clone().get();
             assert_prev_hash_matches(prev_hash);
             certification_metadata.certification = Some(certification.clone());
-            let latest_certified = update_latest_height(&self.latest_certified_height, height);
-            self.metrics
-                .latest_certified_height
-                .set(latest_certified as i64);
-            self.max_certified_height_tx.send_if_modified(|h| {
-                if height > *h {
-                    *h = height;
-                    true
-                } else {
-                    false
-                }
-            });
         }
 
         if !states
@@ -3509,6 +3497,26 @@ impl StateManager for StateManagerImpl {
                 .snapshots
                 .make_contiguous()
                 .sort_by_key(|snapshot| snapshot.height);
+
+            // Only update the certified height and notify the channel if the
+            // certification is actually being stored. We must not fire the channel
+            // when the snapshot already existed (e.g., due to state sync), because
+            // in that case `certification_metadata` is never inserted and the
+            // certified state at this height would not be available.
+            if certification_metadata.certification.is_some() {
+                let latest_certified = update_latest_height(&self.latest_certified_height, height);
+                self.metrics
+                    .latest_certified_height
+                    .set(latest_certified as i64);
+                self.max_certified_height_tx.send_if_modified(|h| {
+                    if height > *h {
+                        *h = height;
+                        true
+                    } else {
+                        false
+                    }
+                });
+            }
 
             states
                 .certifications_metadata
