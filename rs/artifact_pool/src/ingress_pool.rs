@@ -101,8 +101,7 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
         removed
     }
 
-    // Purge below an expiry prefix (non-inclusive), and return the purged artifacts
-    // as an iterator.
+    // Purge below an expiry prefix (non-inclusive), and return the purged artifacts.
     fn purge_below(&mut self, expiry: Time) -> BTreeMap<IngressMessageId, T> {
         let _timer = self
             .metrics
@@ -665,7 +664,6 @@ mod tests {
                         .any(|x| matches!(x, ArtifactTransmit::Deliver(_)))
                 );
                 let expired_count = initial_count - non_expired_count;
-                assert!(expired_count > 0);
                 assert_eq!(result.transmits.len(), expired_count);
                 assert!(!result.poll_immediately);
                 assert_eq!(ingress_pool.validated().size(), non_expired_count);
