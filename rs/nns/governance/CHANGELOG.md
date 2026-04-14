@@ -11,6 +11,16 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-04-14: Proposal 141380
+
+http://dashboard.internetcomputer.org/proposal/141380
+
+## Fixed
+
+* When result in `get_node_providers_rewards_cached` is `Err`,
+  release INFLIGHT (i.e. set it to `false`).
+
+
 # 2026-04-11: Proposal 141331
 
 http://dashboard.internetcomputer.org/proposal/141331
