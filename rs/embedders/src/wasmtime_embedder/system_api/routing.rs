@@ -74,6 +74,12 @@ pub(super) fn resolve_destination(
         | Ok(Ic00Method::BitcoinGetSuccessors) => Ok(own_subnet.get()),
         Ok(Ic00Method::SetupInitialDKG) => {
             let args = SetupInitialDKGArgs::decode(payload)?;
+            // This message should be routed to the NNS subnet by default. We assume that
+            // this message can only be sent by canisters on the NNS subnet hence
+            // defaulting to `own_subnet` here is fine.
+            //
+            // It might be cleaner to pipe in the actual NNS subnet id to this
+            // function and return that instead.
             Ok(args.get_subnet_id().unwrap_or(own_subnet).get())
         }
         Ok(Ic00Method::UpdateSettings) => {
@@ -587,12 +593,8 @@ mod tests {
     }
 
     fn setup_initial_dkg_request(subnet_id: Option<SubnetId>) -> Vec<u8> {
-        let args = SetupInitialDKGArgs::new(vec![node_test_id(0)], RegistryVersion::from(100));
-        let args = if let Some(subnet_id) = subnet_id {
-            args.with_subnet_id(subnet_id)
-        } else {
-            args
-        };
+        let args =
+            SetupInitialDKGArgs::new(vec![node_test_id(0)], RegistryVersion::from(100), subnet_id);
         Encode!(&args).unwrap()
     }
 

@@ -2621,18 +2621,15 @@ pub struct SetupInitialDKGArgs {
 impl Payload<'_> for SetupInitialDKGArgs {}
 
 impl SetupInitialDKGArgs {
-    pub fn new(node_ids: Vec<NodeId>, registry_version: RegistryVersion) -> Self {
+    pub fn new(
+        node_ids: Vec<NodeId>,
+        registry_version: RegistryVersion,
+        subnet_id: Option<SubnetId>,
+    ) -> Self {
         Self {
             node_ids: node_ids.iter().map(|node_id| node_id.get()).collect(),
             registry_version: registry_version.get(),
-            subnet_id: None,
-        }
-    }
-
-    pub fn with_subnet_id(self, subnet_id: SubnetId) -> Self {
-        Self {
-            subnet_id: Some(subnet_id),
-            ..self
+            subnet_id,
         }
     }
 

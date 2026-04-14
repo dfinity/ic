@@ -98,6 +98,7 @@ impl Registry {
             let request = SetupInitialDKGArgs::new(
                 dkg_nodes.clone(),
                 RegistryVersion::new(pre_call_registry_version),
+                None, // Initial DKG request is answered by the NNS subnet
             );
 
             let initial_chain_key_config =

@@ -515,10 +515,11 @@ mod tests {
     #[test]
     fn cli_to_payload_conversion_includes_initial_dkg_subnet_id() {
         let initial_dkg_subnet_id = PrincipalId::from_str("gxevo-lhkam-aaaaa-aaaap-yai").unwrap();
-        let cmd = ProposeToCreateSubnetCmd {
+        let mut cmd = ProposeToCreateSubnetCmd {
             initial_dkg_subnet_id: Some(initial_dkg_subnet_id),
             ..empty_propose_to_create_subnet_cmd()
         };
+        cmd.apply_defaults_for_unset_fields();
         assert_eq!(
             cmd.new_payload().initial_dkg_subnet_id,
             Some(initial_dkg_subnet_id.into())

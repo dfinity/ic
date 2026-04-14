@@ -60,12 +60,8 @@ impl Registry {
         let request = SetupInitialDKGArgs::new(
             payload.node_ids.clone(),
             RegistryVersion::new(self.latest_version()),
+            payload.initial_dkg_subnet_id,
         );
-        let request = if let Some(initial_dkg_subnet_id) = payload.initial_dkg_subnet_id {
-            request.with_subnet_id(initial_dkg_subnet_id)
-        } else {
-            request
-        };
 
         // 2a. Invoke NI-DKG on ic_00
         let response_bytes = call(

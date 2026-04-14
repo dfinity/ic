@@ -48,7 +48,7 @@ use std::time::Duration;
 const NNS_PRE_MASTER: usize = 4;
 const APP_PRE_MASTER: usize = 4;
 const DKG_INTERVAL_LENGTH: u64 = 29;
-const APP_SUBNETS: usize = 5;
+const APP_SUBNETS: usize = 6;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -122,11 +122,12 @@ pub fn test(env: TestEnv) {
 
         // Submit and adopt the configured number of create subnet proposals
         let mut proposal_ids = vec![];
-        for _ in 0..APP_SUBNETS {
+        for proposal_idx in 0..APP_SUBNETS {
             let nodes = unassigned_nodes.by_ref().take(APP_PRE_MASTER).collect();
+            let initial_dkg_subnet_id = (proposal_idx % 2 == 0).then_some(initial_dkg_subnet_id);
             info!(
                 log,
-                "Submitting proposal to create subnet with nodes: {nodes:?}"
+                "Submitting proposal to create subnet with nodes: {nodes:?}, initial_dkg_subnet_id: {initial_dkg_subnet_id:?}"
             );
             let proposal_id = submit_create_application_subnet_proposal_with_initial_dkg_subnet(
                 &governance,
@@ -134,7 +135,7 @@ pub fn test(env: TestEnv) {
                 version.clone(),
                 Some(CanisterCyclesCostSchedule::Normal),
                 Some(0),
-                Some(initial_dkg_subnet_id),
+                initial_dkg_subnet_id,
             )
             .await;
             info!(log, "Voting on proposal {proposal_id}");
