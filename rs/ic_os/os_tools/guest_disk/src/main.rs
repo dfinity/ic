@@ -14,6 +14,8 @@ use std::ffi::{CStr, c_char, c_int, c_void};
 use std::path::{Path, PathBuf};
 use tracing::warn;
 
+const METRICS_DIR: &str = "/run/node_exporter/collector_textfile";
+
 #[derive(clap::Parser)]
 pub enum Args {
     /// Opens an encrypted partition and activates it under /dev/mapper/.
@@ -28,6 +30,14 @@ pub enum Args {
         partition: Partition,
         device_path: PathBuf,
     },
+}
+
+impl Args {
+    fn partition(&self) -> Partition {
+        match self {
+            Args::CryptOpen { partition, .. } | Args::CryptFormat { partition, .. } => *partition,
+        }
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -55,6 +65,7 @@ fn main() -> Result<()> {
         },
         Path::new(DEFAULT_PREVIOUS_SEV_KEY_PATH),
         Path::new(DEFAULT_GENERATED_KEY_PATH),
+        Path::new(METRICS_DIR),
     )
 }
 
@@ -67,18 +78,22 @@ fn run(
     sev_firmware_factory: impl Fn() -> Result<Box<dyn SevGuestFirmware>>,
     previous_key_path: &Path,
     generated_key_path: &Path,
+    metrics_dir: &Path,
 ) -> Result<()> {
     libcryptsetup_rs::set_log_callback::<()>(Some(cryptsetup_log), None);
 
+    let metrics_file = metrics_file_path(metrics_dir, args.partition());
     let mut encryption: Box<dyn DiskEncryption> = if is_sev_active {
         Box::new(SevDiskEncryption {
             sev_firmware: sev_firmware_factory().context("Failed to open SEV firmware")?,
             guest_vm_type: guestos_config.guest_vm_type,
             previous_key_path,
+            metrics_file: &metrics_file,
         })
     } else {
         Box::new(GeneratedKeyDiskEncryption {
             key_path: generated_key_path,
+            metrics_file: &metrics_file,
         })
     };
 
@@ -96,6 +111,15 @@ fn run(
             .format(&device_path, partition)
             .with_context(|| format!("Failed to format device for partition {partition:?}")),
     }
+}
+
+fn metrics_file_path(metrics_dir: &Path, partition: Partition) -> PathBuf {
+    let partition = match partition {
+        Partition::Var => "var",
+        Partition::Store => "store",
+    };
+
+    metrics_dir.join(format!("guest_disk_encryption_{partition}.prom"))
 }
 
 unsafe extern "C" fn cryptsetup_log(_level: c_int, msg: *const c_char, _usrptr: *mut c_void) {
