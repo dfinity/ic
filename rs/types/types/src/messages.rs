@@ -31,7 +31,8 @@ use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
 use ic_types_cycles::Cycles;
 pub use ingress_messages::{
-    Ingress, ParseIngressError, SignedIngress, SignedIngressContent, extract_effective_canister_id,
+    Ingress, ParseIngressError, SenderInfo, SignedIngress, SignedIngressContent,
+    extract_effective_canister_id,
 };
 pub use inter_canister::{
     CallContextId, CallbackId, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE, Payload, Refund,
@@ -409,6 +410,14 @@ impl CanisterCall {
         match self {
             CanisterCall::Request(request) => Arc::make_mut(request).payment.take(),
             CanisterCall::Ingress(_) => Cycles::zero(),
+        }
+    }
+
+    /// Returns the sender info of the message if it is an ingress message with a sender info.
+    pub fn sender_info(&self) -> Option<&SenderInfo> {
+        match self {
+            CanisterCall::Request(_) => None,
+            CanisterCall::Ingress(msg) => msg.sender_info.as_ref(),
         }
     }
 

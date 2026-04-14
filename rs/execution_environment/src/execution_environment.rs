@@ -83,6 +83,7 @@ use ic_types_cycles::{
 };
 use ic_utils_thread::deallocator_thread::{DeallocationSender, DeallocatorThread};
 use ic_wasm_types::WasmHash;
+use num_traits::SaturatingAdd;
 use phantom_newtype::AmountOf;
 use prometheus::IntCounter;
 use rand::RngCore;
@@ -820,15 +821,15 @@ impl ExecutionEnvironment {
                 Ok(args) => {
                     let subnet_admins = state.get_own_subnet_admins();
                     let time = state.time();
-                    let result = self.canister_manager.uninstall_code(
+                    self.uninstall_code(
                         msg.canister_change_origin(args.get_sender_canister_version()),
                         args.get_canister_id(),
                         &mut state,
+                        &mut msg,
                         round_limits,
                         subnet_admins,
                         time,
-                    );
-                    self.process_canister_manager_result(result, &mut state, &mut msg)
+                    )
                 }
             },
 
@@ -1884,6 +1885,14 @@ impl ExecutionEnvironment {
         match result {
             Ok(response) => {
                 state.metadata.heap_delta_estimate += response.heap_delta_increase;
+                if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
+                    && let Some(canister) = state.canister_state_make_mut(&response.canister_id)
+                {
+                    canister.scheduler_state.heap_delta_debit = canister
+                        .scheduler_state
+                        .heap_delta_debit
+                        .saturating_add(&response.heap_delta_increase);
+                }
                 if let Some(unflushed_checkpoint_op) = response.unflushed_checkpoint_op {
                     state
                         .metadata
@@ -2334,6 +2343,37 @@ impl ExecutionEnvironment {
         self.process_canister_manager_result(result, state, msg)
     }
 
+    fn uninstall_code(
+        &self,
+        origin: CanisterChangeOrigin,
+        canister_id: CanisterId,
+        state: &mut ReplicatedState,
+        msg: &mut CanisterCall,
+        round_limits: &mut RoundLimits,
+        subnet_admins: Option<BTreeSet<PrincipalId>>,
+        time: Time,
+    ) -> ExecuteSubnetMessageResult {
+        let canister = match canister_make_mut(canister_id, state) {
+            Ok(canister) => canister,
+            Err(err) => {
+                return ExecuteSubnetMessageResult::Finished {
+                    response: Err(err),
+                    refund: msg.take_cycles(),
+                };
+            }
+        };
+
+        let result = self.canister_manager.uninstall_code(
+            origin,
+            canister,
+            round_limits,
+            subnet_admins,
+            time,
+        );
+
+        self.process_canister_manager_result(result, state, msg)
+    }
+
     fn start_canister(
         &self,
         canister_id: CanisterId,
@@ -2467,9 +2507,19 @@ impl ExecutionEnvironment {
                 effective_canister_id: canister_id,
                 time: state.time(),
             });
-        let result =
-            self.canister_manager
-                .stop_canister(canister_id, msg, call_id, state, subnet_admins);
+        let canister = match canister_make_mut(canister_id, state) {
+            Ok(canister) => canister,
+            Err(err) => {
+                self.remove_stop_canister_call(state, canister_id, Some(call_id));
+                return ExecuteSubnetMessageResult::Finished {
+                    response: Err(err),
+                    refund: msg.take_cycles(),
+                };
+            }
+        };
+        let result = self
+            .canister_manager
+            .stop_canister(msg, call_id, canister, subnet_admins);
         if result.is_err() {
             self.remove_stop_canister_call(state, canister_id, Some(call_id));
         }
@@ -3609,15 +3659,15 @@ impl ExecutionEnvironment {
             ));
         }
 
-        let mut pseudo_random_id = [0_u8; 32];
-        rng.fill_bytes(&mut pseudo_random_id);
+        let mut deprecated_pseudo_random_id = [0_u8; 32];
+        rng.fill_bytes(&mut deprecated_pseudo_random_id);
 
         state.metadata.subnet_call_context_manager.push_context(
             SubnetCallContext::SignWithThreshold(SignWithThresholdContext {
                 request,
                 args,
                 derivation_path: Arc::new(derivation_path),
-                pseudo_random_id,
+                deprecated_pseudo_random_id: Some(deprecated_pseudo_random_id),
                 batch_time: state.metadata.batch_time,
                 nonce: None,
             }),

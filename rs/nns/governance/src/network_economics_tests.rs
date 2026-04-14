@@ -91,9 +91,9 @@ fn test_network_economics_with_default_values_is_valid() {
 #[test]
 fn test_neuron_minimum_dissolve_delay_to_vote_seconds_bounds() {
     // Define constants for better readability and maintainability
-    const LOWER_BOUND_SECONDS: u64 = 3 * ONE_MONTH_SECONDS;
+    const LOWER_BOUND_SECONDS: u64 = 14 * ONE_DAY_SECONDS;
     const UPPER_BOUND_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
-    const DEFAULT_SECONDS: u64 = LOWER_BOUND_SECONDS; // Assuming default is the minimum
+    const DEFAULT_SECONDS: u64 = UPPER_BOUND_SECONDS;
 
     // Test cases: (delay in seconds, expected result)
     let test_cases = [
@@ -106,14 +106,14 @@ fn test_neuron_minimum_dissolve_delay_to_vote_seconds_bounds() {
         (
             Some(LOWER_BOUND_SECONDS - 1),
             Err(vec![format!(
-                "neuron_minimum_dissolve_delay_to_vote_seconds (Some({})) must be between three and six months.",
+                "neuron_minimum_dissolve_delay_to_vote_seconds (Some({})) must be between two weeks and six months.",
                 LOWER_BOUND_SECONDS - 1
             )]),
         ),
         (
             Some(UPPER_BOUND_SECONDS + 1),
             Err(vec![format!(
-                "neuron_minimum_dissolve_delay_to_vote_seconds (Some({})) must be between three and six months.",
+                "neuron_minimum_dissolve_delay_to_vote_seconds (Some({})) must be between two weeks and six months.",
                 UPPER_BOUND_SECONDS + 1
             )]),
         ),

@@ -468,6 +468,7 @@ pub fn get_system_api_type_for_wasm_method(wasm_method: WasmMethod) -> ApiType {
             Cycles::zero(),
             user_test_id(1).get(),
             CallContextId::from(1),
+            None,
         ),
         WasmMethod::Query(_) => ApiType::non_replicated_query(
             UNIX_EPOCH,
@@ -475,6 +476,7 @@ pub fn get_system_api_type_for_wasm_method(wasm_method: WasmMethod) -> ApiType {
             subnet_test_id(1),
             vec![],
             Some(vec![1]),
+            None,
         ),
         WasmMethod::CompositeQuery(_) => ApiType::composite_query(
             UNIX_EPOCH,
@@ -483,6 +485,7 @@ pub fn get_system_api_type_for_wasm_method(wasm_method: WasmMethod) -> ApiType {
             vec![],
             Some(vec![1]),
             CallContextId::from(1),
+            None,
         ),
         WasmMethod::System(_) => unimplemented!(),
     }
