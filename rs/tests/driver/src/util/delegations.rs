@@ -15,8 +15,8 @@ pub const USER_NUMBER_OFFSET: u64 = 10_000;
 
 pub type AnchorNumber = u64;
 
-type CredentialId = ByteBuf;
-type PublicKey = ByteBuf;
+pub type CredentialId = ByteBuf;
+pub type PublicKey = ByteBuf;
 pub type UserKey = PublicKey;
 // in nanos since epoch
 type Timestamp = u64;
