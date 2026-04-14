@@ -13,7 +13,7 @@ rust_library(
     ],
     deps = [
         # Keep sorted.
-        "//packages/icrc-ledger-types:icrc_ledger_types_no_storable",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "@crate_index//:candid",
     ],
 )
