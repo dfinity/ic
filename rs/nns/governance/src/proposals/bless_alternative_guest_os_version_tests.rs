@@ -14,8 +14,6 @@ fn test_validate_chip_ids_empty() {
 
 #[test]
 fn test_validate_chip_ids_valid() {
-    let _guard = temporarily_enable_bless_alternative_guest_os_version_proposals();
-
     let chip_ids = vec![vec![0_u8; 64], vec![1_u8; 64]];
     let defects = validate_chip_ids(&chip_ids);
     assert!(defects.is_empty(), "{defects:#?}");
