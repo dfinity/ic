@@ -210,9 +210,6 @@ thread_local! {
     static ENABLE_NEURON_FOLLOW_RESTRICTIONS: Cell<bool>
         = const { Cell::new(true) };
 
-    static ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS: Cell<bool>
-        = const { Cell::new(true) };
-
     static ENABLE_CREATE_CANISTER_AND_INSTALL_CODE_PROPOSALS: Cell<bool>
         = const { Cell::new(true) };
 
@@ -286,20 +283,6 @@ pub fn temporarily_enable_neuron_follow_restrictions() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_neuron_follow_restrictions() -> Temporary {
     Temporary::new(&ENABLE_NEURON_FOLLOW_RESTRICTIONS, false)
-}
-
-pub fn are_bless_alternative_guest_os_version_proposals_enabled() -> bool {
-    ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS.get()
-}
-
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_bless_alternative_guest_os_version_proposals() -> Temporary {
-    Temporary::new(&ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS, true)
-}
-
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_bless_alternative_guest_os_version_proposals() -> Temporary {
-    Temporary::new(&ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS, false)
 }
 
 pub fn are_create_canister_and_install_code_proposals_enabled() -> bool {
