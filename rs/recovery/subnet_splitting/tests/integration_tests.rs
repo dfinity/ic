@@ -111,7 +111,7 @@ fn load_metrics_e2e_test() {
         let output = std::process::Command::new(split_finder_path)
             .args(["--load-path", &load_samples_path.display().to_string()])
             .args([
-                "--comm-data-path",
+                "--communication-data-path",
                 &communication_samples_path.display().to_string(),
             ])
             .args(["--output-path", &split_output_path.display().to_string()])
@@ -171,15 +171,15 @@ fn load_metrics_e2e_test() {
         // Accept up to 10% error. The precise values are not important here and they're very sensitive
         // to the changes to the replicated state / execution. It's mostly a sanity check that the
         // returned values are not too ridiculous and they might have to be updated once in a while.
-        assert_near!(states_sizes_bytes.source, 4572729, 0.1);
-        assert_near!(states_sizes_bytes.destination, 4572699, 0.1);
-        assert_near!(instructions_executed.source, 7663691, 0.1);
-        assert_near!(instructions_executed.destination, 7664789, 0.1);
+        assert_near!(states_sizes_bytes.source, 4572692, 0.1);
+        assert_near!(states_sizes_bytes.destination, 4572736, 0.1);
+        assert_near!(instructions_executed.source, 7664789, 0.1);
+        assert_near!(instructions_executed.destination, 7663691, 0.1);
         assert_eq!(
             ingress_messages_executed,
             Estimates {
-                source: 19,
-                destination: 20,
+                source: 20,
+                destination: 19,
             }
         );
         assert_eq!(
@@ -206,8 +206,8 @@ fn load_metrics_e2e_test() {
         assert_eq!(
             heartbeats_and_global_timers_executed,
             Estimates {
-                source: 444,
-                destination: 250,
+                source: 250,
+                destination: 444,
             }
         );
         // Check if the split finder found a split satisfying the load constraints

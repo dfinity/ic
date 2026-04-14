@@ -11,8 +11,8 @@ from solver_core import solve_partition
 
 ################################################################
 # Parameters
-EPSILON_LOAD_DEFAULT = 0.05  # Acceptable primary load deviation
-MAX_CUTS = 20
+DEFAULT_EPSILON_LOAD_DEFAULT = 0.05
+DEFAULT_MAX_CUTS = 20
 LOAD_TYPES = [
     "instructions_executed",
     "ingress_messages_executed",
@@ -36,13 +36,12 @@ def compute_targets(load_c):
 
 
 def run_partition(
-    path: Path, comm_data_path: Path, output_path: Path, load_type: str, epsilon_load: float, max_cuts: int
+    path: Path, communication_data_path: Path, output_path: Path, load_type: str, epsilon_load: float, max_cuts: int
 ):
-    data = load_subnet_data(path, load_type, comm_data_path)
+    data = load_subnet_data(path, load_type, communication_data_path)
     edges = data["edges"]
     load = data["load"]
     index_to_canister_id = data["index_to_canister_id"]
-    N_c = data["N_c"]
 
     total_load_primary, max_load_primary, avg_load_primary, target_0_primary, target_1_primary = compute_targets(load)
 
@@ -71,7 +70,7 @@ def run_partition(
         first_in_range = None
         last_in_range = None
 
-        for k in range(N_c):
+        for k in range(len(assignments)):
             is_to_be_migrated = assignments[k] == 1
 
             if is_to_be_migrated:
@@ -92,7 +91,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Run subnet splitting MILP.")
     parser.add_argument("--load-path", type=Path, help="Path to load data", required=True)
     parser.add_argument(
-        "--comm-data-path", type=Path, help="Path to canister-to-canister communication data", required=True
+        "--communication-data-path", type=Path, help="Path to canister-to-canister communication data", required=True
     )
     parser.add_argument("--output-path", type=Path, help="Path to output data", required=True)
     parser.add_argument(
@@ -103,9 +102,12 @@ def parse_args():
         required=True,
     )
     parser.add_argument(
-        "--epsilon-load", type=float, default=EPSILON_LOAD_DEFAULT, help="Allowed primary load deviation fraction"
+        "--epsilon-load",
+        type=float,
+        default=DEFAULT_EPSILON_LOAD_DEFAULT,
+        help="Allowed primary load deviation fraction",
     )
-    parser.add_argument("--max-cuts", type=int, default=MAX_CUTS, help="Maximum number of routing cuts")
+    parser.add_argument("--max-cuts", type=int, default=DEFAULT_MAX_CUTS, help="Maximum number of routing cuts")
     return parser.parse_args()
 
 
@@ -115,7 +117,7 @@ def main():
     run_partition(
         path=args.load_path,
         output_path=args.output_path,
-        comm_data_path=args.comm_data_path,
+        communication_data_path=args.communication_data_path,
         load_type=args.load_type,
         epsilon_load=args.epsilon_load,
         max_cuts=args.max_cuts,
