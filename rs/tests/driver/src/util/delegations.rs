@@ -60,12 +60,11 @@ pub async fn agent_with_delegation(
     signed_delegation: ic_agent::identity::SignedDelegation,
     delegation_identity: BasicIdentity,
 ) -> Agent {
-    let delegated_identity = DelegatedIdentity::new(
+    let delegated_identity = DelegatedIdentity::new_unchecked(
         ii_derived_public_key,
         Box::new(delegation_identity),
         vec![signed_delegation],
-    )
-    .expect("invalid delegation chain: signed_delegation does not delegate to delegation_identity");
+    );
     agent_with_identity(url, delegated_identity).await.unwrap()
 }
 
