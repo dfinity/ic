@@ -2064,20 +2064,6 @@ fn test_large_delta_log_in_single_execution() {
     assert_eq!(logs.len(), message_count as usize);
 }
 
-fn update_settings_duration_sum(env: &StateMachine) -> f64 {
-    fetch_histogram_vec_stats(
-        env.metrics_registry(),
-        "execution_subnet_message_duration_seconds",
-    )
-    .get(&labels(&[
-        ("method_name", "ic00_update_settings"),
-        ("outcome", "finished"),
-        ("status", "success"),
-        ("speed", "fast"),
-    ]))
-    .map_or(0.0, |s| s.sum)
-}
-
 /*
 TODO: remove debug code
 
@@ -2217,27 +2203,16 @@ fn test_canister_resize_down_preserves_logs() {
     let logs_before =
         fetch_log_records_intercanister(&env, universal_canister, canister_id, cycles);
 
-    // Snapshot metrics BEFORE the resize.
-    let sum_before = update_settings_duration_sum(&env);
-
     // Resize log memory store.
     let balance_before = env.cycle_balance(canister_id);
-    //let start = std::time::Instant::now();
     let _ = env.update_settings(
         &canister_id,
         CanisterSettingsArgsBuilder::new()
             .with_log_memory_limit(log_memory_limit - 1)
             .build(),
     );
-    //println!("ABC update_settings duration: {:?}", start.elapsed());
     let balance_after = env.cycle_balance(canister_id);
     assert_gt!(balance_before, balance_after);
-    //println!("ABC resize cost: {}", balance_before - balance_after);
-
-    // Snapshot metrics AFTER the resize.
-    let sum_after = update_settings_duration_sum(&env);
-    //let resize_duration_seconds = sum_after - sum_before;
-    //println!("ABC Resize update_settings duration: {resize_duration_seconds:.6}s");
 
     // After resizing.
     let logs_after = fetch_log_records_intercanister(&env, universal_canister, canister_id, cycles);

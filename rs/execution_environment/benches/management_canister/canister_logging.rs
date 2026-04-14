@@ -30,7 +30,7 @@ fn run_bench_resize_canister_log<M: criterion::measurement::Measurement>(
     let log_message = vec![b'a'; LOG_MESSAGE_SIZE];
     let record_size = LogMemoryStore::estimate_record_size(LOG_MESSAGE_SIZE) as u64;
     let records_to_fill = initial_log_memory_limit / record_size + 1;
-    let calls_to_fill = (records_to_fill + RECORDS_PER_CALL as u64 - 1) / RECORDS_PER_CALL as u64;
+    let calls_to_fill = records_to_fill.div_ceil(RECORDS_PER_CALL as u64);
 
     group.bench_function(bench_name, |b| {
         b.iter_batched(
