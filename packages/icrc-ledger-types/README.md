@@ -8,7 +8,6 @@ token standards.
 
 ## Features
 
-With the default feature, or with the `storable` feature explicitly enabled, the library includes
-`impl Storable for Account`, and a dependency on `ic-stable-structures`. To remove this dependency,
-use the `no_storable` feature. This allows users of this library to independently choose the version of
-`ic-stable-structures` to depend on (if any).
+By default, the library does not include `impl Storable for Account` and has no dependency on
+`ic-stable-structures`. Enable the `storable` feature to opt in to both. This allows users of this
+library to independently choose the version of `ic-stable-structures` to depend on (if any).
