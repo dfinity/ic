@@ -17,4 +17,7 @@ on the process that this file is part of, see
 
 ## Fixed
 
+* `do_split_subnet` - don't assume that all the registry entries exist when checking whether the
+  entries changed across await point
+
 ## Security
