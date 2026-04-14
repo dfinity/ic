@@ -2337,6 +2337,12 @@ impl CanisterManager {
                     round_limits,
                     compilation_cost_handling,
                 );
+            debug_assert!(
+                instructions_for_execution <= prepaid_execution_instructions,
+                "instructions_for_execution {:?} exceeds prepaid_execution_instructions {:?}",
+                instructions_for_execution,
+                prepaid_execution_instructions,
+            );
             let instructions_to_refund =
                 prepaid_execution_instructions.saturating_sub(&instructions_for_execution);
             self.cycles_account_manager.refund_unused_execution_cycles(

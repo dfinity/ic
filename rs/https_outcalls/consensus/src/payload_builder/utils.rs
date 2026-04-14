@@ -26,6 +26,7 @@ use std::{
 /// - The signed metadata is the same as the metadata of the response
 /// - The content_hash is the same as the hash of the content
 /// - The content_size is the same as the size of the content
+/// - The is_reject flag matches whether the content is a Reject
 ///
 /// **NOTE**: The signature is not checked
 pub(crate) fn check_response_consistency(
@@ -57,6 +58,15 @@ pub(crate) fn check_response_consistency(
         return Err(InvalidCanisterHttpPayloadReason::ContentSizeMismatch {
             metadata_size: metadata.content_size,
             calculated_size,
+        });
+    }
+
+    // Check the is_reject flag matches the response content type
+    let calculated_is_reject = content.content.is_reject();
+    if calculated_is_reject != metadata.is_reject {
+        return Err(InvalidCanisterHttpPayloadReason::IsRejectMismatch {
+            metadata_is_reject: metadata.is_reject,
+            calculated_is_reject,
         });
     }
 
@@ -106,6 +116,14 @@ pub(crate) fn validate_flexible_response_with_proof(
         return Err(InvalidCanisterHttpPayloadReason::ContentSizeMismatch {
             metadata_size: response_with_proof.proof.content.content_size,
             calculated_size,
+        });
+    }
+
+    let calculated_is_reject = response_with_proof.response.content.is_reject();
+    if calculated_is_reject != response_with_proof.proof.content.is_reject {
+        return Err(InvalidCanisterHttpPayloadReason::IsRejectMismatch {
+            metadata_is_reject: response_with_proof.proof.content.is_reject,
+            calculated_is_reject,
         });
     }
 
