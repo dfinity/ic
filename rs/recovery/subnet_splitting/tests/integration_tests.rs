@@ -128,13 +128,13 @@ fn load_metrics_e2e_test() {
             str::from_utf8(&output.stderr).unwrap(),
         );
         let canister_id_ranges: Vec<CanisterIdRange> = read_to_string(&split_output_path)
-            .expect("The split finder script should have produced a valid output")
+            .expect("The split-finder script should have produced a valid output")
             .lines()
             .map(|line| CanisterIdRange::from_str(line).expect("Not a valid CanisterIdRange"))
             .collect();
         assert!(
             canister_id_ranges.len() <= MAX_CUTS,
-            "The split find script should have produced at most {MAX_CUTS} because we \
+            "The split-finder script should have produced at most {MAX_CUTS} because we \
             passed {MAX_CUTS} as the `--max-cuts` argument"
         );
 
