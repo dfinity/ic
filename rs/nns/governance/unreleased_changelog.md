@@ -21,7 +21,4 @@ on the process that this file is part of, see
 
 ## Fixed
 
-* When result in `get_node_providers_rewards_cached` is `Err`,
-  release INFLIGHT (i.e. set it to `false`).
-
 ## Security
