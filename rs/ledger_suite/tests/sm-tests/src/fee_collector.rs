@@ -309,7 +309,7 @@ fn send_tx_and_verify_fee_collection(
     let tot_supply = total_supply(env, canister_id);
 
     const NUM_FEE_DEDUCTED: u64 = 3;
-    let num_fee_collected = if legacy_fc { 2u64 } else { 3u64 };
+    let num_fee_collected = if legacy_fc { 2_u64 } else { 3_u64 };
     const MINT_AMOUNT: u64 = 1_000_000;
     const BURN_AMOUNT: u64 = 12_000;
 
@@ -426,7 +426,7 @@ pub fn test_fee_collector_107_with_proptest<Tokens>(
 
                 let mut in_memory_ledger = InMemoryLedger::<Account, Tokens>::default();
 
-                let mut total_blocks = 0u64;
+                let mut total_blocks = 0_u64;
                 for tx_index in 0..TX_COUNT {
                     total_blocks += 1;
                     if let Some(fee_collector) = fee_collectors[tx_index] {
