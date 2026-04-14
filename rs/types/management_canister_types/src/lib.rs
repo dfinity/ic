@@ -3586,6 +3586,7 @@ pub struct ListCanistersResponse {
     pub canisters: Vec<CanisterIdRange>,
 }
 
+impl Payload<'_> for ListCanistersResponse {}
 /// Query methods exported by the management canister.
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Display, EnumIter, EnumString)]
 #[strum(serialize_all = "snake_case")]
