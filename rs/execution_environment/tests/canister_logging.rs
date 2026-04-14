@@ -2294,21 +2294,13 @@ fn test_canister_log_resize_rejected_insufficient_cycles() {
     let env = setup_env();
     let controller = PrincipalId::new_anonymous();
 
-    // Create canister with very few cycles — just enough to create and install.
-    let canister_id = env.create_canister_with_cycles(
-        None,
-        Cycles::new(1_000_000_000_000),
-        Some(
-            CanisterSettingsArgsBuilder::new()
-                .with_controllers(vec![controller])
-                .with_log_memory_limit(log_memory_limit)
-                .with_log_visibility(LogVisibilityV2::Public)
-                .build(),
-        ),
-    );
-    env.install_wasm_in_mode(
-        canister_id,
-        CanisterInstallMode::Install,
+    let canister_id = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![controller])
+            .with_log_memory_limit(log_memory_limit)
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
         wat_canister()
             .update(
                 "fill_logs",
@@ -2318,9 +2310,7 @@ fn test_canister_log_resize_rejected_insufficient_cycles() {
                 ),
             )
             .build_wasm(),
-        vec![],
-    )
-    .unwrap();
+    );
 
     // Fill the log memory store.
     let record_size = LogMemoryStore::estimate_record_size(LOG_MESSAGE_LEN);
@@ -2329,18 +2319,19 @@ fn test_canister_log_resize_rejected_insufficient_cycles() {
         let _ = env.execute_ingress(canister_id, "fill_logs", vec![]);
     }
 
-    // Drain cycles to leave very few remaining (less than resize cost).
-    // Resize cost for ~256 KiB at 32 cycles/byte ≈ 8.4M cycles.
-    // The freezing threshold also reserves some cycles, so we need to
-    // account for that. Set a high freezing threshold to consume most cycles.
+    // Now set a very high freezing threshold so that the canister's entire
+    // balance is consumed by the threshold, leaving no liquid cycles.
+    // Increasing the threshold is allowed even when it makes the canister
+    // frozen (by design, to allow controllers to freeze a canister).
     let _ = env.update_settings(
         &canister_id,
         CanisterSettingsArgsBuilder::new()
-            .with_freezing_threshold(u64::MAX)
+            .with_freezing_threshold(10u64.pow(15))
             .build(),
     );
 
-    // Attempt resize — should be rejected due to insufficient cycles.
+    // Attempt resize — should be rejected because the canister cannot afford
+    // the resize cost without dropping below the freezing threshold.
     let result = env.update_settings(
         &canister_id,
         CanisterSettingsArgsBuilder::new()
@@ -2349,6 +2340,7 @@ fn test_canister_log_resize_rejected_insufficient_cycles() {
     );
     assert!(
         result.is_err(),
-        "Expected log resize to be rejected due to insufficient cycles"
+        "Expected log resize to be rejected due to insufficient cycles, balance: {}",
+        env.cycle_balance(canister_id),
     );
 }

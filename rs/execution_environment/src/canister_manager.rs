@@ -20,7 +20,9 @@ use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::wasm_utils::decoding::decode_wasm;
 use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_interfaces::execution_environment::{MessageMemoryUsage, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::{
+    CanisterOutOfCyclesError, MessageMemoryUsage, SubnetAvailableMemory,
+};
 use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use ic_logger::{ReplicaLogger, error, fatal, info};
 use ic_management_canister_types_private::{
@@ -79,6 +81,17 @@ pub(crate) mod types;
 
 /// Maximum binary slice size allowed per single message download.
 const MAX_SLICE_SIZE_BYTES: u64 = 2_000_000;
+
+/// Instructions charged per byte of stored log data during log memory resize.
+///
+/// Log resize is more expensive per byte than snapshot operations (1 instr/byte)
+/// because it involves deserializing records from the old ring buffer,
+/// re-encoding them, and writing into a new one — not a simple memory copy.
+///
+/// TODO(DSM-11): 32 instr/byte is a preliminary estimate based on devenv
+/// benchmarks (~12-13 ns/byte at ~2B instr/sec). Validate on representative
+/// replica hardware and adjust. Consider moving to SchedulerConfig.
+const LOG_RESIZE_COST_PER_BYTE: u64 = 32;
 
 /// Contains validated cycles and memory usage:
 /// - cycles for instructions that can be consumed safely;
@@ -519,28 +532,31 @@ impl CanisterManager {
                     limit: max_limit,
                 });
             }
+        }
+        // Only check resize cost when the user explicitly sets log_memory_limit
+        // (not when the default fallback is used for the max-limit validation above).
+        if settings.log_memory_limit().is_some() {
             // Resizing the log memory store reads all existing log records from
             // the old ring buffer and rewrites them into a new one. The cost is
             // proportional to `bytes_used` (actual stored data), not the allocated
             // capacity, since only live records are migrated during resize.
-            //
-            // At 32 instructions per byte: log resize is more expensive per byte
-            // than snapshot operations (1 instr/byte) because it involves
-            // deserializing records from the old ring buffer, re-encoding them,
-            // and writing into a new one — not a simple memory copy.
-            //
-            // TODO(DSM-11): 32 instr/byte is a preliminary estimate based on
-            // devenv benchmarks (~12-13 ns/byte at ~2B instr/sec). This needs to
-            // be validated on representative replica hardware and adjusted.
-            let cost_per_byte: u128 = 32;
-            let canister_log_resize_cost =
-                Cycles::new(canister_log_bytes_used.get() as u128 * cost_per_byte);
-            if canister_cycles_balance < canister_log_resize_cost {
-                return Err(CanisterManagerError::InsufficientCyclesInMemoryAllocation {
-                    memory_allocation: new_memory_allocation,
-                    available: canister_cycles_balance,
-                    threshold: canister_log_resize_cost,
-                });
+            let log_resize_instructions =
+                NumInstructions::new(canister_log_bytes_used.get() * LOG_RESIZE_COST_PER_BYTE);
+            let log_resize_cycles = self
+                .cycles_account_manager
+                .management_canister_cost(log_resize_instructions, subnet_size, cost_schedule)
+                .real();
+            // Check the canister can afford the resize without freezing.
+            if canister_cycles_balance < threshold + log_resize_cycles {
+                return Err(CanisterManagerError::LogResizeNotEnoughCycles(
+                    CanisterOutOfCyclesError {
+                        canister_id: CanisterId::unchecked_from_principal(PrincipalId::default()),
+                        available: canister_cycles_balance,
+                        threshold,
+                        requested: log_resize_cycles,
+                        reveal_top_up: false,
+                    },
+                ));
             }
         }
 
@@ -665,6 +681,7 @@ impl CanisterManager {
 
         validate_controller(canister, &sender)?;
 
+        let user_set_log_memory_limit = settings.log_memory_limit().is_some();
         let validated_settings = self.validate_canister_settings(
             settings,
             canister.memory_usage(),
@@ -714,6 +731,24 @@ impl CanisterManager {
                 NumBytes::from(0),
                 NumBytes::from(0),
             );
+        }
+
+        // Deduct cycles and account instructions for log resize.
+        // Validation was done in validate_canister_settings; this is the actual deduction.
+        if user_set_log_memory_limit {
+            let bytes_used = canister.system_state.log_memory_store.bytes_used() as u64;
+            let log_resize_instructions =
+                NumInstructions::new(bytes_used * LOG_RESIZE_COST_PER_BYTE);
+            self.cycles_account_manager
+                .consume_cycles_for_management_canister_instructions(
+                    &sender,
+                    canister,
+                    log_resize_instructions,
+                    subnet_size,
+                    cost_schedule,
+                )
+                .map_err(CanisterManagerError::LogResizeNotEnoughCycles)?;
+            round_limits.instructions -= as_round_instructions(log_resize_instructions);
         }
 
         canister.system_state.bump_canister_version();
