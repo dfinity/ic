@@ -446,28 +446,14 @@ impl RoundSchedule {
         // is safe to assume that the subnet schedule only refers to existing canisters.
         subnet_schedule.retain(|canister_id, _| canister_states.contains_key(canister_id));
 
-        // Also charge and remember idle canisters with positive AP. We will be "winding
-        // down" these canisters by treating them as fully executed every round until
-        // their AP is consumed.
-        let mut winding_down_canisters = BTreeSet::new();
-        for (canister_id, canister_priority) in subnet_schedule.iter_mut() {
-            if canister_priority.accumulated_priority > ZERO
-                && !self.scheduled_canisters.contains(canister_id)
-                && !canister_states
-                    .get(canister_id)
-                    .unwrap()
-                    .must_be_in_schedule()
-            {
-                canister_priority.priority_credit += ONE_HUNDRED_PERCENT;
-                winding_down_canisters.insert(*canister_id);
-            }
-        }
-
         // Add all canisters that we (tried to) schedule this round to the subnet
         // schedule; and apply their respective priority credits.
         let mut free_allocation = ZERO;
         for canister_id in &self.scheduled_canisters {
-            let canister = canister_states.get_mut(canister_id).unwrap();
+            let Some(canister) = canister_states.get_mut(canister_id) else {
+                // Canister was deleted.
+                continue;
+            };
 
             // Add the canister to the subnet schedule, if not already there.
             let canister_priority = subnet_schedule.get_mut(*canister_id);
@@ -488,6 +474,20 @@ impl RoundSchedule {
                 .observe_round_scheduled();
         }
 
+        // // Also charge and remember idle canisters with positive AP. We will be "winding
+        // // down" these canisters by treating them as fully executed every round until
+        // // their AP is consumed.
+        // let mut winding_down_canisters = BTreeSet::new();
+        // for (canister_id, canister_priority) in subnet_schedule.iter_mut() {
+        //     if canister_priority.accumulated_priority > ZERO
+        //         && !self.scheduled_canisters.contains(canister_id)
+        //         && !self.rate_limited_canisters.contains(canister_id)
+        //     {
+        //         canister_priority.accumulated_priority -= ONE_HUNDRED_PERCENT;
+        //         winding_down_canisters.insert(*canister_id);
+        //     }
+        // }
+
         self.grant_heap_delta_and_install_code_credits(state, metrics);
 
         // Grant all canisters in the subnet schedule their compute allocation; and
@@ -496,7 +496,19 @@ impl RoundSchedule {
         let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
         for (canister_id, canister_priority) in subnet_schedule.iter_mut() {
             let canister = canister_states.get_mut(canister_id).unwrap();
-            canister_priority.accumulated_priority += from_ca(canister.compute_allocation());
+            // Treat idle canisters with positive AP as fully executed (which is technically
+            // true). The goal is to gradually burn their AP down to zero, so that if they
+            // get new inputs soon, they don't lose all their previous AP.
+            if canister_priority.accumulated_priority > ZERO
+                && !self.scheduled_canisters.contains(canister_id)
+                && !self.rate_limited_canisters.contains(canister_id)
+            {
+                let charge = ONE_HUNDRED_PERCENT - from_ca(canister.compute_allocation());
+                canister_priority.accumulated_priority -=
+                    charge.min(canister_priority.accumulated_priority);
+            } else {
+                canister_priority.accumulated_priority += from_ca(canister.compute_allocation());
+            }
             free_allocation -= canister_priority.accumulated_priority;
         }
 
@@ -522,24 +534,49 @@ impl RoundSchedule {
         let mut accumulated_priority_deviation = 0.0;
         let mut remaining_canisters = sorted_canister_priorities.len() as i64;
         for (canister_id, priority) in sorted_canister_priorities.into_iter() {
-            if winding_down_canisters.contains(&canister_id) {
-                if priority <= ZERO {
-                    // Idle canister that consumed its previously positive AP. Remove from schedule.
-                    subnet_schedule.remove(&canister_id);
-                }
-                // Don't grant free allocation to winding down canisters or they may be stuck in
-                // the schedule indefinitely.
-                remaining_canisters -= 1;
-                continue;
-            }
+            // if winding_down_canisters.contains(&canister_id) {
+            //     if priority <= ZERO {
+            //         // Idle canister that consumed its previously positive AP. Remove from schedule.
+            //         subnet_schedule.remove(&canister_id);
+            //     }
+            //     // Don't grant free allocation to winding down canisters or they may be stuck in
+            //     // the schedule indefinitely.
+            //     remaining_canisters -= 1;
+            //     continue;
+            // }
 
             let canister_free_allocation = free_allocation / remaining_canisters;
+
+            // Cap the free allocation so that the total per-round grant (compute allocation
+            // + free allocation) does not exceed 100%.
+            //
+            // Without this, canisters that are fully executed every round but have low
+            // compute allocation would see their AP drop indefinitely (they get charged
+            // 100% credit but always granted less).
             let canister_state = canister_states.get(&canister_id).unwrap();
-            if priority <= ZERO
+            let ca = from_ca(canister_state.compute_allocation());
+            let canister_free_allocation =
+                std::cmp::min(canister_free_allocation, ONE_HUNDRED_PERCENT - ca);
+
+            // Max out at an arbitrary 5 rounds of accumulated priority.
+            //
+            // Without this, a canister with 100 compute allocation will accumulate 100
+            // priority it can then never spend for every round of aborted DTS execution.
+            const AP_ROUNDS_MAX: i64 = 5;
+            let canister_priority = subnet_schedule.get_mut(canister_id);
+            let canister_free_allocation = std::cmp::min(
+                canister_free_allocation,
+                ONE_HUNDRED_PERCENT * AP_ROUNDS_MAX - canister_priority.accumulated_priority,
+            );
+
+            let next_execution = canister_state.next_execution();
+            if next_execution == NextExecution::None
+                && priority <= ZERO
                 && priority >= -canister_free_allocation
-                && canister_state.next_execution() == NextExecution::None
             {
                 // Canister with no inputs that has just reached zero accumulated priority.
+
+                // Push it up to zero AP.
                 subnet_schedule.get_mut(canister_id).accumulated_priority = ZERO;
                 free_allocation += priority;
 
@@ -548,29 +585,9 @@ impl RoundSchedule {
                 if !canister_state.must_be_in_schedule() {
                     subnet_schedule.remove(&canister_id);
                 }
-            } else {
+            } else if next_execution != NextExecution::None || priority < ZERO {
                 // Canister with inputs or with negative AP. Bump its AP and keep it in the
                 // schedule.
-                let canister_priority = subnet_schedule.get_mut(canister_id);
-
-                // Cap the free allocation so that the total per-round grant (compute allocation
-                // + free allocation) does not exceed 100%. Without this, canisters that are
-                // fully executed every round but have low compute allocation would see their AP
-                // diverge negatively (they get charged 100% credit but always granted less).
-                let ca = from_ca(canister_state.compute_allocation());
-                let canister_free_allocation =
-                    std::cmp::min(canister_free_allocation, ONE_HUNDRED_PERCENT - ca);
-
-                // Max out at an arbitrary 5 rounds of accumulated priority.
-                //
-                // Without this, a canister with 100 compute allocation will accumulate 100
-                // priority it can then never spend for every round of an aborted DTS execution
-                // (priority credit is increased by 100 per round, but reset on abort).
-                const AP_ROUNDS_MAX: i64 = 5;
-                let canister_free_allocation = std::cmp::min(
-                    canister_free_allocation,
-                    ONE_HUNDRED_PERCENT * AP_ROUNDS_MAX - canister_priority.accumulated_priority,
-                );
 
                 canister_priority.accumulated_priority += canister_free_allocation;
                 free_allocation -= canister_free_allocation;

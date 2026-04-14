@@ -1113,16 +1113,23 @@ impl CanisterArchetype {
 
     fn heap_delta_produced(&self, round: usize) -> NumBytes {
         if let Some(ref rl) = self.rate_limiting {
-            if round % (rl.limited_rounds + rl.unlimited_rounds) == 0 {
+            if round % rl.unlimited_rounds == 0 {
                 return HEAP_DELTA_RATE_LIMIT * rl.limited_rounds as u64;
             }
         }
         NumBytes::new(0)
     }
 
-    fn expected_full_rounds(&self, num_rounds: usize) -> usize {
-        let expected_rounds_from_ca = num_rounds * self.compute_allocation as usize / 100;
+    /// Expected number of full rounds the canister should have executed, out of the
+    /// given number of rounds, given its compute allocation plus free compute.
+    fn expected_full_rounds(&self, num_rounds: usize, free_compute: usize) -> usize {
+        // Total compute available to canister, capped at 100%.
+        let canister_compute = (self.compute_allocation as usize + free_compute).min(100);
+
+        let expected_rounds_from_ca = num_rounds * canister_compute / 100;
         if let Some(ref rl) = self.rate_limiting {
+            // If the canister is rate-limited, it will have only executed in the
+            // unlimited rounds.
             expected_rounds_from_ca * rl.unlimited_rounds
                 / (rl.limited_rounds + rl.unlimited_rounds)
         } else {
@@ -1163,8 +1170,8 @@ impl CanisterSim {
         self.current_cycle_rounds_left > 0 || !self.inputs.is_empty()
     }
 
-    fn produce_heap_delta_debit(&mut self, round: usize) {
-        self.heap_delta_debit += self.archetype.heap_delta_produced(round);
+    fn produce_heap_delta_debit_for_full_round(&mut self) {
+        self.heap_delta_debit += self.archetype.heap_delta_produced(self.full_rounds);
     }
 }
 
@@ -1181,7 +1188,7 @@ prop_compose! {
 
 prop_compose! {
     fn arb_archetype()(
-        compute_allocation in 0..50_u64,
+        raw_compute_allocation in -200..50_i64,
         active_rounds in 1..8_usize,
         inactive_raw in -2..5_i16,
         mut has_long_execution in proptest::bool::ANY,
@@ -1195,7 +1202,7 @@ prop_compose! {
         has_long_execution &= !low_cycles;
 
         CanisterArchetype {
-            compute_allocation,
+            compute_allocation: raw_compute_allocation.max(0) as u64,
             active_rounds,
             inactive_rounds: inactive_raw.max(0) as usize,
             has_long_execution,
@@ -1221,9 +1228,8 @@ fn run_multi_round_simulation(
     scheduler_cores: usize,
     num_rounds: usize,
     archetypes: &[(CanisterArchetype, usize)],
+    debug_canister_idx: Option<usize>,
 ) -> (RoundScheduleFixture, Vec<CanisterSim>) {
-    const CANISTER_IDX: Option<usize> = None;
-
     let mut fixture = RoundScheduleFixture::new();
 
     let mut sims: Vec<CanisterSim> = Vec::new();
@@ -1266,7 +1272,7 @@ fn run_multi_round_simulation(
                     fixture.push_input(canister_id);
                     sim.current_cycle_rounds_left = cycle_rounds;
 
-                    if Some(idx) == CANISTER_IDX {
+                    if Some(idx) == debug_canister_idx {
                         println!(
                             "round {round}, canister {idx}: starting cycle with {cycle_rounds} rounds"
                         );
@@ -1322,7 +1328,6 @@ fn run_multi_round_simulation(
                     } else {
                         // New execution.
                         executed_canisters.insert(*canister_id);
-                        canisters_with_completed_messages.insert(*canister_id);
 
                         // Transition to long execution if the archetype says so.
                         if sim.archetype.has_long_execution && sim.current_cycle_rounds_left > 0 {
@@ -1331,6 +1336,7 @@ fn run_multi_round_simulation(
                             // We've just executed a full slice and consumed the instruction budget.
                             break;
                         }
+                        canisters_with_completed_messages.insert(*canister_id);
 
                         if !sim.is_active() || sim.archetype.consumes_all_inputs {
                             // No more work or canister consumes all inputs every round.
@@ -1357,7 +1363,7 @@ fn run_multi_round_simulation(
         let current_round = ExecutionRound::new(round as u64);
         fixture.finish_round(current_round);
 
-        if CANISTER_IDX.is_some() {
+        if debug_canister_idx.is_some() {
             println!(
                 "round {round}: fully executed canisters: {:?}",
                 fixture
@@ -1376,7 +1382,8 @@ fn run_multi_round_simulation(
                     .iter()
                     .map(|(canister_id, p)| (
                         id_to_sim[canister_id],
-                        p.accumulated_priority.get() / MULTIPLIER
+                        p.accumulated_priority.get() / MULTIPLIER,
+                        -p.priority_credit.get() / MULTIPLIER
                     ))
                     .collect::<Vec<_>>()
             );
@@ -1384,7 +1391,7 @@ fn run_multi_round_simulation(
 
         for canister_id in fixture.fully_executed_canisters().clone() {
             let sim = &mut sims[id_to_sim[&canister_id]];
-            sim.produce_heap_delta_debit(round);
+            sim.produce_heap_delta_debit_for_full_round();
             if sim.heap_delta_debit.get() > 0 && !fixture.has_long_execution(canister_id) {
                 fixture.add_heap_delta_debit(canister_id, sim.heap_delta_debit);
                 sim.heap_delta_debit = NumBytes::new(0);
@@ -1402,6 +1409,7 @@ fn assert_multi_round_invariants(
     fixture: &RoundScheduleFixture,
     sims: &[CanisterSim],
     num_rounds: usize,
+    free_compute_capacity: usize,
 ) -> Result<(), TestCaseError> {
     println!(
         "executed rounds: {:?}",
@@ -1423,19 +1431,21 @@ fn assert_multi_round_invariants(
     // 100% = 500% by finish_round (via the free allocation cap). Negative AP can
     // grow arbitrarily: it simply means the canister got to execute more than its
     // share (because spare compute was available) and will be deprioritized later.
-    let ap_upper_bound = 50 * 100 * MULTIPLIER;
+    const AP_UPPER_BOUND: i64 = 5 * 100 * MULTIPLIER;
+    const AP_LOWER_BOUND: i64 = -50 * 100 * MULTIPLIER;
     for (i, sim) in sims.iter().enumerate() {
         let canister_priority = fixture.state.metadata.subnet_schedule.get(&sim.canister_id);
         assert!(
-            canister_priority.accumulated_priority.get() <= ap_upper_bound,
-            "canister {i}: accumulated_priority {} exceeds upper bound",
+            canister_priority.accumulated_priority.get() <= AP_UPPER_BOUND
+                && canister_priority.accumulated_priority.get() >= AP_LOWER_BOUND,
+            "canister {i}: accumulated_priority {} exceeds bound",
             canister_priority.accumulated_priority.get() / MULTIPLIER,
         );
     }
 
-    // Sanity check: always-active canisters that also keep an input at the end
-    // of each round should never be dropped from the schedule. Their
-    // last_full_execution_round must be positive by the end of the simulation.
+    // Canisters must have either consumed all inputs; or executed proportionally to
+    // their compute allocation and rate limiting.
+    let free_compute_per_canister = free_compute_capacity / sims.len();
     for (i, sim) in sims.iter().enumerate() {
         let canister_id = sim.canister_id;
         let canister_priority = fixture.state.metadata.subnet_schedule.get(&canister_id);
@@ -1443,11 +1453,14 @@ fn assert_multi_round_invariants(
         // If (and only if) the canister has a backlog, check that it got executed as
         // much as its compute allocation and rate limiting allow.
         if sim.inputs.len() > 1 {
-            let executed_rounds = sim.full_rounds as i64;
+            let executed_rounds = sim.full_rounds;
             let credit_rounds = canister_priority.accumulated_priority.get() / MULTIPLIER / 100;
-            let expected_rounds = sim.archetype.expected_full_rounds(num_rounds);
+            let credit_rounds = credit_rounds.max(0) as usize;
+            let expected_rounds = sim
+                .archetype
+                .expected_full_rounds(num_rounds, free_compute_per_canister);
             prop_assert!(
-                executed_rounds + credit_rounds + 1 >= expected_rounds as i64,
+                executed_rounds + credit_rounds + 1 >= expected_rounds,
                 "canister {i}: executed_rounds {executed_rounds} + credit_rounds {credit_rounds} < expected_rounds {expected_rounds}",
             );
         }
@@ -1463,16 +1476,16 @@ fn multi_round_priority_invariants(
     #[strategy(proptest::collection::vec(arb_archetype_with_count(), 2..=5))]
     archetype_configs: Vec<(CanisterArchetype, usize)>,
 ) {
-    let total_compute: u64 = archetype_configs
+    let total_compute: usize = archetype_configs
         .iter()
-        .map(|(a, c)| a.compute_allocation * *c as u64)
+        .map(|(a, c)| a.compute_allocation as usize * *c)
         .sum();
-    let capacity = ((scheduler_cores - 1) * 100) as u64;
+    let capacity = (scheduler_cores - 1) * 100;
     prop_assume!(total_compute < capacity);
 
     let (fixture, sims) =
-        run_multi_round_simulation(scheduler_cores, num_rounds, &archetype_configs);
-    assert_multi_round_invariants(&fixture, &sims, num_rounds)?;
+        run_multi_round_simulation(scheduler_cores, num_rounds, &archetype_configs, Some(22));
+    assert_multi_round_invariants(&fixture, &sims, num_rounds, capacity - total_compute)?;
 }
 
 #[test_strategy::proptest(ProptestConfig { cases: 20, max_shrink_iters: 0, ..ProptestConfig::default() })]
@@ -1506,7 +1519,7 @@ fn multi_round_all_active_proportional_scheduling(
     let num_rounds = num_canisters * 10;
 
     let (fixture, _sims) =
-        run_multi_round_simulation(scheduler_cores, num_rounds, &archetype_configs);
+        run_multi_round_simulation(scheduler_cores, num_rounds, &archetype_configs, None);
 
     let sum_ap: i64 = fixture
         .state
