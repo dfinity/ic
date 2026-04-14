@@ -1315,8 +1315,8 @@ fn test_list_canisters_non_admin_rejected() {
     assert_eq!(err.code(), ErrorCode::InvalidSubnetAdmin);
 }
 
-// Admin caller receives correct ranges: two consecutive IDs coalesced into one
-// range, a gap, then a third canister as its own range.
+// Admin caller receives correct ranges: 5-7 coalesced, gap, 10 alone, gap,
+// 12-15 coalesced.
 #[test]
 fn test_list_canisters_success() {
     let admin: PrincipalId = user_test_id(1).get();
@@ -1326,9 +1326,9 @@ fn test_list_canisters_success() {
         .build();
     test.set_user_id(user_test_id(1));
 
-    // Insert three canisters: IDs 5 and 6 are consecutive (should coalesce),
-    // then ID 10 after a gap (its own range).
-    for raw_id in [5_u64, 6, 10] {
+    // IDs 5, 6, 7 are consecutive (coalesce into [5,7]), ID 10 is isolated
+    // ([10,10]), and IDs 12, 13, 14, 15 are consecutive (coalesce into [12,15]).
+    for raw_id in [5_u64, 6, 7, 10, 12, 13, 14, 15] {
         test.state_mut().put_canister_state(
             CanisterStateBuilder::new()
                 .with_canister_id(CanisterId::from(raw_id))
@@ -1346,11 +1346,15 @@ fn test_list_canisters_success() {
         vec![
             CanisterIdRange {
                 start: CanisterId::from(5_u64),
-                end: CanisterId::from(6_u64),
+                end: CanisterId::from(7_u64),
             },
             CanisterIdRange {
                 start: CanisterId::from(10_u64),
                 end: CanisterId::from(10_u64),
+            },
+            CanisterIdRange {
+                start: CanisterId::from(12_u64),
+                end: CanisterId::from(15_u64),
             },
         ]
     );
