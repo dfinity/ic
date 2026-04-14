@@ -111,11 +111,11 @@ pub enum InvalidCanisterHttpPayloadReason {
     },
     /// A TooManyRequestErrors entry contains a non-Reject response.
     FlexibleRejectExpectedInErrorResponse(CallbackId),
-    /// A ResponsesTooLarge error does not carry enough metadata shares.
-    FlexibleInsufficientMetadataShareCount {
+    /// A ResponsesTooLarge error does not include enough OK shares to prove impossibility.
+    FlexibleResponsesTooLargeInsufficientEvidence {
         callback_id: CallbackId,
-        share_count: usize,
-        min_needed: usize,
+        ok_count: usize,
+        min_known_ok_needed: usize,
     },
     /// A ResponsesTooLarge error is invalid: the smallest responses actually fit.
     FlexibleResponsesNotTooLarge(CallbackId),

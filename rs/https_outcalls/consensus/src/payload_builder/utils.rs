@@ -450,12 +450,14 @@ pub(crate) fn find_flexible_result(
             .sum();
 
         if smallest_content_sum > MAX_CANISTER_HTTP_PAYLOAD_SIZE {
+            let all_seen_shares: Vec<_> = all_ok_shares_sorted_asc
+                .iter()
+                .map(|(share, _)| (*share).clone())
+                .chain(reject_responses.iter().map(|(_, share)| (*share).clone()))
+                .collect();
             let error = FlexibleCanisterHttpError::ResponsesTooLarge {
                 callback_id,
-                metadata_shares: all_ok_shares_sorted_asc[..min_responses]
-                    .iter()
-                    .map(|(share, _size)| (*share).clone())
-                    .collect(),
+                all_seen_shares,
             };
             let error_size = error.count_bytes();
             return FlexibleFindResult::Error(error, error_size);
