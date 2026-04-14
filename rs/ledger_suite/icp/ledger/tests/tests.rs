@@ -1626,7 +1626,7 @@ fn test_query_archived_blocks() {
                     from: AccountIdentifier::from(user2).to_address(),
                     spender: AccountIdentifier::from(user1).to_address(),
                     allowance: Tokens::from_e8s(100_000_000),
-                    allowance_e8s: 100_000_000i128,
+                    allowance_e8s: 100_000_000_i128,
                     expected_allowance: None,
                     expires_at: None,
                     fee: DEFAULT_TRANSFER_FEE,

@@ -18,8 +18,10 @@ use ic_interfaces::messaging::{
     IngressInductionError, LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_CANISTER_STOPPED,
     LABEL_VALUE_CANISTER_STOPPING,
 };
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_management_canister_types_private::CanisterStatusType;
 use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
@@ -32,7 +34,9 @@ use ic_types::{
     },
     time::CoarseTime,
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, CompoundCycles, CyclesUseCaseKind, DroppedMessages,
+};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use rand::{Rng, SeedableRng};
@@ -42,7 +46,7 @@ use std::sync::Arc;
 use strum_macros::{EnumCount, EnumIter};
 
 #[cfg(debug_assertions)]
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 
 /// Maximum message length of a synthetic reject response produced by message
 /// routing.
@@ -523,6 +527,10 @@ impl ReplicatedState {
             .map(|canister| canister.as_ref())
     }
 
+    pub fn canister_state_arc(&self, canister_id: &CanisterId) -> Option<Arc<CanisterState>> {
+        self.canister_states.get(canister_id).cloned()
+    }
+
     /// Makes a mutable reference to the canister state, cloning it if necessary.
     ///
     /// Make sure to only call this when actually mutating the canister state.
@@ -706,24 +714,18 @@ impl ReplicatedState {
         Arc::clone(self.metadata.network_topology.routing_table())
     }
 
-    /// Returns the cost schedule of this subnet.
-    pub fn get_own_cost_schedule(&self) -> CanisterCyclesCostSchedule {
-        let subnet_id = self.metadata.own_subnet_id;
+    /// Returns the size of this subnet. Defaults to `SMALL_APP_SUBNET_MAX_SIZE` if
+    /// the network topology is not populated.
+    pub fn get_own_subnet_size(&self) -> usize {
         self.metadata
-            .network_topology
-            .subnets()
-            .get(&subnet_id)
-            .map(|x| x.cost_schedule)
-            .unwrap_or_default()
+            .own_subnet_size()
+            .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE)
     }
 
-    /// Returns the cost schedule of the provided subnet, if it exists.
-    pub fn get_cost_schedule(&self, subnet_id: SubnetId) -> Option<CanisterCyclesCostSchedule> {
-        self.metadata
-            .network_topology
-            .subnets()
-            .get(&subnet_id)
-            .map(|x| x.cost_schedule)
+    /// Returns the cost schedule of this subnet. Defaults to `Normal` if the
+    /// network topology is not populated.
+    pub fn get_own_cost_schedule(&self) -> CanisterCyclesCostSchedule {
+        self.metadata.own_cost_schedule().unwrap_or_default()
     }
 
     /// Returns the list of subnet admins of this subnet.
@@ -948,6 +950,10 @@ impl ReplicatedState {
             .sum()
     }
 
+    pub fn resource_limits(&self) -> ResourceLimits {
+        self.metadata.own_resource_limits
+    }
+
     /// Returns the `SubnetId` hosting the given `principal_id` (canister or
     /// subnet).
     pub fn find_subnet_id(&self, principal_id: PrincipalId) -> Result<SubnetId, UserError> {
@@ -980,6 +986,7 @@ impl ReplicatedState {
         subnet_available_guaranteed_response_memory: &mut i64,
     ) -> Result<bool, (StateError, RequestOrResponse)> {
         let own_subnet_type = self.metadata.own_subnet_type;
+        let own_cost_schedule = self.get_own_cost_schedule();
         let sender = msg.sender();
         let input_queue_type = if sender.get_ref() == self.metadata.own_subnet_id.get_ref()
             || self.canister_states.contains_key(&sender)
@@ -1024,9 +1031,12 @@ impl ReplicatedState {
                         // Best-effort responses are silently dropped if the canister is not found.
                         RequestOrResponse::Response(response) if response.is_best_effort() => {
                             if !response.refund.is_zero() {
-                                self.observe_lost_cycles_due_to_dropped_messages(
-                                    NominalCycles::from(response.refund.get()),
-                                );
+                                self.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::<
+                                    DroppedMessages,
+                                >::new(
+                                    response.refund,
+                                    own_cost_schedule,
+                                ));
                             }
                             Ok(false)
                         }
@@ -1059,9 +1069,7 @@ impl ReplicatedState {
     /// otherwise.
     pub fn credit_refund(&mut self, refund: &Refund) -> bool {
         if let Some(canister) = self.canister_state_make_mut(&refund.recipient()) {
-            canister
-                .system_state
-                .add_cycles(refund.amount(), CyclesUseCase::NonConsumed);
+            canister.system_state.add_cycles(refund.amount());
             true
         } else {
             false
@@ -1645,10 +1653,16 @@ impl ReplicatedState {
 
     /// Records the loss of `cycles` due to dropping messages (e.g. late best-effort
     /// responses to deleted canisters).
-    pub fn observe_lost_cycles_due_to_dropped_messages(&mut self, cycles: NominalCycles) {
+    pub fn observe_lost_cycles_due_to_dropped_messages(
+        &mut self,
+        cycles: CompoundCycles<DroppedMessages>,
+    ) {
         self.metadata
             .subnet_metrics
-            .observe_consumed_cycles_with_use_case(CyclesUseCase::DroppedMessages, cycles);
+            .observe_consumed_cycles_with_use_case(
+                DroppedMessages::cycles_use_case(),
+                cycles.nominal(),
+            );
     }
 
     /// Computes the subnet's total cycle balance including cycles attached to

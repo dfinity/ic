@@ -452,8 +452,8 @@ where
         ],
     );
 
-    assert_eq!(10_000_000u64, balance_of(&env, canister_id, p1.0));
-    assert_eq!(5_000_000u64, balance_of(&env, canister_id, p2.0));
+    assert_eq!(10_000_000_u64, balance_of(&env, canister_id, p1.0));
+    assert_eq!(5_000_000_u64, balance_of(&env, canister_id, p2.0));
 }
 
 pub fn test_metadata_icp_ledger<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
@@ -744,14 +744,14 @@ where
     );
 
     assert_eq!(15_000_000, total_supply(&env, canister_id));
-    assert_eq!(10_000_000u64, balance_of(&env, canister_id, p1.0));
-    assert_eq!(5_000_000u64, balance_of(&env, canister_id, p2.0));
+    assert_eq!(10_000_000_u64, balance_of(&env, canister_id, p1.0));
+    assert_eq!(5_000_000_u64, balance_of(&env, canister_id, p2.0));
 
     transfer(&env, canister_id, p1.0, p2.0, 1_000_000).expect("transfer failed");
 
     assert_eq!(15_000_000 - FEE, total_supply(&env, canister_id));
-    assert_eq!(9_000_000u64 - FEE, balance_of(&env, canister_id, p1.0));
-    assert_eq!(6_000_000u64, balance_of(&env, canister_id, p2.0));
+    assert_eq!(9_000_000_u64 - FEE, balance_of(&env, canister_id, p1.0));
+    assert_eq!(6_000_000_u64, balance_of(&env, canister_id, p2.0));
 }
 
 pub fn test_tx_deduplication<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
@@ -845,7 +845,7 @@ where
                 from_subaccount: None,
                 to: p2.0.into(),
                 fee: None,
-                amount: Nat::from(1_000_000u32),
+                amount: Nat::from(1_000_000_u32),
                 created_at_time: Some(now),
                 memo: None,
             }
@@ -898,7 +898,7 @@ where
                 from_subaccount: None,
                 to: p2.0.into(),
                 fee: None,
-                amount: Nat::from(1_000_000u32),
+                amount: Nat::from(1_000_000_u32),
                 created_at_time: Some(now),
                 memo: Some(Memo::default()),
             }
@@ -1023,7 +1023,7 @@ where
     assert_eq!(
         mint_error,
         TransferError::BadFee {
-            expected_fee: Nat::from(0u64)
+            expected_fee: Nat::from(0_u64)
         }
     );
 
@@ -1052,7 +1052,7 @@ where
     assert_eq!(
         burn_error,
         TransferError::BadFee {
-            expected_fee: Nat::from(0u64)
+            expected_fee: Nat::from(0_u64)
         }
     );
 
@@ -1083,7 +1083,7 @@ where
     assert_eq!(
         burn_from_error,
         TransferFromError::BadFee {
-            expected_fee: Nat::from(0u64)
+            expected_fee: Nat::from(0_u64)
         }
     );
 
@@ -1113,7 +1113,7 @@ where
     );
 
     assert_eq!(
-        10_000_000u64,
+        10_000_000_u64,
         balance_of(
             &env,
             canister_id,
@@ -1124,7 +1124,7 @@ where
         )
     );
     assert_eq!(
-        10_000_000u64,
+        10_000_000_u64,
         balance_of(
             &env,
             canister_id,
@@ -1148,7 +1148,7 @@ where
     .expect("transfer failed");
 
     assert_eq!(
-        6_000_000u64,
+        6_000_000_u64,
         balance_of(
             &env,
             canister_id,
@@ -1187,7 +1187,7 @@ where
                 from_subaccount: None,
                 to: p2.0.into(),
                 fee: None,
-                amount: Nat::from(1_000_000u32),
+                amount: Nat::from(1_000_000_u32),
                 created_at_time: Some(now - tx_window - 1),
                 memo: None,
             }
@@ -1208,15 +1208,15 @@ where
                 from_subaccount: None,
                 to: p2.0.into(),
                 fee: None,
-                amount: Nat::from(1_000_000u32),
+                amount: Nat::from(1_000_000_u32),
                 created_at_time: Some(now + Duration::from_secs(5 * 60).as_nanos() as u64),
                 memo: None
             }
         )
     );
 
-    assert_eq!(10_000_000u64, balance_of(&env, canister_id, p1.0));
-    assert_eq!(0u64, balance_of(&env, canister_id, p2.0));
+    assert_eq!(10_000_000_u64, balance_of(&env, canister_id, p1.0));
+    assert_eq!(0_u64, balance_of(&env, canister_id, p2.0));
 }
 
 fn test_controllers<T>(
@@ -1468,7 +1468,7 @@ pub fn test_archiving<T>(
 
     let archive_info = list_archives(&env, canister_id);
     assert_eq!(archive_info.len(), 1);
-    assert_eq!(archive_info[0].block_range_start, 0u8);
+    assert_eq!(archive_info[0].block_range_start, 0_u8);
     assert_eq!(archive_info[0].block_range_end, NUM_BLOCKS_TO_ARCHIVE - 1);
 
     let archive_principal = archive_info[0].canister_id;
@@ -1552,7 +1552,7 @@ pub fn test_archiving<T>(
 
     let archive_info = list_archives(&env, canister_id);
     assert_eq!(archive_info.len(), 1);
-    assert_eq!(archive_info[0].block_range_start, 0u8);
+    assert_eq!(archive_info[0].block_range_start, 0_u8);
     assert_eq!(
         archive_info[0].block_range_end,
         2 * NUM_BLOCKS_TO_ARCHIVE - 1
@@ -1930,7 +1930,7 @@ where
     // We didn't set the max_memo_length in the init params of the ledger
     // so the memo will be accepted only if it's 32 bytes or less.
     for i in 0..=32 {
-        assert!(transfer_with_memo(&vec![0u8; i]).is_ok(), "Memo size: {i}");
+        assert!(transfer_with_memo(&vec![0_u8; i]).is_ok(), "Memo size: {i}");
     }
     expect_memo_length_error(transfer_with_memo, &[0_u8; 33]);
 
@@ -1945,7 +1945,7 @@ where
 
     // Now the ledger should accept memos up to 64 bytes.
     for i in 0..=64 {
-        assert!(transfer_with_memo(&vec![0u8; i]).is_ok(), "Memo size: {i}");
+        assert!(transfer_with_memo(&vec![0_u8; i]).is_ok(), "Memo size: {i}");
     }
     expect_memo_length_error(transfer_with_memo, &[0_u8; 65]);
 
@@ -2543,7 +2543,7 @@ where
     assert_eq!(
         send_approval(&env, canister_id, from.0, &approve_args),
         Err(ApproveError::AllowanceChanged {
-            current_allowance: Nat::from(150_000u32)
+            current_allowance: Nat::from(150_000_u32)
         })
     );
     let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
@@ -2559,7 +2559,7 @@ where
     assert_eq!(
         send_approval(&env, canister_id, from.0, &approve_args),
         Err(ApproveError::AllowanceChanged {
-            current_allowance: Nat::from(150_000u32)
+            current_allowance: Nat::from(150_000_u32)
         })
     );
     let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
@@ -2601,7 +2601,7 @@ where
     assert_eq!(
         send_approval(&env, canister_id, from.0, &approve_args),
         Err(ApproveError::InsufficientFunds {
-            balance: Nat::from(5_000u32)
+            balance: Nat::from(5_000_u32)
         })
     );
     let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
@@ -2926,12 +2926,12 @@ where
 
     assert_eq!(allowances[0].from_account, approver);
     assert_eq!(allowances[0].to_spender, spender);
-    assert_eq!(allowances[0].allowance, Nat::from(1u64));
+    assert_eq!(allowances[0].allowance, Nat::from(1_u64));
     assert_eq!(allowances[0].expires_at, None);
 
     assert_eq!(allowances[1].from_account, approver);
     assert_eq!(allowances[1].to_spender, spender_sub);
-    assert_eq!(allowances[1].allowance, Nat::from(2u64));
+    assert_eq!(allowances[1].allowance, Nat::from(2_u64));
     assert_eq!(allowances[1].expires_at, expiration_far);
 
     args.take = Some(Nat::from(1_u64));
@@ -2954,12 +2954,12 @@ where
 
     assert_eq!(allowances[0].from_account, approver_sub);
     assert_eq!(allowances[0].to_spender, spender);
-    assert_eq!(allowances[0].allowance, Nat::from(3u64));
+    assert_eq!(allowances[0].allowance, Nat::from(3_u64));
     assert_eq!(allowances[0].expires_at, None);
 
     assert_eq!(allowances[1].from_account, approver_sub);
     assert_eq!(allowances[1].to_spender, spender_sub);
-    assert_eq!(allowances[1].allowance, Nat::from(4u64));
+    assert_eq!(allowances[1].allowance, Nat::from(4_u64));
     assert_eq!(allowances[1].expires_at, expiration_near);
 
     env.advance_time(Duration::from_secs(10));
@@ -3350,7 +3350,7 @@ where
     assert_eq!(
         send_transfer_from(&env, canister_id, spender.0, &transfer_from_args),
         Err(TransferFromError::InsufficientFunds {
-            balance: Nat::from(50_000u32)
+            balance: Nat::from(50_000_u32)
         })
     );
     assert_eq!(balance_of(&env, canister_id, from.0), 50_000);
@@ -3362,7 +3362,7 @@ where
     assert_eq!(
         send_transfer_from(&env, canister_id, spender.0, &transfer_from_args),
         Err(TransferFromError::InsufficientAllowance {
-            allowance: Nat::from(10_000u32)
+            allowance: Nat::from(10_000_u32)
         })
     );
     assert_eq!(balance_of(&env, canister_id, from.0), 50_000);
@@ -4383,7 +4383,7 @@ pub fn test_cycles_for_archive_creation_default_spawns_archive<T>(
     T: CandidType,
 {
     let account = Account::from(PrincipalId::new_user_test_id(1).0);
-    let initial_balances = vec![(account, 100_000_000u64)];
+    let initial_balances = vec![(account, 100_000_000_u64)];
 
     let subnet_config = SubnetConfig::new(SubnetType::Application);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
@@ -4456,11 +4456,11 @@ pub mod metadata {
         let env = StateMachine::new();
 
         let forbidden_metadata: Vec<(String, Value)> = vec![
-            (METADATA_DECIMALS.to_string(), 8u64.into()),
+            (METADATA_DECIMALS.to_string(), 8_u64.into()),
             (METADATA_NAME.to_string(), "BogusName".into()),
             (METADATA_SYMBOL.to_string(), "BN".into()),
-            (METADATA_FEE.to_string(), Nat::from(10_000u64).into()),
-            (METADATA_MAX_MEMO_LENGTH.to_string(), 8u64.into()),
+            (METADATA_FEE.to_string(), Nat::from(10_000_u64).into()),
+            (METADATA_MAX_MEMO_LENGTH.to_string(), 8_u64.into()),
         ];
 
         let args = encode_init_args(InitArgs {
@@ -4524,7 +4524,7 @@ pub mod metadata {
         // Verify that specifying any of the forbidden metadata in the init args is not possible.
         for forbidden_metadata in FORBIDDEN_METADATA.iter() {
             let args = encode_init_args(InitArgs {
-                metadata: vec![(forbidden_metadata.to_string(), 8u64.into())],
+                metadata: vec![(forbidden_metadata.to_string(), 8_u64.into())],
                 ..init_args(vec![])
             });
             let args = Encode!(&args).unwrap();
@@ -4550,7 +4550,7 @@ pub mod metadata {
         // Verify that also upgrading does not accept the forbidden metadata
         for forbidden_metadata in FORBIDDEN_METADATA.iter() {
             let ledger_upgrade_arg = LedgerArgument::Upgrade(Some(UpgradeArgs {
-                metadata: Some(vec![(forbidden_metadata.to_string(), 8u64.into())]),
+                metadata: Some(vec![(forbidden_metadata.to_string(), 8_u64.into())]),
                 ..UpgradeArgs::default()
             }));
             match env.upgrade_canister(
@@ -5164,7 +5164,7 @@ pub mod archiving {
             .first()
             .expect("should return one archive info");
         assert!(
-            first_archive_info.archived_range.contains(&0u64),
+            first_archive_info.archived_range.contains(&0_u64),
             "expected archived_range {:?} to contain block number 0",
             first_archive_info.archived_range
         );
@@ -6019,7 +6019,7 @@ pub fn test_icrc3_blocks_compatibility_with_production_ledger<T>(
                         test_ledger_id,
                         "icrc3_get_blocks",
                         Encode!(&vec![GetBlocksRequest {
-                            start: Nat::from(0u64),
+                            start: Nat::from(0_u64),
                             length: Nat::from(production_blocks.len() as u64),
                         }])
                         .unwrap(),

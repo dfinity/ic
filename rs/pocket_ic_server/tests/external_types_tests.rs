@@ -2,9 +2,9 @@ use candid::CandidType;
 use candid::types::subtype::{equal, subtype};
 use candid_parser::utils::{CandidSource, instantiate_candid};
 use flate2::read::GzDecoder;
-use pocket_ic_server::external_canister_types::{
-    BitcoinCanisterArg, DogecoinCanisterArg, InternetIdentityFrontendInit,
-};
+use ic_btc_interface::CanisterArg as BitcoinCanisterArg;
+use ic_doge_interface::CanisterArg as DogecoinCanisterArg;
+use pocket_ic_server::external_canister_types::InternetIdentityFrontendInit;
 use pocket_ic_server::external_canister_types::{
     /*CyclesLedgerArgs, */ InternetIdentityInit, NnsDappCanisterArguments, SnsAggregatorConfig,
 };

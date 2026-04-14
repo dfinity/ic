@@ -85,9 +85,9 @@ thread_local! {
     static LEDGER: RefCell<Option<Ledger>> = const { RefCell::new(None) };
     static PRE_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
     static POST_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
-    static TOTAL_VOLUME: RefCell<f64> = const { RefCell::new(0f64) };
-    static TOTAL_VOLUME_DENOMINATOR: RefCell<f64> = const { RefCell::new(1f64) };
-    static TOTAL_VOLUME_FEE_IN_DECIMALS: RefCell<f64> = const { RefCell::new(0f64) };
+    static TOTAL_VOLUME: RefCell<f64> = const { RefCell::new(0_f64) };
+    static TOTAL_VOLUME_DENOMINATOR: RefCell<f64> = const { RefCell::new(1_f64) };
+    static TOTAL_VOLUME_FEE_IN_DECIMALS: RefCell<f64> = const { RefCell::new(0_f64) };
 }
 
 declare_log_buffer!(name = LOG, capacity = 1000);
@@ -268,7 +268,7 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
 }
 
 fn initialize_total_volume() {
-    let denominator = 10f64.powf(Access::with_ledger(|ledger| ledger.decimals()) as f64);
+    let denominator = 10_f64.powf(Access::with_ledger(|ledger| ledger.decimals()) as f64);
     let fee = Access::with_ledger(|ledger| ledger.transfer_fee());
     TOTAL_VOLUME_DENOMINATOR.with(|n| *n.borrow_mut() = denominator);
     if fee != Tokens::ZERO {

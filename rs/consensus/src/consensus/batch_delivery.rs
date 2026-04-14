@@ -690,7 +690,7 @@ mod tests {
         let payload = ConsensusPayload::new(ic_types::crypto::crypto_hash, block_payload);
 
         let block = Block::new(
-            CryptoHashOf::from(CryptoHash(vec![0u8; 32])),
+            CryptoHashOf::from(CryptoHash(vec![0_u8; 32])),
             payload,
             Height::from(1),
             Rank(0),

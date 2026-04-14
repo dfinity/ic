@@ -115,7 +115,6 @@ system_test_nns(
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
-        "@crate_index//:ssh2",
     ],
 )
 

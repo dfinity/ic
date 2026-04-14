@@ -364,6 +364,7 @@ fn handle_transfer_operation(
                 .into_vec(),
         ),
         ingress_expiry: 0,
+        sender_info: None,
     };
 
     add_payloads(
@@ -415,6 +416,7 @@ fn handle_neuron_info(
         nonce: None,
         sender: Blob(sender.into_vec()), // Sender is controller or hotkey.
         ingress_expiry: 0,
+        sender_info: None,
     };
     add_payloads(
         payloads,
@@ -476,6 +478,7 @@ fn handle_list_neurons(
         nonce: None,
         sender: Blob(sender.into_vec()), // Sender is controller or hotkey.
         ingress_expiry: 0,
+        sender_info: None,
     };
     add_payloads(
         payloads,
@@ -606,6 +609,7 @@ fn handle_stake(
                 .into_vec(),
         ),
         ingress_expiry: 0,
+        sender_info: None,
     };
 
     add_payloads(
@@ -1024,6 +1028,7 @@ fn add_neuron_management_payload(
                 .into_vec(),
         ),
         ingress_expiry: 0,
+        sender_info: None,
     };
 
     add_payloads(

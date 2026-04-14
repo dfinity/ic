@@ -364,6 +364,7 @@ async fn test_request_with_empty_signature_fails<T: Identity + 'static>(
             sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
+            sender_info: None,
         },
     };
     let signature = sign_query(&content, &identity);
@@ -397,6 +398,7 @@ async fn test_request_with_empty_signature_fails<T: Identity + 'static>(
             sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
+            sender_info: None,
         },
     };
     let signature = sign_update(&content, &identity);
@@ -473,6 +475,7 @@ async fn test_request_signed_by_another_identity_fails<
             sender: Blob(identity1.sender().unwrap().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
+            sender_info: None,
         },
     };
     let signature1 = sign_query(&content, &identity1);
@@ -507,6 +510,7 @@ async fn test_request_signed_by_another_identity_fails<
             sender: Blob(identity1.sender().unwrap().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
+            sender_info: None,
         },
     };
     let signature1 = sign_update(&content, &identity1);
@@ -585,6 +589,7 @@ async fn test_request_with_valid_signature_but_wrong_sender_fails<
             sender: Blob(identity1.sender().unwrap().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
+            sender_info: None,
         },
     };
     let signature2 = sign_query(&content, &identity2);
@@ -619,6 +624,7 @@ async fn test_request_with_valid_signature_but_wrong_sender_fails<
             sender: Blob(identity1.sender().unwrap().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
+            sender_info: None,
         },
     };
     let signature2 = sign_update(&content, &identity2);
@@ -693,6 +699,7 @@ async fn test_request_with_empty_domain_separator_fails<T: Identity + 'static>(
             sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
+            sender_info: None,
         },
     };
     let signature = sign_query_with_empty_domain_separator(&content, &identity);
@@ -727,6 +734,7 @@ async fn test_request_with_empty_domain_separator_fails<T: Identity + 'static>(
             sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
+            sender_info: None,
         },
     };
     let signature = sign_update_with_empty_domain_separator(&content, &identity);
@@ -802,6 +810,7 @@ async fn test_request_with_invalid_signature_fails<T: Identity + 'static>(
             sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
+            sender_info: None,
         },
     };
     let signature = sign_query(&content, &identity);
@@ -841,6 +850,7 @@ async fn test_request_with_invalid_signature_fails<T: Identity + 'static>(
             sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
+            sender_info: None,
         },
     };
     let signature = sign_update(&content, &identity);

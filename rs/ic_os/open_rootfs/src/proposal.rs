@@ -48,12 +48,14 @@ pub fn read_and_verify_signed_bless_alternative_guest_os_version_proposal(
     // point, it cannot "un-pass". Therefore, we don't care about the certificate's time.
     // Furthermore, we do not yet have a reliable source of time, and so, we wouldn't be able to
     // securely say, "this happened sufficiently recently".
-    certificate.verify(
-        GOVERNANCE_CANISTER_ID.get().as_slice(),
-        nns_public_key,
-        &0,
-        &u128::MAX,
-    )?;
+    certificate
+        .verify(
+            GOVERNANCE_CANISTER_ID.get().as_slice(),
+            nns_public_key,
+            &0,
+            &u128::MAX,
+        )
+        .context("Failed to verify proposal's signature")?;
 
     let SubtreeLookupResult::Found(request_status) =
         certificate.tree.lookup_subtree(vec![b"request_status"])

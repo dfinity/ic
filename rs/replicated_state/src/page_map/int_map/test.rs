@@ -97,7 +97,7 @@ fn test_max_key_range() {
 }
 
 #[test_strategy::proptest]
-fn test_insert(#[strategy(proptest::collection::vec(0u64..20u64, 10))] keys: Vec<u64>) {
+fn test_insert(#[strategy(proptest::collection::vec(0_u64..20_u64, 10))] keys: Vec<u64>) {
     let mut btree_map = BTreeMap::new();
     let mut int_map = IntMap::new();
     let mut mutable_int_map = MutableIntMap::new();
@@ -142,8 +142,8 @@ fn make_maps(
 
 #[test_strategy::proptest]
 fn test_lookup(
-    #[strategy(proptest::collection::vec(0u64..20u64, 0..10))] keys: Vec<u64>,
-    #[strategy(proptest::collection::vec(0u64..20u64, 10))] lookups: Vec<u64>,
+    #[strategy(proptest::collection::vec(0_u64..20_u64, 0..10))] keys: Vec<u64>,
+    #[strategy(proptest::collection::vec(0_u64..20_u64, 10))] lookups: Vec<u64>,
 ) {
     let (btree_map, int_map, mutable_int_map) = make_maps(keys);
 
@@ -161,8 +161,8 @@ fn test_lookup(
 
 #[test_strategy::proptest]
 fn test_bounds(
-    #[strategy(proptest::collection::vec(0u64..20u64, 0..10))] keys: Vec<u64>,
-    #[strategy(proptest::collection::vec(0u64..20u64, 10))] lookups: Vec<u64>,
+    #[strategy(proptest::collection::vec(0_u64..20_u64, 0..10))] keys: Vec<u64>,
+    #[strategy(proptest::collection::vec(0_u64..20_u64, 10))] lookups: Vec<u64>,
 ) {
     let (btree_map, int_map, mutable_int_map) = make_maps(keys);
 
@@ -202,8 +202,8 @@ fn test_bounds(
 
 #[test_strategy::proptest]
 fn test_remove(
-    #[strategy(proptest::collection::vec(0u64..20u64, 0..10))] inserts: Vec<u64>,
-    #[strategy(proptest::collection::vec(0u64..20u64, 10))] removes: Vec<u64>,
+    #[strategy(proptest::collection::vec(0_u64..20_u64, 0..10))] inserts: Vec<u64>,
+    #[strategy(proptest::collection::vec(0_u64..20_u64, 10))] removes: Vec<u64>,
 ) {
     let (mut btree_map, mut int_map, mut mutable_int_map) = make_maps(inserts);
 
@@ -226,8 +226,8 @@ fn test_remove(
 
 #[test_strategy::proptest]
 fn test_union(
-    #[strategy(proptest::collection::vec(0u64..20u64, 0..10))] first: Vec<u64>,
-    #[strategy(proptest::collection::vec(0u64..20u64, 0..10))] second: Vec<u64>,
+    #[strategy(proptest::collection::vec(0_u64..20_u64, 0..10))] first: Vec<u64>,
+    #[strategy(proptest::collection::vec(0_u64..20_u64, 0..10))] second: Vec<u64>,
 ) {
     let (mut first_btree_map, first_int_map, mut mutable_int_map) = make_maps(first);
     let (mut btree_map, second_int_map, second_mutable_int_map) = make_maps(second);
@@ -247,8 +247,8 @@ fn test_union(
 
 #[test_strategy::proptest]
 fn test_split_off(
-    #[strategy(proptest::collection::vec(0u64..20u64, 0..10))] keys: Vec<u64>,
-    #[strategy(0u64..20u64)] split_key: u64,
+    #[strategy(proptest::collection::vec(0_u64..20_u64, 0..10))] keys: Vec<u64>,
+    #[strategy(0_u64..20_u64)] split_key: u64,
 ) {
     let (mut btree_map, _, mut mutable_int_map) = make_maps(keys);
 
@@ -265,7 +265,7 @@ fn test_split_off(
 }
 
 #[test_strategy::proptest]
-fn test_len(#[strategy(proptest::collection::vec(0u64..20u64, 0..10))] keys: Vec<u64>) {
+fn test_len(#[strategy(proptest::collection::vec(0_u64..20_u64, 0..10))] keys: Vec<u64>) {
     let (btree_map, int_map, mutable_int_map) = make_maps(keys);
 
     prop_assert_eq!(btree_map.len(), int_map.len());
@@ -276,7 +276,7 @@ fn test_len(#[strategy(proptest::collection::vec(0u64..20u64, 0..10))] keys: Vec
 }
 
 #[test_strategy::proptest]
-fn test_iterators(#[strategy(proptest::collection::vec(0u64..20u64, 0..10))] keys: Vec<u64>) {
+fn test_iterators(#[strategy(proptest::collection::vec(0_u64..20_u64, 0..10))] keys: Vec<u64>) {
     let (btree_map, int_map, mutable_int_map) = make_maps(keys);
 
     prop_assert!(btree_map.iter().eq(int_map.iter()));
@@ -291,7 +291,7 @@ fn test_iterators(#[strategy(proptest::collection::vec(0u64..20u64, 0..10))] key
 }
 
 #[test_strategy::proptest]
-fn test_from_iter(#[strategy(proptest::collection::vec(0u64..20u64, 0..10))] keys: Vec<u64>) {
+fn test_from_iter(#[strategy(proptest::collection::vec(0_u64..20_u64, 0..10))] keys: Vec<u64>) {
     let (btree_map, _, mutable_int_map) = make_maps(keys);
 
     let int_map = btree_map.clone().into_iter().collect::<IntMap<_, _>>();
@@ -306,7 +306,7 @@ fn test_from_iter(#[strategy(proptest::collection::vec(0u64..20u64, 0..10))] key
 }
 
 #[test_strategy::proptest]
-fn test_eq(#[strategy(proptest::collection::vec(0u64..20u64, 0..10))] keys: Vec<u64>) {
+fn test_eq(#[strategy(proptest::collection::vec(0_u64..20_u64, 0..10))] keys: Vec<u64>) {
     use ic_validate_eq::ValidateEq;
     use std::fmt::Debug;
 

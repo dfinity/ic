@@ -309,9 +309,9 @@ fn test_burn_and_mint_fee() {
             .burn(*TEST_ACCOUNT, Tokens::from(50_u64))
             .build();
         let result0 = add_block(&agent, &block0).await.unwrap();
-        assert_eq!(result0, Nat::from(0u64));
+        assert_eq!(result0, Nat::from(0_u64));
         let result1 = add_block(&agent, &block1).await.unwrap();
-        assert_eq!(result1, Nat::from(1u64));
+        assert_eq!(result1, Nat::from(1_u64));
 
         blocks_synchronizer::start_synching_blocks(
             agent.clone(),
@@ -331,7 +331,7 @@ fn test_burn_and_mint_fee() {
                 .await
                 .unwrap()
                 .unwrap(),
-            Nat::from(850u64) // mint 1000 - mint fee 50 - burn 50 - burn fee 50
+            Nat::from(850_u64) // mint 1000 - mint fee 50 - burn 50 - burn fee 50
         );
         assert!(
             storage_client
@@ -355,9 +355,9 @@ fn test_burn_and_mint_fee() {
             .burn(*TEST_ACCOUNT, Tokens::from(50_u64))
             .build();
         let result2 = add_block(&agent, &block2).await.unwrap();
-        assert_eq!(result2, Nat::from(2u64));
+        assert_eq!(result2, Nat::from(2_u64));
         let result3 = add_block(&agent, &block3).await.unwrap();
-        assert_eq!(result3, Nat::from(3u64));
+        assert_eq!(result3, Nat::from(3_u64));
 
         blocks_synchronizer::start_synching_blocks(
             agent.clone(),
@@ -377,7 +377,7 @@ fn test_burn_and_mint_fee() {
                 .await
                 .unwrap()
                 .unwrap(),
-            Nat::from(800u64) // 850 + mint 100 - mint fee 50 - burn 50 - burn fee 50
+            Nat::from(800_u64) // 850 + mint 100 - mint fee 50 - burn 50 - burn fee 50
         );
         assert_eq!(
             storage_client
@@ -385,7 +385,7 @@ fn test_burn_and_mint_fee() {
                 .await
                 .unwrap()
                 .unwrap(),
-            Nat::from(100u64) // mint fee 50 + burn fee 50
+            Nat::from(100_u64) // mint fee 50 + burn fee 50
         );
     });
 }

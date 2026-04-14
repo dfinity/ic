@@ -28,6 +28,7 @@ ic-management-canister-types-private = { path = "../../../../types/management_ca
 ic-metrics-encoder = "1"
 ic-nervous-system-clients = { path = "../../../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../../../nervous_system/common" }
+ic-nervous-system-string = { path = "../../../../nervous_system/string" }
 ic-nervous-system-common-build-metadata = { path = "../../../../nervous_system/common/build_metadata" }
 ic-nervous-system-proxied-canister-calls-tracker = { path = "../../../../nervous_system/proxied_canister_calls_tracker" }
 ic-nervous-system-root = { path = "../../../../nervous_system/root" }

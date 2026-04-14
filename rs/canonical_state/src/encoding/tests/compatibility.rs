@@ -27,7 +27,7 @@ use ic_types::{
     time::CoarseTime,
     xnet::{RejectReason, RejectSignal, StreamFlags, StreamIndex},
 };
-use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting};
 use serde_cbor::value::Value;
 use std::collections::{BTreeMap, VecDeque};
 
@@ -212,19 +212,19 @@ fn canonical_encoding_stream_header() {
 fn canonical_encoding_subnet_metrics() {
     for certification_version in all_supported_versions() {
         let mut metrics = SubnetMetrics::default();
-        metrics.observe_consumed_cycles_by_deleted_canisters(NominalCycles::from(0));
-        metrics.observe_consumed_cycles_http_outcalls(NominalCycles::from(50_000_000_000));
-        metrics.observe_consumed_cycles_ecdsa_outcalls(NominalCycles::from(100_000_000_000));
+        metrics.observe_consumed_cycles_by_deleted_canisters(NominalCycles::zero());
+        metrics.observe_consumed_cycles_http_outcalls(NominalCycles::new(50_000_000_000));
+        metrics.observe_consumed_cycles_ecdsa_outcalls(NominalCycles::new(100_000_000_000));
         metrics.num_canisters = 5;
         metrics.canister_state_bytes = NumBytes::from(5 * 1024 * 1024);
         metrics.update_transactions_total = 4200;
         metrics.observe_consumed_cycles_with_use_case(
             CyclesUseCase::Instructions,
-            NominalCycles::from(80_000_000_000),
+            NominalCycles::new(80_000_000_000),
         );
         metrics.observe_consumed_cycles_with_use_case(
             CyclesUseCase::RequestAndResponseTransmission,
-            NominalCycles::from(20_000_000_000),
+            NominalCycles::new(20_000_000_000),
         );
         let schnorr_key_id = MasterPublicKeyId::Schnorr(SchnorrKeyId {
             algorithm: SchnorrAlgorithm::Bip340Secp256k1,

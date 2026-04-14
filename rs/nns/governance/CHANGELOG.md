@@ -11,6 +11,47 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-04-06: Proposal 141242
+
+http://dashboard.internetcomputer.org/proposal/141242
+
+## Added
+
+- Proposal type `DeleteSubnet`, currently limited to CloudEngine subnets.
+- Tag neurons that have the maximum dissolve delay of 8 years with their bonus base
+  (`eight_year_gang_bonus_base_e8s`), in preparation for the dissolve delay bonus
+  grandfathering when the maximum dissolve delay is reduced to 2 years.
+- Expose data that will be used to determine the bonus that "8 year gang" neurons
+  will receive, starting in the near future. This data consists of the staked amount
+  in neurons with 8 year dissolve delay at the beginning of Mission 70. This will be
+  used in the near future to determine voting power (and consequently, voting rewards),
+  once other aspects of voting power/rewards are in production.
+
+
+# 2026-03-27: Proposal 141090
+
+http://dashboard.internetcomputer.org/proposal/141090
+
+## Added
+
+- Support for `snapshot_visibility` in `UpdateCanisterSettings` proposals.
+- Tag neurons that have the maximum dissolve delay of 8 years with their bonus base
+  (`eight_year_gang_bonus_base_e8s`), in preparation for the dissolve delay bonus
+  grandfathering when the maximum dissolve delay is reduced to 2 years.
+
+
+# 2026-03-20: Proposal 140958
+
+http://dashboard.internetcomputer.org/proposal/140958
+
+## Changed
+
+- `CreateServiceNervousSystem` proposals no longer reject SNS configurations
+  where the sum of developer-allocated tokens exceeds
+  `swap_distribution.total_e8s`. With the Neurons' Fund discontinued, this
+  validation is no longer needed.
+
+
 # 2026-03-13: Proposal 140859
 
 http://dashboard.internetcomputer.org/proposal/140859

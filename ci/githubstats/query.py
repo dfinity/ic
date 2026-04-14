@@ -1041,6 +1041,7 @@ def top(args):
         time_filter=get_time_filter(args),
         only_prs=sql.Literal(args.prs),
         branch=sql.Literal(args.branch if args.branch else ""),
+        exclude_prs=sql.SQL("{}::int[]").format(sql.Literal(args.exclude_pr)),
         order_by=order_by,
         N=sql.Literal(args.N),
         condition=sql.Literal(True)
@@ -1116,6 +1117,7 @@ def last(args):
         time_filter=get_time_filter(args),
         only_prs=sql.Literal(args.prs),
         branch=sql.Literal(args.branch if args.branch else ""),
+        exclude_prs=sql.SQL("{}::int[]").format(sql.Literal(args.exclude_pr)),
     )
 
     log_psql_query(args.verbose, query.as_string(), args.conninfo)
@@ -1237,6 +1239,14 @@ Mutually exclusive with --day/--week/--month""",
 
     filter_parser.add_argument("--prs", action="store_true", help="Only show test runs on Pull Requests")
     filter_parser.add_argument("--branch", metavar="B", type=str, help="Filter by branch SQL LIKE pattern")
+    filter_parser.add_argument(
+        "--exclude-pr",
+        metavar="PR_NUMBER",
+        type=int,
+        action="append",
+        default=[],
+        help="Exclude workflow runs on this PR number (can be repeated)",
+    )
 
     subparsers = parser.add_subparsers(required=True)
 

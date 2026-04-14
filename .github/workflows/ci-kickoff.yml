@@ -10,6 +10,13 @@ on:
   pull_request:
     branches-ignore:
       - hotfix-* # This is to ensure that this workflow is not triggered twice on ic-private, as it's already triggered from release-testing
+  workflow_dispatch:
+    inputs:
+      release-build:
+        description: Whether this CI run is for a release build, which may require additional steps such as uploading artifacts.
+        required: false
+        default: ''
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
@@ -27,7 +34,9 @@ jobs:
     secrets: inherit
     with:
       commit-sha: ${{ github.sha }}
+      release-build: ${{ inputs.release-build }}
     permissions:
+      actions: write
       contents: read
       id-token: write
       pull-requests: read
@@ -60,7 +69,7 @@ jobs:
       pull-requests: write
       statuses: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.sha }}
       - uses: ./.github/actions/post-commit-status
@@ -80,7 +89,7 @@ jobs:
       pull-requests: write
       statuses: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.sha }}
       - uses: ./.github/actions/post-commit-status
@@ -101,7 +110,7 @@ jobs:
       pull-requests: write
       statuses: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.sha }}
       - uses: ./.github/actions/post-commit-status

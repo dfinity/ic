@@ -17,3 +17,7 @@ nls_iso8859-1
 sev-guest
 usb_storage
 vfat
+vmw_pvscsi
+mptsas
+mptspi
+sd_mod

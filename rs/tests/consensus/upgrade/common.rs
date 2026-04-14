@@ -29,7 +29,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::util::{LogStream, create_agent};
 use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::*},
-    util::{MessageCanister, block_on},
+    util::{JournalStreamer, MessageCanister, block_on},
 };
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
 use ic_utils::interfaces::ManagementCanister;
@@ -438,10 +438,14 @@ async fn fetch_latest_computed_root_hashes_from_logs(
 ///
 /// This function will never return if an upgrade is not scheduled.
 fn assert_orchestrator_stopped_gracefully(node: &IcNodeSnapshot) {
-    const MESSAGE: &str = r"Orchestrator shut down gracefully";
-
-    let script = format!("journalctl -f | grep -q \"{MESSAGE}\"");
-
-    node.block_on_bash_script(&script)
-        .expect("Orchestrator did not shut down gracefully");
+    let session = node.block_on_ssh_session().unwrap();
+    session.set_timeout(5 * 60 * 1000);
+    assert!(
+        JournalStreamer::new(session)
+            .follow()
+            .max_lines(1)
+            .contains("Orchestrator shut down gracefully")
+            .unwrap_or_default(),
+        "Orchestrator did not shut down gracefully"
+    );
 }

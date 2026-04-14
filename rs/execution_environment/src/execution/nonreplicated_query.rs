@@ -69,17 +69,24 @@ pub fn execute_non_replicated_query(
 
     let mut preserve_changes = false;
     let (api_type, call_context_id) = match query_kind {
-        NonReplicatedQueryKind::Pure { caller } => (
+        NonReplicatedQueryKind::Pure {
+            caller,
+            sender_info,
+        } => (
             ApiType::non_replicated_query(
                 time,
                 caller,
                 hypervisor.subnet_id(),
                 payload.to_vec(),
                 data_certificate,
+                sender_info,
             ),
             None,
         ),
-        NonReplicatedQueryKind::Stateful { call_origin } => {
+        NonReplicatedQueryKind::Stateful {
+            call_origin,
+            sender_info,
+        } => {
             preserve_changes = true;
             let caller = match call_origin {
                 CallOrigin::Query(source, ..) => source.get(),
@@ -93,6 +100,7 @@ pub fn execute_non_replicated_query(
                     Cycles::zero(),
                     time,
                     RequestMetadata::for_new_call_tree(time),
+                    sender_info.clone(),
                 )
                 .unwrap();
             (
@@ -103,6 +111,7 @@ pub fn execute_non_replicated_query(
                     payload.to_vec(),
                     data_certificate,
                     call_context_id,
+                    sender_info,
                 ),
                 Some(call_context_id),
             )

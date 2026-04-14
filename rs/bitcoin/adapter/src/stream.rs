@@ -147,7 +147,7 @@ impl<Header: Decodable + Encodable + Clone, Block: Decodable + Encodable + Clone
         } = config;
 
         let timeout_duration = Duration::from_secs(CONNECTION_TIMEOUT_SECS);
-        let data = vec![0u8; STREAM_BUFFER_SIZE];
+        let data = vec![0_u8; STREAM_BUFFER_SIZE];
         let unparsed = vec![];
 
         let tcp_stream_attempt = timeout(

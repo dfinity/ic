@@ -252,12 +252,12 @@ mod tests {
     };
 
     pub fn principal_strategy() -> impl Strategy<Value = Principal> {
-        let bytes_strategy = prop::collection::vec(0..=255u8, 29);
+        let bytes_strategy = prop::collection::vec(0..=255_u8, 29);
         bytes_strategy.prop_map(|bytes| Principal::from_slice(bytes.as_slice()))
     }
 
     pub fn account_strategy() -> impl Strategy<Value = Account> {
-        let bytes_strategy = prop::option::of(prop::collection::vec(0..=255u8, 32));
+        let bytes_strategy = prop::option::of(prop::collection::vec(0..=255_u8, 32));
         let principal_strategy = principal_strategy();
         (bytes_strategy, principal_strategy).prop_map(|(bytes, principal)| Account {
             owner: principal,
@@ -427,7 +427,7 @@ mod tests {
         );
         // Should be caught by the additional check in `try_from_subaccount_to_principal`.
         assert_matches!(
-            try_from_subaccount_to_principal([32u8; 32]),
+            try_from_subaccount_to_principal([32_u8; 32]),
             Err(PrincipalError::BytesTooLong())
         );
         use proptest::{prop_assert_eq, proptest};
@@ -450,7 +450,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "range end index 256 out of range for slice of length 32")]
     fn test_index_out_of_range_subaccount_to_principal() {
-        let index_out_of_range_subaccount = [0xffu8; 32];
+        let index_out_of_range_subaccount = [0xff_u8; 32];
         subaccount_to_principal(index_out_of_range_subaccount);
     }
 

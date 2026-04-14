@@ -233,6 +233,7 @@ rust_binary(
     crate_name = "ic_systest_nns_delegation_test",
     deps = [
         # Keep sorted.
+        "//rs/canonical_state",
         "//rs/certification",
         "//rs/crypto/tree_hash",
         "//rs/crypto/utils/threshold_sig_der",
@@ -243,8 +244,8 @@ rust_binary(
         "//rs/universal_canister/lib",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
+        "@crate_index//:futures",
         "@crate_index//:ic-agent",
-        "@crate_index//:ic-utils",
         "@crate_index//:leb128",
         "@crate_index//:reqwest",
         "@crate_index//:serde",

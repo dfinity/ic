@@ -216,6 +216,7 @@ pub fn empty_subnet_update() -> UpdateSubnetPayload {
         is_halted: None,
         halt_at_cup_height: None,
         features: None,
+        resource_limits: None,
         chain_key_config: None,
         chain_key_signing_enable: None,
         chain_key_signing_disable: None,
@@ -253,7 +254,7 @@ pub fn run_chain_key_signature_test(
     existing_key: Vec<u8>,
 ) {
     info!(logger, "Run through Chain key signature test.");
-    let message_hash = vec![0xabu8; 32];
+    let message_hash = vec![0xab_u8; 32];
     block_on(async {
         let public_key = get_public_key_with_retries(key_id, canister, logger, 100)
             .await
@@ -299,7 +300,7 @@ pub async fn get_public_key_and_test_signature(
         scale_cycles(ECDSA_SIGNATURE_FEE)
     };
 
-    let message_hash = vec![0xabu8; 32];
+    let message_hash = vec![0xab_u8; 32];
 
     info!(logger, "Getting the public key for {}", key_id);
     let public_key = get_public_key_with_logger(key_id, message_canister, logger).await?;
@@ -1121,47 +1122,64 @@ pub fn await_pre_signature_stash_size(
     key_ids: &[MasterPublicKeyId],
     log: &Logger,
 ) {
+    block_on(await_pre_signature_stash_size_async(
+        subnet,
+        expected_size,
+        key_ids,
+        log,
+    ));
+}
+
+pub async fn await_pre_signature_stash_size_async(
+    subnet: &SubnetSnapshot,
+    expected_size: usize,
+    key_ids: &[MasterPublicKeyId],
+    log: &Logger,
+) {
     let metric_vec = key_ids
         .iter()
         .map(|key_id| format!("execution_pre_signature_stash_size{{key_id=\"{key_id}\"}}"))
         .collect::<Vec<_>>();
     let metrics = MetricsFetcher::new(subnet.nodes(), metric_vec.clone());
-    ic_system_test_driver::retry_with_msg!(
+    ic_system_test_driver::retry_with_msg_async!(
         format!(
             "Waiting until pre-signature stashes for key_ids {key_ids:?} are of size {expected_size}",
         ),
-        log.clone(),
+        log,
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
-        || match block_on(metrics.fetch::<usize>()) {
-            Ok(val) => {
-                for metric in &metric_vec {
-                    let Some(sizes) = val.get(metric) else {
-                        bail!("Metric {metric} not found in {val:?}");
-                    };
-                    if sizes.len() != subnet.nodes().count() {
-                        bail!(
-                            "Metric {metric} only reported by {} out of {} nodes",
-                            sizes.len(),
-                            subnet.nodes().count()
-                        );
-                    }
-                    for size in sizes {
-                        if *size != expected_size {
+        || async {
+            match metrics.fetch::<usize>().await {
+                Ok(val) => {
+                    for metric in &metric_vec {
+                        let Some(sizes) = val.get(metric) else {
+                            bail!("Metric {metric} not found in {val:?}");
+                        };
+                        if sizes.len() != subnet.nodes().count() {
                             bail!(
-                                "Pre-signature stash for key_id {} is of size {}, but expected {}",
-                                metric, size, expected_size
+                                "Metric {metric} only reported by {} out of {} nodes",
+                                sizes.len(),
+                                subnet.nodes().count()
                             );
                         }
+                        for size in sizes {
+                            if *size != expected_size {
+                                bail!(
+                                    "Pre-signature stash for key_id {} is of size {}, but expected {}",
+                                    metric, size, expected_size
+                                );
+                            }
+                        }
                     }
+                    Ok(())
                 }
-                Ok(())
-            }
-            Err(err) => {
-                bail!("Could not connect to metrics yet {:?}", err);
+                Err(err) => {
+                    bail!("Could not connect to metrics yet {:?}", err);
+                }
             }
         }
     )
+    .await
     .expect("The subnet did not reach the required pre-signature stash size in time");
 }
 

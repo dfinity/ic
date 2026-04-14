@@ -179,7 +179,7 @@ impl Setup {
         loop {
             let block_index = self.execute_icp_transfer();
             let all_blocks = query_encoded_blocks(&self.pocket_ic, true);
-            assert_eq!(all_blocks.len(), block_index as usize + 1usize);
+            assert_eq!(all_blocks.len(), block_index as usize + 1_usize);
 
             assert_eq!(block_index + 1, self.ledger_blocks_created);
             assert!(
@@ -499,7 +499,7 @@ fn should_set_up_initial_state_with_mainnet_canisters() {
     // Verify the initial account balances
     assert_eq!(
         account_balance(&setup.pocket_ic, &setup.user1.account_identifier()).get_e8s(),
-        0u64
+        0_u64
     );
     assert_eq!(
         account_balance(
@@ -511,7 +511,7 @@ fn should_set_up_initial_state_with_mainnet_canisters() {
     );
     assert_eq!(
         account_balance(&setup.pocket_ic, &setup.user2.account_identifier()).get_e8s(),
-        0u64
+        0_u64
     );
     assert_eq!(
         account_balance(
@@ -519,7 +519,7 @@ fn should_set_up_initial_state_with_mainnet_canisters() {
             &setup.user2.account_identifier_with_subaccount()
         )
         .get_e8s(),
-        0u64
+        0_u64
     );
 
     // Verify that we have two blocks that are the initial mints.
