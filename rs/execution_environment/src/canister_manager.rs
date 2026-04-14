@@ -57,8 +57,9 @@ use ic_types::messages::{
     StopCanisterCallId,
 };
 use ic_types::{
-    CanisterId, CanisterTimer, ComputeAllocation, MAX_AGGREGATE_LOG_MEMORY_LIMIT, MemoryAllocation,
-    NumBytes, NumInstructions, PrincipalId, SnapshotId, Time,
+    CanisterId, CanisterTimer, ComputeAllocation, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
+    MAX_AGGREGATE_LOG_MEMORY_LIMIT, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
+    SnapshotId, Time,
 };
 use ic_types_cycles::{
     CanisterCreation, CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase,
@@ -505,7 +506,9 @@ impl CanisterManager {
             });
         }
 
-        let log_memory_limit = settings.log_memory_limit();
+        let log_memory_limit = settings.log_memory_limit().or(Some(NumBytes::new(
+            DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64,
+        )));
         if let Some(requested_limit) = log_memory_limit {
             // User can setup a zero log memory limit to disable logging.
             // But cannot set it higher than the maximum limit.
