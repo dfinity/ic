@@ -78,7 +78,7 @@ use ic_metrics::MetricsRegistry;
 use ic_protobuf::{
     registry::{
         crypto::v1::{ChainKeyEnabledSubnetList, PublicKey as PublicKeyProto, X509PublicKeyCert},
-        node::v1::{ConnectionEndpoint, NodeRecord},
+        node::v1::{ConnectionEndpoint, NodeRecord, NodeRewardType},
         node_rewards::v2::NodeRewardsTable,
         provisional_whitelist::v1::ProvisionalWhitelist as PbProvisionalWhitelist,
         replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
@@ -398,7 +398,8 @@ fn add_subnet_local_registry_records(
             chip_id: None,
             public_ipv4_config: None,
             domain: None,
-            node_reward_type: None,
+            node_reward_type: (subnet_type == SubnetType::CloudEngine)
+                .then_some(NodeRewardType::Type4 as i32),
             ssh_node_state_write_access: vec![],
         };
         registry_data_provider
