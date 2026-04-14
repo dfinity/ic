@@ -198,5 +198,6 @@ rust_ic_bench(
         "//rs/types/types",
         "@crate_index//:criterion",
         "@crate_index//:tempfile",
+        "@crate_index//:tokio",
     ],
 )
