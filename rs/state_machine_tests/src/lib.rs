@@ -125,7 +125,7 @@ use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
     page_map::Buffer,
     replicated_state::ReplicatedStateMessageRouting,
-    testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
+    testing::{CanisterQueuesTesting, SystemStateTesting},
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_state_manager::StateManagerImpl;
@@ -141,8 +141,8 @@ use ic_test_utilities_time::FastForwardTimeSource;
 pub use ic_types::ingress::WasmResult;
 use ic_types::{
     AccumulatedPriority, CanisterId, CanisterLog, CountBytes, CryptoHashOfPartialState,
-    CryptoHashOfState, Height, NodeId, NumBytes, PrincipalId, Randomness, RegistryVersion,
-    ReplicaVersion, SnapshotId, SubnetId, UserId,
+    CryptoHashOfState, Height, NodeId, NumBytes, NumInstructions, PrincipalId, Randomness,
+    RegistryVersion, ReplicaVersion, SnapshotId, SubnetId, UserId,
     artifact::IngressMessageId,
     batch::{
         Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, ChainKeyData,
@@ -272,7 +272,6 @@ impl MessageOrdering {
 struct FlexibleOrderingScheduler {
     inner: Box<dyn Scheduler<State = ReplicatedState>>,
     target: Arc<RwLock<Option<CanisterId>>>,
-    suppress_subnet_messages: Arc<RwLock<bool>>,
 }
 
 impl Scheduler for FlexibleOrderingScheduler {
@@ -303,16 +302,6 @@ impl Scheduler for FlexibleOrderingScheduler {
                 .accumulated_priority = AccumulatedPriority::new(i64::MAX / 4);
         }
 
-        // Assumption: no new messages land in subnet_queues during
-        // execute_round — they stay in output until build_streams.
-        // Fragile if the scheduler changes to induct into subnet_queues.
-        let suppress = *self.suppress_subnet_messages.read().unwrap();
-        let saved_subnet_queues = if suppress {
-            Some(std::mem::take(state.subnet_queues_mut()))
-        } else {
-            None
-        };
-
         let mut result = self.inner.execute_round(
             state,
             randomness,
@@ -323,10 +312,6 @@ impl Scheduler for FlexibleOrderingScheduler {
             current_round_type,
             registry_settings,
         );
-
-        if let Some(saved) = saved_subnet_queues {
-            result.put_subnet_queues(saved);
-        }
 
         if target.is_some() {
             let zero = AccumulatedPriority::new(0);
@@ -340,6 +325,40 @@ impl Scheduler for FlexibleOrderingScheduler {
 
     fn checkpoint_round_with_no_execution(&self, state: &mut ReplicatedState) {
         self.inner.checkpoint_round_with_no_execution(state)
+    }
+}
+
+struct FlexibleMessageOrdering {
+    ordering_target: Arc<RwLock<Option<CanisterId>>>,
+    scheduler_config: Arc<RwLock<ic_config::subnet_config::SchedulerConfig>>,
+    ingress_buffer: RwLock<BTreeMap<MessageId, SignedIngress>>,
+}
+
+/// Budget formulas (from `SchedulerImpl::execute_round`):
+///   canister_budget = max_instructions_per_round
+///                     - max(max_instructions_per_slice, max_instructions_per_install_code_slice)
+///                     + 1
+///   subnet_budget  = subnet_messages_per_round_instruction_limit
+impl FlexibleMessageOrdering {
+    fn set_ordering_target(&self, target: Option<CanisterId>) {
+        *self.ordering_target.write().unwrap() = target;
+    }
+
+    /// canister_budget = 1, subnet_budget = 0.
+    fn prioritise_canister_execution(&self) {
+        let mut config = self.scheduler_config.write().unwrap();
+        config.max_instructions_per_round = config.max_instructions_per_slice;
+        config.max_instructions_per_install_code_slice = config.max_instructions_per_slice;
+        config.subnet_messages_per_round_instruction_limit = NumInstructions::from(0);
+    }
+
+    /// canister_budget = 0, subnet_budget = 1.
+    fn prioritise_subnet_execution(&self) {
+        let mut config = self.scheduler_config.write().unwrap();
+        config.max_instructions_per_round =
+            config.max_instructions_per_slice - NumInstructions::new(1);
+        config.max_instructions_per_install_code_slice = config.max_instructions_per_slice;
+        config.subnet_messages_per_round_instruction_limit = NumInstructions::from(1);
     }
 }
 
@@ -1238,10 +1257,7 @@ pub struct StateMachine {
     cycles_account_manager: Arc<CyclesAccountManager>,
     cost_schedule: CanisterCyclesCostSchedule,
     hypervisor_config: HypervisorConfig,
-    flexible_ordering: bool,
-    ordering_target: Arc<RwLock<Option<CanisterId>>>,
-    suppress_subnet_messages: Arc<RwLock<bool>>,
-    ingress_buffer: RwLock<BTreeMap<MessageId, SignedIngress>>,
+    fmo: Option<FlexibleMessageOrdering>,
 }
 
 impl Default for StateMachine {
@@ -2053,21 +2069,6 @@ impl StateMachine {
             Some(config) => (config.subnet_config, config.hypervisor_config),
             None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
         };
-        // One canister, one message per round. Canister budget =
-        // max_instructions_per_round - max_slice + 1 = 1.
-        // Exhausted after one message + overhead, blocking a second.
-        // DTS per-slice limit is independent of round budget.
-        if flexible_ordering {
-            let sc = &mut subnet_config.scheduler_config;
-            sc.scheduler_cores = 1;
-            // Scheduler computes canister budget as:
-            //   max_instructions_per_round - max(slice, install_code_slice) + 1
-            // Cap install_code_slice so it doesn't inflate the subtraction.
-            sc.max_instructions_per_install_code_slice = sc.max_instructions_per_slice;
-            sc.max_instructions_per_round = sc.max_instructions_per_slice;
-            // Zero-cost subnet messages may bypass this; suppress is the primary guard.
-            sc.subnet_messages_per_round_instruction_limit = ic_types::NumInstructions::from(1);
-        }
         if let Some(ecdsa_signature_fee) = ecdsa_signature_fee {
             subnet_config
                 .cycles_account_manager_config
@@ -2178,6 +2179,12 @@ impl StateMachine {
             cancellation_token_clone,
         );
 
+        if flexible_ordering {
+            // Single execution thread so the priority boost in
+            // FlexibleOrderingScheduler is deterministic.
+            subnet_config.scheduler_config.scheduler_cores = 1;
+        }
+
         // NOTE: constructing execution services requires tokio context.
         //
         // We could have required the client to use [tokio::test] for state
@@ -2201,12 +2208,10 @@ impl StateMachine {
         });
 
         let ordering_target: Arc<RwLock<Option<CanisterId>>> = Arc::new(RwLock::new(None));
-        let suppress_subnet_messages: Arc<RwLock<bool>> = Arc::new(RwLock::new(false));
         let scheduler: Box<dyn Scheduler<State = ReplicatedState>> = if flexible_ordering {
             Box::new(FlexibleOrderingScheduler {
                 inner: execution_services.scheduler,
                 target: Arc::clone(&ordering_target),
-                suppress_subnet_messages: Arc::clone(&suppress_subnet_messages),
             })
         } else {
             execution_services.scheduler
@@ -2446,10 +2451,15 @@ impl StateMachine {
             cycles_account_manager: execution_services.cycles_account_manager,
             cost_schedule,
             hypervisor_config,
-            flexible_ordering,
-            ordering_target,
-            suppress_subnet_messages,
-            ingress_buffer: RwLock::new(BTreeMap::new()),
+            fmo: if flexible_ordering {
+                Some(FlexibleMessageOrdering {
+                    ordering_target,
+                    scheduler_config: execution_services.scheduler_config.clone(),
+                    ingress_buffer: RwLock::new(BTreeMap::new()),
+                })
+            } else {
+                None
+            },
         }
     }
 
@@ -2734,21 +2744,28 @@ impl StateMachine {
             .push(msg, self.get_time(), self.nodes[0].node_id);
     }
 
+    fn fmo(&self) -> &FlexibleMessageOrdering {
+        self.fmo
+            .as_ref()
+            .expect("build the StateMachine with with_flexible_ordering()")
+    }
+
     pub fn set_ordering_target(&self, target: Option<CanisterId>) {
-        *self.ordering_target.write().unwrap() = target;
+        self.fmo().set_ordering_target(target);
     }
 
-    fn set_suppress_subnet_messages(&self, suppress: bool) {
-        *self.suppress_subnet_messages.write().unwrap() = suppress;
-    }
-
-    /// Reset per-round ordering state (priority boost and subnet suppression)
-    /// so subsequent tick()/execute_ingress() pass through normally. The
-    /// scheduler config (budget, cores) remains — it's a permanent choice
-    /// but does not break normal calls (just one message per round per tick).
+    /// Reset per-round ordering state so subsequent tick()/execute_ingress()
+    /// pass through normally.
     pub fn clear_flexible_ordering(&self) {
-        self.set_ordering_target(None);
-        self.set_suppress_subnet_messages(false);
+        let fmo = self.fmo();
+        let mut config = fmo.scheduler_config.write().unwrap();
+        let default = SubnetConfig::new(self.subnet_type).scheduler_config;
+        config.max_instructions_per_round = default.max_instructions_per_slice;
+        config.max_instructions_per_install_code_slice = default.max_instructions_per_slice;
+        config.subnet_messages_per_round_instruction_limit =
+            default.subnet_messages_per_round_instruction_limit;
+        drop(config);
+        fmo.set_ordering_target(None);
     }
 
     pub fn buffer_ingress_as(
@@ -2760,7 +2777,8 @@ impl StateMachine {
     ) -> Result<MessageId, SubmitIngressError> {
         let msg = self.ingress_message(sender, canister_id, method, payload);
         let message_id = msg.id();
-        self.ingress_buffer
+        self.fmo()
+            .ingress_buffer
             .write()
             .unwrap()
             .insert(message_id.clone(), msg);
@@ -2768,7 +2786,8 @@ impl StateMachine {
     }
 
     pub fn take_buffered_ingress(&self, message_id: &MessageId) -> SignedIngress {
-        self.ingress_buffer
+        self.fmo()
+            .ingress_buffer
             .write()
             .unwrap()
             .remove(message_id)
@@ -2776,16 +2795,13 @@ impl StateMachine {
     }
 
     pub fn execute_with_ordering(&self, ordering: MessageOrdering) {
-        assert!(
-            self.flexible_ordering,
-            "build the StateMachine with with_flexible_ordering()"
-        );
+        let fmo = self.fmo();
         const MAX_TICKS: usize = 100;
 
         for msg in ordering.messages {
             match msg {
                 OrderedMessage::Ingress(target, ref ingress_id) if target == IC_00 => {
-                    self.set_suppress_subnet_messages(false);
+                    fmo.prioritise_subnet_execution();
                     let signed = self.take_buffered_ingress(ingress_id);
                     let payload = PayloadBuilder::new()
                         .with_max_expiry_time_from_now(self.get_time().into())
@@ -2811,10 +2827,10 @@ impl StateMachine {
                 }
 
                 OrderedMessage::Ingress(target, ref ingress_id) => {
-                    self.set_suppress_subnet_messages(true);
+                    fmo.prioritise_canister_execution();
                     self.set_next_scheduled_method(target, NextScheduledMethod::Message);
                     self.set_next_input_source(target, InputSource::Ingress);
-                    self.set_ordering_target(Some(target));
+                    fmo.set_ordering_target(Some(target));
                     let signed = self.take_buffered_ingress(ingress_id);
                     let payload = PayloadBuilder::new()
                         .with_max_expiry_time_from_now(self.get_time().into())
@@ -2824,14 +2840,14 @@ impl StateMachine {
                 }
 
                 OrderedMessage::Heartbeat(canister) | OrderedMessage::Timer(canister) => {
-                    self.set_suppress_subnet_messages(true);
+                    fmo.prioritise_canister_execution();
                     let method = match msg {
                         OrderedMessage::Heartbeat(_) => NextScheduledMethod::Heartbeat,
                         OrderedMessage::Timer(_) => NextScheduledMethod::GlobalTimer,
                         _ => unreachable!(),
                     };
                     self.set_next_scheduled_method(canister, method);
-                    self.set_ordering_target(Some(canister));
+                    fmo.set_ordering_target(Some(canister));
                     self.tick();
                     self.complete_dts(canister, MAX_TICKS);
                 }
@@ -2842,11 +2858,8 @@ impl StateMachine {
                         "No message from {} to IC_00 in subnet_queues or loopback",
                         source,
                     );
-                    self.set_suppress_subnet_messages(false);
+                    fmo.prioritise_subnet_execution();
                     self.tick();
-                    // Re-suppress before DTS: install_code DTS ticks should
-                    // not drain additional subnet messages.
-                    self.set_suppress_subnet_messages(true);
                     self.complete_dts(source, MAX_TICKS);
                 }
 
@@ -2856,17 +2869,17 @@ impl StateMachine {
                         "No response from IC_00 to {} in queue or loopback",
                         target,
                     );
-                    self.set_suppress_subnet_messages(true);
+                    fmo.prioritise_canister_execution();
                     self.set_next_scheduled_method(target, NextScheduledMethod::Message);
                     self.set_next_input_source(target, InputSource::RemoteSubnet);
-                    self.set_ordering_target(Some(target));
+                    fmo.set_ordering_target(Some(target));
                     self.tick();
                     self.complete_dts(target, MAX_TICKS);
                 }
 
                 OrderedMessage::Request { source, target }
                 | OrderedMessage::Response { source, target } => {
-                    self.set_suppress_subnet_messages(true);
+                    fmo.prioritise_canister_execution();
                     self.set_next_input_source(target, InputSource::LocalSubnet);
                     assert!(
                         self.next_sender_in_queue(source, target),
@@ -2875,7 +2888,7 @@ impl StateMachine {
                         target,
                     );
                     self.set_next_scheduled_method(target, NextScheduledMethod::Message);
-                    self.set_ordering_target(Some(target));
+                    fmo.set_ordering_target(Some(target));
                     self.tick();
                     self.complete_dts(target, MAX_TICKS);
                 }
@@ -2925,7 +2938,6 @@ impl StateMachine {
         }
     }
 
-    /// Checks that `source` is the next sender in `target`'s local input schedule.
     fn next_sender_in_queue(&self, source: CanisterId, target: CanisterId) -> bool {
         let state = self.get_latest_state();
         let queues = match state.canister_state(&target) {
@@ -2935,10 +2947,6 @@ impl StateMachine {
         queues.local_sender_schedule().front() == Some(&source)
     }
 
-    /// Checks that a message involving IC_00 is available: either in
-    /// subnet_queues (local schedule for requests to IC_00, remote schedule
-    /// for responses from IC_00) or in the loopback stream (not yet
-    /// inducted by Demux).
     fn next_sender_in_subnet_queue(&self, source: CanisterId, target: CanisterId) -> bool {
         let state = self.get_latest_state();
 

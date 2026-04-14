@@ -29,7 +29,10 @@ pub use execution_environment::{
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 pub use hypervisor::{Hypervisor, HypervisorMetrics};
 use ic_base_types::PrincipalId;
-use ic_config::{execution_environment::Config, subnet_config::SubnetConfig};
+use ic_config::{
+    execution_environment::Config,
+    subnet_config::{SchedulerConfig, SubnetConfig},
+};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasm_executor::WasmExecutor;
 use ic_interfaces::execution_environment::{
@@ -94,6 +97,7 @@ pub struct ExecutionServices {
     pub query_execution_service: QueryExecutionService,
     pub transform_execution_service: TransformExecutionService,
     pub scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
+    pub scheduler_config: Arc<std::sync::RwLock<SchedulerConfig>>,
     pub query_stats_payload_builder: QueryStatsPayloadBuilderParams,
     pub cycles_account_manager: Arc<CyclesAccountManager>,
 }
@@ -159,8 +163,9 @@ impl ExecutionServices {
             false,
         );
 
+        let scheduler_config = Arc::new(std::sync::RwLock::new(subnet_config.scheduler_config));
         let scheduler = Box::new(SchedulerImpl::new(
-            subnet_config.scheduler_config,
+            Arc::clone(&scheduler_config),
             config.embedders_config,
             own_subnet_id,
             Arc::clone(&ingress_history_writer) as Arc<_>,
@@ -180,6 +185,7 @@ impl ExecutionServices {
             query_execution_service,
             transform_execution_service,
             scheduler,
+            scheduler_config,
             query_stats_payload_builder,
             cycles_account_manager,
         }

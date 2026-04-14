@@ -51,7 +51,7 @@ use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use strum::IntoEnumIterator;
 
 mod round_schedule;
@@ -130,7 +130,7 @@ impl SchedulerRoundLimits {
 ////////////////////////////////////////////////////////////////////////
 /// Scheduler Implementation
 pub(crate) struct SchedulerImpl {
-    config: SchedulerConfig,
+    pub(crate) config: Arc<RwLock<SchedulerConfig>>,
     hypervisor_config: HypervisorConfig,
     own_subnet_id: SubnetId,
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
@@ -148,7 +148,7 @@ pub(crate) struct SchedulerImpl {
 impl SchedulerImpl {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        config: SchedulerConfig,
+        config: Arc<RwLock<SchedulerConfig>>,
         hypervisor_config: HypervisorConfig,
         own_subnet_id: SubnetId,
         ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
@@ -160,7 +160,7 @@ impl SchedulerImpl {
         rate_limiting_of_instructions: FlagStatus,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Self {
-        let scheduler_cores = config.scheduler_cores as u32;
+        let scheduler_cores = config.read().unwrap().scheduler_cores as u32;
         Self {
             config,
             hypervisor_config,
@@ -176,6 +176,11 @@ impl SchedulerImpl {
             rate_limiting_of_instructions,
             fd_factory,
         }
+    }
+
+    /// Returns a snapshot of the current scheduler config.
+    fn config(&self) -> SchedulerConfig {
+        self.config.read().unwrap().clone()
     }
 
     /// Makes progress in executing long-running `install_code` messages.
@@ -199,8 +204,8 @@ impl SchedulerImpl {
                 },
             }
             let instruction_limits = InstructionLimits::new(
-                self.config.max_instructions_per_install_code,
-                self.config.max_instructions_per_install_code_slice,
+                self.config().max_instructions_per_install_code,
+                self.config().max_instructions_per_install_code_slice,
             );
             let instructions_before = round_limits.instructions;
             let (new_state, execute_subnet_message_result_type) =
@@ -318,7 +323,7 @@ impl SchedulerImpl {
         measurement_scope: &MeasurementScope,
         chain_key_data: &ChainKeyData,
     ) -> (ReplicatedState, ExecuteSubnetMessageResultType) {
-        let instruction_limits = get_instruction_limits_for_subnet_message(&self.config, &msg);
+        let instruction_limits = get_instruction_limits_for_subnet_message(&self.config(), &msg);
 
         let instructions_before = round_limits.instructions;
         let (new_state, execute_subnet_message_result_type) = self.exec_env.execute_subnet_message(
@@ -539,7 +544,7 @@ impl SchedulerImpl {
             );
 
             round_limits.instructions -= as_round_instructions(
-                self.config
+                self.config()
                     .instruction_overhead_per_canister_for_finalization
                     * state.num_canisters() as u64,
             );
@@ -558,7 +563,7 @@ impl SchedulerImpl {
                     .inc();
             }
 
-            if total_heap_delta >= self.config.max_heap_delta_per_iteration {
+            if total_heap_delta >= self.config().max_heap_delta_per_iteration {
                 break state;
             }
             {
@@ -659,12 +664,12 @@ impl SchedulerImpl {
                 let logger = new_logger!(self.log; messaging.round => round_id.get());
                 let rate_limiting_of_heap_delta = self.rate_limiting_of_heap_delta;
                 let round_limits = round_limits_per_thread.clone();
-                let config = &self.config;
+                let config = self.config();
                 scope.execute(move || {
                     *result = execute_canisters_on_thread(
                         canisters,
                         exec_env,
-                        config,
+                        &config,
                         round_id,
                         time,
                         network_topology,
@@ -1024,7 +1029,7 @@ impl SchedulerImpl {
         let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
         paused_round_states
             .iter()
-            .skip(self.config.max_paused_executions)
+            .skip(self.config().max_paused_executions)
             .for_each(|rs| {
                 let canister = canister_states.get_mut(&rs.canister_id()).unwrap();
                 abort_canister(
@@ -1217,7 +1222,7 @@ impl Scheduler for SchedulerImpl {
             // many threads to ensure a unique execution thread id.
             csprng = Csprng::from_randomness_and_purpose(
                 &randomness,
-                &ExecutionThread(self.config.scheduler_cores as u32),
+                &ExecutionThread(self.config().scheduler_cores as u32),
             );
 
             // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
@@ -1238,18 +1243,19 @@ impl Scheduler for SchedulerImpl {
             //
             // We want the total number executed instructions to not exceed `R`,
             // which gives us: `X - (1 - S) <= R` or `X <= R - S + 1`.
+            let config = self.config();
             let max_instructions_per_slice = std::cmp::max(
-                self.config.max_instructions_per_slice,
-                self.config.max_instructions_per_install_code_slice,
+                config.max_instructions_per_slice,
+                config.max_instructions_per_install_code_slice,
             );
-            let round_instructions = as_round_instructions(self.config.max_instructions_per_round)
+            let round_instructions = as_round_instructions(config.max_instructions_per_round)
                 - as_round_instructions(max_instructions_per_slice)
                 + RoundInstructions::from(1);
 
             SchedulerRoundLimits {
                 instructions: round_instructions,
                 subnet_instructions: as_round_instructions(
-                    self.config.subnet_messages_per_round_instruction_limit,
+                    config.subnet_messages_per_round_instruction_limit,
                 ),
                 subnet_available_memory: self.exec_env.scaled_subnet_available_memory(&state),
                 subnet_available_callbacks: self.exec_env.subnet_available_callbacks(&state),
@@ -1305,15 +1311,15 @@ impl Scheduler for SchedulerImpl {
             // For that behavior to be meaningful, we ensure that the initial reserve
             // does not exceed one half of the heap delta capacity.
             let subnet_heap_delta_capacity =
-                subnet_heap_delta_capacity(&self.config, state.resource_limits());
+                subnet_heap_delta_capacity(&self.config(), state.resource_limits());
             let heap_delta_initial_reserve = if state.metadata.own_subnet_type == SubnetType::System
             {
                 // On system subnets, the initial reserve should not be overriden
                 // for backward-compatibility.
-                self.config.heap_delta_initial_reserve
+                self.config().heap_delta_initial_reserve
             } else {
                 std::cmp::min(
-                    self.config.heap_delta_initial_reserve,
+                    self.config().heap_delta_initial_reserve,
                     subnet_heap_delta_capacity / 2,
                 )
             };
@@ -1403,13 +1409,13 @@ impl Scheduler for SchedulerImpl {
 
             RoundSchedule::apply_scheduling_strategy(
                 &mut state,
-                self.config.scheduler_cores,
-                self.config.heap_delta_rate_limit,
+                self.config().scheduler_cores,
+                self.config().heap_delta_rate_limit,
                 self.rate_limiting_of_heap_delta,
-                self.config.install_code_rate_limit,
+                self.config().install_code_rate_limit,
                 self.rate_limiting_of_instructions,
                 current_round,
-                self.config.accumulated_priority_reset_interval,
+                self.config().accumulated_priority_reset_interval,
                 &self.metrics,
                 &round_log,
             )

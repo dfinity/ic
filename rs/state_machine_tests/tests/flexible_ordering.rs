@@ -952,3 +952,62 @@ fn test_heartbeat_then_request() {
         counter
     );
 }
+
+#[test]
+fn test_ic00_tick_does_not_leak_canister_execution() {
+    let sm = setup();
+    let canister_a = install_uc(&sm);
+    let canister_b = install_uc(&sm);
+    let canister_c = install_uc(&sm);
+
+    // A calls B; B replies with "hello".
+    let b_reply = wasm().reply_data(b"hello").build();
+    let a_payload = wasm()
+        .inter_update(canister_b, CallArgs::default().other_side(b_reply))
+        .build();
+    let ingress_a = sm
+        .buffer_ingress_as(
+            PrincipalId::new_anonymous(),
+            canister_a,
+            "update",
+            a_payload,
+        )
+        .unwrap();
+
+    // install_code on canister_c via IC_00.
+    let new_wasm = UNIVERSAL_CANISTER_WASM.to_vec();
+    let install_args =
+        InstallCodeArgs::new(CanisterInstallMode::Upgrade, canister_c, new_wasm, vec![]);
+    let install_ingress = sm
+        .buffer_ingress_as(
+            PrincipalId::new_anonymous(),
+            IC_00,
+            "install_code",
+            install_args.encode(),
+        )
+        .unwrap();
+
+    sm.execute_with_ordering(MessageOrdering::new(vec![
+        OrderedMessage::Ingress(canister_a, ingress_a.clone()),
+        OrderedMessage::Ingress(IC_00, install_ingress.clone()),
+        // If B leaked during step 2, this would panic: "Message from A not
+        // next in B's queue" because B already consumed it.
+        OrderedMessage::Request {
+            source: canister_a,
+            target: canister_b,
+        },
+        OrderedMessage::Response {
+            source: canister_b,
+            target: canister_a,
+        },
+    ]));
+
+    assert_eq!(get_reply(&sm, &ingress_a), b"hello");
+    match sm.ingress_status(&install_ingress) {
+        IngressStatus::Known {
+            state: IngressState::Completed(_),
+            ..
+        } => {}
+        other => panic!("Expected install_code to complete, got: {:?}", other),
+    }
+}

@@ -2,7 +2,7 @@ use std::{
     collections::{BTreeMap, HashMap, VecDeque},
     convert::{TryFrom, TryInto},
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
 };
 
 use ic_base_types::{CanisterId, NumBytes, PrincipalId, SubnetId};
@@ -136,7 +136,7 @@ pub(crate) struct SchedulerTest {
 impl std::fmt::Debug for SchedulerTest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SchedulerTest")
-            .field("scheduler_cores", &self.scheduler.config.scheduler_cores)
+            .field("scheduler_cores", &self.scheduler.config().scheduler_cores)
             .field("canisters", &self.state().canister_states().len())
             .field(
                 "compute_allocations",
@@ -620,11 +620,11 @@ impl SchedulerTest {
         let compute_allocation_used = state.total_compute_allocation();
         let mut csprng = Csprng::from_randomness_and_purpose(
             &Randomness::from([0; 32]),
-            &ExecutionThread(self.scheduler.config.scheduler_cores as u32),
+            &ExecutionThread(self.scheduler.config().scheduler_cores as u32),
         );
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(
-                self.scheduler.config.max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
+                self.scheduler.config().max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
             ),
             subnet_available_memory: self
                 .scheduler
@@ -1054,7 +1054,7 @@ impl SchedulerTestBuilder {
         );
 
         let scheduler = SchedulerImpl::new(
-            self.scheduler_config,
+            Arc::new(RwLock::new(self.scheduler_config)),
             self.hypervisor_config.clone(),
             self.own_subnet_id,
             execution_services.ingress_history_writer,
