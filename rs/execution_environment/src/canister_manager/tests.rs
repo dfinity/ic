@@ -280,7 +280,6 @@ impl CanisterManagerBuilder {
             ),
             cycles_account_manager,
             Arc::new(TestPageAllocatorFileDescriptorImpl),
-            FlagStatus::Disabled,
         )
     }
 }
