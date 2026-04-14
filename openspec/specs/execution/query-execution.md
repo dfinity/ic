@@ -145,6 +145,13 @@ Certain management canister methods can be called as queries.
 - **THEN** the canister logs are returned if the caller has permission
 - **AND** log visibility settings (Public, Controllers, AllowedViewers) are respected
 
+#### Scenario: List canisters query
+- **WHEN** `list_canisters` is called as a query on the management canister
+- **THEN** the caller must be a subnet admin (validated against the subnet's admin list)
+- **AND** the response contains a list of `CanisterIdRange` entries covering all canisters on the subnet
+- **AND** consecutive canister IDs are merged into ranges for compactness
+- **AND** if the subnet has no subnet admins configured, the call is rejected
+
 #### Scenario: Canister metadata query
 - **WHEN** `canister_metadata` is called as a query
 - **THEN** the requested metadata section is returned if it exists and is public
