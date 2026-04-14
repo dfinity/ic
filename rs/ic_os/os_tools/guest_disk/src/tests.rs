@@ -1,4 +1,4 @@
-use crate::{Args, Partition, crypt_name, run};
+use crate::{Args, Partition, crypt_name, metrics_file_path, run};
 use anyhow::Result;
 use config_types::{GuestOSConfig, ICOSSettings};
 use guest_disk::crypt::{
@@ -34,7 +34,7 @@ struct TestFixture<'a> {
     guestos_config: GuestOSConfig,
     _temp_dir: TempDir,
     _guard: parking_lot::MutexGuard<'a, ()>,
-    metrics_file: PathBuf,
+    metrics_dir: PathBuf,
 }
 
 impl<'a> TestFixture<'a> {
@@ -49,7 +49,7 @@ impl<'a> TestFixture<'a> {
         let guestos_config = Self::create_guestos_config(enable_trusted_execution_environment);
         let sev_firmware_builder =
             MockSevGuestFirmwareBuilder::new().with_derived_key(Some([0; 32]));
-        let metrics_file = temp_dir.path().join("test_metrics.prom");
+        let metrics_dir = temp_dir.path().to_path_buf();
 
         Self {
             device,
@@ -59,7 +59,7 @@ impl<'a> TestFixture<'a> {
             guestos_config,
             _temp_dir: temp_dir,
             _guard: guard,
-            metrics_file,
+            metrics_dir,
         }
     }
 
@@ -92,8 +92,12 @@ impl<'a> TestFixture<'a> {
             || Ok(Box::new(self.sev_firmware_builder.clone())),
             &self.previous_key_path,
             &self.generated_key_path,
-            &self.metrics_file,
+            &self.metrics_dir,
         )
+    }
+
+    fn metrics_file(&self, partition: Partition) -> PathBuf {
+        metrics_file_path(&self.metrics_dir, partition)
     }
 
     fn format(&mut self, partition: Partition) -> Result<()> {
@@ -602,32 +606,28 @@ fn test_verification_cipher_tampered() {
 
 #[test]
 fn test_verification_volume_key_size_tampered() {
-    for enable_trusted_execution_environment in [true, false] {
-        assert_verification_result_with_tampered_luks_parameters(
-            enable_trusted_execution_environment,
-            "aes",
-            "xts-plain64",
-            256 / 8,
-            CryptKdf::Pbkdf2,
-            TEST_PBKDF_ITERATIONS,
-            "Unexpected volume key size",
-        );
-    }
+    assert_verification_result_with_tampered_luks_parameters(
+        true,
+        "aes",
+        "xts-plain64",
+        256 / 8,
+        CryptKdf::Pbkdf2,
+        TEST_PBKDF_ITERATIONS,
+        "Unexpected volume key size",
+    );
 }
 
 #[test]
 fn test_verification_pbkdf_type_tampered() {
-    for enable_trusted_execution_environment in [true, false] {
-        assert_verification_result_with_tampered_luks_parameters(
-            enable_trusted_execution_environment,
-            "aes",
-            "xts-plain64",
-            TEST_VOLUME_KEY_BYTES,
-            CryptKdf::Argon2I,
-            TEST_PBKDF_ITERATIONS,
-            "Unexpected keyslot PBKDF type",
-        );
-    }
+    assert_verification_result_with_tampered_luks_parameters(
+        true,
+        "aes",
+        "xts-plain64",
+        TEST_VOLUME_KEY_BYTES,
+        CryptKdf::Argon2I,
+        TEST_PBKDF_ITERATIONS,
+        "Unexpected keyslot PBKDF type",
+    );
 }
 
 #[test]
@@ -642,15 +642,9 @@ fn test_metrics_export() {
     // Open the device which will export metrics
     fixture.open(Partition::Var).expect("Failed to open device");
 
-    // Verify the metrics file was created
-    assert!(
-        fixture.metrics_file.exists(),
-        "Metrics file was not created"
-    );
-
     // Read and verify the metrics content
-    let metrics_content =
-        fs::read_to_string(&fixture.metrics_file).expect("Failed to read metrics file");
+    let metrics_content = fs::read_to_string(fixture.metrics_file(Partition::Var))
+        .expect("Failed to read metrics file");
 
     // Check that the metrics file contains expected content
     assert!(

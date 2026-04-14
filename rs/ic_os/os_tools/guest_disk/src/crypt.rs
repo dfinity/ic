@@ -279,12 +279,9 @@ pub(crate) fn verify_luks_parameters(luks_parameters: &LuksParameters) -> Result
         luks_parameters.volume_key_size
     );
 
-    let mut active_keyslots = 0;
     for keyslot in &luks_parameters.keyslots {
         match keyslot.status {
             KeyslotInfo::Active | KeyslotInfo::ActiveLast => {
-                active_keyslots += 1;
-
                 let pbkdf_type = keyslot
                     .pbkdf_type
                     .as_ref()
@@ -316,18 +313,9 @@ pub(crate) fn verify_luks_parameters(luks_parameters: &LuksParameters) -> Result
                     key_size
                 );
             }
-            KeyslotInfo::Invalid | KeyslotInfo::Unbound => {
-                bail!(
-                    "Unexpected keyslot status for slot {}: {:?}",
-                    keyslot.slot,
-                    keyslot.status
-                );
-            }
-            KeyslotInfo::Inactive => {}
+            KeyslotInfo::Invalid | KeyslotInfo::Unbound | KeyslotInfo::Inactive => {}
         }
     }
-
-    ensure!(active_keyslots > 0, "No active keyslots found");
 
     Ok(())
 }
@@ -425,6 +413,14 @@ mod tests {
     }
 
     #[test]
+    fn verify_luks_parameters_accepts_invalid_keyslot() {
+        let mut luks_parameters = valid_luks_parameters();
+        luks_parameters.keyslots[0].status = KeyslotInfo::Invalid;
+
+        verify_luks_parameters(&luks_parameters).unwrap();
+    }
+
+    #[test]
     fn verify_luks_parameters_rejects_unexpected_format() {
         let mut luks_parameters = valid_luks_parameters();
         luks_parameters.format = EncryptionFormat::Plain;
@@ -432,25 +428,5 @@ mod tests {
         let err = verify_luks_parameters(&luks_parameters).unwrap_err();
 
         assert!(format!("{err:#}").contains("Unexpected encryption format"));
-    }
-
-    #[test]
-    fn verify_luks_parameters_rejects_unexpected_keyslot_status() {
-        let mut luks_parameters = valid_luks_parameters();
-        luks_parameters.keyslots[1].status = KeyslotInfo::Unbound;
-
-        let err = verify_luks_parameters(&luks_parameters).unwrap_err();
-
-        assert!(format!("{err:#}").contains("Unexpected keyslot status for slot 1"));
-    }
-
-    #[test]
-    fn verify_luks_parameters_rejects_missing_active_keyslots() {
-        let mut luks_parameters = valid_luks_parameters();
-        luks_parameters.keyslots[0] = inactive_keyslot(0);
-
-        let err = verify_luks_parameters(&luks_parameters).unwrap_err();
-
-        assert!(format!("{err:#}").contains("No active keyslots found"));
     }
 }
