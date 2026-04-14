@@ -16,8 +16,8 @@ impl IngressPoolMetrics {
             ),
             ingress_messages_expired: metrics_registry.int_counter(
                 "ingress_pool_messages_expired_total",
-                "Total number of ingress messages in either section of the ingress pool \
-                which expired",
+                "Total number of ingress messages which expired in either section of \
+                the ingress pool",
             ),
         }
     }
