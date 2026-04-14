@@ -1125,12 +1125,12 @@ fn main() -> Result<()> {
         Endpoint::SubnetReadState(read_state::subnet::Version::V2),
         Endpoint::SubnetReadState(read_state::subnet::Version::V3),
     ] {
-        parallel_group = parallel_group.add_test(systest!(test_empty_paths_return_time; endpoint));
-        parallel_group = parallel_group.add_test(systest!(test_time_path_returns_time; endpoint));
-        parallel_group = parallel_group.add_test(systest!(test_subnet_path; endpoint));
-        parallel_group = parallel_group.add_test(systest!(test_invalid_request_rejected; endpoint));
-        parallel_group = parallel_group.add_test(systest!(test_invalid_path_rejected; endpoint));
         parallel_group = parallel_group
+            .add_test(systest!(test_empty_paths_return_time; endpoint))
+            .add_test(systest!(test_time_path_returns_time; endpoint))
+            .add_test(systest!(test_subnet_path; endpoint))
+            .add_test(systest!(test_invalid_request_rejected; endpoint))
+            .add_test(systest!(test_invalid_path_rejected; endpoint))
             .add_test(systest!(test_deprecated_subnet_canister_ranges_paths; endpoint));
     }
 

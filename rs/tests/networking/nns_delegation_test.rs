@@ -801,27 +801,19 @@ fn upgrade_non_nns_subnets_if_necessary(env: &TestEnv) {
 fn main() -> Result<()> {
     let mut par_group = SystemTestSubGroup::new();
     for subnet_type in TESTED_SUBNET_TYPES {
-        par_group = par_group.add_test(systest!(nns_delegation_updates; subnet_type));
-        par_group = par_group
-            .add_test(systest!(canister_read_state_v2_returns_correct_delegation; subnet_type));
-        par_group = par_group
-            .add_test(systest!(canister_read_state_v3_returns_correct_delegation; subnet_type));
-        par_group = par_group.add_test(systest!(canister_read_state_v3_management_canister_returns_correct_delegation; subnet_type));
-        par_group = par_group
-            .add_test(systest!(subnet_read_state_v2_returns_correct_delegation; subnet_type));
-        par_group = par_group
-            .add_test(systest!(subnet_read_state_v3_returns_correct_delegation; subnet_type));
-        // note: the v2 call endpoint doesn't return an NNS delegation, so there is nothing to test
-        par_group = par_group.add_test(systest!(call_v3_returns_correct_delegation; subnet_type));
-        par_group = par_group.add_test(systest!(call_v4_returns_correct_delegation; subnet_type));
-        par_group = par_group.add_test(
-            systest!(call_v4_management_canister_returns_correct_delegation; subnet_type),
-        );
-        par_group = par_group
-            .add_test(systest!(query_v2_passes_correct_delegation_to_canister; subnet_type));
-        par_group = par_group
-            .add_test(systest!(query_v3_passes_correct_delegation_to_canister; subnet_type));
-        par_group = par_group.add_test(systest!(interlaced_v2_and_v3_query_requests; subnet_type));
+        par_group = par_group.add_test(systest!(nns_delegation_updates; subnet_type))
+            .add_test(systest!(canister_read_state_v2_returns_correct_delegation; subnet_type))
+            .add_test(systest!(canister_read_state_v3_returns_correct_delegation; subnet_type))
+            .add_test(systest!(canister_read_state_v3_management_canister_returns_correct_delegation; subnet_type))
+            .add_test(systest!(subnet_read_state_v2_returns_correct_delegation; subnet_type))
+            .add_test(systest!(subnet_read_state_v3_returns_correct_delegation; subnet_type))
+            // note: the v2 call endpoint doesn't return an NNS delegation, so there is nothing to test
+            .add_test(systest!(call_v3_returns_correct_delegation; subnet_type))
+            .add_test(systest!(call_v4_returns_correct_delegation; subnet_type))
+            .add_test(systest!(call_v4_management_canister_returns_correct_delegation; subnet_type))
+            .add_test(systest!(query_v2_passes_correct_delegation_to_canister; subnet_type))
+            .add_test(systest!(query_v3_passes_correct_delegation_to_canister; subnet_type))
+            .add_test(systest!(interlaced_v2_and_v3_query_requests; subnet_type));
     }
 
     SystemTestGroup::new()
