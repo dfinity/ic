@@ -6,7 +6,7 @@ use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
-use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetRecord, SubnetType};
+use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetRecord};
 use ic_registry_canister_client::CanisterRegistryClient;
 use ic_registry_keys::{
     DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
@@ -63,13 +63,13 @@ impl RegistryQuerier {
             .collect()
     }
 
-    /// Returns the [`SubnetType`] for the given subnet at the specified registry version,
-    /// or `None` if the subnet record does not exist.
-    fn subnet_type(
+    /// Returns the [`SubnetRecord`] for the given subnet at the specified registry version,
+    /// or `None` if the record does not exist.
+    pub fn get_subnet_record(
         &self,
         subnet_id: SubnetId,
         version: RegistryVersion,
-    ) -> Result<Option<SubnetType>, String> {
+    ) -> Result<Option<SubnetRecord>, String> {
         let key = make_subnet_record_key(subnet_id);
         let record_bytes = self
             .registry_client
@@ -80,37 +80,10 @@ impl RegistryQuerier {
             Some(bytes) => {
                 let record = SubnetRecord::decode(bytes.as_slice())
                     .map_err(|e| format!("Failed to decode SubnetRecord for {subnet_id}: {e:?}"))?;
-                Ok(Some(record.subnet_type()))
+                Ok(Some(record))
             }
             None => Ok(None),
         }
-    }
-
-    /// Returns the list of subnets eligible for metrics collection.
-    ///
-    /// Cloud engine subnets are excluded because their management canister
-    /// does not expose `node_metrics_history`, which causes the entire
-    /// metrics sync to fail.
-    pub fn subnets_for_metrics(
-        &self,
-        version: RegistryVersion,
-    ) -> Result<Vec<SubnetId>, String> {
-        let all_subnets = self.subnets_list(version)?;
-        let mut result = Vec::with_capacity(all_subnets.len());
-
-        for subnet_id in all_subnets {
-            match self.subnet_type(subnet_id, version)? {
-                Some(SubnetType::CloudEngine) => {
-                    ic_cdk::println!(
-                        "Excluding cloud engine subnet {} from metrics collection",
-                        subnet_id,
-                    );
-                }
-                _ => result.push(subnet_id),
-            }
-        }
-
-        Ok(result)
     }
 
     /// Returns the NodeRewardsTable at the specified version.

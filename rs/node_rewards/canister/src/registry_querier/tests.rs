@@ -309,43 +309,20 @@ fn test_node_re_registered_after_deletion() {
 }
 
 #[test]
-fn test_subnets_for_metrics_excludes_cloud_engine() {
+fn test_get_subnet_record_returns_correct_type() {
     let client = client_for_tests();
     let app_subnet: SubnetId = PrincipalId::new_subnet_test_id(10).into();
-    let system_subnet: SubnetId = PrincipalId::new_subnet_test_id(11).into();
     let cloud_engine_subnet: SubnetId = PrincipalId::new_subnet_test_id(12).into();
+    let missing_subnet: SubnetId = PrincipalId::new_subnet_test_id(99).into();
 
     let version = 39680u64;
     let date = "2025-07-17";
-
-    let subnets_record = SubnetListRecord {
-        subnets: vec![
-            app_subnet.get().to_vec(),
-            system_subnet.get().to_vec(),
-            cloud_engine_subnet.get().to_vec(),
-        ],
-    };
-    add_record_helper(
-        &make_subnet_list_record_key(),
-        version,
-        Some(subnets_record),
-        date,
-    );
 
     add_record_helper(
         &make_subnet_record_key(app_subnet),
         version,
         Some(SubnetRecord {
             subnet_type: SubnetType::Application as i32,
-            ..SubnetRecord::default()
-        }),
-        date,
-    );
-    add_record_helper(
-        &make_subnet_record_key(system_subnet),
-        version,
-        Some(SubnetRecord {
-            subnet_type: SubnetType::System as i32,
             ..SubnetRecord::default()
         }),
         date,
@@ -360,11 +337,20 @@ fn test_subnets_for_metrics_excludes_cloud_engine() {
         date,
     );
 
-    let metrics_subnets = client.subnets_for_metrics(version.into()).unwrap();
+    let app_record = client
+        .get_subnet_record(app_subnet, version.into())
+        .unwrap()
+        .unwrap();
+    assert_eq!(app_record.subnet_type(), SubnetType::Application);
 
-    assert_eq!(metrics_subnets, vec![app_subnet, system_subnet]);
-    assert!(
-        !metrics_subnets.contains(&cloud_engine_subnet),
-        "Cloud engine subnet should be excluded from metrics collection"
-    );
+    let cloud_record = client
+        .get_subnet_record(cloud_engine_subnet, version.into())
+        .unwrap()
+        .unwrap();
+    assert_eq!(cloud_record.subnet_type(), SubnetType::CloudEngine);
+
+    let missing = client
+        .get_subnet_record(missing_subnet, version.into())
+        .unwrap();
+    assert!(missing.is_none());
 }
