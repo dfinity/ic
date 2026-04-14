@@ -74,3 +74,7 @@ path = "ingress_verification_test.rs"
 [[bin]]
 name = "ic_crypto_csp_start_order_test"
 path = "ic_crypto_csp_start_order_test.rs"
+
+[[bin]]
+name = "cloud_engine_canister_sig_test"
+path = "cloud_engine_canister_sig_test.rs"
