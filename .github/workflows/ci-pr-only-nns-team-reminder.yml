@@ -19,7 +19,7 @@ jobs:
     steps:
       # IMPORTANT: we use `pull_request_target` so this can run on external PRs and have write permissions (to post a comment)
       # However this means that no checkout step can be introduced, as that would expose a security vulnerability.
-      - uses: actions/github-script@v6
+      - uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6.4.1
         id: mainStep
         # If the PR requires governance-team to approve, GitHub will force governance-team to
         # be in requested_teams. Therefore, the following condition is always

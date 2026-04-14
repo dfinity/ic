@@ -47,3 +47,22 @@ Following the execution of these commands, the system will reboot into the newly
     manageboot.sh confirm
 
 For more information on the upgrade commands, see ic-os/components/upgrade/manageboot
+
+== SEV-SNP upgrade process
+
+When SEV-SNP is enabled, GuestOS upgrades require an additional **disk encryption key exchange** step. This is because the store partition's encryption key is derived from the SEV launch measurement. A new GuestOS version has a different launch measurement, so the new version cannot derive the old key on its own.
+
+To perform this exchange, the HostOS launches a temporary, low-resource "upgrade VM" (4 GiB memory) alongside the active GuestOS on the same physical CPU. The upgrade VM exists only to perform the key exchange. The full sequence is:
+
+1. The orchestrator installs the new image to the passive partition, same as a non-SEV upgrade.
+2. The orchestrator starts a key exchange server on the active GuestOS and requests the HostOS to launch the upgrade VM.
+3. The active GuestOS and upgrade VM perform **mutual attestation**: each side generates an SEV-SNP attestation report and verifies the other's measurement against approved launch measurements from the registry, confirms matching chip IDs (same physical CPU), and validates a TLS key binding to prevent MITM.
+4. The active GuestOS sends the disk encryption key to the upgrade VM over the attested channel. The upgrade VM writes the key to disk and shuts down.
+5. The orchestrator commits the upgrade and reboots into the new version, which uses the transferred key to unlock the store partition.
+
+The mutual attestation prevents two attack scenarios:
+
+* A malicious upgrade VM impersonating an NNS-approved version to steal the disk key.
+* A malicious old GuestOS injecting tainted data into the store partition before handing off the key to a legitimate upgrade.
+
+For implementation details, see link:../../rs/ic_os/guest_upgrade/README.md[rs/ic_os/guest_upgrade].

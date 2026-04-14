@@ -71,6 +71,16 @@ pub struct NetworkTopology {
         ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
     #[prost(message, repeated, tag = "8")]
     pub chain_key_enabled_subnets: ::prost::alloc::vec::Vec<ChainKeySubnetEntry>,
+    #[prost(message, optional, tag = "9")]
+    pub full_topology: ::core::option::Option<FullTopology>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FullTopology {
+    #[prost(message, repeated, tag = "1")]
+    pub subnets: ::prost::alloc::vec::Vec<SubnetsEntry>,
+    #[prost(message, optional, tag = "2")]
+    pub routing_table:
+        ::core::option::Option<super::super::super::registry::routing_table::v1::RoutingTable>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetupInitialDkgContext {
@@ -153,7 +163,7 @@ pub struct SignWithThresholdContext {
     #[prost(bytes = "vec", repeated, tag = "3")]
     pub derivation_path_vec: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
     #[prost(bytes = "vec", tag = "4")]
-    pub pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
+    pub deprecated_pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "5")]
     pub batch_time: u64,
     #[prost(bytes = "vec", optional, tag = "8")]

@@ -3,7 +3,7 @@ use crate::validation::ValidationError;
 use ic_base_types::RegistryVersion;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
-    NodeId, Time,
+    NodeId,
     artifact::CanisterHttpResponseId,
     canister_http::{
         CanisterHttpResponse, CanisterHttpResponseArtifact, CanisterHttpResponseShare,
@@ -29,18 +29,16 @@ pub enum InvalidCanisterHttpPayloadReason {
     InvalidMetadata {
         metadata_id: CallbackId,
         content_id: CallbackId,
-        metadata_timeout: Time,
-        content_timeout: Time,
     },
     /// The content hash of the signed metadata does not match the actual hash of the content
     ContentHashMismatch {
         metadata_hash: CryptoHashOf<CanisterHttpResponse>,
         calculated_hash: CryptoHashOf<CanisterHttpResponse>,
     },
-    /// The response has already timed out
-    Timeout {
-        timed_out_at: Time,
-        validation_time: Time,
+    /// The content size of the signed metadata does not match the actual size of the content
+    ContentSizeMismatch {
+        metadata_size: u32,
+        calculated_size: u32,
     },
     /// A timeout refers to a CallbackId that is unknown by the StateManager
     UnknownCallbackId(CallbackId),
@@ -92,10 +90,30 @@ pub enum InvalidCanisterHttpPayloadReason {
         callback_id: CallbackId,
         signer: NodeId,
     },
+    /// A flexible ok-response group contains a Reject response.
+    FlexibleRejectNotAllowedInOkResponses {
+        callback_id: CallbackId,
+    },
     /// The payload is not in its designated section.
     /// For example, a non-flexible response is not in the responses section
     /// or a flexible response is not in the flexible_responses section.
     InvalidPayloadSection(CallbackId),
+    /// A TooManyRequestErrors error does not carry enough rejects.
+    FlexibleInsufficientRejectCount {
+        callback_id: CallbackId,
+        reject_count: usize,
+        min_needed: usize,
+    },
+    /// A TooManyRequestErrors entry contains a non-Reject response.
+    FlexibleRejectExpectedInErrorResponse(CallbackId),
+    /// A ResponsesTooLarge error does not carry enough metadata shares.
+    FlexibleInsufficientMetadataShareCount {
+        callback_id: CallbackId,
+        share_count: usize,
+        min_needed: usize,
+    },
+    /// A ResponsesTooLarge error is invalid: the smallest responses actually fit.
+    FlexibleResponsesNotTooLarge(CallbackId),
     /// The payload could not be deserialized
     DecodeError(ProxyDecodeError),
 }

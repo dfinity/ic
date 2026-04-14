@@ -262,7 +262,6 @@ impl ConsensusImpl {
                 payload_builder.clone(),
                 dkg_pool.clone(),
                 idkg_pool.clone(),
-                thread_pool.clone(),
                 state_manager.clone(),
                 stable_registry_version_age,
                 metrics_registry.clone(),

@@ -13,6 +13,10 @@ mod ic0 {
         pub fn msg_arg_data_size() -> u32;
         pub fn msg_caller_copy(dst: u32, offset: u32, size: u32) -> ();
         pub fn msg_caller_size() -> u32;
+        pub fn msg_caller_info_data_copy(dst: u32, offset: u32, size: u32) -> ();
+        pub fn msg_caller_info_data_size() -> u32;
+        pub fn msg_caller_info_signer_copy(dst: u32, offset: u32, size: u32) -> ();
+        pub fn msg_caller_info_signer_size() -> u32;
         pub fn msg_reject(src: u32, size: u32) -> ();
         pub fn msg_reject_code() -> u32;
         pub fn msg_reject_msg_copy(dst: u32, offset: u32, size: u32) -> ();
@@ -193,6 +197,46 @@ pub fn msg_caller_copy(offset: u32, size: u32) -> Vec<u8> {
 /// Returns the caller of the current call.
 pub fn caller() -> Vec<u8> {
     msg_caller_copy(0, msg_caller_size())
+}
+
+/// Returns the size of the caller info data in bytes.
+pub fn msg_caller_info_data_size() -> u32 {
+    unsafe { ic0::msg_caller_info_data_size() }
+}
+
+/// Returns a buffer of the given size filled with the caller info data bytes
+/// starting from the given offset.
+pub fn msg_caller_info_data_copy(offset: u32, size: u32) -> Vec<u8> {
+    let mut bytes = vec![0; size as usize];
+    unsafe {
+        ic0::msg_caller_info_data_copy(bytes.as_mut_ptr() as u32, offset, size);
+    }
+    bytes
+}
+
+/// Returns the caller info data blob.
+pub fn caller_info_data() -> Vec<u8> {
+    msg_caller_info_data_copy(0, msg_caller_info_data_size())
+}
+
+/// Returns the size of the caller info signer in bytes.
+pub fn msg_caller_info_signer_size() -> u32 {
+    unsafe { ic0::msg_caller_info_signer_size() }
+}
+
+/// Returns a buffer of the given size filled with the caller info signer bytes
+/// starting from the given offset.
+pub fn msg_caller_info_signer_copy(offset: u32, size: u32) -> Vec<u8> {
+    let mut bytes = vec![0; size as usize];
+    unsafe {
+        ic0::msg_caller_info_signer_copy(bytes.as_mut_ptr() as u32, offset, size);
+    }
+    bytes
+}
+
+/// Returns the caller info signer blob.
+pub fn caller_info_signer() -> Vec<u8> {
+    msg_caller_info_signer_copy(0, msg_caller_info_signer_size())
 }
 
 /// Returns the canister id as a blob.

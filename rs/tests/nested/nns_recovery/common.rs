@@ -11,7 +11,7 @@ use ic_consensus_system_test_utils::{
     node::await_subnet_earliest_topology_version_with_retries,
     rw_message::store_message_with_retries,
     ssh_access::{
-        AuthMean, disable_ssh_access_to_node, get_updatesubnetpayload_with_keys,
+        AuthMean, disable_ssh_access_to_node, get_update_subnet_payload_with_keys,
         update_subnet_record, wait_until_authentication_is_granted,
     },
     subnet::assert_subnet_is_healthy,
@@ -27,7 +27,7 @@ use ic_recovery::{
 use ic_system_test_driver::{
     driver::{
         constants::SSH_USERNAME,
-        ic::{AmountOfMemoryKiB, NrOfVCPUs, VmResources},
+        ic::{AmountOfMemoryKiB, NrOfVCPUs, VmResourceOverrides},
         nested::{HasNestedVms, NestedNodes, NestedVm},
         test_env::TestEnv,
         test_env_api::*,
@@ -43,10 +43,10 @@ use rand::seq::SliceRandom;
 use slog::{Logger, info};
 use tokio::task::JoinSet;
 
-pub const NNS_RECOVERY_VM_RESOURCES: VmResources = VmResources {
-    vcpus: Some(NrOfVCPUs::new(32)),
+pub const NNS_RECOVERY_VM_RESOURCE_OVERRIDES: VmResourceOverrides = VmResourceOverrides {
+    vcpus: Some(NrOfVCPUs::new(40)), // 36 GuestOS CPU + 4 HostOS
     memory_kibibytes: Some(AmountOfMemoryKiB::new(50331648)), // 48GiB
-    boot_image_minimal_size_gibibytes: None,
+    ..VmResourceOverrides::const_default()
 };
 
 /// 4 nodes is the minimum subnet size that satisfies 3f+1 for f=1
@@ -72,7 +72,7 @@ pub struct SetupConfig {
     pub impersonate_upstreams: bool,
     pub subnet_size: usize,
     pub dkg_interval: u64,
-    pub nested_nodes_vm_resources: VmResources,
+    pub nested_nodes_vm_resource_overrides: VmResourceOverrides,
 }
 
 #[derive(Debug)]
@@ -80,7 +80,7 @@ pub struct TestConfig {
     pub local_recovery: bool,
     pub break_dfinity_owned_node: bool,
     pub num_broken_nodes: usize,
-    pub add_and_bless_upgrade_version: bool,
+    pub add_upgrade_version: bool,
     pub fix_dfinity_owned_node_like_np: bool,
     pub sequential_np_actions: bool,
 }
@@ -152,7 +152,7 @@ pub fn grant_backup_access_to_all_nns_nodes(
     let nns_node = nns_subnet.nodes().next().unwrap();
 
     info!(logger, "Update the registry with the backup key");
-    let payload = get_updatesubnetpayload_with_keys(
+    let payload = get_update_subnet_payload_with_keys(
         nns_subnet.subnet_id,
         None,
         Some(vec![ssh_backup_pub_key.to_string()]),
@@ -185,9 +185,12 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
     setup_ic_infrastructure(&env, Some(cfg.dkg_interval), /*is_fast=*/ false);
 
     let host_vm_names = get_host_vm_names(cfg.subnet_size);
-    NestedNodes::new_with_resources(&host_vm_names, cfg.nested_nodes_vm_resources)
-        .setup_and_start(&env)
-        .unwrap();
+    NestedNodes::new_with_resource_overrides(
+        &host_vm_names,
+        cfg.nested_nodes_vm_resource_overrides,
+    )
+    .setup_and_start(&env)
+    .unwrap();
 }
 
 pub fn test(env: TestEnv, cfg: TestConfig) {
@@ -246,8 +249,8 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         serde_json::to_string(&guest_launch_measurements).unwrap(),
     )
     .expect("Could not write guest launch measurements to file");
-    if !cfg.add_and_bless_upgrade_version {
-        // If ic-recovery does not add/bless the new version to the registry, then we must bless it now.
+    if !cfg.add_upgrade_version {
+        // If ic-recovery does not add the new version to the registry, then we must elect it now.
         block_on(bless_replica_version(
             &nns_node,
             &upgrade_version,
@@ -430,7 +433,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         upgrade_image_url: Some(upgrade_image_url),
         upgrade_image_hash: Some(upgrade_image_hash),
         upgrade_image_launch_measurements_path: Some(env.get_path(GUEST_LAUNCH_MEASUREMENTS_PATH)),
-        add_and_bless_upgrade_version: Some(cfg.add_and_bless_upgrade_version),
+        add_and_bless_upgrade_version: Some(cfg.add_upgrade_version),
         replay_until_height: Some(highest_cert_share),
         download_pool_node: Some(download_pool_node.get_ip_addr()),
         admin_access_location: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
@@ -668,6 +671,10 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: NNSRecoverySameNodes, 
 
     // The command is expected to reboot the node as part of the recovery, so if it returns
     // successfully, it means something went wrong.
+    // Set a 5-minute SSH timeout to detect when the node reboots and the TCP connection
+    // hangs (e.g. abrupt reboot without clean TCP FIN). Without this, the SSH channel
+    // can hang indefinitely waiting for data from the rebooted node.
+    session.set_timeout(5 * 60 * 1000);
     info!(logger, "Executing local recovery command: \n{command}");
     node.block_on_bash_script_from_session(&session, &command)
         .expect_err("Local recovery command completed without rebooting");

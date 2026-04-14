@@ -208,9 +208,9 @@ pub struct CanisterStateBits {
     pub snapshot_visibility: SnapshotVisibility,
     pub log_memory_limit: NumBytes,
     pub canister_log: CanisterLog,
+    pub next_canister_log_record_idx: u64,
     pub wasm_memory_limit: Option<NumBytes>,
     pub next_snapshot_id: u64,
-    pub snapshots_memory_usage: NumBytes,
     pub task_queue: TaskQueue,
     pub environment_variables: BTreeMap<String, String>,
 }

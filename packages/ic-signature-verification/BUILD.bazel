@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -26,6 +26,12 @@ rust_library(
     name = "ic-signature-verification",
     srcs = glob(["src/**/*.rs"]),
     deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":ic-signature-verification",
+    deps = DEPENDENCIES + TEST_DEPENDENCIES,
 )
 
 rust_test_suite(

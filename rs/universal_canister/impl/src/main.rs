@@ -321,6 +321,8 @@ fn eval(ops_bytes: OpsBytes) {
                 let offset = stack.pop_int();
                 stack.push_blob(api::msg_caller_copy(offset, size));
             }
+            Ops::MsgCallerInfoData => stack.push_blob(api::caller_info_data()),
+            Ops::MsgCallerInfoSigner => stack.push_blob(api::caller_info_signer()),
             Ops::MsgRejectMsgSize => stack.push_int(api::msg_reject_msg_size()),
             Ops::MsgRejectMsgCopy => {
                 let size = stack.pop_int();

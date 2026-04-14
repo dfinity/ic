@@ -9,12 +9,11 @@ on the process that this file is part of, see
 
 ## Added
 
+* Enabled CreateCanisterAndInstallCode proposals.
+
 ## Changed
 
-- `CreateServiceNervousSystem` proposals no longer reject SNS configurations
-  where the sum of developer-allocated tokens exceeds
-  `swap_distribution.total_e8s`. With the Neurons' Fund discontinued, this
-  validation is no longer needed.
+* Mission 70 voting rewards adjustment has been re-calculated. Now: 63.29%. Before: 65.5%.
 
 ## Deprecated
 

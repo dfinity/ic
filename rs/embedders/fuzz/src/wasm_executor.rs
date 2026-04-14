@@ -132,6 +132,7 @@ fn setup_wasm_execution_input(
         Cycles::new(1_000_000_000),
         UNIX_EPOCH,
         RequestMetadata::default(),
+        None,
     );
 
     WasmExecutionInput {
