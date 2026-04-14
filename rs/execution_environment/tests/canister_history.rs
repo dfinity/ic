@@ -440,7 +440,8 @@ where
     );
 }
 
-fn canister_history_tracks_controllers_change() {
+#[test]
+fn canister_history_tracks_controllers_change_as_controllers_change() {
     let mut now = std::time::SystemTime::now();
     let env = setup_with_application_subnet();
     env.set_time(now);
@@ -547,11 +548,6 @@ fn canister_history_tracks_controllers_change() {
             reference_change_entries
         );
     }
-}
-
-#[test]
-fn canister_history_tracks_controllers_change_as_controllers_change() {
-    canister_history_tracks_controllers_change();
 }
 
 #[test]
