@@ -1,5 +1,5 @@
 load("@python_deps//:requirements.bzl", "requirement")
-load("@rules_python//python:defs.bzl", "py_binary")
+load("@rules_python//python:defs.bzl", "py_binary", "py_test")
 
 py_binary(
     name = "split_finder",
@@ -17,4 +17,11 @@ py_binary(
         requirement("pandas"),
         requirement("pulp"),
     ],
+)
+
+py_test(
+    name = "split_finder_test",
+    srcs = ["split_finder_test.py"],
+    data = ["//rs/recovery/subnet_splitting:test_data"],
+    deps = [":split_finder"],
 )

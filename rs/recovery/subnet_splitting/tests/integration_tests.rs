@@ -14,6 +14,7 @@ use proxy_canister::{RemoteHttpRequest, UnvalidatedCanisterHttpRequestArgs};
 use slog::{Logger, info};
 
 const EPSILON: f64 = 0.0001;
+const MAX_CUTS: usize = 10;
 
 /// Checks whether the first argument is equal to the second argument with a relative error
 /// tolerance up to the third argument.
@@ -33,7 +34,7 @@ macro_rules! assert_near {
 #[test]
 /// Tests that three tools needed for subnet splitting are compatible with each other:
 /// 1. `state-tool`, which extracts load metrics and manifest from the replicated state,
-/// 2. TODO(CON-1569): a tool which takes the output of the `state-tool` and proposes a good split,
+/// 2. `split-finder`, which takes the output of the `state-tool` and proposes a good split,
 /// 3. `subnet-splitting-tool`, which takes the outputs from the above two tools, and returns
 ///    estimated loads/sizes after splitting a subnet.
 fn load_metrics_e2e_test() {
@@ -92,24 +93,18 @@ fn load_metrics_e2e_test() {
         ic_state_tool::commands::canister_metrics::get(checkpoint_dir.clone(), &load_samples_path)
             .expect("Should compute canister metrics for a valid checkpoint");
         let communication_samples_path = dir.path().join("comm_samples.csv");
-        let mut file = std::fs::File::create(&communication_samples_path).unwrap();
+        // TODO(CON-1569): use actual connectivity metrics
+        {
+            let communication_data = include_str!("../test_data/fake_communication_sample.csv");
+            let mut communication_samples_file =
+                std::fs::File::create(&communication_samples_path).unwrap();
+            write!(communication_samples_file, "{communication_data}").unwrap();
+        }
 
         info!(
             logger,
             "Using `split-finder` to find candidate canister ranges to be migrated"
         );
-        // TODO(CON-1569): use actual connectivity metrics
-        {
-            file.write_all(b"sender_canister_id,receiver_canister_id,count\n")
-                .unwrap();
-            let mut canister_ids = state_machine.get_canister_ids();
-            canister_ids.sort();
-
-            for canister_id in &canister_ids {
-                file.write_all(format!("{canister_id},{canister_id},1\n").as_bytes())
-                    .unwrap()
-            }
-        }
         let split_output_path = dir.path().join("split_output.csv");
         let split_finder_path =
             std::env::var("SPLIT_FINDER_PATH").expect("SPLIT_FINDER_PATH not set");
@@ -122,7 +117,7 @@ fn load_metrics_e2e_test() {
             .args(["--output-path", &split_output_path.display().to_string()])
             .args(["--load-type", "instructions_executed"])
             .args(["--epsilon-load", &EPSILON.to_string()])
-            .args(["--max-cuts", "10"])
+            .args(["--max-cuts", &MAX_CUTS.to_string()])
             .output()
             .unwrap();
         assert_eq!(
@@ -132,11 +127,16 @@ fn load_metrics_e2e_test() {
             str::from_utf8(&output.stdout).unwrap(),
             str::from_utf8(&output.stderr).unwrap(),
         );
-        let canister_id_ranges = read_to_string(&split_output_path)
+        let canister_id_ranges: Vec<CanisterIdRange> = read_to_string(&split_output_path)
             .expect("The split finder script should have produced a valid output")
             .lines()
             .map(|line| CanisterIdRange::from_str(line).expect("Not a valid CanisterIdRange"))
             .collect();
+        assert!(
+            canister_id_ranges.len() <= MAX_CUTS,
+            "The split find script should have produced at most {MAX_CUTS} because we \
+            passed {MAX_CUTS} as the `--max-cuts` argument"
+        );
 
         // And finally use the `subnet-splitting-tool` to estimate the loads on each subnet after a
         // split.
