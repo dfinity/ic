@@ -1,5 +1,5 @@
 use crate::InternalHttpQueryHandler;
-use candid::Decode;
+use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, NumSeconds, PrincipalId};
 use ic_config::execution_environment::INSTRUCTION_OVERHEAD_PER_QUERY_CALL;
 use ic_error_types::{ErrorCode, UserError};
@@ -1294,7 +1294,7 @@ fn query_call_exceeds_instructions_limit() {
 fn test_list_canisters_no_subnet_admins() {
     let mut test = ExecutionTestBuilder::new().build();
     let err = test
-        .non_replicated_query(CanisterId::ic_00(), "list_canisters", vec![])
+        .non_replicated_query(CanisterId::ic_00(), "list_canisters", Encode!().unwrap())
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterRejectedMessage);
 }
@@ -1310,7 +1310,7 @@ fn test_list_canisters_non_admin_rejected() {
         .build();
     test.set_user_id(non_admin);
     let err = test
-        .non_replicated_query(CanisterId::ic_00(), "list_canisters", vec![])
+        .non_replicated_query(CanisterId::ic_00(), "list_canisters", Encode!().unwrap())
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidSubnetAdmin);
 }
@@ -1337,7 +1337,7 @@ fn test_list_canisters_success() {
     }
 
     let reply = test
-        .non_replicated_query(CanisterId::ic_00(), "list_canisters", vec![])
+        .non_replicated_query(CanisterId::ic_00(), "list_canisters", Encode!().unwrap())
         .unwrap();
     let response = Decode!(&reply.bytes(), ListCanistersResponse).unwrap();
 
