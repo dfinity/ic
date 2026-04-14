@@ -173,7 +173,7 @@ use ic_types::{
         Blob, CallbackId, Certificate, CertificateDelegation, CertificateDelegationMetadata,
         EXPECTED_MESSAGE_ID_LENGTH, HttpCallContent, HttpCanisterUpdate, HttpRequestContent,
         HttpRequestEnvelope, MessageId, Payload as MsgPayload, Query, QuerySource, RejectContext,
-        RequestOrResponse, Response, SignedIngress, extract_effective_canister_id,
+        RequestOrResponse, Response, SignedIngress, StreamMessage, extract_effective_canister_id,
     },
     signature::ThresholdSignature,
     state_manager::StateManagerResult,
@@ -2942,18 +2942,17 @@ impl StateMachine {
     fn next_sender_in_subnet_queue(&self, source: CanisterId, target: CanisterId) -> bool {
         let state = self.get_latest_state();
 
+        let subnet_canister_id = CanisterId::unchecked_from_principal(self.get_subnet_id().get());
         match (source, target) {
             (IC_00, target) => {
                 // IC_00 response: lands in remote schedule.
                 state.subnet_queues().remote_sender_schedule().front() == Some(&IC_00)
-                    || self.has_loopback_message_for(target)
+                    || self.has_loopback_message_for(subnet_canister_id, target)
             }
             (source, IC_00) => {
                 // Request to IC_00: receiver in loopback is the subnet ID.
                 state.subnet_queues().local_sender_schedule().front() == Some(&source)
-                    || self.has_loopback_message_for(CanisterId::unchecked_from_principal(
-                        self.get_subnet_id().get(),
-                    ))
+                    || self.has_loopback_message_for(source, subnet_canister_id)
             }
             (_, _) => {
                 panic!("Management canister is not involved; use next_sender_in_queue");
@@ -2961,14 +2960,18 @@ impl StateMachine {
         }
     }
 
-    fn has_loopback_message_for(&self, receiver: CanisterId) -> bool {
+    fn has_loopback_message_for(&self, sender: CanisterId, receiver: CanisterId) -> bool {
         let state = self.get_latest_state();
         let subnet_id = self.get_subnet_id();
         state.streams().get(&subnet_id).is_some_and(|s| {
-            s.messages()
-                .iter()
-                .next()
-                .is_some_and(|(_, msg)| msg.receiver() == receiver)
+            s.messages().iter().next().is_some_and(|(_, msg)| {
+                let msg_sender = match msg {
+                    StreamMessage::Request(req) => req.sender,
+                    StreamMessage::Response(resp) => resp.respondent,
+                    StreamMessage::Refund(_) => return false,
+                };
+                msg_sender == sender && msg.receiver() == receiver
+            })
         })
     }
 
