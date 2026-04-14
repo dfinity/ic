@@ -146,8 +146,10 @@ pub fn exchange_rate_to_permyriad(rate: &ExchangeRate) -> u64 {
 /// A client for fetching ICP/CXDR exchange rates from the Exchange Rate Canister (XRC).
 #[async_trait]
 pub trait ExchangeRateCanisterClient: Send + Sync {
-    /// Fetch the ICP/XDR rate. The XRC uses CXDR (stablecoin-validated XDR) internally, but that is an implementation detail. Pass `timestamp` (Unix seconds, rounded to midnight UTC of the
-    /// target day) to request a historical day's rate; pass `None` for the latest available rate.
+    /// Fetch the ICP/XDR rate. The XRC uses CXDR (stablecoin-validated XDR) internally, but that
+    /// is an implementation detail. Pass `timestamp` (Unix seconds, rounded to midnight UTC of
+    /// the target day) to request a historical day's rate; pass `None` for the latest available
+    /// rate.
     async fn get_icp_to_xdr_exchange_rate(
         &self,
         timestamp: Option<u64>,
