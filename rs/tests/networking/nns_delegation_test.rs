@@ -778,8 +778,6 @@ fn upgrade_non_nns_subnets_if_necessary(env: &TestEnv) {
             .iter()
             .copied()
             .filter(|t| *t != SubnetType::System)
-            // TODO(CON-1696): Remove next line when #9613 reaches mainnet NNS
-            .filter(|t| *t != SubnetType::CloudEngine)
             .map(|subnet_type| {
                 let env = env.clone();
                 let nns_node = nns_node.clone();
@@ -806,11 +804,7 @@ macro_rules! systest_all_subnet_types {
         $group = $group.add_test(systest!($function_name; SubnetType::System));
         $group = $group.add_test(systest!($function_name; SubnetType::Application));
         $group = $group.add_test(systest!($function_name; SubnetType::VerifiedApplication));
-        // TODO(CON-1696): Remove this condition (and always run the test for cloud engines) when
-        // #9613 reaches mainnet NNS
-        if get_guestos_img_version() == get_guestos_update_img_version() {
-            $group = $group.add_test(systest!($function_name; SubnetType::CloudEngine));
-        }
+        $group = $group.add_test(systest!($function_name; SubnetType::CloudEngine));
     };
 }
 

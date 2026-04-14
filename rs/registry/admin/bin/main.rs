@@ -509,7 +509,7 @@ enum SubCommand {
     ///
     /// This is the first step of subnet recovery. Previously the first step was
     /// done using propose-to-update-subnet. However, that does not support
-    /// changing ssn_node_state_write_access, which is needed when a subnet has
+    /// changing ssh_node_state_write_access, which is needed when a subnet has
     /// SEV enabled everywhere (or the subnet has no DFINITY node).
     ///
     /// At the end of subnet recovery, run propose-to-bring-subnet-back-online.
@@ -839,7 +839,7 @@ struct ProposeToTakeSubnetOfflineForRepairsCmd {
     /// This usually isn't a problem, because the list is typically empty when
     /// this proposal is used as part of subnet recovery.
     #[clap(long, num_args(1..))]
-    pub ssh_readonly_access: Vec<String>,
+    pub ssh_readonly_access: Option<Vec<String>>,
 
     /// Similar to the --ssh-readonly-access flag, but there are some important
     /// differences:
@@ -862,7 +862,7 @@ struct ProposeToTakeSubnetOfflineForRepairsCmd {
     /// clobber. However, in practice, it would probably be empty to begin with,
     /// so most likely, this won't be an issue.
     #[clap(long, value_parser, num_args(1..))]
-    pub ssh_node_state_write_access: Vec<NodeSshAccessFlagValue>,
+    pub ssh_node_state_write_access: Option<Vec<NodeSshAccessFlagValue>>,
 
     /// List of replica version IDs to recall. These versions will be marked as
     /// recalled for this subnet, preventing them from being upgraded to them. If the
@@ -899,15 +899,13 @@ impl ProposalPayload<SetSubnetOperationalLevelPayload> for ProposeToTakeSubnetOf
         let ssh_node_state_write_access = self
             .ssh_node_state_write_access
             .clone()
-            .into_iter()
-            .map(NodeSshAccess::from)
-            .collect();
+            .map(|keys| keys.into_iter().map(NodeSshAccess::from).collect());
 
         SetSubnetOperationalLevelPayload {
             subnet_id: Some(SubnetId::from(self.subnet)),
             operational_level: Some(operational_level::DOWN_FOR_REPAIRS),
-            ssh_readonly_access: Some(self.ssh_readonly_access.clone()),
-            ssh_node_state_write_access: Some(ssh_node_state_write_access),
+            ssh_readonly_access: self.ssh_readonly_access.clone(),
+            ssh_node_state_write_access,
             recalled_replica_version_ids,
         }
     }
@@ -928,14 +926,14 @@ impl FromStr for NodeSshAccessFlagValue {
         let node_id = parts.next().ok_or("Missing node ID.")?;
         let public_keys = parts
             .next()
-            .ok_or("Missing semicolon separating node ID and SSH public key.")?
+            .ok_or("Missing semicolon separating node ID and SSH public keys.")?
             .to_string();
 
         // Parse node_id.
         let node_id = PrincipalId::from_str(node_id).map_err(|err| format!("{err}"))?;
         let node_id = NodeId::from(node_id);
 
-        // Parse public_keys, by simply splitting on ','.<
+        // Parse public_keys, by simply splitting on ','.
         let public_keys = public_keys
             .split(',')
             .map(|public_key| public_key.to_string())
