@@ -3,6 +3,7 @@
 /// But we keep it separated for code readability
 use crate::{
     HasTimestamp,
+    ingress_pool::metrics::IngressPoolMetrics,
     metrics::{POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED, PoolMetrics},
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
@@ -16,16 +17,16 @@ use ic_interfaces::{
         ValidatedPoolReader,
     },
 };
-use ic_logger::{ReplicaLogger, debug};
+use ic_logger::{ReplicaLogger, debug, warn};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     CountBytes, NodeId, Time,
     artifact::IngressMessageId,
     messages::{EXPECTED_MESSAGE_ID_LENGTH, MessageId, SignedIngress},
 };
-use prometheus::IntCounter;
 use std::collections::BTreeMap;
 
+mod metrics;
 mod peer_counter;
 
 use peer_counter::PeerCounters;
@@ -179,9 +180,9 @@ impl<T: AsRef<IngressPoolObject> + HasTimestamp> PoolSection<T> for IngressPoolS
 pub struct IngressPoolImpl {
     validated: IngressPoolSection<ValidatedIngressArtifact>,
     unvalidated: IngressPoolSection<UnvalidatedIngressArtifact>,
+    metrics: IngressPoolMetrics,
     ingress_pool_max_count: usize,
     ingress_pool_max_bytes: usize,
-    ingress_messages_throttled: IntCounter,
     node_id: NodeId,
     log: ReplicaLogger,
 }
@@ -198,10 +199,7 @@ impl IngressPoolImpl {
         IngressPoolImpl {
             ingress_pool_max_count: config.ingress_pool_max_count,
             ingress_pool_max_bytes: config.ingress_pool_max_bytes,
-            ingress_messages_throttled: metrics_registry.int_counter(
-                "ingress_messages_throttled",
-                "Number of throttled ingress messages",
-            ),
+            metrics: IngressPoolMetrics::new(&metrics_registry),
             validated: IngressPoolSection::new(
                 log.clone(),
                 PoolMetrics::new(metrics_registry.clone(), POOL_INGRESS, POOL_TYPE_VALIDATED),
@@ -314,12 +312,27 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                     }
                 }
                 ChangeAction::PurgeBelowExpiry(expiry) => {
+                    let mut expired_messages_count = 0;
                     transmits.extend(
                         self.validated
                             .purge_below(expiry)
+                            .inspect(|_| expired_messages_count += 1)
                             .map(|i| (&i.msg.signed_ingress).into())
                             .map(ArtifactTransmit::Abort),
                     );
+
+                    if expired_messages_count > 0 {
+                        warn!(
+                            every_n_seconds => 30,
+                            self.log,
+                            "Purging {expired_messages_count} expired ingress message \
+                            from the ingress pool"
+                        );
+                        self.metrics
+                            .ingress_messages_expired
+                            .inc_by(expired_messages_count)
+                    }
+
                     let _unused = self.unvalidated.purge_below(expiry);
                 }
             }
@@ -346,7 +359,7 @@ impl ValidatedPoolReader<SignedIngress> for IngressPoolImpl {
 impl IngressPoolThrottler for IngressPoolImpl {
     fn exceeds_threshold(&self) -> bool {
         if self.exceeds_limit(&self.node_id) {
-            self.ingress_messages_throttled.inc();
+            self.metrics.ingress_messages_throttled.inc();
 
             true
         } else {
@@ -650,9 +663,15 @@ mod tests {
                         .iter()
                         .any(|x| matches!(x, ArtifactTransmit::Deliver(_)))
                 );
-                assert_eq!(result.transmits.len(), initial_count - non_expired_count);
+                let expired_count = initial_count - non_expired_count;
+                assert!(expired_count > 0);
+                assert_eq!(result.transmits.len(), expired_count);
                 assert!(!result.poll_immediately);
                 assert_eq!(ingress_pool.validated().size(), non_expired_count);
+                assert_eq!(
+                    ingress_pool.metrics.ingress_messages_expired.get(),
+                    expired_count as u64
+                );
             })
         })
     }
