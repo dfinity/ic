@@ -96,6 +96,14 @@ Simple wrapper for canister ID payloads: `{ canister_id: principal }`.
 - `CanisterLoadSnapshotRecord` -- `{ canister_version, snapshot_id, taken_at_timestamp, source: SnapshotSource, from_canister_id }`.
 - `CanisterSettingsChangeRecord` -- `{ controllers: Option<Vec<PrincipalId>>, environment_variables_hash: Option<[u8; 32]> }`.
 
+### Visibility Types
+
+#### `LogVisibility`
+Controls who can read a canister's logs: `Controllers` (default), `Public`, or `AllowedViewers(Vec<Principal>)`.
+
+#### `SnapshotVisibility`
+Controls who can read a canister's snapshots: `Controllers` (default), `Public`, or `AllowedViewers(Vec<Principal>)`. Added to `CanisterSettings` as the `snapshot_visibility` field.
+
 ### BoundedVec
 
 ```
