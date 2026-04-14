@@ -315,7 +315,7 @@ fn test_get_subnet_record_returns_correct_type() {
     let cloud_engine_subnet: SubnetId = PrincipalId::new_subnet_test_id(12).into();
     let missing_subnet: SubnetId = PrincipalId::new_subnet_test_id(99).into();
 
-    let version = 39680u64;
+    let version = 39680_u64;
     let date = "2025-07-17";
 
     add_record_helper(
