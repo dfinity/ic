@@ -174,7 +174,7 @@ use ic_types::{
         EXPECTED_MESSAGE_ID_LENGTH, HttpCallContent, HttpCanisterUpdate, HttpRequestContent,
         HttpRequestEnvelope, MessageId, Payload as MsgPayload, Query, QuerySource,
         RawSignedSenderInfo, RejectContext, RequestOrResponse, Response, SignedIngress,
-        SignedSenderInfo, extract_effective_canister_id,
+        SignedSenderInfo, StreamMessage, extract_effective_canister_id,
     },
     signature::ThresholdSignature,
     state_manager::StateManagerResult,
@@ -2787,7 +2787,7 @@ impl StateMachine {
         method: impl ToString,
         payload: Vec<u8>,
     ) -> Result<MessageId, SubmitIngressError> {
-        let msg = self.ingress_message(sender, canister_id, method, payload);
+        let msg = self.ingress_message(sender, canister_id, method, payload, None);
         let message_id = msg.id();
         self.fmo()
             .ingress_buffer

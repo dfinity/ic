@@ -380,7 +380,7 @@ impl SchedulerImpl {
                 .cycles_account_manager
                 .can_prepay_execution_cycles(
                     canister,
-                    self.config.max_instructions_per_message,
+                    self.config().max_instructions_per_message,
                     subnet_size,
                     cost_schedule,
                 )
