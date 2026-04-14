@@ -1337,7 +1337,8 @@ macro_rules! define_affine_and_projective_types {
                 #[cfg(feature = "rayon")]
                 {
                     let results: Vec<$projective> = scalars.par_iter().map(|s| self * s).collect();
-                    $projective::batch_normalize(&results).try_into().expect("Length preserved")
+                    let results: [$projective; N] = results.try_into().expect("Length preserved");
+                    $projective::batch_normalize_array(&results)
                 }
                 #[cfg(not(feature = "rayon"))]
                 {
