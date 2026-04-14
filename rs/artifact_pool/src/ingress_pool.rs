@@ -175,7 +175,6 @@ impl<T: AsRef<IngressPoolObject> + HasTimestamp> PoolSection<T> for IngressPoolS
     }
 }
 
-#[derive(Clone)]
 pub struct IngressPoolImpl {
     validated: IngressPoolSection<ValidatedIngressArtifact>,
     unvalidated: IngressPoolSection<UnvalidatedIngressArtifact>,

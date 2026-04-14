@@ -1,7 +1,6 @@
 use ic_metrics::MetricsRegistry;
 use prometheus::IntCounter;
 
-#[derive(Clone)]
 /// Some ingress pool specific metrics.
 pub(super) struct IngressPoolMetrics {
     pub ingress_messages_throttled: IntCounter,
