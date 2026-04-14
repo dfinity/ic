@@ -55,9 +55,12 @@ use tokio::sync::oneshot;
 use tower::{Service, util::BoxCloneService};
 
 pub(crate) use self::query_scheduler::QueryScheduler;
+use crate::execution::common::validate_subnet_admin;
 use ic_management_canister_types_private::{
-    CanisterIdRecord, FetchCanisterLogsRequest, Payload, QueryMethod,
+    CanisterIdRange, CanisterIdRecord, FetchCanisterLogsRequest, ListCanistersResponse, Payload,
+    QueryMethod,
 };
+use ic_registry_routing_table::canister_id_into_u64;
 
 pub struct DataCertificateWithDelegationMetadata {
     pub data_certificate: Vec<u8>,
@@ -230,6 +233,45 @@ impl InternalHttpQueryHandler {
                     let result = Ok(WasmResult::Reply(Encode!(&response).unwrap()));
                     self.metrics.observe_subnet_query_message(
                         QueryMethod::CanisterStatus,
+                        since.elapsed().as_secs_f64(),
+                        &result,
+                    );
+                    return result;
+                }
+                Ok(QueryMethod::ListCanisters) => {
+                    let since = Instant::now();
+                    let caller = query.source();
+                    match state.get_ref().get_own_subnet_admins() {
+                        Some(ref admins) => {
+                            validate_subnet_admin(admins, &caller).map_err(UserError::from)?
+                        }
+                        None => {
+                            return Err(UserError::new(
+                                ErrorCode::CanisterRejectedMessage,
+                                "list_canisters is only available on subnets with subnet admins",
+                            ));
+                        }
+                    }
+                    let mut canisters: Vec<CanisterIdRange> = Vec::new();
+                    for id in state.get_ref().canister_states().keys() {
+                        let id_u64 = canister_id_into_u64(*id);
+                        match canisters.last_mut() {
+                            Some(last)
+                                if canister_id_into_u64(last.end).checked_add(1)
+                                    == Some(id_u64) =>
+                            {
+                                last.end = *id;
+                            }
+                            _ => canisters.push(CanisterIdRange {
+                                start: *id,
+                                end: *id,
+                            }),
+                        }
+                    }
+                    let response = ListCanistersResponse { canisters };
+                    let result = Ok(WasmResult::Reply(Encode!(&response).unwrap()));
+                    self.metrics.observe_subnet_query_message(
+                        QueryMethod::ListCanisters,
                         since.elapsed().as_secs_f64(),
                         &result,
                     );
