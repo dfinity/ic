@@ -472,7 +472,7 @@ fn divergence_responses_count_toward_max_responses() {
 /// Test that oversized payloads don't validate
 #[test]
 fn oversized_validation() {
-    let validation_result = run_validatation_test(
+    let validation_result = run_non_flexible_validation_test(
         true,
         |response, _| {
             // Give response oversized content
@@ -493,7 +493,7 @@ fn oversized_validation() {
 /// Test that payloads with wrong registry version don't validate
 #[test]
 fn registry_version_validation() {
-    let validation_result = run_validatation_test(
+    let validation_result = run_non_flexible_validation_test(
         true,
         |_, metadata| {
             // Set metadata to a newer registry version
@@ -516,7 +516,7 @@ fn registry_version_validation() {
 /// Test that payloads with wrong hash don't validate
 #[test]
 fn hash_validation() {
-    let validation_result = run_validatation_test(
+    let validation_result = run_non_flexible_validation_test(
         true,
         |response, _| {
             // Change response content to have a different hash
@@ -537,7 +537,7 @@ fn hash_validation() {
 /// Test that payloads with wrong content size don't validate
 #[test]
 fn content_size_validation() {
-    let validation_result = run_validatation_test(
+    let validation_result = run_non_flexible_validation_test(
         true,
         |_response, metadata| {
             metadata.content_size = metadata.content_size.wrapping_add(1);
@@ -557,7 +557,7 @@ fn content_size_validation() {
 /// Test that payloads with wrong is_reject flag don't validate
 #[test]
 fn is_reject_validation() {
-    let validation_result = run_validatation_test(
+    let validation_result = run_non_flexible_validation_test(
         true,
         |_response, metadata| {
             metadata.is_reject = !metadata.is_reject;
@@ -577,7 +577,7 @@ fn is_reject_validation() {
 /// Test that payloads don't validate, if registry for height does not exist
 #[test]
 fn registry_unavailable_validation() {
-    let validation_result = run_validatation_test(
+    let validation_result = run_non_flexible_validation_test(
         true,
         |_, _| { /* Nothing to modify */ },
         &ValidationContext {
@@ -600,7 +600,7 @@ fn registry_unavailable_validation() {
 /// the existing helper functions
 #[test]
 fn feature_disabled_validation() {
-    let validation_result = run_validatation_test(false, |_, _| {}, &default_validation_context());
+    let validation_result = run_non_flexible_validation_test(false, |_, _| {}, &default_validation_context());
     match validation_result {
         Err(ValidationError::ValidationFailed(
             PayloadValidationFailure::CanisterHttpPayloadValidationFailed(
@@ -1577,7 +1577,7 @@ pub(crate) fn default_validation_context() -> ValidationContext {
 ///
 /// This is useful to run a number of tests against the payload validator, without the need
 /// to mock up all needed structures again and again.
-fn run_validatation_test<F>(
+fn run_non_flexible_validation_test<F>(
     https_feature_flag: bool,
     mut modify: F,
     validation_context: &ValidationContext,
