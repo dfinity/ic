@@ -103,7 +103,7 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
 
     // Purge below an expiry prefix (non-inclusive), and return the purged artifacts
     // as an iterator.
-    fn purge_below(&mut self, expiry: Time) -> Box<dyn Iterator<Item = T> + '_> {
+    fn purge_below(&mut self, expiry: Time) -> BTreeMap<IngressMessageId, T> {
         let _timer = self
             .metrics
             .op_duration
@@ -121,7 +121,7 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
         }
         // SAFETY: Checking byte size invariant
         self.assert_section_ok();
-        Box::new(to_remove.into_values())
+        to_remove
     }
 
     /// Counts the exact bytes by iterating over the artifact btreemap, instead
@@ -312,15 +312,18 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                     }
                 }
                 ChangeAction::PurgeBelowExpiry(expiry) => {
-                    let mut expired_messages_count = 0;
+                    let expired_validated = self.validated.purge_below(expiry);
+                    let expired_unvalidated = self.unvalidated.purge_below(expiry);
+
                     transmits.extend(
-                        self.validated
-                            .purge_below(expiry)
-                            .inspect(|_| expired_messages_count += 1)
+                        expired_validated
+                            .values()
                             .map(|i| (&i.msg.signed_ingress).into())
                             .map(ArtifactTransmit::Abort),
                     );
 
+                    let expired_messages_count =
+                        expired_validated.len() + expired_unvalidated.len();
                     if expired_messages_count > 0 {
                         warn!(
                             every_n_seconds => 30,
@@ -330,10 +333,8 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                         );
                         self.metrics
                             .ingress_messages_expired
-                            .inc_by(expired_messages_count)
+                            .inc_by(expired_messages_count as u64)
                     }
-
-                    let _unused = self.unvalidated.purge_below(expiry);
                 }
             }
         }
