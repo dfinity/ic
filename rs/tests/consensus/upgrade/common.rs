@@ -389,11 +389,10 @@ fn find_latest_computed_root_hashes_from_logs(
 
     let mut latest_root_hash_per_node = BTreeMap::new();
     for node in nodes {
-        let matches = JournalStreamer::new(node.block_on_ssh_session().unwrap())
+        let last_hash = JournalStreamer::new(node.block_on_ssh_session().unwrap())
             .previous_boot()
             .search(computed_root_hash_regex.as_str())
-            .expect("Failed to fetch log entries");
-        let last_hash = matches
+            .expect("Failed to fetch log entries")
             .into_iter()
             .map(|entry| {
                 let caps = computed_root_hash_regex
