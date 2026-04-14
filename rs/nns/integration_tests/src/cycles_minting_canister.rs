@@ -12,9 +12,10 @@ use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_canister_client_sender::Sender;
 use ic_ledger_core::tokens::CheckedSub;
-use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInfoResponse, CanisterStatusResultV2, EnvironmentVariable,
+use ic_management_canister_types::{
+    CanisterStatusResult as ManagementCanisterStatusResult, EnvironmentVariable,
 };
+use ic_management_canister_types_private::{CanisterIdRecord, CanisterInfoResponse};
 use ic_nervous_system_clients::canister_status::CanisterStatusResult;
 use ic_nervous_system_common::{E8, ONE_MONTH_SECONDS, ONE_TRILLION};
 use ic_nervous_system_common_test_keys::{
@@ -231,7 +232,7 @@ fn canister_status(
     machine: &StateMachine,
     sender: PrincipalId,
     target: CanisterId,
-) -> Result<CanisterStatusResultV2, String> {
+) -> Result<ManagementCanisterStatusResult, String> {
     update_with_sender(
         machine,
         CanisterId::ic_00(),
@@ -291,11 +292,11 @@ fn test_cmc_notify_create_with_settings() {
     //default settings
     let canister = notify_create_canister(&state_machine, None);
     let status = canister_status(&state_machine, *TEST_USER1_PRINCIPAL, canister).unwrap();
-    assert_eq!(status.controllers(), vec![*TEST_USER1_PRINCIPAL]);
-    assert_eq!(status.compute_allocation(), 0);
-    assert_eq!(status.memory_allocation(), 0);
-    assert_eq!(status.freezing_threshold(), 2592000);
-    assert_eq!(status.environment_variables(), vec![]);
+    assert_eq!(status.settings.controllers, vec![TEST_USER1_PRINCIPAL.0]);
+    assert_eq!(status.settings.compute_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.memory_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.freezing_threshold, Nat::from(2_592_000_u64));
+    assert_eq!(status.settings.environment_variables, vec![]);
 
     //specify single controller
     let canister = notify_create_canister(
@@ -307,34 +308,34 @@ fn test_cmc_notify_create_with_settings() {
         }),
     );
     let status = canister_status(&state_machine, *TEST_USER2_PRINCIPAL, canister).unwrap();
-    assert_eq!(status.controllers(), vec![*TEST_USER2_PRINCIPAL]);
-    assert_eq!(status.compute_allocation(), 0);
-    assert_eq!(status.memory_allocation(), 0);
-    assert_eq!(status.freezing_threshold(), 2592000);
-    assert_eq!(status.environment_variables(), vec![]);
+    assert_eq!(status.settings.controllers, vec![TEST_USER2_PRINCIPAL.0]);
+    assert_eq!(status.settings.compute_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.memory_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.freezing_threshold, Nat::from(2_592_000_u64));
+    assert_eq!(status.settings.environment_variables, vec![]);
 
     //specify multiple controllers
     let mut specified_controllers = vec![
-        *TEST_USER1_PRINCIPAL,
-        *TEST_USER2_PRINCIPAL,
-        *TEST_USER3_PRINCIPAL,
+        TEST_USER1_PRINCIPAL.0,
+        TEST_USER2_PRINCIPAL.0,
+        TEST_USER3_PRINCIPAL.0,
     ];
     specified_controllers.sort();
     let canister = notify_create_canister(
         &state_machine,
         Some(CanisterSettings {
-            controllers: Some(specified_controllers.iter().map(|p| p.0).collect()),
+            controllers: Some(specified_controllers.clone()),
             ..Default::default()
         }),
     );
     let status = canister_status(&state_machine, *TEST_USER1_PRINCIPAL, canister).unwrap();
-    let mut canister_controllers = status.controllers();
+    let mut canister_controllers = status.settings.controllers.clone();
     canister_controllers.sort();
     assert_eq!(specified_controllers, canister_controllers);
-    assert_eq!(status.compute_allocation(), 0);
-    assert_eq!(status.memory_allocation(), 0);
-    assert_eq!(status.freezing_threshold(), 2592000);
-    assert_eq!(status.environment_variables(), vec![]);
+    assert_eq!(status.settings.compute_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.memory_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.freezing_threshold, Nat::from(2_592_000_u64));
+    assert_eq!(status.settings.environment_variables, vec![]);
 
     //specify no controller
     let canister = notify_create_canister(
@@ -351,46 +352,46 @@ fn test_cmc_notify_create_with_settings() {
     let canister = notify_create_canister(
         &state_machine,
         Some(dbg!(CanisterSettings {
-            compute_allocation: Some(Nat::from(7u64)),
+            compute_allocation: Some(Nat::from(3_u64)), // 3%
             ..Default::default()
         })),
     );
     let status = dbg!(canister_status(&state_machine, *TEST_USER1_PRINCIPAL, canister).unwrap());
-    assert_eq!(status.controllers(), vec![*TEST_USER1_PRINCIPAL]);
-    assert_eq!(status.compute_allocation(), 7);
-    assert_eq!(status.memory_allocation(), 0);
-    assert_eq!(status.freezing_threshold(), 2592000);
-    assert_eq!(status.environment_variables(), vec![]);
+    assert_eq!(status.settings.controllers, vec![TEST_USER1_PRINCIPAL.0]);
+    assert_eq!(status.settings.compute_allocation, Nat::from(3_u64));
+    assert_eq!(status.settings.memory_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.freezing_threshold, Nat::from(2_592_000_u64));
+    assert_eq!(status.settings.environment_variables, vec![]);
 
     //specify freezing threshold
     let canister = notify_create_canister(
         &state_machine,
         Some(CanisterSettings {
-            freezing_threshold: Some(Nat::from(7u64)),
+            freezing_threshold: Some(Nat::from(86_400_u64)), // 1 day in seconds
             ..Default::default()
         }),
     );
     let status = canister_status(&state_machine, *TEST_USER1_PRINCIPAL, canister).unwrap();
-    assert_eq!(status.controllers(), vec![*TEST_USER1_PRINCIPAL]);
-    assert_eq!(status.compute_allocation(), 0);
-    assert_eq!(status.memory_allocation(), 0);
-    assert_eq!(status.freezing_threshold(), 7);
-    assert_eq!(status.environment_variables(), vec![]);
+    assert_eq!(status.settings.controllers, vec![TEST_USER1_PRINCIPAL.0]);
+    assert_eq!(status.settings.compute_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.memory_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.freezing_threshold, Nat::from(86_400_u64));
+    assert_eq!(status.settings.environment_variables, vec![]);
 
     //specify memory allocation
     let canister = notify_create_canister(
         &state_machine,
         Some(CanisterSettings {
-            memory_allocation: Some(Nat::from(7u64)),
+            memory_allocation: Some(Nat::from(1_048_576_u64)), // 1 MiB
             ..Default::default()
         }),
     );
     let status = canister_status(&state_machine, *TEST_USER1_PRINCIPAL, canister).unwrap();
-    assert_eq!(status.controllers(), vec![*TEST_USER1_PRINCIPAL]);
-    assert_eq!(status.compute_allocation(), 0);
-    assert_eq!(status.memory_allocation(), 7);
-    assert_eq!(status.freezing_threshold(), 2592000);
-    assert_eq!(status.environment_variables(), vec![]);
+    assert_eq!(status.settings.controllers, vec![TEST_USER1_PRINCIPAL.0]);
+    assert_eq!(status.settings.compute_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.memory_allocation, Nat::from(1_048_576_u64));
+    assert_eq!(status.settings.freezing_threshold, Nat::from(2_592_000_u64));
+    assert_eq!(status.settings.environment_variables, vec![]);
 
     //specify environment variables
     let env_vars = vec![EnvironmentVariable {
@@ -400,34 +401,26 @@ fn test_cmc_notify_create_with_settings() {
     let canister = notify_create_canister(
         &state_machine,
         Some(CanisterSettings {
-            environment_variables: Some(
-                env_vars
-                    .iter()
-                    .map(|e| ic_management_canister_types::EnvironmentVariable {
-                        name: e.name.clone(),
-                        value: e.value.clone(),
-                    })
-                    .collect(),
-            ),
+            environment_variables: Some(env_vars.clone()),
             ..Default::default()
         }),
     );
     let status = canister_status(&state_machine, *TEST_USER1_PRINCIPAL, canister).unwrap();
-    assert_eq!(status.controllers(), vec![*TEST_USER1_PRINCIPAL]);
-    assert_eq!(status.compute_allocation(), 0);
-    assert_eq!(status.memory_allocation(), 0);
-    assert_eq!(status.freezing_threshold(), 2592000);
-    assert_eq!(status.environment_variables(), env_vars);
+    assert_eq!(status.settings.controllers, vec![TEST_USER1_PRINCIPAL.0]);
+    assert_eq!(status.settings.compute_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.memory_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.freezing_threshold, Nat::from(2_592_000_u64));
+    assert_eq!(status.settings.environment_variables, env_vars);
 }
 
 fn canister_cycles_balance(
     state_machine: &StateMachine,
     canister: CanisterId,
     controller: PrincipalId,
-) -> u128 {
+) -> Nat {
     canister_status(state_machine, controller, canister)
         .unwrap()
-        .cycles()
+        .cycles
 }
 
 #[test]
@@ -458,11 +451,11 @@ fn test_cmc_create_canister_refunds() {
         )
     };
 
-    assert_eq!(cmc_cycles_balance(), 0);
+    assert_eq!(cmc_cycles_balance(), Nat::from(0_u128));
 
     let universal_canister = set_up_universal_canister(&state_machine, Some(u128::MAX.into()));
 
-    let uc_cycles_balance = || state_machine.cycle_balance(universal_canister);
+    let uc_cycles_balance = || Nat::from(state_machine.cycle_balance(universal_canister));
 
     //default settings
     let canister = cmc_create_canister_with_cycles(
@@ -474,11 +467,17 @@ fn test_cmc_create_canister_refunds() {
     )
     .unwrap();
     let status = canister_status(&state_machine, universal_canister.get(), canister).unwrap();
-    assert_eq!(status.controllers(), vec![universal_canister.get()]);
+    assert_eq!(
+        status.settings.controllers,
+        vec![universal_canister.get().0]
+    );
 
     // We minted, then used, then accepted some cycles.
-    assert_eq!(cmc_cycles_balance(), 10_000_000_000_000);
-    assert_eq!(uc_cycles_balance(), u128::MAX - 10_000_000_000_000);
+    assert_eq!(cmc_cycles_balance(), Nat::from(10_000_000_000_000_u128));
+    assert_eq!(
+        uc_cycles_balance(),
+        Nat::from(u128::MAX - 10_000_000_000_000)
+    );
 
     // Create canister on non-existing subnet type
     let error = cmc_create_canister_with_cycles(
@@ -498,8 +497,11 @@ fn test_cmc_create_canister_refunds() {
         }
     );
 
-    assert_eq!(cmc_cycles_balance(), 10_000_100_000_000);
-    assert_eq!(uc_cycles_balance(), u128::MAX - 10_000_100_000_000);
+    assert_eq!(cmc_cycles_balance(), Nat::from(10_000_100_000_000_u128));
+    assert_eq!(
+        uc_cycles_balance(),
+        Nat::from(u128::MAX - 10_000_100_000_000)
+    );
 
     let canister = cmc_create_canister_with_cycles(
         &state_machine,
@@ -510,10 +512,16 @@ fn test_cmc_create_canister_refunds() {
     )
     .unwrap();
     let status = canister_status(&state_machine, universal_canister.get(), canister).unwrap();
-    assert_eq!(status.controllers(), vec![universal_canister.get()]);
+    assert_eq!(
+        status.settings.controllers,
+        vec![universal_canister.get().0]
+    );
 
-    assert_eq!(cmc_cycles_balance(), 11_000_000_000_000);
-    assert_eq!(uc_cycles_balance(), u128::MAX - 21_000_100_000_000);
+    assert_eq!(cmc_cycles_balance(), Nat::from(11_000_000_000_000_u128));
+    assert_eq!(
+        uc_cycles_balance(),
+        Nat::from(u128::MAX - 21_000_100_000_000)
+    );
 }
 
 /// Test create_canister with different canister settings
@@ -549,11 +557,14 @@ fn test_cmc_cycles_create_with_settings() {
     )
     .unwrap();
     let status = canister_status(&state_machine, universal_canister.get(), canister).unwrap();
-    assert_eq!(status.controllers(), vec![universal_canister.get()]);
-    assert_eq!(status.compute_allocation(), 0);
-    assert_eq!(status.memory_allocation(), 0);
-    assert_eq!(status.freezing_threshold(), 2592000);
-    assert_eq!(status.environment_variables(), vec![]);
+    assert_eq!(
+        status.settings.controllers,
+        vec![universal_canister.get().0]
+    );
+    assert_eq!(status.settings.compute_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.memory_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.freezing_threshold, Nat::from(2_592_000_u64));
+    assert_eq!(status.settings.environment_variables, vec![]);
 
     //specify single controller
     let canister = cmc_create_canister_with_cycles(
@@ -568,24 +579,24 @@ fn test_cmc_cycles_create_with_settings() {
     )
     .unwrap();
     let status = canister_status(&state_machine, *TEST_USER1_PRINCIPAL, canister).unwrap();
-    assert_eq!(status.controllers(), vec![*TEST_USER1_PRINCIPAL]);
-    assert_eq!(status.compute_allocation(), 0);
-    assert_eq!(status.memory_allocation(), 0);
-    assert_eq!(status.freezing_threshold(), 2592000);
-    assert_eq!(status.environment_variables(), vec![]);
+    assert_eq!(status.settings.controllers, vec![TEST_USER1_PRINCIPAL.0]);
+    assert_eq!(status.settings.compute_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.memory_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.freezing_threshold, Nat::from(2_592_000_u64));
+    assert_eq!(status.settings.environment_variables, vec![]);
 
     //specify multiple controllers
     let mut specified_controllers = vec![
-        *TEST_USER1_PRINCIPAL,
-        *TEST_USER2_PRINCIPAL,
-        *TEST_USER3_PRINCIPAL,
+        TEST_USER1_PRINCIPAL.0,
+        TEST_USER2_PRINCIPAL.0,
+        TEST_USER3_PRINCIPAL.0,
     ];
     specified_controllers.sort();
     let canister = cmc_create_canister_with_cycles(
         &state_machine,
         universal_canister,
         Some(CanisterSettings {
-            controllers: Some(specified_controllers.iter().map(|p| p.0).collect()),
+            controllers: Some(specified_controllers.clone()),
             ..Default::default()
         }),
         None,
@@ -593,13 +604,13 @@ fn test_cmc_cycles_create_with_settings() {
     )
     .unwrap();
     let status = canister_status(&state_machine, *TEST_USER1_PRINCIPAL, canister).unwrap();
-    let mut canister_controllers = status.controllers();
+    let mut canister_controllers = status.settings.controllers.clone();
     canister_controllers.sort();
     assert_eq!(specified_controllers, canister_controllers);
-    assert_eq!(status.compute_allocation(), 0);
-    assert_eq!(status.memory_allocation(), 0);
-    assert_eq!(status.freezing_threshold(), 2592000);
-    assert_eq!(status.environment_variables(), vec![]);
+    assert_eq!(status.settings.compute_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.memory_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.freezing_threshold, Nat::from(2_592_000_u64));
+    assert_eq!(status.settings.environment_variables, vec![]);
 
     //specify no controller
     let canister = cmc_create_canister_with_cycles(
@@ -622,7 +633,7 @@ fn test_cmc_cycles_create_with_settings() {
         universal_canister,
         Some(CanisterSettings {
             controllers: Some(vec![TEST_USER1_PRINCIPAL.0]),
-            compute_allocation: Some(Nat::from(7u64)),
+            compute_allocation: Some(Nat::from(3_u64)), // 3%
             ..Default::default()
         }),
         None,
@@ -630,11 +641,11 @@ fn test_cmc_cycles_create_with_settings() {
     )
     .unwrap();
     let status = canister_status(&state_machine, *TEST_USER1_PRINCIPAL, canister).unwrap();
-    assert_eq!(status.controllers(), vec![*TEST_USER1_PRINCIPAL]);
-    assert_eq!(status.compute_allocation(), 7);
-    assert_eq!(status.memory_allocation(), 0);
-    assert_eq!(status.freezing_threshold(), 2592000);
-    assert_eq!(status.environment_variables(), vec![]);
+    assert_eq!(status.settings.controllers, vec![TEST_USER1_PRINCIPAL.0]);
+    assert_eq!(status.settings.compute_allocation, Nat::from(3_u64));
+    assert_eq!(status.settings.memory_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.freezing_threshold, Nat::from(2_592_000_u64));
+    assert_eq!(status.settings.environment_variables, vec![]);
 
     //specify freezing threshold
     let canister = cmc_create_canister_with_cycles(
@@ -642,7 +653,7 @@ fn test_cmc_cycles_create_with_settings() {
         universal_canister,
         Some(CanisterSettings {
             controllers: Some(vec![TEST_USER1_PRINCIPAL.0]),
-            freezing_threshold: Some(Nat::from(7u64)),
+            freezing_threshold: Some(Nat::from(86_400_u64)), // 1 day in seconds
             ..Default::default()
         }),
         None,
@@ -650,11 +661,11 @@ fn test_cmc_cycles_create_with_settings() {
     )
     .unwrap();
     let status = canister_status(&state_machine, *TEST_USER1_PRINCIPAL, canister).unwrap();
-    assert_eq!(status.controllers(), vec![*TEST_USER1_PRINCIPAL]);
-    assert_eq!(status.compute_allocation(), 0);
-    assert_eq!(status.memory_allocation(), 0);
-    assert_eq!(status.freezing_threshold(), 7);
-    assert_eq!(status.environment_variables(), vec![]);
+    assert_eq!(status.settings.controllers, vec![TEST_USER1_PRINCIPAL.0]);
+    assert_eq!(status.settings.compute_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.memory_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.freezing_threshold, Nat::from(86_400_u64));
+    assert_eq!(status.settings.environment_variables, vec![]);
 
     //specify memory allocation
     let canister = cmc_create_canister_with_cycles(
@@ -662,7 +673,7 @@ fn test_cmc_cycles_create_with_settings() {
         universal_canister,
         Some(CanisterSettings {
             controllers: Some(vec![TEST_USER1_PRINCIPAL.0]),
-            memory_allocation: Some(Nat::from(7u64)),
+            memory_allocation: Some(Nat::from(1_048_576_u64)), // 1 MiB
             ..Default::default()
         }),
         None,
@@ -670,11 +681,11 @@ fn test_cmc_cycles_create_with_settings() {
     )
     .unwrap();
     let status = canister_status(&state_machine, *TEST_USER1_PRINCIPAL, canister).unwrap();
-    assert_eq!(status.controllers(), vec![*TEST_USER1_PRINCIPAL]);
-    assert_eq!(status.compute_allocation(), 0);
-    assert_eq!(status.memory_allocation(), 7);
-    assert_eq!(status.freezing_threshold(), 2592000);
-    assert_eq!(status.environment_variables(), vec![]);
+    assert_eq!(status.settings.controllers, vec![TEST_USER1_PRINCIPAL.0]);
+    assert_eq!(status.settings.compute_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.memory_allocation, Nat::from(1_048_576_u64));
+    assert_eq!(status.settings.freezing_threshold, Nat::from(2_592_000_u64));
+    assert_eq!(status.settings.environment_variables, vec![]);
 
     //specify environment variables
     let env_vars = vec![EnvironmentVariable {
@@ -686,15 +697,7 @@ fn test_cmc_cycles_create_with_settings() {
         universal_canister,
         Some(CanisterSettings {
             controllers: Some(vec![TEST_USER1_PRINCIPAL.0]),
-            environment_variables: Some(
-                env_vars
-                    .iter()
-                    .map(|e| ic_management_canister_types::EnvironmentVariable {
-                        name: e.name.clone(),
-                        value: e.value.clone(),
-                    })
-                    .collect(),
-            ),
+            environment_variables: Some(env_vars.clone()),
             ..Default::default()
         }),
         None,
@@ -702,11 +705,11 @@ fn test_cmc_cycles_create_with_settings() {
     )
     .unwrap();
     let status = canister_status(&state_machine, *TEST_USER1_PRINCIPAL, canister).unwrap();
-    assert_eq!(status.controllers(), vec![*TEST_USER1_PRINCIPAL]);
-    assert_eq!(status.compute_allocation(), 0);
-    assert_eq!(status.memory_allocation(), 0);
-    assert_eq!(status.freezing_threshold(), 2592000);
-    assert_eq!(status.environment_variables(), env_vars);
+    assert_eq!(status.settings.controllers, vec![TEST_USER1_PRINCIPAL.0]);
+    assert_eq!(status.settings.compute_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.memory_allocation, Nat::from(0_u64));
+    assert_eq!(status.settings.freezing_threshold, Nat::from(2_592_000_u64));
+    assert_eq!(status.settings.environment_variables, env_vars);
 
     let universal_status = canister_status(
         &state_machine,
@@ -714,7 +717,7 @@ fn test_cmc_cycles_create_with_settings() {
         universal_canister,
     )
     .unwrap();
-    let universal_cycles = universal_status.cycles();
+    let universal_cycles = universal_status.cycles;
 
     // Creating a canister with obviously too few cycles returns all cycles to the caller
     let error =
@@ -736,7 +739,7 @@ fn test_cmc_cycles_create_with_settings() {
             universal_canister
         )
         .unwrap()
-        .cycles()
+        .cycles
     );
 
     // Refund works when requesting a non-existent subnet type but charges some penalty
@@ -760,14 +763,14 @@ fn test_cmc_cycles_create_with_settings() {
         "Refund was not BAD_REQUEST_CYCLES_PENALTY smaller than initial send amount"
     );
     assert_eq!(
-        universal_cycles - BAD_REQUEST_CYCLES_PENALTY,
+        universal_cycles - Nat::from(BAD_REQUEST_CYCLES_PENALTY),
         canister_status(
             &state_machine,
             PrincipalId::new_anonymous(),
             universal_canister
         )
         .unwrap()
-        .cycles(),
+        .cycles,
         "Penalty was not BAD_REQUEST_CYCLES_PENALTY"
     );
 }
