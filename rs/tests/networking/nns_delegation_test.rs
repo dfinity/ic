@@ -778,8 +778,6 @@ fn upgrade_non_nns_subnets_if_necessary(env: &TestEnv) {
             .iter()
             .copied()
             .filter(|t| *t != SubnetType::System)
-            // TODO(CON-1696): Remove next line when #9613 reaches mainnet NNS
-            .filter(|t| *t != SubnetType::CloudEngine)
             .map(|subnet_type| {
                 let env = env.clone();
                 let nns_node = nns_node.clone();

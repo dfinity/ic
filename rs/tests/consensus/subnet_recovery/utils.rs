@@ -18,7 +18,7 @@ use ic_system_test_driver::{
 };
 use ic_types::SubnetId;
 use slog::{Logger, info};
-use std::{fmt::Debug, path::PathBuf};
+use std::{collections::BTreeMap, fmt::Debug, path::PathBuf};
 use url::Url;
 
 pub const READONLY_USERNAME: &str = "readonly";
@@ -86,7 +86,6 @@ pub fn halt_subnet(
     admin_helper: &AdminHelper,
     subnet_node: &IcNodeSnapshot,
     subnet_id: SubnetId,
-    keys: &[String],
     logger: &Logger,
 ) {
     info!(logger, "Halting subnet {subnet_id}...");
@@ -96,7 +95,11 @@ pub fn halt_subnet(
 
     AdminStep {
         logger: logger.clone(),
-        ic_admin_cmd: admin_helper.get_halt_subnet_command(subnet_id, true, keys),
+        ic_admin_cmd: admin_helper.get_propose_to_take_subnet_offline_for_repairs_command(
+            subnet_id,
+            &[],
+            &BTreeMap::new(),
+        ),
     }
     .exec()
     .expect("Failed to halt subnet");
@@ -115,16 +118,12 @@ pub fn halt_subnet(
 
 /// Unhalt the given subnet by executing the corresponding ic-admin command through the given NNS
 /// URL.
-pub fn unhalt_subnet(
-    admin_helper: &AdminHelper,
-    subnet_id: SubnetId,
-    keys: &[String],
-    logger: &Logger,
-) {
+pub fn unhalt_subnet(admin_helper: &AdminHelper, subnet_id: SubnetId, logger: &Logger) {
     info!(logger, "Unhalting subnet {subnet_id}...");
     AdminStep {
         logger: logger.clone(),
-        ic_admin_cmd: admin_helper.get_halt_subnet_command(subnet_id, false, keys),
+        ic_admin_cmd: admin_helper
+            .get_propose_to_bring_subnet_back_online_after_repairs_command(subnet_id),
     }
     .exec()
     .expect("Failed to unhalt subnet");
