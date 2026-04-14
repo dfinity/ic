@@ -834,7 +834,10 @@ pub enum CanisterHttpResponseContent {
 
 impl CanisterHttpResponseContent {
     pub fn is_reject(&self) -> bool {
-        matches!(self, CanisterHttpResponseContent::Reject(_))
+        match self {
+            CanisterHttpResponseContent::Success(_) => false,
+            CanisterHttpResponseContent::Reject(_) => true,
+        }
     }
 }
 
