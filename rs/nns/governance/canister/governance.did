@@ -334,6 +334,12 @@ type GetNeuronsFundAuditInfoRequest = record {
   nns_proposal_id : opt ProposalId;
 };
 
+type GetMaturityModulationRequest = record {};
+
+type GetMaturityModulationResponse = record {
+  maturity_modulation : opt MaturityModulation;
+};
+
 type GetNeuronsFundAuditInfoResponse = record {
   result : opt Result_6;
 };
@@ -1472,6 +1478,11 @@ type MaturityDisbursement = record {
   account_identifier_to_disburse_to : opt AccountIdentifier;
 };
 
+type MaturityModulation = record {
+  current_value_permyriad : opt int32;
+  updated_at_days_since_epoch : opt nat64;
+};
+
 // A topic that can be followed. It is almost the same as the topic on the
 // proposal, except that the `CatchAll` is a special value and following on this
 // `topic` will let the neuron follow the votes on all topics except for
@@ -1597,6 +1608,9 @@ service : (Governance) -> {
       Result_2,
     ) query;
   get_latest_reward_event : () -> (RewardEvent) query;
+  get_maturity_modulation : (GetMaturityModulationRequest) -> (
+      GetMaturityModulationResponse,
+    ) query;
   get_metrics : () -> (Result_3) query;
   get_monthly_node_provider_rewards : () -> (Result_4);
   get_most_recent_monthly_node_provider_rewards : () -> (

@@ -4076,3 +4076,12 @@ impl From<api::TakeCanisterSnapshot> for pb::TakeCanisterSnapshot {
         }
     }
 }
+
+impl From<pb::MaturityModulation> for api::MaturityModulation {
+    fn from(item: pb::MaturityModulation) -> Self {
+        Self {
+            current_value_permyriad: item.current_value_permyriad,
+            updated_at_days_since_epoch: item.updated_at_days_since_epoch,
+        }
+    }
+}

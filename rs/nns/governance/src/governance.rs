@@ -1,4 +1,4 @@
-#![allow(deprecated)]
+ #![allow(deprecated)]
 use crate::{
     are_nf_fund_proposals_disabled, are_performance_based_rewards_enabled,
     are_subnet_splitting_proposals_enabled, decoder_config,
@@ -108,8 +108,9 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::{
     self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
-    GetNeuronIndexRequest, GetPendingProposalsRequest, ListNeuronVotesRequest, ListNeurons,
-    ListNeuronsResponse, ListProposalInfoRequest, ListProposalInfoResponse, ManageNeuronResponse,
+    GetMaturityModulationResponse, GetNeuronIndexRequest, GetPendingProposalsRequest,
+    ListNeuronVotesRequest, ListNeurons, ListNeuronsResponse, ListProposalInfoRequest,
+    ListProposalInfoResponse, ManageNeuronResponse, MaturityModulation as ApiMaturityModulation,
     NeuronIndexData, NeuronInfo, NeuronVote, NeuronVotes, ProposalInfo,
     manage_neuron_response::{self, StakeMaturityResponse},
     proposal_validation::{
@@ -8021,6 +8022,17 @@ impl Governance {
 
     pub fn get_restore_aging_summary(&self) -> Option<RestoreAgingSummary> {
         self.heap_data.restore_aging_summary.clone()
+    }
+
+    /// Returns the current maturity modulation, as defined by Mission 70.
+    pub fn get_maturity_modulation(&self) -> GetMaturityModulationResponse {
+        GetMaturityModulationResponse {
+            maturity_modulation: self
+                .heap_data
+                .maturity_modulation
+                .clone()
+                .map(ApiMaturityModulation::from),
+        }
     }
 }
 

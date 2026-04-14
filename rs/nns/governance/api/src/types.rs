@@ -4738,3 +4738,23 @@ pub struct CreatedNeuron {
 }
 
 pub type CreateNeuronResponse = Result<CreatedNeuron, GovernanceError>;
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq, Default,
+)]
+pub struct MaturityModulation {
+    pub current_value_permyriad: Option<i32>,
+    pub updated_at_days_since_epoch: Option<u64>,
+}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq, Default,
+)]
+pub struct GetMaturityModulationRequest {}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq, Default,
+)]
+pub struct GetMaturityModulationResponse {
+    pub maturity_modulation: Option<MaturityModulation>,
+}
