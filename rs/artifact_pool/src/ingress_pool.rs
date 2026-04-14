@@ -326,8 +326,11 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                         warn!(
                             every_n_seconds => 30,
                             self.log,
-                            "Purging {expired_messages_count} expired ingress messages \
-                            from the ingress pool"
+                            "Purging {} expired ingress messages \
+                            from the validated ingress pool and {} \
+                            from the unvalidated ingress pool",
+                            expired_validated.len(),
+                            expired_unvalidated.len()
                         );
                         self.metrics
                             .ingress_messages_expired
