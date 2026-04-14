@@ -320,22 +320,23 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                             .map(ArtifactTransmit::Abort),
                     );
 
-                    let expired_messages_count =
-                        expired_validated.len() + expired_unvalidated.len();
-                    if expired_messages_count > 0 {
-                        warn!(
-                            every_n_seconds => 30,
-                            self.log,
-                            "Purging {} expired ingress messages \
-                            from the validated ingress pool and {} \
-                            from the unvalidated ingress pool",
-                            expired_validated.len(),
-                            expired_unvalidated.len()
-                        );
-                        self.metrics
-                            .ingress_messages_expired
-                            .inc_by(expired_messages_count as u64)
-                    }
+                    let log_if_non_zero = |count, pool_type| {
+                        if count > 0 {
+                            warn!(
+                                every_n_seconds => 30,
+                                self.log,
+                                "Purging {count} expired ingress messages from \
+                                the {pool_type} ingress pool"
+                            );
+                            self.metrics
+                                .ingress_messages_expired
+                                .with_label_values(&[pool_type])
+                                .inc_by(count as u64);
+                        }
+                    };
+
+                    log_if_non_zero(expired_validated.len(), "validated");
+                    log_if_non_zero(expired_unvalidated.len(), "unvalidated");
                 }
             }
         }
@@ -670,7 +671,11 @@ mod tests {
                 assert!(!result.poll_immediately);
                 assert_eq!(ingress_pool.validated().size(), non_expired_count);
                 assert_eq!(
-                    ingress_pool.metrics.ingress_messages_expired.get(),
+                    ingress_pool
+                        .metrics
+                        .ingress_messages_expired
+                        .with_label_values(&["validated"])
+                        .get(),
                     expired_count as u64
                 );
             })
