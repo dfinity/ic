@@ -375,6 +375,7 @@ impl CanisterHttpPoolManagerImpl {
                         registry_version,
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
+                        is_reject: response.content.is_reject(),
                         replica_version: ReplicaVersion::default(),
                     };
                     let signature = if let Ok(signature) = self
@@ -524,6 +525,13 @@ impl CanisterHttpPoolManagerImpl {
                             return Some(CanisterHttpChangeAction::HandleInvalid(
                                 share.clone(),
                                 "Content size does not match the response".to_string(),
+                            ));
+                        }
+
+                        if share.content.is_reject != response.content.is_reject() {
+                            return Some(CanisterHttpChangeAction::HandleInvalid(
+                                share.clone(),
+                                "is_reject does not match the response content".to_string(),
                             ));
                         }
 
@@ -804,6 +812,7 @@ pub mod test {
                         registry_version: RegistryVersion::from(1),
                         content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                         content_size: 0,
+                        is_reject: false,
                         replica_version: ReplicaVersion::default(),
                     };
 
@@ -900,6 +909,7 @@ pub mod test {
                     registry_version: RegistryVersion::from(1),
                     content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                     content_size: 0,
+                    is_reject: false,
                     replica_version: ReplicaVersion::default(),
                 };
 
@@ -1005,6 +1015,7 @@ pub mod test {
                     registry_version: RegistryVersion::from(1),
                     content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                     content_size: 0,
+                    is_reject: false,
                     replica_version: ReplicaVersion::default(),
                 };
 
@@ -1132,6 +1143,7 @@ pub mod test {
                     registry_version: RegistryVersion::from(1),
                     content_hash: ic_types::crypto::crypto_hash(&response),
                     content_size: response.content.count_bytes() as u32,
+                    is_reject: false,
                     replica_version: ReplicaVersion::default(),
                 };
 
@@ -1249,6 +1261,38 @@ pub mod test {
                         CanisterHttpChangeAction::HandleInvalid(_, reason) if reason == "Content size does not match the response"
                     );
                 }
+
+                // TEST 4: Non-replicated request artifact has a mismatched is_reject flag.
+                // It should be marked as invalid.
+                {
+                    let response = empty_canister_http_response(0);
+                    let mut canister_http_pool =
+                        CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                    let mut bad_share = share.clone();
+                    bad_share.content.is_reject = !bad_share.content.is_reject;
+
+                    let artifact_with_mismatched_is_reject = CanisterHttpResponseArtifact {
+                        share: bad_share,
+                        response: Some(response),
+                    };
+                    canister_http_pool.insert(UnvalidatedArtifact {
+                        message: artifact_with_mismatched_is_reject,
+                        peer_id: delegated_node_id,
+                        timestamp: UNIX_EPOCH,
+                    });
+
+                    let changes = pool_manager.validate_shares(
+                        pool.get_cache().as_ref(),
+                        &canister_http_pool,
+                        Height::from(0),
+                    );
+
+                    assert_matches!(
+                        &changes[0],
+                        CanisterHttpChangeAction::HandleInvalid(_, reason) if reason == "is_reject does not match the response content"
+                    );
+                }
             })
         });
     }
@@ -1296,6 +1340,7 @@ pub mod test {
                     registry_version: RegistryVersion::from(1),
                     content_hash: ic_types::crypto::crypto_hash(&response),
                     content_size: response.content.count_bytes() as u32,
+                    is_reject: false,
                     replica_version: ReplicaVersion::default(),
                 };
                 let share = Signed {
@@ -1393,6 +1438,7 @@ pub mod test {
                     registry_version: RegistryVersion::from(1),
                     content_hash: ic_types::crypto::crypto_hash(&response),
                     content_size: response.content.count_bytes() as u32,
+                    is_reject: false,
                     replica_version: ReplicaVersion::default(),
                 };
 
@@ -1530,6 +1576,7 @@ pub mod test {
                         registry_version: RegistryVersion::from(1),
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
+                        is_reject: false,
                         replica_version: ReplicaVersion::default(),
                     };
                     let share = Signed {
@@ -1595,6 +1642,7 @@ pub mod test {
                         registry_version: RegistryVersion::from(1),
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
+                        is_reject: false,
                         replica_version: ReplicaVersion::default(),
                     };
                     let share = Signed {
@@ -1698,6 +1746,7 @@ pub mod test {
                     registry_version: RegistryVersion::from(1),
                     content_hash: ic_types::crypto::crypto_hash(&response),
                     content_size: response.content.count_bytes() as u32,
+                    is_reject: true,
                     replica_version: ReplicaVersion::default(),
                 };
 
@@ -2029,6 +2078,7 @@ pub mod test {
                     registry_version: RegistryVersion::from(1),
                     content_hash: dishonest_hash,
                     content_size: dishonest_response.content.count_bytes() as u32,
+                    is_reject: true,
                     replica_version: ReplicaVersion::default(),
                 };
                 let share = Signed {
@@ -2167,6 +2217,7 @@ pub mod test {
                     registry_version: RegistryVersion::from(1),
                     content_hash: ic_types::crypto::crypto_hash(&response),
                     content_size: response.content.count_bytes() as u32,
+                    is_reject: true,
                     replica_version: ReplicaVersion::default(),
                 };
 
@@ -2244,6 +2295,7 @@ pub mod test {
                     registry_version: RegistryVersion::from(1),
                     content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                     content_size: 0,
+                    is_reject: false,
                     replica_version: ReplicaVersion::default(),
                 };
 
@@ -2508,6 +2560,7 @@ pub mod test {
                     registry_version: RegistryVersion::from(1),
                     content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                     content_size: 0,
+                    is_reject: false,
                     replica_version: ReplicaVersion::default(),
                 };
 
@@ -2671,6 +2724,7 @@ pub mod test {
                     registry_version: RegistryVersion::from(1),
                     content_hash: crypto_hash(&response),
                     content_size: response.content.count_bytes() as u32,
+                    is_reject: false,
                     replica_version: ReplicaVersion::default(),
                 };
                 let share = Signed {
@@ -2769,6 +2823,7 @@ pub mod test {
                     registry_version: RegistryVersion::from(1),
                     content_hash: crypto_hash(&response),
                     content_size: response.content.count_bytes() as u32,
+                    is_reject: false,
                     replica_version: ReplicaVersion::default(),
                 };
 
@@ -2890,6 +2945,37 @@ pub mod test {
                         if reason == "Content size does not match the response"
                     );
                 }
+
+                // TEST 4: Flexible artifact has a mismatched is_reject flag -- should be invalid.
+                {
+                    let response = empty_canister_http_response(callback_id.get());
+                    let mut canister_http_pool =
+                        CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                    let mut bad_share = share.clone();
+                    bad_share.content.is_reject = !bad_share.content.is_reject;
+
+                    canister_http_pool.insert(UnvalidatedArtifact {
+                        message: CanisterHttpResponseArtifact {
+                            share: bad_share,
+                            response: Some(response),
+                        },
+                        peer_id: committee_member,
+                        timestamp: UNIX_EPOCH,
+                    });
+
+                    let changes = pool_manager.validate_shares(
+                        pool.get_cache().as_ref(),
+                        &canister_http_pool,
+                        Height::from(0),
+                    );
+
+                    assert_matches!(
+                        &changes[0],
+                        CanisterHttpChangeAction::HandleInvalid(_, reason)
+                        if reason == "is_reject does not match the response content"
+                    );
+                }
             })
         });
     }
@@ -2970,6 +3056,7 @@ pub mod test {
                         registry_version: RegistryVersion::from(1),
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
+                        is_reject: false,
                         replica_version: ReplicaVersion::default(),
                     };
                     let share = Signed {
@@ -3033,6 +3120,7 @@ pub mod test {
                         registry_version: RegistryVersion::from(1),
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
+                        is_reject: false,
                         replica_version: ReplicaVersion::default(),
                     };
                     let share = Signed {

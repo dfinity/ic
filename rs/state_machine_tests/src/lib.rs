@@ -2613,6 +2613,7 @@ impl StateMachine {
                 registry_version,
                 content_hash: ic_types::crypto::crypto_hash(&response),
                 content_size: content.count_bytes() as u32,
+                is_reject: content.is_reject(),
                 replica_version: ReplicaVersion::default(),
             };
             let signature = CryptoReturningOk::default()
