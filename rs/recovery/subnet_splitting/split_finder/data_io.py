@@ -3,9 +3,6 @@ from typing import Dict, List, Tuple
 
 import pandas as pd
 
-"""
-"""
-
 
 def load_subnet_data(load_path: Path, load_type: str, communication_data_path: Path) -> Dict:
     """
