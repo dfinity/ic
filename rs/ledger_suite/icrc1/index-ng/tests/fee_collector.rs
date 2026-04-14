@@ -118,8 +118,8 @@ fn test_fee_collector_ranges(legacy: bool) {
     };
     let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
-    let mut range_start = 0u64;
-    let mut curr_txid = 0u64;
+    let mut range_start = 0_u64;
+    let mut curr_txid = 0_u64;
     if !legacy {
         curr_txid += 1; // init fee collector block
     }
@@ -299,7 +299,7 @@ fn test_fee_collector_107_edge_cases() {
     let mut block_id = 0;
 
     let add_mint_block = |block_id: u64, fc: Option<Account>, fc_id: Option<u64>| {
-        let mint = BlockBuilder::new(block_id, block_id).with_fee(Tokens::from(1u64));
+        let mint = BlockBuilder::new(block_id, block_id).with_fee(Tokens::from(1_u64));
         let mint = match fc {
             Some(fc) => mint.with_fee_collector(fc),
             None => mint,
@@ -308,7 +308,7 @@ fn test_fee_collector_107_edge_cases() {
             Some(fc_id) => mint.with_fee_collector_block(fc_id),
             None => mint,
         };
-        let mint = mint.mint(regular_account, Tokens::from(1000u64)).build();
+        let mint = mint.mint(regular_account, Tokens::from(1000_u64)).build();
 
         assert_eq!(
             Nat::from(block_id),
@@ -320,13 +320,13 @@ fn test_fee_collector_107_edge_cases() {
     };
 
     let add_approve_block = |block_id: u64, fc: Option<Account>| {
-        let approve = BlockBuilder::new(block_id, block_id).with_fee(Tokens::from(1u64));
+        let approve = BlockBuilder::new(block_id, block_id).with_fee(Tokens::from(1_u64));
         let approve = match fc {
             Some(fc) => approve.with_fee_collector(fc),
             None => approve,
         };
         let approve = approve
-            .approve(regular_account, regular_account, Tokens::from(1u64))
+            .approve(regular_account, regular_account, Tokens::from(1_u64))
             .build();
 
         assert_eq!(
@@ -412,7 +412,7 @@ fn add_custom_block(
     btype: Option<&str>,
     tx_fields: Vec<(&str, ICRC3Value)>,
 ) {
-    let mut block_builder = BlockBuilder::new(block_id, block_id).with_fee(Tokens::from(1u64));
+    let mut block_builder = BlockBuilder::new(block_id, block_id).with_fee(Tokens::from(1_u64));
     if let Some(btype) = btype {
         block_builder = block_builder.with_btype(String::from(btype));
     }
@@ -517,7 +517,7 @@ fn test_fee_collector_107_irregular_mthd() {
     let tx_fields = vec![
         ("mthd", ICRC3Value::Text(UNRECOGNIZED_MTHD_NAME.to_string())),
         ("fee_collector", account_to_icrc3_value(&feecol_107)),
-        ("ts", ICRC3Value::Nat(Nat::from(0u64))),
+        ("ts", ICRC3Value::Nat(Nat::from(0_u64))),
     ];
 
     add_custom_block(env, ledger_id, 0, Some(BTYPE_107), tx_fields);
@@ -534,7 +534,7 @@ fn test_fee_collector_107_op_instead_of_mthd() {
     let tx_fields = vec![
         ("op", ICRC3Value::Text(SET_FEE_COL_107.to_string())),
         ("fee_collector", account_to_icrc3_value(&feecol_107)),
-        ("ts", ICRC3Value::Nat(Nat::from(0u64))),
+        ("ts", ICRC3Value::Nat(Nat::from(0_u64))),
     ];
 
     add_custom_block(env, ledger_id, 0, Some(BTYPE_107), tx_fields);
@@ -559,7 +559,7 @@ fn test_block_with_no_btype_but_with_mthd() {
 
     let tx_fields = vec![
         ("mthd", ICRC3Value::Text("107set_fee_collector".to_string())),
-        ("ts", ICRC3Value::Nat(Nat::from(0u64))),
+        ("ts", ICRC3Value::Nat(Nat::from(0_u64))),
     ];
 
     add_custom_block(env, ledger_id, 0, None, tx_fields);
@@ -583,7 +583,7 @@ fn test_block_with_no_btype_and_no_mthd() {
     let ledger_id = install_icrc3_test_ledger(env);
     let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
-    let tx_fields = vec![("ts", ICRC3Value::Nat(Nat::from(0u64)))];
+    let tx_fields = vec![("ts", ICRC3Value::Nat(Nat::from(0_u64)))];
 
     add_custom_block(env, ledger_id, 0, None, tx_fields);
     let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
