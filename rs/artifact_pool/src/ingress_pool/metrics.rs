@@ -17,7 +17,7 @@ impl IngressPoolMetrics {
             ),
             ingress_messages_expired: metrics_registry.int_counter(
                 "ingress_messages_expired",
-                "Number of throttled ingress messages",
+                "Number of expired ingress messages",
             ),
         }
     }
