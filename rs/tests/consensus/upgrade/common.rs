@@ -389,34 +389,28 @@ fn find_latest_computed_root_hashes_from_logs(
 
     let mut latest_root_hash_per_node = BTreeMap::new();
     for node in nodes {
-        let last_hash = JournalStreamer::new(node.block_on_ssh_session().unwrap())
+        let last_entry = JournalStreamer::new(node.block_on_ssh_session().unwrap())
             .previous_boot()
             .search(computed_root_hash_regex.as_str())
             .expect("Failed to fetch log entries")
-            .into_iter()
-            .map(|entry| {
-                let caps = computed_root_hash_regex
-                    .captures(&entry)
-                    .expect("Should match the regex");
-                let hash = caps.get(1).unwrap().as_str().to_string();
-                let height = caps.get(2).unwrap().as_str().parse::<u64>().ok().unwrap();
-                info!(
-                    logger,
-                    "Found computed root hash log entry for node {} @{}: {}",
-                    node.node_id,
-                    height,
-                    hash
-                );
-                hash
-            })
-            .next_back()
+            .last()
             .unwrap_or_else(|| {
                 panic!(
                     "No log entry with computed root hash found for node {}",
                     node.node_id
                 )
             });
-        latest_root_hash_per_node.insert(node.node_id, last_hash);
+
+        let caps = computed_root_hash_regex
+            .captures(&last_entry)
+            .expect("Should match the regex");
+        let hash = caps.get(1).unwrap().as_str().to_string();
+        let height = caps.get(2).unwrap().as_str().parse::<u64>().ok().unwrap();
+        info!(
+            logger,
+            "Found computed root hash log entry for node {} @{}: {}", node.node_id, height, hash
+        );
+        latest_root_hash_per_node.insert(node.node_id, hash);
     }
 
     latest_root_hash_per_node
