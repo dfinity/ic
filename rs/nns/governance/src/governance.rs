@@ -7641,9 +7641,10 @@ impl Governance {
         }
 
         INFLIGHT.set(true);
-        let rewards = self.get_node_providers_rewards().await?;
+        let rewards = self.get_node_providers_rewards().await;
         INFLIGHT.set(false);
 
+        let rewards = rewards?;
         CACHE.set(Some((now, rewards.clone())));
 
         Ok(rewards)
