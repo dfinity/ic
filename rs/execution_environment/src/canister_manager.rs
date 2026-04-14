@@ -517,12 +517,15 @@ impl CanisterManager {
             });
         }
 
+        // When the user explicitly sets log_memory_limit: validate the limit
+        // and check the canister can afford the resize cost.
+        // When not set: default to DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT so that
+        // new canisters get a log memory store initialized via do_update_settings.
+        let user_set_log_memory_limit = settings.log_memory_limit().is_some();
         let log_memory_limit = settings.log_memory_limit().or(Some(NumBytes::new(
             DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64,
         )));
         if let Some(requested_limit) = log_memory_limit {
-            // User can setup a zero log memory limit to disable logging.
-            // But cannot set it higher than the maximum limit.
             let max_limit = NumBytes::new(MAX_AGGREGATE_LOG_MEMORY_LIMIT as u64);
             if requested_limit > max_limit {
                 return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooHigh {
@@ -531,20 +534,16 @@ impl CanisterManager {
                 });
             }
         }
-        // Only check resize cost when the user explicitly sets log_memory_limit
-        // (not when the default fallback is used for the max-limit validation above).
-        if settings.log_memory_limit().is_some() {
-            // Resizing the log memory store reads all existing log records from
-            // the old ring buffer and rewrites them into a new one. The cost is
-            // proportional to `bytes_used` (actual stored data), not the allocated
-            // capacity, since only live records are migrated during resize.
+        if user_set_log_memory_limit {
+            // Resizing reads all stored log records from the old ring buffer and
+            // rewrites them into a new one. Cost is proportional to bytes_used
+            // (actual stored data), not allocated capacity.
             let log_resize_instructions =
                 NumInstructions::new(canister_log_bytes_used.get() * LOG_RESIZE_COST_PER_BYTE);
             let log_resize_cycles = self
                 .cycles_account_manager
                 .management_canister_cost(log_resize_instructions, subnet_size, cost_schedule)
                 .real();
-            // Check the canister can afford the resize without freezing.
             if canister_cycles_balance < threshold + log_resize_cycles {
                 return Err(CanisterManagerError::LogResizeNotEnoughCycles {
                     available: canister_cycles_balance,
