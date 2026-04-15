@@ -31,7 +31,7 @@ def compute_targets(canister_loads):
     # it will be impossible to split the subnet in such a way that the load is balanced equally
     # across both of the post-split subnets. In that case we relax the constraints a bit.
     max_allowed_load = max(max_canister_load, average_load)
-    return total_canister_loads, max_canister_load, average_load, max_allowed_load
+    return max_allowed_load
 
 
 def find_split(path: Path, communication_data_path: Path, load_type: str, epsilon_load: float, max_cuts: int):
@@ -40,7 +40,7 @@ def find_split(path: Path, communication_data_path: Path, load_type: str, epsilo
     load = data["load"]
     index_to_canister_id = data["index_to_canister_id"]
 
-    total_load_primary, max_load_primary, avg_load_primary, max_allowed_load_per_subnet = compute_targets(load)
+    max_allowed_load_per_subnet = compute_targets(load)
 
     result = solve_partition(
         [LoadConstraints(load_type, load, max_allowed_load_per_subnet, epsilon_load)],
