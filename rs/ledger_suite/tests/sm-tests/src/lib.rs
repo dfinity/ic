@@ -6498,7 +6498,10 @@ where
     let blocks = icrc3_get_blocks(&env, canister_id, 0, 1);
     assert_eq!(blocks.blocks.len(), 1);
     let btype = match &blocks.blocks[0].block {
-        ICRC3Value::Map(m) => m.iter().find(|(k, _)| k.as_str() == "btype").map(|(_, v)| v.clone()),
+        ICRC3Value::Map(m) => m
+            .iter()
+            .find(|(k, _)| k.as_str() == "btype")
+            .map(|(_, v)| v.clone()),
         other => panic!("expected Map block, got: {other:?}"),
     };
     assert_eq!(
@@ -6533,7 +6536,10 @@ where
     let blocks = icrc3_get_blocks(&env, canister_id, 1, 1);
     assert_eq!(blocks.blocks.len(), 1);
     let btype = match &blocks.blocks[0].block {
-        ICRC3Value::Map(m) => m.iter().find(|(k, _)| k.as_str() == "btype").map(|(_, v)| v.clone()),
+        ICRC3Value::Map(m) => m
+            .iter()
+            .find(|(k, _)| k.as_str() == "btype")
+            .map(|(_, v)| v.clone()),
         other => panic!("expected Map block, got: {other:?}"),
     };
     assert_eq!(
