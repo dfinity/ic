@@ -531,6 +531,56 @@ fn add_subnet_local_registry_records(
     );
 }
 
+/// Register minimal registry records for a non-local subnet so that it
+/// appears in the `NetworkTopology` and its routing table entries are not
+/// filtered out.
+fn register_non_local_subnet(
+    extra_subnet_id: SubnetId,
+    registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+) {
+    let mut seed = [0u8; 32];
+    let subnet_bytes = extra_subnet_id.get().to_vec();
+    for (i, b) in subnet_bytes.iter().enumerate() {
+        seed[i % 32] ^= b;
+    }
+    let (ni_dkg_transcript, _) =
+        dummy_initial_dkg_transcript_with_master_key(&mut StdRng::from_seed(seed));
+    let public_key: ThresholdSigPublicKey = (&ni_dkg_transcript).try_into().unwrap();
+
+    let mut high_threshold_transcript = ni_dkg_transcript.clone();
+    high_threshold_transcript.dkg_id.dkg_tag = NiDkgTag::HighThreshold;
+    let mut low_threshold_transcript = ni_dkg_transcript;
+    low_threshold_transcript.dkg_id.dkg_tag = NiDkgTag::LowThreshold;
+    let cup_contents = CatchUpPackageContents {
+        initial_ni_dkg_transcript_high_threshold: Some(high_threshold_transcript.into()),
+        initial_ni_dkg_transcript_low_threshold: Some(low_threshold_transcript.into()),
+        ..Default::default()
+    };
+    registry_data_provider
+        .add(
+            &make_catch_up_package_contents_key(extra_subnet_id),
+            INITIAL_REGISTRY_VERSION,
+            Some(cup_contents),
+        )
+        .unwrap();
+
+    let record = SubnetRecordBuilder::from(&[])
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    add_single_subnet_record(
+        registry_data_provider,
+        INITIAL_REGISTRY_VERSION.get(),
+        extra_subnet_id,
+        record,
+    );
+    add_subnet_key_record(
+        registry_data_provider,
+        INITIAL_REGISTRY_VERSION.get(),
+        extra_subnet_id,
+        public_key,
+    );
+}
+
 fn make_fresh_registry_cup(
     registry_client: Arc<FakeRegistryClient>,
     subnet_id: SubnetId,
@@ -1574,7 +1624,23 @@ impl StateMachineBuilder {
                 )
                 .expect("failed to assign a canister range");
         }
-        let subnet_list = vec![sm.get_subnet_id()];
+        // Register all subnet IDs referenced in the routing table (not just
+        // the local one) so that the routing table entries survive the
+        // filtering in `try_to_populate_network_topology`. Without this,
+        // entries for non-local subnets are silently dropped and any
+        // response destined for those subnets triggers a critical error
+        // in the stream builder.
+        let subnet_list: Vec<SubnetId> = routing_table
+            .iter()
+            .map(|(_, sid)| *sid)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        for &extra_subnet_id in &subnet_list {
+            if extra_subnet_id != subnet_id {
+                register_non_local_subnet(extra_subnet_id, &registry_data_provider);
+            }
+        }
         let chain_keys = chain_keys_enabled_status
             .into_iter()
             .filter_map(|(key_id, is_enabled)| {
