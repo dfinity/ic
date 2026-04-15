@@ -2962,6 +2962,66 @@ fn flexible_build_responses_too_large_with_rejects_reducing_unseen() {
 }
 
 #[test]
+fn flexible_build_responses_too_large_fewer_ok_than_min_responses() {
+    let num_nodes = 6;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    // min_responses=4, committee=6.
+    // 3 large OK shares (sum > MAX) from nodes 0..3.
+    // 2 rejects from nodes 3..5 → only 1 unseen member remains.
+    // min_known_ok_needed = 4 - 1 = 3, and we have exactly 3 OK shares whose sum exceeds MAX.
+    // Even though num_ok (3) < min_responses (4), we can already prove impossibility.
+    let body_size = (MAX_CANISTER_HTTP_PAYLOAD_SIZE / 3) + 100_000;
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 4, 6, |pb, pool| {
+        {
+            use ic_types::canister_http::CanisterHttpReject;
+
+            let mut pool_access = pool.write().unwrap();
+            for node_idx in 0..3_u64 {
+                let body = vec![0xAA_u8; body_size];
+                let (response, metadata) = test_response_and_metadata_with_content(
+                    callback_id.get(),
+                    CanisterHttpResponseContent::Success(body),
+                );
+                let share = metadata_to_share(node_idx, &metadata);
+                add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
+            }
+            for node_idx in 3..5_u64 {
+                let (response, metadata) = test_response_and_metadata_with_content(
+                    callback_id.get(),
+                    CanisterHttpResponseContent::Reject(CanisterHttpReject {
+                        reject_code: RejectCode::SysTransient,
+                        message: format!("error_{node_idx}"),
+                    }),
+                );
+                let share = metadata_to_share(node_idx, &metadata);
+                add_own_share_to_pool(pool_access.deref_mut(), &share, &response);
+            }
+        }
+
+        let parsed = build_and_validate_and_parse_payload(&pb);
+
+        assert!(parsed.flexible_responses.is_empty());
+        assert_eq!(parsed.flexible_errors.len(), 1);
+        assert_matches!(
+            &parsed.flexible_errors[0],
+            FlexibleCanisterHttpError::ResponsesTooLarge {
+                callback_id: cb,
+                all_seen_shares,
+            } => {
+                assert_eq!(*cb, callback_id);
+                assert_eq!(all_seen_shares.len(), 5);
+                let ok_count = all_seen_shares.iter().filter(|s| !s.content.is_reject).count();
+                let reject_count = all_seen_shares.iter().filter(|s| s.content.is_reject).count();
+                assert_eq!(ok_count, 3);
+                assert_eq!(reject_count, 2);
+            }
+        );
+    });
+}
+
+#[test]
 fn flexible_build_too_many_request_errors() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
