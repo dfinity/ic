@@ -2807,14 +2807,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_environment_variables_flag(
-        mut self,
-        environment_variables_flag: FlagStatus,
-    ) -> Self {
-        self.execution_config.environment_variables = environment_variables_flag;
-        self
-    }
-
     pub fn with_deterministic_memory_tracker_enabled(mut self, enabled: bool) -> Self {
         self.execution_config
             .embedders_config
