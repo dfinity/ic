@@ -468,10 +468,10 @@ fn test_dts_execution_completes() {
             r#"(module
                 (import "ic0" "msg_reply" (func $msg_reply))
                 (func $run
-                    (local $i i32)
+                    (local $i i64)
                     (loop $loop
-                        (local.set $i (i32.add (local.get $i) (i32.const 1)))
-                        (br_if $loop (i32.lt_s (local.get $i) (i32.const 3000000000)))
+                        (local.set $i (i64.add (local.get $i) (i64.const 1)))
+                        (br_if $loop (i64.lt_s (local.get $i) (i64.const 3000000000)))
                     )
                     (call $msg_reply))
                 (memory $memory 1)
