@@ -2639,6 +2639,21 @@ impl StateManagerImpl {
             hash_tree,
         })
     }
+
+    fn update_latest_certified_height(&self, height: Height) {
+        let latest_certified = update_latest_height(&self.latest_certified_height, height);
+        self.metrics
+            .latest_certified_height
+            .set(latest_certified as i64);
+        self.max_certified_height_tx.send_if_modified(|h| {
+            if height > *h {
+                *h = height;
+                true
+            } else {
+                false
+            }
+        });
+    }
 }
 
 fn initial_state(own_subnet_id: SubnetId, own_subnet_type: SubnetType) -> Labeled<ReplicatedState> {
@@ -3116,19 +3131,7 @@ impl StateManager for StateManagerImpl {
                 );
             }
 
-            let latest_certified =
-                update_latest_height(&self.latest_certified_height, certification.height);
-            self.metrics
-                .latest_certified_height
-                .set(latest_certified as i64);
-            self.max_certified_height_tx.send_if_modified(|h| {
-                if certification_height > *h {
-                    *h = certification_height;
-                    true
-                } else {
-                    false
-                }
-            });
+            self.update_latest_certified_height(certification_height);
 
             if let Some((_, certification_requested_at)) = metadata.hash_tree {
                 self.metrics
@@ -3504,18 +3507,7 @@ impl StateManager for StateManagerImpl {
             // in that case `certification_metadata` is never inserted and the
             // certified state at this height would not be available.
             if certification_metadata.certification.is_some() {
-                let latest_certified = update_latest_height(&self.latest_certified_height, height);
-                self.metrics
-                    .latest_certified_height
-                    .set(latest_certified as i64);
-                self.max_certified_height_tx.send_if_modified(|h| {
-                    if height > *h {
-                        *h = height;
-                        true
-                    } else {
-                        false
-                    }
-                });
+                self.update_latest_certified_height(height);
             }
 
             states

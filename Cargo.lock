@@ -7923,7 +7923,6 @@ dependencies = [
  "mockall",
  "prometheus",
  "slog",
- "tokio",
 ]
 
 [[package]]
