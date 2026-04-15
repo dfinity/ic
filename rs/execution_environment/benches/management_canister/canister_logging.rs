@@ -14,12 +14,9 @@ use ic_types_cycles::Cycles;
 const KIB: u64 = 1024;
 const MIB: u64 = 1024 * KIB;
 
-/// Message size used for log records in benchmarks.
-const LOG_MESSAGE_SIZE: usize = 100;
-
-/// How many records to write per ingress call.
-/// Chosen so that 2 MiB of logs can be filled in 1-2 calls.
-const RECORDS_PER_CALL: u32 = 20_000;
+/// Zero-byte messages create the maximum number of records per buffer,
+/// which is the worst case for resize (most deserialization/re-encoding work).
+const LOG_MESSAGE_SIZE: usize = 0;
 
 fn run_bench_resize_canister_log<M: criterion::measurement::Measurement>(
     group: &mut BenchmarkGroup<M>,
@@ -29,8 +26,7 @@ fn run_bench_resize_canister_log<M: criterion::measurement::Measurement>(
 ) {
     let log_message = vec![b'a'; LOG_MESSAGE_SIZE];
     let record_size = LogMemoryStore::estimate_record_size(LOG_MESSAGE_SIZE) as u64;
-    let records_to_fill = initial_log_memory_limit / record_size + 1;
-    let calls_to_fill = records_to_fill.div_ceil(RECORDS_PER_CALL as u64);
+    let records_to_fill = (initial_log_memory_limit / record_size + 1) as u32;
 
     group.bench_function(bench_name, |b| {
         b.iter_batched(
@@ -56,15 +52,13 @@ fn run_bench_resize_canister_log<M: criterion::measurement::Measurement>(
                     wat_canister()
                         .update(
                             "fill_logs",
-                            wat_fn().repeat(RECORDS_PER_CALL, wat_fn().debug_print(&log_message)),
+                            wat_fn().repeat(records_to_fill, wat_fn().debug_print(&log_message)),
                         )
                         .build_wasm(),
                     vec![],
                 )
                 .unwrap();
-                for _ in 0..calls_to_fill {
-                    let _ = env.execute_ingress(canister_id, "fill_logs", vec![]);
-                }
+                let _ = env.execute_ingress(canister_id, "fill_logs", vec![]);
                 (env, canister_id)
             },
             // Measurement: resize the log memory store.
@@ -90,16 +84,16 @@ pub fn canister_logging_benchmark(c: &mut Criterion) {
     // Varying sizes to verify linear scaling of resize cost.
     run_bench_resize_canister_log(
         &mut group,
-        "from:256KiB/to:-1/msg:100B",
+        "from:256KiB/to:-1/msg:0B",
         256 * KIB,
         256 * KIB - 1,
     );
-    run_bench_resize_canister_log(&mut group, "from:1MiB/to:-1/msg:100B", MIB, MIB - 1);
-    run_bench_resize_canister_log(&mut group, "from:2MiB/to:-1/msg:100B", 2 * MIB, 2 * MIB - 1);
+    run_bench_resize_canister_log(&mut group, "from:1MiB/to:-1/msg:0B", MIB, MIB - 1);
+    run_bench_resize_canister_log(&mut group, "from:2MiB/to:-1/msg:0B", 2 * MIB, 2 * MIB - 1);
     // Resize up to confirm symmetric cost.
     run_bench_resize_canister_log(
         &mut group,
-        "from:2MiB-1/to:2MiB/msg:100B",
+        "from:2MiB-1/to:2MiB/msg:0B",
         2 * MIB - 1,
         2 * MIB,
     );
