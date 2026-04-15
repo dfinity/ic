@@ -2865,25 +2865,17 @@ impl StateMachine {
                 }
 
                 OrderedMessage::Request { source, target } if target == IC_00 => {
-                    assert!(
-                        self.next_sender_in_subnet_queue(source, target),
-                        "No message from {} to IC_00 in subnet_queues or loopback",
-                        source,
-                    );
+                    self.set_next_sender_in_subnet_queue(source, target);
                     fmo.prioritise_subnet_execution();
                     self.tick();
                     self.complete_dts(source, MAX_TICKS);
                 }
 
                 OrderedMessage::Response { source, target } if source == IC_00 => {
-                    assert!(
-                        self.next_sender_in_subnet_queue(source, target),
-                        "No response from IC_00 to {} in queue or loopback",
-                        target,
-                    );
+                    self.set_next_sender_in_subnet_queue(source, target);
                     fmo.prioritise_canister_execution();
                     self.set_next_scheduled_method(target, NextScheduledMethod::Message);
-                    self.set_next_input_source(target, InputSource::RemoteSubnet);
+                    self.set_next_input_source(target, InputSource::LocalSubnet);
                     fmo.set_ordering_target(Some(target));
                     self.tick();
                     self.complete_dts(target, MAX_TICKS);
@@ -2959,24 +2951,40 @@ impl StateMachine {
         queues.local_sender_schedule().front() == Some(&source)
     }
 
-    fn next_sender_in_subnet_queue(&self, source: CanisterId, target: CanisterId) -> bool {
-        let state = self.get_latest_state();
-
+    fn set_next_sender_in_subnet_queue(&self, source: CanisterId, target: CanisterId) {
         let subnet_canister_id = CanisterId::unchecked_from_principal(self.get_subnet_id().get());
         match (source, target) {
             (IC_00, target) => {
-                // IC_00 response: lands in remote schedule.
-                state.subnet_queues().remote_sender_schedule().front() == Some(&IC_00)
-                    || self.has_loopback_message_for(subnet_canister_id, target)
+                if self.has_loopback_message_for(subnet_canister_id, target) {
+                    self.message_routing.induct_loopback_stream();
+                }
+                let state = self.get_latest_state();
+                let queues = state
+                    .canister_state(&target)
+                    .unwrap_or_else(|| panic!("Canister {} not found", target))
+                    .system_state
+                    .queues();
+                assert!(
+                    queues.local_sender_schedule().front() == Some(&subnet_canister_id),
+                    "No response from IC_00 to {} in canister's input schedule",
+                    target,
+                );
             }
             (source, IC_00) => {
-                // Request to IC_00: receiver in loopback is the subnet ID.
-                state.subnet_queues().local_sender_schedule().front() == Some(&source)
-                    || self.has_loopback_message_for(source, subnet_canister_id)
+                if self.has_loopback_message_for(source, subnet_canister_id) {
+                    self.message_routing.induct_loopback_stream();
+                }
+                assert!(
+                    self.get_latest_state()
+                        .subnet_queues()
+                        .local_sender_schedule()
+                        .front()
+                        == Some(&source),
+                    "No request from {} to IC_00 in subnet queue",
+                    source,
+                );
             }
-            (_, _) => {
-                panic!("Management canister is not involved; use next_sender_in_queue");
-            }
+            _ => panic!("Management canister is not involved; use next_sender_in_queue"),
         }
     }
 
@@ -2984,7 +2992,7 @@ impl StateMachine {
         let state = self.get_latest_state();
         let subnet_id = self.get_subnet_id();
         state.streams().get(&subnet_id).is_some_and(|s| {
-            s.messages().iter().next().is_some_and(|(_, msg)| {
+            s.messages().iter().any(|(_, msg)| {
                 let msg_sender = match msg {
                     StreamMessage::Request(req) => req.sender,
                     StreamMessage::Response(resp) => resp.respondent,

@@ -39,6 +39,12 @@ pub(crate) trait StateMachine: Send {
         node_public_keys: NodePublicKeys,
         api_boundary_nodes: ApiBoundaryNodes,
     ) -> ReplicatedState;
+
+    /// Inducts messages from the loopback stream into input queues without
+    /// executing any round.
+    fn induct_loopback_stream(&self, state: ReplicatedState) -> ReplicatedState {
+        state
+    }
 }
 pub(crate) struct StateMachineImpl {
     scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
@@ -111,6 +117,10 @@ impl StateMachineImpl {
 }
 
 impl StateMachine for StateMachineImpl {
+    fn induct_loopback_stream(&self, state: ReplicatedState) -> ReplicatedState {
+        self.demux.induct_loopback_stream(state)
+    }
+
     fn execute_round(
         &self,
         mut state: ReplicatedState,
