@@ -82,8 +82,8 @@ pub(crate) fn compute_average_icp_xdr_rate(
     if count == 0 {
         return None;
     }
-    let sum: u64 = filtered.into_iter().sum();
-    Some(sum / count)
+    let sum: u128 = filtered.into_iter().map(|r| r as u128).sum();
+    Some((sum / count as u128) as u64)
 }
 
 /// Compute the new maturity modulation in permyriad.
@@ -252,6 +252,16 @@ impl UpdateIcpXdrRateRelatedData {
             println!(
                 "{}UpdateIcpXdrRateRelatedData: XRC rate failed validation: {}",
                 LOG_PREFIX, err
+            );
+            return None;
+        }
+
+        // Verify that XRC returned a rate for the day we requested. If not, the rate
+        // won't fill the expected slot and backfill would loop on the same day.
+        if exchange_rate.timestamp != timestamp {
+            println!(
+                "{}UpdateIcpXdrRateRelatedData: requested timestamp {} but XRC returned {}; ignoring.",
+                LOG_PREFIX, timestamp, exchange_rate.timestamp
             );
             return None;
         }
