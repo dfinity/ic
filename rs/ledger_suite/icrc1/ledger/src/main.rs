@@ -1015,6 +1015,7 @@ fn icrc152_mint_not_async(
                     message: format!("unexpected error: {:?}", other),
                 },
             })?;
+        update_total_volume(amount, false);
         Ok(block_idx)
     })?;
     Ok(block_idx)
@@ -1116,6 +1117,7 @@ fn icrc152_burn_not_async(
                     message: format!("unexpected error: {:?}", other),
                 },
             })?;
+        update_total_volume(amount, false);
         Ok(block_idx)
     })?;
     Ok(block_idx)
