@@ -536,6 +536,7 @@ pub fn create_data_payload(
         &transcript_builder,
         state_manager,
         registry_client,
+        Some(idkg_payload_metrics),
         log,
     )?;
 
@@ -575,6 +576,7 @@ pub(crate) fn create_data_payload_helper(
     transcript_builder: &dyn IDkgTranscriptBuilder,
     state_manager: &dyn StateManager<State = ReplicatedState>,
     registry_client: &dyn RegistryClient,
+    idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
     log: &ReplicaLogger,
 ) -> Result<Option<IDkgPayload>, IDkgPayloadError> {
     let height = parent_block.height().increment();
@@ -615,6 +617,7 @@ pub(crate) fn create_data_payload_helper(
         total_pre_signatures,
         block_reader,
         transcript_builder,
+        idkg_payload_metrics,
         log,
     )?;
 
@@ -632,6 +635,7 @@ pub(crate) fn create_data_payload_helper_2(
     total_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, usize>,
     block_reader: &dyn IDkgBlockReader,
     transcript_builder: &dyn IDkgTranscriptBuilder,
+    idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
     log: &ReplicaLogger,
 ) -> Result<(), IDkgPayloadError> {
     // Check if we are creating a new key, if so, start using it immediately.
@@ -656,6 +660,7 @@ pub(crate) fn create_data_payload_helper_2(
             idkg_payload,
             transcript_builder,
             height,
+            idkg_payload_metrics,
             log,
         )?,
         key_transcript::update_next_key_transcripts(
@@ -693,6 +698,7 @@ pub(crate) fn create_data_payload_helper_2(
         idkg_dealings_contexts,
         block_reader,
         transcript_builder,
+        idkg_payload_metrics,
         log,
     );
     resharing::initiate_reshare_requests(
@@ -701,6 +707,8 @@ pub(crate) fn create_data_payload_helper_2(
             idkg_dealings_contexts,
             validation_context_registry_version,
         ),
+        idkg_payload_metrics,
+        log,
     );
     Ok(())
 }
@@ -878,6 +886,7 @@ mod tests {
             BTreeMap::from([(key_id.clone(), 2)]),
             &TestIDkgBlockReader::new(),
             &TestIDkgTranscriptBuilder::new(),
+            None,
             &ic_logger::replica_logger::no_op_logger(),
         )
         .unwrap();
@@ -1025,6 +1034,7 @@ mod tests {
                 &mut idkg_payload,
                 &transcript_builder,
                 parent_block_height,
+                None,
                 &no_op_logger(),
             )
             .unwrap();
@@ -1284,6 +1294,7 @@ mod tests {
                 &mut idkg_payload,
                 &transcript_builder,
                 parent_block_height,
+                None,
                 &no_op_logger(),
             )
             .unwrap();
@@ -1887,6 +1898,7 @@ mod tests {
                 BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
+                None,
                 &no_op_logger(),
             )
             .unwrap();
@@ -1911,6 +1923,7 @@ mod tests {
                 BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
+                None,
                 &no_op_logger(),
             )
             .unwrap();
@@ -1994,6 +2007,7 @@ mod tests {
                 BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
+                None,
                 &no_op_logger(),
             );
             assert!(result.is_ok());
@@ -2102,6 +2116,7 @@ mod tests {
             BTreeMap::default(),
             &block_reader,
             &transcript_builder,
+            None,
             &no_op_logger(),
         )
         .unwrap();
@@ -2219,6 +2234,7 @@ mod tests {
                 BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
+                None,
                 &no_op_logger(),
             );
             assert!(result.is_ok());
@@ -2244,6 +2260,7 @@ mod tests {
                 BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
+                None,
                 &no_op_logger(),
             );
             assert!(result.is_ok());
@@ -2267,6 +2284,7 @@ mod tests {
                 BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
+                None,
                 &no_op_logger(),
             );
             assert!(result.is_ok());

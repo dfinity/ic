@@ -11,7 +11,7 @@ use ic_interfaces::{
     crypto::{ErrorReproducibility, IDkgProtocol},
     idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool},
 };
-use ic_logger::{ReplicaLogger, debug, warn};
+use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     Height, NodeId,
@@ -832,7 +832,8 @@ impl IDkgPreSignerImpl {
             }
             Err(error) => {
                 // Defer in case of transient errors
-                debug!(
+                warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Dealing validation(transient error): {}, error = {:?}", signed_dealing, error
                 );
@@ -878,7 +879,8 @@ impl IDkgPreSignerImpl {
             } else {
                 self.metrics
                     .pre_sign_errors_inc("verify_dealing_private_transient");
-                debug!(
+                warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Dealing private verification(transient error): {}, error = {:?}",
                     dealing,
@@ -897,7 +899,8 @@ impl IDkgPreSignerImpl {
             )
             .map_or_else(
                 |error| {
-                    debug!(
+                    warn!(
+                        every_n_seconds => 10,
                         self.log,
                         "Dealing multi sign failed: {}, error = {:?}", dealing, error
                     );

@@ -2,7 +2,7 @@
 
 use crate::{
     complaints::{IDkgTranscriptLoader, TranscriptLoadStatus},
-    metrics::{IDkgPayloadMetrics, IDkgPayloadStats},
+    metrics::{IDkgPayloadMetrics, IDkgPayloadMetricsOptionExt, IDkgPayloadStats},
 };
 use ic_consensus_utils::{RoundRobin, pool_reader::PoolReader, range_len};
 use ic_crypto::get_master_public_key_from_transcript;
@@ -182,9 +182,7 @@ pub(super) fn block_chain_reader(
                 log,
                 "block_chain_reader(): failed to build chain cache: {}", err
             );
-            if let Some(metrics) = idkg_payload_metrics {
-                metrics.payload_errors_inc("summary_invalid_chain_cache");
-            };
+            idkg_payload_metrics.payload_errors_inc("summary_invalid_chain_cache");
             err
         })
 }

@@ -437,6 +437,7 @@ fn validate_data_payload(
         &builder,
         state_manager,
         registry_client,
+        None,
         &ic_logger::replica_logger::no_op_logger(),
     ) {
         Ok(idkg_payload) => {
@@ -801,7 +802,12 @@ mod test {
         let (key_transcript, key_transcript_ref) =
             payload.generate_current_key(&key_id, &env, &mut rng);
         block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript);
-        initiate_reshare_requests(&mut payload, reshare_requests.clone());
+        initiate_reshare_requests(
+            &mut payload,
+            reshare_requests.clone(),
+            None,
+            &no_op_logger(),
+        );
         let prev_payload = payload.clone();
 
         // Create completed dealings for request 1.
@@ -817,6 +823,7 @@ mod test {
             &contexts,
             &block_reader,
             &transcript_builder,
+            None,
             &no_op_logger(),
         );
         assert_eq!(payload.xnet_reshare_agreements.len(), 1);
@@ -855,6 +862,7 @@ mod test {
             &contexts,
             &block_reader,
             &transcript_builder,
+            None,
             &no_op_logger(),
         );
 
