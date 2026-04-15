@@ -133,7 +133,7 @@ fn load_metrics_e2e_test() {
             .map(|line| CanisterIdRange::from_str(line).expect("Not a valid CanisterIdRange"))
             .collect();
         assert!(
-            canister_id_ranges.len() <= (MAX_CUTS + 1) / 2,
+            canister_id_ranges.len() <= MAX_CUTS.div_ceil(2),
             "The split-finder script should have produced at most {MAX_CUTS} because we \
             passed {MAX_CUTS} as the `--max-cuts` argument"
         );
