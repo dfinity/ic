@@ -1843,14 +1843,15 @@ fn test_construction_submit() {
                             ic_icrc1::Operation::Burn { .. } => None,
                             ic_icrc1::Operation::FeeCollector { .. } => None,
                             ic_icrc1::Operation::AuthorizedMint { .. }
-                            | ic_icrc1::Operation::AuthorizedBurn { .. } => {
-                                panic!("AuthorizedMint/AuthorizedBurn not yet supported in Rosetta")
-                            }
+                            | ic_icrc1::Operation::AuthorizedBurn { .. } => None,
                         };
 
                         if matches!(
                             icrc1_transaction.operation,
-                            ic_icrc1::Operation::Mint { .. } | ic_icrc1::Operation::Burn { .. }
+                            ic_icrc1::Operation::Mint { .. }
+                                | ic_icrc1::Operation::Burn { .. }
+                                | ic_icrc1::Operation::AuthorizedMint { .. }
+                                | ic_icrc1::Operation::AuthorizedBurn { .. }
                         ) {
                             let caller_agent = Icrc1Agent {
                                 agent: get_custom_agent(arg_with_caller.caller.clone(), setup.port)

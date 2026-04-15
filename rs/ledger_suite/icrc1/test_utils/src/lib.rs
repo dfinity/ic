@@ -172,10 +172,6 @@ fn operation_strategy<Tokens: TokensType>(
                 },
             );
 
-        // TODO: AuthorizedMint/AuthorizedBurn strategies are commented out until
-        // Rosetta support is implemented (PR 4). Rosetta proptests use blocks_strategy
-        // and will panic on these variants. Re-enable after Rosetta handles them.
-        /*
         let authorized_mint_amount = amount.clone();
         let authorized_mint_strategy = (
             account_strategy(),
@@ -208,7 +204,6 @@ fn operation_strategy<Tokens: TokensType>(
                     reason,
                 },
             );
-        */
 
         prop_oneof![
             mint_strategy,
@@ -216,8 +211,8 @@ fn operation_strategy<Tokens: TokensType>(
             transfer_strategy,
             approve_strategy,
             fee_collector_strategy,
-            // authorized_mint_strategy,
-            // authorized_burn_strategy,
+            authorized_mint_strategy,
+            authorized_burn_strategy,
         ]
     })
 }
