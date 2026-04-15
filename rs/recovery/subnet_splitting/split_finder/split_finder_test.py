@@ -28,9 +28,12 @@ class TestCsvLoading(unittest.TestCase):
         self.assertEqual(
             result,
             [
-                ("r7inp-6aaaa-aaaaa-aaabq-cai", "rno2w-sqaaa-aaaaa-aaacq-cai"),
-                ("qoctq-giaaa-aaaaa-aaaea-cai", "qjdve-lqaaa-aaaaa-aaaeq-cai"),
-                ("q4eej-kyaaa-aaaaa-aaaha-cai", "si2b5-pyaaa-aaaaa-aaaja-cai"),
+                ("rkp4c-7iaaa-aaaaa-aaaca-cai", "rno2w-sqaaa-aaaaa-aaacq-cai"),
+                ("qjdve-lqaaa-aaaaa-aaaeq-cai", "qsgjb-riaaa-aaaaa-aaaga-cai"),
+                ("q3fc5-haaaa-aaaaa-aaahq-cai", "si2b5-pyaaa-aaaaa-aaaja-cai"),
+                # ("r7inp-6aaaa-aaaaa-aaabq-cai", "rno2w-sqaaa-aaaaa-aaacq-cai"),
+                # ("qoctq-giaaa-aaaaa-aaaea-cai", "qjdve-lqaaa-aaaaa-aaaeq-cai"),
+                # ("q4eej-kyaaa-aaaaa-aaaha-cai", "si2b5-pyaaa-aaaaa-aaaja-cai"),
             ],
             msg=f"`find_split` returned unexpected split: {result}",
         )

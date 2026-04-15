@@ -24,15 +24,14 @@ def compute_targets(load_c):
     if len(load_c) == 0:
         raise ValueError("The provided load data is empty")
 
-    total_load_c = sum(load_c)
-    max_canister_load = max(load_c)
-    average_load = total_load_c / 2
-    # If there is a single canister which is responsible for majority of the load on the subnet
+    total_canister_loads = sum(canister_loads)
+    max_canister_load = max(canister_loads)
+    average_load = total_canister_loads / 2
+    # If there is a single canister which has is responsible for majority of the load on the subnet
     # it will be impossible to split the subnet in such a way that the load is balanced equally
     # across both of the post-split subnets. In that case we relax the constraints a bit.
-    target_load_0 = max(max_canister_load, average_load)
-    target_load_1 = total_load_c - target_load_0
-    return total_load_c, max_canister_load, average_load, target_load_0, target_load_1
+    max_allowed_load = max(max_canister_load, average_load)
+    return total_canister_loads, max_canister_load, average_load, max_allowed_load
 
 
 def find_split(path: Path, communication_data_path: Path, load_type: str, epsilon_load: float, max_cuts: int):
@@ -41,13 +40,12 @@ def find_split(path: Path, communication_data_path: Path, load_type: str, epsilo
     load = data["load"]
     index_to_canister_id = data["index_to_canister_id"]
 
-    total_load_primary, max_load_primary, avg_load_primary, target_0_primary, target_1_primary = compute_targets(load)
+    total_load_primary, max_load_primary, avg_load_primary, max_allowed_load_per_subnet = compute_targets(load)
 
     result = solve_partition(
         load,
         edges,
-        target_0_primary,
-        target_1_primary,
+        max_allowed_load_per_subnet,
         epsilon=epsilon_load,
         max_cuts=max_cuts,
         load_secondary=None,

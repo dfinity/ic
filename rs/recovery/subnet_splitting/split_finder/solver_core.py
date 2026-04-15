@@ -2,18 +2,15 @@ from typing import Dict, List, Tuple
 
 import pulp
 
+class LoadConstraints:
+    canister_loads: List[float]
+    max_allowed_load_per_subnet: float
+    epsilon: float
 
 def solve_partition(
-    load_c: List[float],
+    constraints: List[LoadConstraints],
     edges: Dict[Tuple[int, int], int],
-    target_load_0: float,
-    target_load_1: float,
-    epsilon: float,
     max_cuts: int,
-    load_secondary: List[float] | None = None,
-    target_sec_0: float | None = None,
-    target_sec_1: float | None = None,
-    epsilon_secondary: float | None = None,
 ) -> Dict:
     """
     Build and solve the MILP for a given load vector and communication edges.
@@ -49,10 +46,8 @@ def solve_partition(
     load_0 = pulp.lpSum([load_c[k] * (1 - t[k]) for k in range(canister_count)])
     load_1 = pulp.lpSum([load_c[k] * t[k] for k in range(canister_count)])
 
-    problem += load_0 >= target_load_0 * (1 - epsilon), "LoadBalanceLower_0"
-    problem += load_0 <= target_load_0 * (1 + epsilon), "LoadBalanceUpper_0"
-    problem += load_1 >= target_load_1 * (1 - epsilon), "LoadBalanceLower_1"
-    problem += load_1 <= target_load_1 * (1 + epsilon), "LoadBalanceUpper_1"
+    problem += load_0 <= max_allowed_load_per_subnet * (1 + epsilon), "LoadBalanceUpper_0"
+    problem += load_1 <= max_allowed_load_per_subnet * (1 + epsilon), "LoadBalanceUpper_1"
 
     load_sec_0 = load_sec_1 = None
     if (
