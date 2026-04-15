@@ -262,7 +262,7 @@ pub fn rosetta_core_operations_to_icrc1_operation(
         }
 
         pub fn build(self) -> anyhow::Result<crate::common::storage::types::IcrcOperation> {
-            Ok(match self.icrc_operation.context("Icrc Operation type needs to be of type Mint, Burn, Transfer or Approve")? {
+            Ok(match self.icrc_operation.context("Icrc Operation type needs to be of type Mint, Burn, Transfer, Approve, FeeCollector, AuthorizedMint or AuthorizedBurn")? {
                 IcrcOperation::Mint => {
                     if self.from.is_some() {
                         bail!("From AccountIdentifier field is not allowed for Mint operation")
@@ -980,5 +980,77 @@ mod tests {
             fn test_block_conversions_u256(block in blocks_strategy::<U256>(arb_amount())){
                 test_block_conversion::<U256>(block)
             }
+    }
+
+    fn test_account() -> AccountIdentifier {
+        icrc_ledger_types::icrc1::account::Account {
+            owner: candid::Principal::management_canister(),
+            subaccount: None,
+        }
+        .into()
+    }
+
+    fn test_account_2() -> AccountIdentifier {
+        icrc_ledger_types::icrc1::account::Account {
+            owner: candid::Principal::anonymous(),
+            subaccount: None,
+        }
+        .into()
+    }
+
+    fn make_op(
+        index: u64,
+        op_type: OperationType,
+        account: AccountIdentifier,
+        amount: Option<&str>,
+    ) -> rosetta_core::objects::Operation {
+        rosetta_core::objects::Operation::new(
+            index,
+            op_type.to_string(),
+            Some(account),
+            amount.map(|a| {
+                rosetta_core::objects::Amount::new(a.parse().unwrap(), Currency::default())
+            }),
+            None,
+            None,
+        )
+    }
+
+    #[test]
+    fn test_authorized_mint_with_spender_is_rejected() {
+        // AuthorizedMint followed by a Spender op → builder has spender set → build() rejects
+        let result = rosetta_core_operations_to_icrc1_operation(vec![
+            make_op(
+                0,
+                OperationType::AuthorizedMint,
+                test_account(),
+                Some("1000"),
+            ),
+            make_op(1, OperationType::Spender, test_account_2(), None),
+        ]);
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().to_string().contains("Spender"),
+            "Expected error about Spender not being allowed for AuthorizedMint"
+        );
+    }
+
+    #[test]
+    fn test_authorized_burn_with_spender_is_rejected() {
+        // AuthorizedBurn followed by a Spender op → builder has spender set → build() rejects
+        let result = rosetta_core_operations_to_icrc1_operation(vec![
+            make_op(
+                0,
+                OperationType::AuthorizedBurn,
+                test_account(),
+                Some("-1000"),
+            ),
+            make_op(1, OperationType::Spender, test_account_2(), None),
+        ]);
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().to_string().contains("Spender"),
+            "Expected error about Spender not being allowed for AuthorizedBurn"
+        );
     }
 }

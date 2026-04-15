@@ -504,7 +504,7 @@ impl TryFrom<(Option<String>, BTreeMap<String, Value>)> for IcrcOperation {
                 }
                 found => {
                     bail!(
-                        "Expected field 'op' to be 'burn', 'mint', 'xfer' or 'approve' but found {found}"
+                        "Expected field 'op' to be 'burn', 'mint', 'xfer', 'approve', '{BTYPE_122_MINT}' or '{BTYPE_122_BURN}' but found {found}"
                     )
                 }
             }
