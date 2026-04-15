@@ -2892,9 +2892,11 @@ impl StateMachine {
         let canister = state
             .canister_state_make_mut(&canister_id)
             .unwrap_or_else(|| panic!("Canister {} not found", canister_id));
-        if let Some(es) = canister.execution_state.as_mut() {
-            es.next_scheduled_method = method;
-        }
+        canister
+            .execution_state
+            .as_mut()
+            .unwrap_or_else(|| panic!("Canister {} has no execution state", canister_id))
+            .next_scheduled_method = method;
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);
     }
