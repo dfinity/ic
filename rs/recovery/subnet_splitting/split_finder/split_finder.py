@@ -20,7 +20,7 @@ LOAD_TYPES = [
 ]
 
 
-def compute_targets(canister_loads):
+def compute_max_allowed_load_per_subnet(canister_loads):
     if len(canister_loads) == 0:
         raise ValueError("The provided load data is empty")
 
@@ -42,7 +42,7 @@ def find_split(
     load = data["load"]
     index_to_canister_id = data["index_to_canister_id"]
 
-    max_allowed_load_per_subnet = compute_targets(load)
+    max_allowed_load_per_subnet = compute_max_allowed_load_per_subnet(load)
 
     result = solve_partition(
         [LoadConstraints(load_type, load, max_allowed_load_per_subnet, epsilon_load)],

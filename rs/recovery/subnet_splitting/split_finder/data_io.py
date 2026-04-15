@@ -7,7 +7,8 @@ import pandas as pd
 def load_subnet_data(load_path: Path, load_baseline_path: Path, load_type: str, communication_data_path: Path) -> Dict:
     """
     Load canister metadata and communication edges for a subnet.
-    Returns canister edge list (i, j, weight), load vector, and index mappings.
+    Returns a mapping between canister edges and their weights: (i, j) => weight, load vector,
+    and index mappings.
 
     Arguments:
     load_path -- path to a file in the csv format which contains load metrics for each canister.
@@ -48,10 +49,9 @@ def load_subnet_data(load_path: Path, load_baseline_path: Path, load_type: str, 
         sender_id = row["sender_canister_id"]
         receiver_id = row["receiver_canister_id"]
         count = row["count"]
-        if sender_id in canister_id_to_index and receiver_id in canister_id_to_index:
-            i = canister_id_to_index[sender_id]
-            j = canister_id_to_index[receiver_id]
-            edges[(i, j)] = count
+        sender_index = canister_id_to_index[sender_id]
+        receiver_index = canister_id_to_index[receiver_id]
+        edges[(sender_index, receiver_index)] = count
 
     load = communicating_canisters[load_type].tolist()
 
