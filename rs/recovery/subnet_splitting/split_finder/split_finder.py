@@ -61,9 +61,9 @@ def find_split(path: Path, communication_data_path: Path, load_type: str, epsilo
     assignments = result["assignments"]
 
     if problem.status != pulp.LpStatusOptimal:
-        print("Status: Solution Not Optimal")
-        print("Please check model constraints and settings.")
-        sys.exit(1)
+        raise RuntimeError(
+            "Status: Solution Not Optimal. Please check model constraints and settings."
+        )
 
     ranges = []
     first_in_range = None
