@@ -2217,9 +2217,11 @@ fn test_canister_log_resize_deducts_cycles() {
     let balance_after = env.cycle_balance(canister_id);
 
     // The resize cost is proportional to bytes_used. With a full 2 MiB buffer,
-    // expect at least 1.5 MiB * 32 cycles/byte (allowing slack for partial fill).
+    // expect at least 1.5 MiB * cost_per_byte (allowing slack for partial fill).
+    // Must match LOG_RESIZE_COST_PER_BYTE in canister_manager.rs.
+    let log_resize_cost_per_byte: u64 = 32;
     let cycles_deducted = balance_before - balance_after;
-    let min_expected = 3 * MIB / 2 * 32;
+    let min_expected = 3 * MIB / 2 * log_resize_cost_per_byte;
     assert_gt!(
         cycles_deducted,
         min_expected as u128,
@@ -2288,13 +2290,14 @@ fn test_canister_log_resize_empty_buffer_minimal_charge() {
     if !LOG_MEMORY_STORE_FEATURE_ENABLED {
         return;
     }
+    let log_memory_limt = 2 * MIB;
     let env = setup_env();
     let controller = PrincipalId::new_anonymous();
     let canister_id = create_and_install_canister(
         &env,
         CanisterSettingsArgsBuilder::new()
             .with_controllers(vec![controller])
-            .with_log_memory_limit(256 * KIB)
+            .with_log_memory_limit(log_memory_limt)
             .with_log_visibility(LogVisibilityV2::Public)
             .build(),
         wat_canister().build_wasm(),
@@ -2315,7 +2318,7 @@ fn test_canister_log_resize_empty_buffer_minimal_charge() {
     let result = env.update_settings(
         &canister_id,
         CanisterSettingsArgsBuilder::new()
-            .with_log_memory_limit(256 * KIB - 1)
+            .with_log_memory_limit(log_memory_limt - 1)
             .build(),
     );
     assert!(result.is_ok());
