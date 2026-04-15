@@ -649,6 +649,7 @@ impl SchedulerTest {
             self.registry_settings(),
             &self.replica_version,
             &ChainKeyData::default(),
+            &self.scheduler_config,
         )
     }
 
