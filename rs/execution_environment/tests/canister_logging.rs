@@ -2182,7 +2182,7 @@ fn test_canister_log_resize_deducts_cycles() {
     if !LOG_MEMORY_STORE_FEATURE_ENABLED {
         return;
     }
-    let log_memory_limit = 256 * KIB;
+    let log_memory_limit = 2 * MIB;
 
     let env = setup_env();
     let controller = PrincipalId::new_anonymous();
@@ -2196,7 +2196,6 @@ fn test_canister_log_resize_deducts_cycles() {
         wat_canister()
             .update(
                 "fill_logs",
-                // 3K records of 100B each (120B per record) fills 256 KiB in one call.
                 wat_fn().repeat(
                     records_to_fill(log_memory_limit, 100),
                     wat_fn().debug_print(&[b'a'; 100]),
@@ -2217,10 +2216,10 @@ fn test_canister_log_resize_deducts_cycles() {
     assert!(result.is_ok());
     let balance_after = env.cycle_balance(canister_id);
 
-    // The resize cost is proportional to bytes_used. With a full 256 KiB buffer,
-    // expect at least 200 KiB * 32 cycles/byte (allowing slack for partial fill).
+    // The resize cost is proportional to bytes_used. With a full 2 MiB buffer,
+    // expect at least 1.5 MiB * 32 cycles/byte (allowing slack for partial fill).
     let cycles_deducted = balance_before - balance_after;
-    let min_expected = 200 * KIB * 32;
+    let min_expected = 3 * MIB / 2 * 32;
     assert_gt!(
         cycles_deducted,
         min_expected as u128,
@@ -2267,16 +2266,20 @@ fn test_canister_log_resize_rejected_insufficient_cycles() {
             .build(),
     );
 
-    let result = env.update_settings(
-        &canister_id,
-        CanisterSettingsArgsBuilder::new()
-            .with_log_memory_limit(log_memory_limit - 1)
-            .build(),
-    );
+    let err = env
+        .update_settings(
+            &canister_id,
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(log_memory_limit - 1)
+                .build(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInLogResize);
     assert!(
-        result.is_err(),
-        "Expected log resize to be rejected due to insufficient cycles, balance: {}",
-        env.cycle_balance(canister_id),
+        err.description()
+            .contains("Cannot resize canister log memory due to insufficient cycles"),
+        "Unexpected error message: {}",
+        err.description(),
     );
 }
 
