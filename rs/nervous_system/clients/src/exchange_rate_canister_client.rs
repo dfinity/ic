@@ -130,12 +130,15 @@ pub fn validate_exchange_rate(
 
 /// Converts an `ExchangeRate` to permyriad (4 decimal places).
 ///
-/// The rate from the XRC has `metadata.decimals` decimal places. This multiplies
-/// by 10^(4 - decimals) to normalize to permyriad. Fractional sub-units are
-/// truncated, not rounded.
+/// The rate from the XRC has `metadata.decimals` decimal places. To normalize to
+/// permyriad, this divides by 10^(decimals - 4) when `decimals > 4`, multiplies
+/// by 10^(4 - decimals) when `decimals < 4`, and leaves the rate unchanged when
+/// `decimals == 4`. Fractional sub-units are truncated, not rounded.
 pub fn exchange_rate_to_permyriad(rate: &ExchangeRate) -> u64 {
     let decimals = rate.metadata.decimals;
     let power_diff = PERMYRIAD_DECIMAL_PLACES.abs_diff(decimals);
+    // XRC decimals are bounded (ICP/XDR uses 9), so power_diff is small and
+    // 10^power_diff fits comfortably in u64.
     match decimals.cmp(&PERMYRIAD_DECIMAL_PLACES) {
         std::cmp::Ordering::Greater => rate.rate.saturating_div(10u64.pow(power_diff)),
         std::cmp::Ordering::Less => rate.rate.saturating_mul(10u64.pow(power_diff)),
