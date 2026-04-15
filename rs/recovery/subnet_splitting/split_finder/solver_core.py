@@ -30,16 +30,16 @@ def solve_partition(
     prob += pulp.lpSum([transitions[i] for i in range(N_c - 1)]) <= max_cuts, "MaxCuts"
 
     for i in range(N_c - 1):
-        prob += transitions[i] >= t[i] - t[i + 1], f"TransitionMin_{i}"
-        prob += transitions[i] >= t[i + 1] - t[i], f"TransitionMax_{i}"
+        prob += transitions[i] >= t[i] - t[i + 1], f"TransitionLower1_{i}"
+        prob += transitions[i] >= t[i + 1] - t[i], f"TransitionLower2_{i}"
         prob += transitions[i] <= t[i] + t[i + 1], f"TransitionUpper1_{i}"
         prob += transitions[i] <= 2 - t[i] - t[i + 1], f"TransitionUpper2_{i}"
 
     z = {}
     for i, j, weight in edges:
         z[(i, j)] = pulp.LpVariable(f"z_{i}_{j}", cat="Binary")
-        prob += z[(i, j)] >= t[i] - t[j], f"InterGroupComm1_{i}_{j}"
-        prob += z[(i, j)] >= t[j] - t[i], f"InterGroupComm2_{i}_{j}"
+        prob += z[(i, j)] >= t[i] - t[j], f"InterGroupCommLower1_{i}_{j}"
+        prob += z[(i, j)] >= t[j] - t[i], f"InterGroupCommLower2_{i}_{j}"
         prob += z[(i, j)] <= t[i] + t[j], f"InterGroupCommUpper1_{i}_{j}"
         prob += z[(i, j)] <= 2 - t[i] - t[j], f"InterGroupCommUpper2_{i}_{j}"
 
