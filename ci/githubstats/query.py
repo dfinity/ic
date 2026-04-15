@@ -1017,7 +1017,7 @@ def extract_test_name(label: str) -> str:
     return parts[1] if len(parts) == 2 else label
 
 
-def get_recent_commits(git_since: str) -> list:
+def get_recent_commits(git_since: str) -> list[str]:
     """Run git log --oneline --since once and return the list of commit lines."""
     repo_root = THIS_SCRIPT_DIR.parent.parent
     try:
