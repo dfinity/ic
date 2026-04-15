@@ -302,6 +302,7 @@ impl Player {
             MaliciousFlags::default(),
         ));
         let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
+        let scheduler_config = subnet_config.scheduler_config.clone();
         let execution_service = ExecutionServices::setup_execution(
             log.clone(),
             &metrics_registry,
@@ -319,6 +320,7 @@ impl Player {
             state_manager.clone(),
             execution_service.ingress_history_writer.clone(),
             execution_service.scheduler,
+            scheduler_config,
             cfg.hypervisor.clone(),
             Arc::clone(&execution_service.cycles_account_manager),
             subnet_id,
