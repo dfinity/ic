@@ -31,7 +31,7 @@ class TestCsvLoading(unittest.TestCase):
                 ("rwlgt-iiaaa-aaaaa-aaaaa-cai", "rkp4c-7iaaa-aaaaa-aaaca-cai"),
                 ("qaa6y-5yaaa-aaaaa-aaafa-cai", "qhbym-qaaaa-aaaaa-aaafq-cai"),
                 ("qvhpv-4qaaa-aaaaa-aaagq-cai", "q4eej-kyaaa-aaaaa-aaaha-cai"),
-                ("sp3hj-caaaa-aaaaa-aaajq-cai", "sp3hj-caaaa-aaaaa-aaajq-cai")
+                ("sp3hj-caaaa-aaaaa-aaajq-cai", "sp3hj-caaaa-aaaaa-aaajq-cai"),
             ],
         )
 
