@@ -1207,7 +1207,7 @@ impl WasmtimeInstance {
                     error: "No memory tracker for stable memory".to_string(),
                 })?;
             let tracker = tracker.lock();
-            let heap_memory = heap_memory.data(&*self.store);
+            let heap_memory = heap_memory.data(&self.store);
 
             fn handle_bytemap_entry(
                 previous_page_marked_written: &mut bool,

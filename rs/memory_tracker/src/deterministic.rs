@@ -71,8 +71,7 @@ use nix::sys::mman::{ProtFlags, mprotect};
 use crate::{
     AccessKind, DirtyPageTracking, MemoryArea, MemoryLimits, MemoryTracker, MemoryTrackerMetrics,
     PageBitmap, apply_memory_instructions, map_unaccessed_pages, print_enomem_help,
-    signal_mutex::SignalMutex,
-    range_size_in_bytes,
+    range_size_in_bytes, signal_mutex::SignalMutex,
 };
 
 use crate::conversions::{

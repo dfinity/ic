@@ -3,9 +3,11 @@ use crate::wasmtime_embedder::host_memory::MemoryPageSize;
 
 use ic_types::NumBytes;
 use libc::c_void;
-use memory_tracker::{SigsegvMemoryTracker, signal_access_kind_and_address, signal_mutex::SignalMutex};
+use memory_tracker::{
+    SigsegvMemoryTracker, signal_access_kind_and_address, signal_mutex::SignalMutex,
+};
 use std::convert::TryFrom;
-use std::sync::{Arc, Mutex, atomic::Ordering};
+use std::sync::{Arc, atomic::Ordering};
 
 /// Helper function to create a memory tracking SIGSEGV handler function.
 pub(crate) fn sigsegv_memory_tracker_handler(
@@ -22,7 +24,10 @@ pub(crate) fn sigsegv_memory_tracker_handler(
     memories.sort_by_key(|(base, _, _)| *base);
 
     let check_if_expanded =
-        move |tracker: &memory_tracker::signal_mutex::SignalMutexGuard<'_, SigsegvMemoryTracker>,
+        move |tracker: &memory_tracker::signal_mutex::SignalMutexGuard<
+            '_,
+            SigsegvMemoryTracker,
+        >,
               si_addr: *mut c_void,
               current_size_in_pages: &MemoryPageSize| unsafe {
             let page_count = current_size_in_pages.load(Ordering::SeqCst);
