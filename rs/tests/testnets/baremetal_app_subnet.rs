@@ -1,18 +1,22 @@
-// Interactive testnet: NNS on Farm, one AMD SEV-SNP bare-metal machine (via IPMI like
-// `sev_recovery.rs`) that joins the registry, then a CreateSubnet proposal places that
-// node alone on a new Application subnet.
+// Interactive testnet: NNS on Farm, one bare-metal machine (via IPMI like `sev_recovery.rs`)
+// that joins the registry, then a CreateSubnet proposal places that node alone on a new
+// Application subnet.
+//
+// The host may be AMD SEV-SNP-capable or not. When `TRUSTED_EXECUTION_ENVIRONMENT` is set in the
+// environment (any value), SetupOS is built with the trusted execution path enabled, as in
+// `nested::setup`. Omit it for bare metal without SEV-SNP.
 //
 // Prerequisites:
 //   - `BARE_METAL_HOST_SECRETS` must name an INI file with bare-metal login info
 //     (same as `//rs/tests/nested:sev_recovery`). Without it, setup fails.
 //
-// Setup example (either export in your shell or pass `--test_env` so the driver sees it):
+// Setup example (pass `--test_env` so the driver sees it):
 //
-//   $ export BARE_METAL_HOST_SECRETS="$(realpath /path/to/host.ini)"
 //   $ ./ci/container/container-run.sh
-//   $ ict testnet create sev_baremetal_app_subnet --verbose --output-dir=./test_tmpdir -- \
+//   $ ict testnet create baremetal_app_subnet --verbose --output-dir=./test_tmpdir -- \
 //       --test_tmpdir=./test_tmpdir \
-//       --test_env=BARE_METAL_HOST_SECRETS="$(realpath /path/to/host.ini)"
+//       --test_env BARE_METAL_HOST_SECRETS="$(realpath /path/to/host.ini)" \
+//       --test_env TRUSTED_EXECUTION_ENVIRONMENT=true   # false for non-SEV
 //
 // The bare-metal guest IPv6 appears in the driver log after registration; SSH uses the
 // same admin key layout as other testnets under `test_tmpdir`.
@@ -32,8 +36,7 @@ use ic_system_test_driver::nns::{
 };
 use ic_system_test_driver::util::{block_on, runtime_from_url};
 use nested::{
-    create_bare_metal_session, create_bare_metal_tee_node, registration,
-    util::setup_ic_infrastructure,
+    create_bare_metal_node, create_bare_metal_session, registration, util::setup_ic_infrastructure,
 };
 use nns_dapp::set_authorized_subnets;
 use slog::info;
@@ -59,9 +62,15 @@ fn setup(env: TestEnv) {
 
     setup_ic_infrastructure(&env, /* dkg_interval */ None, /* is_fast */ true);
 
+    let enable_tee = std::env::var_os("TRUSTED_EXECUTION_ENVIRONMENT").is_some();
+    info!(
+        logger,
+        "Bare-metal nested node: trusted_execution_environment (SEV-SNP path) = {}", enable_tee
+    );
+
     let bare_metal = create_bare_metal_session(&env);
     let mut nodes = NestedNodes {
-        nodes: vec![create_bare_metal_tee_node(&bare_metal)],
+        nodes: vec![create_bare_metal_node(&bare_metal, enable_tee)],
     };
     nodes
         .setup_and_start(&env)
@@ -135,8 +144,9 @@ fn setup(env: TestEnv) {
 
     info!(
         logger,
-        "SEV bare-metal application subnet is ready (subnet_id = {}, node_id = {})",
+        "Bare-metal application subnet is ready (subnet_id = {}, node_id = {}, tee = {})",
         app_subnets[0].subnet_id,
-        bare_metal_node_id
+        bare_metal_node_id,
+        enable_tee
     );
 }

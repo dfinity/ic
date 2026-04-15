@@ -30,6 +30,7 @@ message CanisterHttpResponseMetadata {
   uint64 registry_version = 4;
   string replica_version = 5;
   uint32 content_size = 6;
+  bool is_reject = 7;
 }
 
 message CanisterHttpResponseContent {
@@ -62,6 +63,7 @@ message CanisterHttpResponseWithConsensus {
   reserved 6;
   repeated CanisterHttpResponseSignature signatures = 7;
   uint32 content_size = 9;
+  bool is_reject = 10;
 }
 
 message CanisterHttpShare {

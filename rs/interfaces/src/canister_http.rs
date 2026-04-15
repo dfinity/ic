@@ -40,6 +40,11 @@ pub enum InvalidCanisterHttpPayloadReason {
         metadata_size: u32,
         calculated_size: u32,
     },
+    /// The is_reject flag of the signed metadata does not match the actual response content type
+    IsRejectMismatch {
+        metadata_is_reject: bool,
+        calculated_is_reject: bool,
+    },
     /// A timeout refers to a CallbackId that is unknown by the StateManager
     UnknownCallbackId(CallbackId),
     /// A CallbackId was included as a timeout, however the Request has not timed out at all
@@ -98,6 +103,22 @@ pub enum InvalidCanisterHttpPayloadReason {
     /// For example, a non-flexible response is not in the responses section
     /// or a flexible response is not in the flexible_responses section.
     InvalidPayloadSection(CallbackId),
+    /// A TooManyRequestErrors error does not carry enough rejects.
+    FlexibleInsufficientRejectCount {
+        callback_id: CallbackId,
+        reject_count: usize,
+        min_needed: usize,
+    },
+    /// A TooManyRequestErrors entry contains a non-Reject response.
+    FlexibleRejectExpectedInErrorResponse(CallbackId),
+    /// A ResponsesTooLarge error does not carry enough metadata shares.
+    FlexibleInsufficientMetadataShareCount {
+        callback_id: CallbackId,
+        share_count: usize,
+        min_needed: usize,
+    },
+    /// A ResponsesTooLarge error is invalid: the smallest responses actually fit.
+    FlexibleResponsesNotTooLarge(CallbackId),
     /// The payload could not be deserialized
     DecodeError(ProxyDecodeError),
 }

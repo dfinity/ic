@@ -13,7 +13,6 @@ on:
       - release-*
     workflows:
       - Schedule Daily
-      - Schedule Hourly
       - Schedule RC
       - Schedule Rust Benchmarks
       - Schedule Weekly
@@ -24,7 +23,7 @@ on:
       - Sync IC private from IC public
       - Update mainnet ICOS versions file
       - Update mainnet canister versions file
-      - CI Main
+      - Kickoff
       - Bazel Dependency Submission
 
 jobs:
@@ -71,9 +70,9 @@ jobs:
             CHANNEL="eng-consensus-alerts"
           elif [[ "$TRIGGERING_WORKFLOW_NAME" == "Update mainnet canister versions file" ]]; then
             CHANNEL="eng-nns"
-          elif [[ "$TRIGGERING_WORKFLOW_NAME" == "CI Main" ]] && [[ "$TRIGGERING_WORKFLOW_BRANCH" == "ic-mainnet-revisions" ]]; then
+          elif [[ "$TRIGGERING_WORKFLOW_NAME" == "Kickoff" ]] && [[ "$TRIGGERING_WORKFLOW_BRANCH" == "ic-mainnet-revisions" ]]; then
             CHANNEL="eng-consensus-alerts"
-          elif [[ "$TRIGGERING_WORKFLOW_NAME" == "CI Main" ]] && [[ "$TRIGGERING_WORKFLOW_BRANCH" == "ic-nervous-system-wasms" ]]; then
+          elif [[ "$TRIGGERING_WORKFLOW_NAME" == "Kickoff" ]] && [[ "$TRIGGERING_WORKFLOW_BRANCH" == "ic-nervous-system-wasms" ]]; then
             CHANNEL="eng-nns"
           fi
 

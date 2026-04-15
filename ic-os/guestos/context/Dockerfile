@@ -127,8 +127,7 @@ RUN mkdir -p /var/lib/ic/backup \
              /var/lib/ic/data
 
 # Create two mount points for temporary use during setup of "var" partition
-# and a mount point for testing the mount of the data partition.
-RUN mkdir -p /mnt/var_old /mnt/var_new /mnt/data_test
+RUN mkdir -p /mnt/var_old /mnt/var_new
 
 # Set /bin/sh to point to /bin/bash instead of the default /bin/dash
 RUN ln -sf /bin/bash /usr/bin/sh

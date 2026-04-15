@@ -71,6 +71,7 @@ impl CertificateData {
         subnet_pub_key: Option<ThresholdSigPublicKey>,
         time: Option<u64>,
         canister_ranges_format: CanisterRangesFormat,
+        subnet_type: Option<&str>,
     ) -> LabeledTree<Vec<u8>> {
         let time = time.unwrap_or(REPLICA_TIME);
         match self {
@@ -103,7 +104,7 @@ impl CertificateData {
                         CanisterRangesFormat::Tree => (false, true),
                     };
 
-                create_certificate_labeled_tree(
+                create_certificate_labeled_tree_with_subnet_type(
                     canister_id_ranges,
                     *subnet_id,
                     public_key,
@@ -111,6 +112,7 @@ impl CertificateData {
                     time,
                     with_tree_canister_ranges,
                     with_flat_canister_ranges,
+                    subnet_type,
                 )
             }
         }
@@ -126,6 +128,28 @@ pub fn create_certificate_labeled_tree(
     with_tree_canister_ranges: bool,
     with_flat_canister_ranges: bool,
 ) -> LabeledTree<Vec<u8>> {
+    create_certificate_labeled_tree_with_subnet_type(
+        canister_id_ranges,
+        subnet_id,
+        subnet_public_key,
+        max_ranges_per_routing_table_leaf,
+        time,
+        with_tree_canister_ranges,
+        with_flat_canister_ranges,
+        None,
+    )
+}
+
+pub fn create_certificate_labeled_tree_with_subnet_type(
+    canister_id_ranges: &Vec<(CanisterId, CanisterId)>,
+    subnet_id: SubnetId,
+    subnet_public_key: ThresholdSigPublicKey,
+    max_ranges_per_routing_table_leaf: usize,
+    time: u64,
+    with_tree_canister_ranges: bool,
+    with_flat_canister_ranges: bool,
+    subnet_type: Option<&str>,
+) -> LabeledTree<Vec<u8>> {
     let mut subnet_subtree = vec![(
         Label::from("public_key"),
         LabeledTree::Leaf(public_key_to_der(&subnet_public_key.into_bytes()).unwrap()),
@@ -135,6 +159,13 @@ pub fn create_certificate_labeled_tree(
         subnet_subtree.push((
             Label::from("canister_ranges"),
             LabeledTree::Leaf(serialize_to_cbor(canister_id_ranges)),
+        ));
+    }
+
+    if let Some(subnet_type) = subnet_type {
+        subnet_subtree.push((
+            Label::from("type"),
+            LabeledTree::Leaf(subnet_type.as_bytes().to_vec()),
         ));
     }
 
@@ -230,6 +261,7 @@ pub struct CertificateBuilder {
     delegation: Option<Box<CertificateBuilder>>,
     time: Option<u64>,
     canister_ranges_format: CanisterRangesFormat,
+    subnet_type: Option<String>,
 }
 
 impl CertificateBuilder {
@@ -250,6 +282,7 @@ impl CertificateBuilder {
             delegation: None,
             time: None,
             canister_ranges_format: CanisterRangesFormat::Flat,
+            subnet_type: None,
         }
     }
 
@@ -275,6 +308,11 @@ impl CertificateBuilder {
 
     pub fn with_canister_ranges_format(mut self, format: CanisterRangesFormat) -> Self {
         self.canister_ranges_format = format;
+        self
+    }
+
+    pub fn with_subnet_type(mut self, subnet_type: &str) -> Self {
+        self.subnet_type = Some(subnet_type.to_string());
         self
     }
 
@@ -312,6 +350,7 @@ impl CertificateBuilder {
             self.delegatee_pub_key,
             self.time,
             self.canister_ranges_format,
+            self.subnet_type.as_deref(),
         );
         hash_full_tree(&mut b, tree);
 

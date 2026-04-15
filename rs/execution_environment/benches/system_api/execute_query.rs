@@ -116,7 +116,10 @@ pub fn execute_query_bench(c: &mut Criterion) {
             };
             let instructions_before = round_limits.instructions;
             let result = execute_non_replicated_query(
-                NonReplicatedQueryKind::Pure { caller: sender },
+                NonReplicatedQueryKind::Pure {
+                    caller: sender,
+                    sender_info: None,
+                },
                 WasmMethod::Query("test".to_string()),
                 &[],
                 canister_state,

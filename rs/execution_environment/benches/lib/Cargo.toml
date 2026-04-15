@@ -14,6 +14,7 @@ ic-embedders = { path = "../../../embedders" }
 ic-error-types = { path = "../../../../packages/ic-error-types" }
 ic-execution-environment = { path = "../../" }
 ic-interfaces = { path = "../../../interfaces" }
+ic-sys = { path = "../../../sys" }
 ic-limits = { path = "../../../limits" }
 ic-logger = { path = "../../../monitoring/logger" }
 ic-metrics = { path = "../../../monitoring/metrics" }

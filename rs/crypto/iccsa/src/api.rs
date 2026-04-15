@@ -112,7 +112,7 @@ fn verify_certified_data(
     sig: &SignatureBytes,
     pk: &PublicKeyBytes,
 ) -> CryptoResult<()> {
-    ic_certification::verify_certified_data_with_cache(
+    ic_certification::verify_certified_data_with_cache_for_canister_sig(
         certificate,
         canister_id,
         root_pubkey,
@@ -132,12 +132,15 @@ fn verify_certified_data(
         | CertificateValidationError::SubnetIdMismatch {
             provided_subnet_id: _,
             delegation_subnet_id: _,
-        } => CryptoError::SignatureVerification {
-            algorithm: AlgorithmId::IcCanisterSignature,
-            public_key_bytes: pk.0.clone(),
-            sig_bytes: sig.0.clone(),
-            internal_error: format!("certificate verification failed: {err}"),
-        },
+        }
+        | CertificateValidationError::UntrustedDelegationSubnet(_) => {
+            CryptoError::SignatureVerification {
+                algorithm: AlgorithmId::IcCanisterSignature,
+                public_key_bytes: pk.0.clone(),
+                sig_bytes: sig.0.clone(),
+                internal_error: format!("certificate verification failed: {err}"),
+            }
+        }
     })?;
     Ok(())
 }
