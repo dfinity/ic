@@ -373,6 +373,7 @@ impl CanisterManager {
         canister_reserved_balance: Cycles,
         canister_reserved_balance_limit: Option<Cycles>,
         canister_log_bytes_used: NumBytes,
+        log_resize_needed: bool,
     ) -> Result<ValidatedCanisterSettings, CanisterManagerError> {
         self.validate_environment_variables(&settings)?;
 
@@ -533,18 +534,22 @@ impl CanisterManager {
             // Resizing reads all stored log records from the old ring buffer and
             // rewrites them into a new one. Cost is proportional to bytes_used
             // (actual stored data), not allocated capacity.
-            let log_resize_instructions =
-                NumInstructions::new(canister_log_bytes_used.get() * LOG_RESIZE_COST_PER_BYTE);
-            let log_resize_cycles = self
-                .cycles_account_manager
-                .management_canister_cost(log_resize_instructions, subnet_size, cost_schedule)
-                .real();
-            if canister_cycles_balance < reservation_cycles + threshold + log_resize_cycles {
-                return Err(CanisterManagerError::InsufficientCyclesInLogResize {
-                    available: canister_cycles_balance,
-                    threshold: reservation_cycles + threshold,
-                    requested: log_resize_cycles,
-                });
+            // Skip the charge when resize would be a no-op (e.g., capacity
+            // unchanged or limit set to 0 with an already-empty store).
+            if log_resize_needed {
+                let log_resize_instructions =
+                    NumInstructions::new(canister_log_bytes_used.get() * LOG_RESIZE_COST_PER_BYTE);
+                let log_resize_cycles = self
+                    .cycles_account_manager
+                    .management_canister_cost(log_resize_instructions, subnet_size, cost_schedule)
+                    .real();
+                if canister_cycles_balance < reservation_cycles + threshold + log_resize_cycles {
+                    return Err(CanisterManagerError::InsufficientCyclesInLogResize {
+                        available: canister_cycles_balance,
+                        threshold: reservation_cycles + threshold,
+                        requested: log_resize_cycles,
+                    });
+                }
             }
             Some(requested_limit)
         } else {
@@ -597,6 +602,7 @@ impl CanisterManager {
             Cycles::zero(),
             None,
             NumBytes::new(0),
+            true, // New canister: resize always needed.
         )
     }
 
@@ -676,7 +682,15 @@ impl CanisterManager {
 
         validate_controller(canister, &sender)?;
 
-        let user_set_log_memory_limit = settings.log_memory_limit().is_some();
+        let log_resize_needed = settings
+            .log_memory_limit()
+            .map(|limit| {
+                canister
+                    .system_state
+                    .log_memory_store
+                    .would_resize(limit.get() as usize)
+            })
+            .unwrap_or(false);
         let validated_settings = self.validate_canister_settings(
             settings,
             canister.memory_usage(),
@@ -693,6 +707,7 @@ impl CanisterManager {
             canister.system_state.reserved_balance(),
             canister.system_state.reserved_balance_limit(),
             NumBytes::new(canister.system_state.log_memory_store.bytes_used() as u64),
+            log_resize_needed,
         )?;
 
         let old_usage = canister.memory_usage();
@@ -735,7 +750,7 @@ impl CanisterManager {
         // consume_cycles_for_management_canister_instructions to avoid
         // recomputing the freezing threshold from post-mutation memory usage,
         // which could fail despite validation having passed.
-        if user_set_log_memory_limit {
+        if log_resize_needed {
             // Use pre-mutation bytes_used so that downsize operations (which drop
             // old records) are charged for the actual work of reading/rewriting
             // the original buffer, matching what validation checked.

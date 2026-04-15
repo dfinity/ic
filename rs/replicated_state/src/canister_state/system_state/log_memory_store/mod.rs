@@ -207,6 +207,18 @@ impl LogMemoryStore {
             .unwrap_or(0)
     }
 
+    /// Returns `true` if calling `resize(limit)` would actually do work
+    /// (migrate records or deallocate), `false` if it would be a no-op.
+    pub fn would_resize(&self, limit: usize) -> bool {
+        if self.feature_flag == FlagStatus::Disabled || limit == 0 {
+            // resize_impl deallocates — that's a no-op only if already empty.
+            return self.maybe_page_map.is_some();
+        }
+        let target_limit = limit.max(DATA_CAPACITY_MIN);
+        let current_capacity = self.get_header().map(|h| h.data_capacity.get() as usize);
+        current_capacity != Some(target_limit)
+    }
+
     /// Resizes the ring buffer to the specified limit, preserving existing records.
     ///
     /// This method enforces a minimum safe capacity and performs no operation if the
