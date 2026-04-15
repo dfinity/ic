@@ -6421,9 +6421,9 @@ impl Governance {
         let now_seconds = self.env.now();
         let maturity_modulation = match self
             .heap_data
-            .icp_xdr_rate_history
+            .maturity_modulation
             .as_ref()
-            .and_then(|h| h.current_maturity_modulation_permyriad)
+            .and_then(|m| m.current_value_permyriad)
         {
             None => return,
             Some(value) => value,

@@ -562,9 +562,9 @@ async fn try_finalize_maturity_disbursement(
         let now_seconds = governance.env.now();
         let maturity_modulation = governance
             .heap_data
-            .icp_xdr_rate_history
+            .maturity_modulation
             .as_ref()
-            .and_then(|h| h.current_maturity_modulation_permyriad);
+            .and_then(|m| m.current_value_permyriad);
         let maturity_disbursement_finalization = next_maturity_disbursement_to_finalize(
             &governance.neuron_store,
             &governance.heap_data.in_flight_commands,

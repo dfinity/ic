@@ -3,7 +3,7 @@ use super::*;
 use crate::{
     governance::Environment,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
-    pb::v1::{IcpXdrRateHistory, Subaccount},
+    pb::v1::{MaturityModulation, Subaccount},
     test_utils::{MockEnvironment, MockRandomness},
 };
 
@@ -543,8 +543,8 @@ fn set_governance_for_test(
         Arc::new(MockCMC::default()),
         Box::new(MockRandomness::new()),
     );
-    governance.heap_data.icp_xdr_rate_history = Some(IcpXdrRateHistory {
-        current_maturity_modulation_permyriad: Some(maturity_modulation),
+    governance.heap_data.maturity_modulation = Some(MaturityModulation {
+        current_value_permyriad: Some(maturity_modulation),
         ..Default::default()
     });
     for neuron in neurons {
@@ -618,7 +618,7 @@ async fn test_finalize_maturity_disbursement_no_maturity_modulation() {
         DEFAULT_MATURITY_MODULATION_BASIS_POINTS,
     );
     TEST_GOVERNANCE.with_borrow_mut(|governance| {
-        governance.heap_data.icp_xdr_rate_history = None;
+        governance.heap_data.maturity_modulation = None;
     });
 
     // Step 2: Initiate the maturity disbursement and advance to disbursement time.
