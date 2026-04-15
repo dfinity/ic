@@ -323,7 +323,7 @@ fn execution_round_metrics_are_recorded() {
     let metrics = &test.scheduler().metrics;
     assert_eq!(1, metrics.round.duration.get_sample_count(),);
     assert_eq!(1, metrics.round.instructions.get_sample_count(),);
-    assert_eq!(130, metrics.round.instructions.get_sample_sum() as u64);
+    assert_eq!(133, metrics.round.instructions.get_sample_sum() as u64);
     assert_eq!(1, metrics.round.messages.get_sample_count());
     assert_eq!(13, metrics.round.messages.get_sample_sum() as u64);
     assert_eq!(
@@ -360,7 +360,7 @@ fn execution_round_metrics_are_recorded() {
             .get_sample_count()
     );
     assert_eq!(
-        30,
+        33,
         metrics
             .round_inner_subnet_queue
             .instructions
@@ -376,9 +376,9 @@ fn execution_round_metrics_are_recorded() {
     );
     assert_eq!(1, metrics.round_inner.duration.get_sample_count());
     assert_eq!(1, metrics.round_inner.instructions.get_sample_count());
-    // (3 subnet messages + 10 canister messages) * 10 instructions
+    // (3 subnet messages + 10 canister messages) * 10 instructions + 3 subnet message base costs
     assert_eq!(
-        130,
+        133,
         metrics.round_inner.instructions.get_sample_sum() as u64,
     );
     assert_eq!(1, metrics.round_inner.messages.get_sample_count());

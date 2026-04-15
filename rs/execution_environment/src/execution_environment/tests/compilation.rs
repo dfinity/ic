@@ -579,11 +579,15 @@ mod state_machine_tests {
 
         let expected_compilation_instructions = wat_compilation_cost(TEST_CANISTER);
 
+        // install_canister_wat sends 2 subnet messages (create_canister + install_code),
+        // each consuming 1 instruction as a per-message base cost.
+        let subnet_message_base_cost_per_install = 2.0;
+
         // Installing first canister takes some instructions.
         let _canister_id1 = env.install_canister_wat(TEST_CANISTER, vec![], None);
         assert_eq!(
             env.subnet_message_instructions(),
-            expected_compilation_instructions.get() as f64,
+            expected_compilation_instructions.get() as f64 + subnet_message_base_cost_per_install,
         );
 
         // Installing another canister with the same Wasm doesn't take instructions.
@@ -594,6 +598,7 @@ mod state_machine_tests {
                 + CompilationCostHandling::CountReducedAmount
                     .adjusted_compilation_cost(expected_compilation_instructions)
                     .get() as f64
+                + 2.0 * subnet_message_base_cost_per_install
         );
     }
 
@@ -605,11 +610,15 @@ mod state_machine_tests {
 
         let expected_compilation_instructions = wat_compilation_cost(TEST_CANISTER).get() as f64;
 
+        // install_canister_wat sends 2 subnet messages (create_canister + install_code),
+        // each consuming 1 instruction as a per-message base cost.
+        let subnet_message_base_cost_per_install = 2.0;
+
         // Installing first canister takes some instructions.
         let _canister_id1 = env.install_canister_wat(TEST_CANISTER, vec![], None);
         assert_eq!(
             env.subnet_message_instructions(),
-            expected_compilation_instructions,
+            expected_compilation_instructions + subnet_message_base_cost_per_install,
         );
 
         // Installing another canister with the same Wasm uses instructions because
@@ -617,7 +626,7 @@ mod state_machine_tests {
         let _canister_id2 = env.install_canister_wat(TEST_CANISTER, vec![], None);
         assert_eq!(
             env.subnet_message_instructions(),
-            2.0 * expected_compilation_instructions,
+            2.0 * expected_compilation_instructions + 2.0 * subnet_message_base_cost_per_install,
         );
     }
 }

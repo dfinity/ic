@@ -242,7 +242,7 @@ fn scheduler_executes_postponed_raw_rand_requests() {
             "execution_round_phase_instructions",
         )
         .get(&labels(&[("phase", "raw_rand")])),
-        Some(&HistogramStats { count: 1, sum: 0.0 })
+        Some(&HistogramStats { count: 1, sum: 1.0 })
     );
 }
 

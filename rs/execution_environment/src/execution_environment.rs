@@ -236,6 +236,17 @@ pub fn as_num_instructions(a: RoundInstructions) -> NumInstructions {
     NumInstructions::from(u64::try_from(a.get()).unwrap_or(0))
 }
 
+/// Returns the base instruction cost for processing a subnet message.
+/// The base cost accounts for the overhead of handling the message itself,
+/// and is deducted once per message regardless of the message's specific
+/// processing cost.
+///
+/// This function accepts the full `SubnetMessage` to allow future extensions
+/// to derive different base costs depending on the message type or content.
+pub fn subnet_message_base_cost(_msg: &SubnetMessage) -> NumInstructions {
+    NumInstructions::from(1)
+}
+
 /// Contains limits (or budget) for various resources that affect duration of
 /// a round such as
 /// - executed instructions,
@@ -534,6 +545,8 @@ impl ExecutionEnvironment {
     ) -> (ReplicatedState, ExecuteSubnetMessageResultType) {
         let since = Instant::now(); // Start logging execution time.
         let cost_schedule = state.get_own_cost_schedule();
+
+        round_limits.instructions -= as_round_instructions(subnet_message_base_cost(&msg));
 
         let mut msg = match msg {
             SubnetMessage::Response(response) => {

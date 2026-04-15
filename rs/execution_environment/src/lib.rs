@@ -24,7 +24,7 @@ use canister_manager::{CanisterManager, types::CanisterMgrConfig};
 pub use execution_environment::{
     CompilationCostHandling, ExecuteMessageResult, ExecuteSubnetMessageResultType,
     ExecutionEnvironment, ExecutionResponse, RoundInstructions, RoundLimits, as_num_instructions,
-    as_round_instructions, execute_canister,
+    as_round_instructions, execute_canister, subnet_message_base_cost,
 };
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 pub use hypervisor::{Hypervisor, HypervisorMetrics};

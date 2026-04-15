@@ -21,7 +21,8 @@ use ic_execution_environment::{
     CompilationCostHandling, DataCertificateWithDelegationMetadata, ExecuteMessageResult,
     ExecuteSubnetMessageResultType, ExecutionEnvironment, ExecutionServicesForTesting, Hypervisor,
     IngressFilterMetrics, InternalHttpQueryHandler, RoundInstructions, RoundLimits, WasmSource,
-    abort_all_paused_executions, execute_canister, wasm_execution_mode,
+    abort_all_paused_executions, as_round_instructions, execute_canister, subnet_message_base_cost,
+    wasm_execution_mode,
 };
 use ic_interfaces::execution_environment::{
     ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -1724,12 +1725,15 @@ impl ExecutionTest {
         if let Some(canister_id) = maybe_canister_id {
             match execute_subnet_message_result_type {
                 ExecuteSubnetMessageResultType::Finished => {
-                    // cycles charging proceeds by prepaying for the message instruction limit
-                    // and subsequently refunding based on `slice_instructions_used`
-                    // and thus `slice_instructions_used` are capped
-                    // at the message instruction limit
-                    let capped_slice_instructions_used = std::cmp::min(
-                        NumInstructions::from(slice_instructions_used.get() as u64),
+                    // Subtract the per-message base cost first (it is deducted from
+                    // round_limits but not billed to the canister as cycles), then cap at
+                    // the message instruction limit.  The subtraction must come before the
+                    // cap so that hitting the limit accounts for wasm instructions only.
+                    let base_cost = subnet_message_base_cost(&message);
+                    let canister_instructions_used = std::cmp::min(
+                        NumInstructions::from(
+                            (slice_instructions_used.get() as u64).saturating_sub(base_cost.get()),
+                        ),
                         self.install_code_instruction_limits.message(),
                     );
                     if let Some(canister) =
@@ -1739,38 +1743,54 @@ impl ExecutionTest {
                             canister,
                             message,
                             cycles_used_before.unwrap(),
-                            capped_slice_instructions_used,
+                            canister_instructions_used,
                         );
                     } else {
                         // If the canister no longer exists (because it was deleted),
-                        // then no instructions should be used.
-                        assert_eq!(capped_slice_instructions_used.get(), 0);
+                        // then no canister instructions should have been used.
+                        assert_eq!(canister_instructions_used, NumInstructions::new(0));
                     }
                     // For backward compatibility, we only perform stats updates for install code messages.
                     if is_install_code {
                         self.update_execution_stats(
                             canister_id,
-                            capped_slice_instructions_used,
+                            canister_instructions_used,
                             cost_schedule,
                         );
                     }
                 }
                 ExecuteSubnetMessageResultType::Processing => {
-                    // such subnet messages should not consume any instructions
-                    assert_eq!(slice_instructions_used.get(), 0);
+                    // such subnet messages should not consume any canister instructions;
+                    // only the per-message base cost is deducted from round_limits
+                    assert_eq!(
+                        slice_instructions_used,
+                        as_round_instructions(subnet_message_base_cost(&message))
+                    );
                 }
                 ExecuteSubnetMessageResultType::Paused => {
+                    // Store only canister-level (wasm) instructions: the per-message base cost
+                    // is deducted from round_limits but not billed to the canister as cycles.
+                    let base_cost = subnet_message_base_cost(&message);
+                    let canister_instructions_used = NumInstructions::from(
+                        (slice_instructions_used.get().max(0) as u64)
+                            .saturating_sub(base_cost.get()),
+                    );
                     let paused_subnet_message = PausedSubnetMessage {
                         message,
                         cycles_used_before: cycles_used_before.unwrap(),
-                        instructions: NumInstructions::from(slice_instructions_used.get() as u64),
+                        instructions: canister_instructions_used,
                     };
                     self.paused_subnet_messages
                         .insert(canister_id, paused_subnet_message);
                 }
             }
         } else {
-            assert_eq!(slice_instructions_used.get(), 0);
+            // No effective canister: no canister instructions should be consumed,
+            // only the per-message base cost deducted from round_limits.
+            assert_eq!(
+                slice_instructions_used,
+                as_round_instructions(subnet_message_base_cost(&message))
+            );
         }
         self.check_invariants();
         true
@@ -1918,6 +1938,9 @@ impl ExecutionTest {
                             instructions_used,
                             self.install_code_instruction_limits.message(),
                         );
+                        // `capped_instructions_used` already reflects only canister (wasm)
+                        // instructions: the per-message base cost was subtracted when the first
+                        // slice was stored in `paused_subnet_message.instructions`.
                         let cycles_used_before = paused_subnet_message.cycles_used_before;
                         let canister = self
                             .state
