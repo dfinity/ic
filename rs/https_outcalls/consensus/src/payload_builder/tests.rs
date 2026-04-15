@@ -44,9 +44,10 @@ use ic_types::{
     },
     canister_http::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL, CanisterHttpMethod,
-        CanisterHttpRequestContext, CanisterHttpResponse, CanisterHttpResponseArtifact,
-        CanisterHttpResponseContent, CanisterHttpResponseDivergence, CanisterHttpResponseMetadata,
-        CanisterHttpResponseShare, CanisterHttpResponseWithConsensus, Replication,
+        CanisterHttpReject, CanisterHttpRequestContext, CanisterHttpResponse,
+        CanisterHttpResponseArtifact, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
+        CanisterHttpResponseMetadata, CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
+        Replication,
     },
     consensus::get_faults_tolerated,
     crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed, crypto_hash},
@@ -1850,8 +1851,6 @@ fn flexible_build_filters_rejects_in_ok_responses() {
 
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, pool| {
         {
-            use ic_types::canister_http::CanisterHttpReject;
-
             let mut pool_access = pool.write().unwrap();
             // Nodes 0 and 1 produce Reject responses
             for node_idx in 0..2_u64 {
@@ -2707,7 +2706,7 @@ fn flexible_ok_responses_into_messages_skips_reject_entries() {
 
     let (reject_response, reject_metadata) = test_response_and_metadata_with_content(
         99,
-        CanisterHttpResponseContent::Reject(ic_types::canister_http::CanisterHttpReject {
+        CanisterHttpResponseContent::Reject(CanisterHttpReject {
             reject_code: RejectCode::SysTransient,
             message: "adapter error".to_string(),
         }),
@@ -2912,8 +2911,6 @@ fn flexible_build_responses_too_large_with_rejects_reducing_unseen() {
     let body_size = (MAX_CANISTER_HTTP_PAYLOAD_SIZE / 2) + 100_000;
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 6, |pb, pool| {
         {
-            use ic_types::canister_http::CanisterHttpReject;
-
             let mut pool_access = pool.write().unwrap();
             for node_idx in 0..3_u64 {
                 let body = vec![0xAA_u8; body_size];
@@ -2975,8 +2972,6 @@ fn flexible_build_responses_too_large_fewer_ok_than_min_responses() {
     let body_size = (MAX_CANISTER_HTTP_PAYLOAD_SIZE / 3) + 100_000;
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 4, 6, |pb, pool| {
         {
-            use ic_types::canister_http::CanisterHttpReject;
-
             let mut pool_access = pool.write().unwrap();
             for node_idx in 0..3_u64 {
                 let body = vec![0xAA_u8; body_size];
@@ -3030,8 +3025,6 @@ fn flexible_build_too_many_request_errors() {
     // min_responses=3, so at most 1 reject is tolerable. 2 rejects should trigger TooManyRequestErrors.
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, pool| {
         {
-            use ic_types::canister_http::CanisterHttpReject;
-
             let mut pool_access = pool.write().unwrap();
             // Nodes 0 and 1 produce Reject responses
             for node_idx in 0..2_u64 {
@@ -3088,8 +3081,6 @@ fn flexible_build_not_enough_rejects_stays_pending() {
     // min_responses=3, so at most 1 reject is tolerable. Only 1 reject + 1 OK → pending.
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, pool| {
         {
-            use ic_types::canister_http::CanisterHttpReject;
-
             let mut pool_access = pool.write().unwrap();
             // Node 0 produces a Reject
             let (response, metadata) = test_response_and_metadata_with_content(
@@ -3127,8 +3118,6 @@ fn flexible_build_ok_takes_precedence_over_rejects() {
     // reject_count(2) > committee.len()-min_responses(3). Because we have enough OK responses.
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 5, |pb, pool| {
         {
-            use ic_types::canister_http::CanisterHttpReject;
-
             let mut pool_access = pool.write().unwrap();
             for node_idx in 0..2_u64 {
                 let (response, metadata) = test_response_and_metadata_with_content(
@@ -4313,8 +4302,6 @@ fn flexible_reject_response(
     callback_id: u64,
     signer_node: u64,
 ) -> FlexibleCanisterHttpResponseWithProof {
-    use ic_types::canister_http::CanisterHttpReject;
-
     let (response, metadata) = test_response_and_metadata_with_content(
         callback_id,
         CanisterHttpResponseContent::Reject(CanisterHttpReject {
