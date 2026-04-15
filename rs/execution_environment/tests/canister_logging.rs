@@ -2086,7 +2086,6 @@ fn test_canister_resize_up_preserves_logs() {
             .build(),
         UNIVERSAL_CANISTER_WASM.to_vec(),
     );
-    // Cycles attached to inter-canister fetch_canister_logs calls.
     let fetch_cycles = Cycles::new(100_000_000_000);
 
     let canister_id = create_and_install_canister(
