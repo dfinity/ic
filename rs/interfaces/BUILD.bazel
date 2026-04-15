@@ -15,6 +15,7 @@ rust_library(
         # Keep sorted.
         "//packages/ic-error-types",
         "//packages/ic-heap-bytes",
+        "//rs/config",
         "//rs/crypto/interfaces/sig_verification",
         "//rs/phantom_newtype",
         "//rs/protobuf",

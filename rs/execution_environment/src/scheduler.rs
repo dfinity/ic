@@ -51,7 +51,7 @@ use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use strum::IntoEnumIterator;
 
 mod round_schedule;
@@ -130,7 +130,7 @@ impl SchedulerRoundLimits {
 ////////////////////////////////////////////////////////////////////////
 /// Scheduler Implementation
 pub(crate) struct SchedulerImpl {
-    pub(crate) config: Arc<RwLock<SchedulerConfig>>,
+    config: SchedulerConfig,
     hypervisor_config: HypervisorConfig,
     own_subnet_id: SubnetId,
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
@@ -148,7 +148,7 @@ pub(crate) struct SchedulerImpl {
 impl SchedulerImpl {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        config: Arc<RwLock<SchedulerConfig>>,
+        config: SchedulerConfig,
         hypervisor_config: HypervisorConfig,
         own_subnet_id: SubnetId,
         ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
@@ -160,7 +160,7 @@ impl SchedulerImpl {
         rate_limiting_of_instructions: FlagStatus,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Self {
-        let scheduler_cores = config.read().unwrap().scheduler_cores as u32;
+        let scheduler_cores = config.scheduler_cores as u32;
         Self {
             config,
             hypervisor_config,
@@ -178,9 +178,9 @@ impl SchedulerImpl {
         }
     }
 
-    /// Returns a snapshot of the current scheduler config.
-    fn config(&self) -> SchedulerConfig {
-        self.config.read().unwrap().clone()
+    /// Returns a reference to the scheduler config.
+    fn config(&self) -> &SchedulerConfig {
+        &self.config
     }
 
     /// Makes progress in executing long-running `install_code` messages.
@@ -315,7 +315,7 @@ impl SchedulerImpl {
         measurement_scope: &MeasurementScope,
         chain_key_data: &ChainKeyData,
     ) -> (ReplicatedState, ExecuteSubnetMessageResultType) {
-        let instruction_limits = get_instruction_limits_for_subnet_message(&self.config(), &msg);
+        let instruction_limits = get_instruction_limits_for_subnet_message(self.config(), &msg);
 
         let instructions_before = round_limits.instructions;
         let (new_state, execute_subnet_message_result_type) = self.exec_env.execute_subnet_message(
@@ -669,7 +669,7 @@ impl SchedulerImpl {
                 let logger = new_logger!(self.log; messaging.round => round_id.get());
                 let rate_limiting_of_heap_delta = self.rate_limiting_of_heap_delta;
                 let round_limits = round_limits_per_thread.clone();
-                let config = self.config();
+                let config = self.config().clone();
                 scope.execute(move || {
                     *result = execute_canisters_on_thread(
                         canisters,
@@ -1140,6 +1140,30 @@ impl Scheduler for SchedulerImpl {
 
     fn execute_round(
         &self,
+        state: ReplicatedState,
+        randomness: Randomness,
+        chain_key_data: ChainKeyData,
+        replica_version: &ReplicaVersion,
+        current_round: ExecutionRound,
+        round_summary: Option<ExecutionRoundSummary>,
+        current_round_type: ExecutionRoundType,
+        registry_settings: &RegistryExecutionSettings,
+    ) -> ReplicatedState {
+        self.execute_round_with_config(
+            state,
+            randomness,
+            chain_key_data,
+            replica_version,
+            current_round,
+            round_summary,
+            current_round_type,
+            registry_settings,
+            self.config(),
+        )
+    }
+
+    fn execute_round_with_config(
+        &self,
         mut state: ReplicatedState,
         randomness: Randomness,
         chain_key_data: ChainKeyData,
@@ -1148,6 +1172,7 @@ impl Scheduler for SchedulerImpl {
         round_summary: Option<ExecutionRoundSummary>,
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
+        config: &SchedulerConfig,
     ) -> ReplicatedState {
         // IMPORTANT!
         // When making changes to this method, please make sure each piece of code is covered by duration metrics.
@@ -1224,7 +1249,7 @@ impl Scheduler for SchedulerImpl {
             // many threads to ensure a unique execution thread id.
             csprng = Csprng::from_randomness_and_purpose(
                 &randomness,
-                &ExecutionThread(self.config().scheduler_cores as u32),
+                &ExecutionThread(config.scheduler_cores as u32),
             );
 
             // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
@@ -1245,7 +1270,6 @@ impl Scheduler for SchedulerImpl {
             //
             // We want the total number executed instructions to not exceed `R`,
             // which gives us: `X - (1 - S) <= R` or `X <= R - S + 1`.
-            let config = self.config();
             let max_instructions_per_slice = std::cmp::max(
                 config.max_instructions_per_slice,
                 config.max_instructions_per_install_code_slice,
@@ -1313,15 +1337,15 @@ impl Scheduler for SchedulerImpl {
             // For that behavior to be meaningful, we ensure that the initial reserve
             // does not exceed one half of the heap delta capacity.
             let subnet_heap_delta_capacity =
-                subnet_heap_delta_capacity(&self.config(), state.resource_limits());
+                subnet_heap_delta_capacity(config, state.resource_limits());
             let heap_delta_initial_reserve = if state.metadata.own_subnet_type == SubnetType::System
             {
                 // On system subnets, the initial reserve should not be overriden
                 // for backward-compatibility.
-                self.config().heap_delta_initial_reserve
+                config.heap_delta_initial_reserve
             } else {
                 std::cmp::min(
-                    self.config().heap_delta_initial_reserve,
+                    config.heap_delta_initial_reserve,
                     subnet_heap_delta_capacity / 2,
                 )
             };
@@ -1411,13 +1435,13 @@ impl Scheduler for SchedulerImpl {
 
             RoundSchedule::apply_scheduling_strategy(
                 &mut state,
-                self.config().scheduler_cores,
-                self.config().heap_delta_rate_limit,
+                config.scheduler_cores,
+                config.heap_delta_rate_limit,
                 self.rate_limiting_of_heap_delta,
-                self.config().install_code_rate_limit,
+                config.install_code_rate_limit,
                 self.rate_limiting_of_instructions,
                 current_round,
-                self.config().accumulated_priority_reset_interval,
+                config.accumulated_priority_reset_interval,
                 &self.metrics,
                 &round_log,
             )

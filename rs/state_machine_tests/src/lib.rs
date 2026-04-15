@@ -271,6 +271,7 @@ impl MessageOrdering {
 struct FlexibleOrderingScheduler {
     inner: Box<dyn Scheduler<State = ReplicatedState>>,
     target: Arc<RwLock<Option<CanisterId>>>,
+    config: Arc<RwLock<ic_config::subnet_config::SchedulerConfig>>,
 }
 
 impl Scheduler for FlexibleOrderingScheduler {
@@ -301,7 +302,8 @@ impl Scheduler for FlexibleOrderingScheduler {
                 .accumulated_priority = AccumulatedPriority::new(i64::MAX / 4);
         }
 
-        let mut result = self.inner.execute_round(
+        let config = self.config.read().unwrap().clone();
+        let mut result = self.inner.execute_round_with_config(
             state,
             randomness,
             chain_key_data,
@@ -310,6 +312,7 @@ impl Scheduler for FlexibleOrderingScheduler {
             round_summary,
             current_round_type,
             registry_settings,
+            &config,
         );
 
         if target.is_some() {
@@ -2220,14 +2223,16 @@ impl StateMachine {
 
         if flexible_ordering {
             let ordering_target: Arc<RwLock<Option<CanisterId>>> = Arc::new(RwLock::new(None));
+            let scheduler_config = Arc::new(RwLock::new(subnet_config.scheduler_config.clone()));
             flexible_message_ordering = Some(FlexibleMessageOrdering {
                 ordering_target: Arc::clone(&ordering_target),
-                scheduler_config: execution_services.scheduler_config.clone(),
+                scheduler_config: Arc::clone(&scheduler_config),
                 ingress_buffer: RwLock::new(BTreeMap::new()),
             });
             scheduler = Box::new(FlexibleOrderingScheduler {
                 inner: scheduler,
                 target: ordering_target,
+                config: scheduler_config,
             });
         }
 

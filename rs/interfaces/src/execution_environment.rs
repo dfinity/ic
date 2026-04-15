@@ -3,6 +3,7 @@ mod errors;
 
 pub use errors::{CanisterBacktrace, CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
+use ic_config::subnet_config::SchedulerConfig;
 use ic_error_types::UserError;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -1568,6 +1569,37 @@ pub trait Scheduler: Send {
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
     ) -> Self::State;
+
+    /// Executes a round using the provided scheduler config for round budget
+    /// and scheduling computations.
+    ///
+    /// The default implementation ignores the config and delegates to
+    /// `execute_round`. Implementations that support config overrides (e.g.
+    /// for testing) should override this method.
+    #[allow(clippy::too_many_arguments)]
+    fn execute_round_with_config(
+        &self,
+        state: Self::State,
+        randomness: Randomness,
+        chain_key_data: ChainKeyData,
+        replica_version: &ReplicaVersion,
+        current_round: ExecutionRound,
+        round_summary: Option<ExecutionRoundSummary>,
+        current_round_type: ExecutionRoundType,
+        registry_settings: &RegistryExecutionSettings,
+        _config: &SchedulerConfig,
+    ) -> Self::State {
+        self.execute_round(
+            state,
+            randomness,
+            chain_key_data,
+            replica_version,
+            current_round,
+            round_summary,
+            current_round_type,
+            registry_settings,
+        )
+    }
 
     /// Code to be executed in a checkpoint round, iff `execute_round()` was not
     /// called (e.g. during a subnet split).

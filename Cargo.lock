@@ -10742,6 +10742,7 @@ name = "ic-interfaces"
 version = "0.9.0"
 dependencies = [
  "ic-base-types",
+ "ic-config",
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-internal-csp-proptest-utils",
  "ic-error-types 0.2.0",

@@ -2,7 +2,7 @@ use std::{
     collections::{BTreeMap, HashMap, VecDeque},
     convert::{TryFrom, TryInto},
     path::PathBuf,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, Mutex},
 };
 
 use ic_base_types::{CanisterId, NumBytes, PrincipalId, SubnetId};
@@ -1071,7 +1071,7 @@ impl SchedulerTestBuilder {
         );
 
         let scheduler = SchedulerImpl::new(
-            Arc::new(RwLock::new(self.scheduler_config)),
+            self.scheduler_config,
             self.hypervisor_config.clone(),
             self.own_subnet_id,
             execution_services.ingress_history_writer,
