@@ -77,7 +77,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:slog-term",
     "@crate_index//:strum",
     "@crate_index//:tempfile",
-    "@crate_index//:tokio",
 ]
 
 NONMALICIOUS_DEPENDENCIES = [
