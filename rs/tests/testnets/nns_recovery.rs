@@ -54,7 +54,7 @@ fn setup(env: TestEnv, use_mainnet_state: bool) {
     let subnet_size = std::env::var("SUBNET_SIZE")
         .ok()
         .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or(1);
+        .unwrap_or(0);
 
     let dkg_interval = std::env::var("DKG_INTERVAL")
         .ok()
