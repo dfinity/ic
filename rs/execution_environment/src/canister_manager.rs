@@ -539,10 +539,10 @@ impl CanisterManager {
                 .cycles_account_manager
                 .management_canister_cost(log_resize_instructions, subnet_size, cost_schedule)
                 .real();
-            if canister_cycles_balance < threshold + log_resize_cycles {
+            if canister_cycles_balance < reservation_cycles + threshold + log_resize_cycles {
                 return Err(CanisterManagerError::InsufficientCyclesInLogResize {
                     available: canister_cycles_balance,
-                    threshold,
+                    threshold: reservation_cycles + threshold,
                     requested: log_resize_cycles,
                 });
             }
