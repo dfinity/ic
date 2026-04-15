@@ -1221,13 +1221,15 @@ pub fn requests_with_valid_sender_info(env: TestEnv) {
             }
 
             ///////////////////////////////////////////////////////////////////
-            // Valid sender_info should be accepted for query calls
+            // Valid sender_info should be accepted for query calls,
+            // and the canister should be able to read the info via
+            // the msg_caller_info system API.
             for &api_ver in ALL_QUERY_API_VERSIONS {
                 let content = HttpQueryContent::Query {
                     query: HttpUserQuery {
                         canister_id: Blob(test_info.canister_id.get().as_slice().to_vec()),
                         method_name: "query".to_string(),
-                        arg: Blob(wasm().reply_data(b"query_reply").build()),
+                        arg: Blob(wasm().msg_caller_info_data().append_and_reply().build()),
                         sender: Blob(id.principal().as_slice().to_vec()),
                         ingress_expiry: expiry_time().as_nanos() as u64,
                         nonce: None,
@@ -1236,7 +1238,7 @@ pub fn requests_with_valid_sender_info(env: TestEnv) {
                 };
                 let message_id = MessageId::from(content.representation_independent_hash());
                 let signature = id.sign_bytes(&message_id.as_signed_bytes());
-                send_request(
+                let response = send_request(
                     api_ver,
                     &test_info,
                     "query",
@@ -1245,8 +1247,9 @@ pub fn requests_with_valid_sender_info(env: TestEnv) {
                     None,
                     signature,
                 )
-                .await
-                .expect_query_ok(api_ver);
+                .await;
+                response.expect_query_ok(api_ver);
+                response.expect_query_reply_arg(api_ver, &info_bytes);
             }
 
             // Helper: build a query call with the given sender_info.
@@ -1659,6 +1662,29 @@ impl ReplicaResponse {
                 }
             },
             ResponseBody::Text(t) => panic!("Expected CBOR response but got text instead: {:?}", t),
+        }
+    }
+
+    fn expect_query_reply_arg(&self, _api_ver: usize, expected_arg: &[u8]) {
+        match &self.body {
+            ResponseBody::Cbor(serde_cbor::Value::Map(m)) => {
+                let reply = m
+                    .get(&serde_cbor::Value::Text("reply".to_owned()))
+                    .expect("Missing 'reply' field in CBOR response");
+                if let serde_cbor::Value::Map(reply_map) = reply {
+                    let arg = reply_map
+                        .get(&serde_cbor::Value::Text("arg".to_owned()))
+                        .expect("Missing 'arg' field in reply");
+                    if let serde_cbor::Value::Bytes(bytes) = arg {
+                        assert_eq!(bytes, expected_arg, "Query reply arg mismatch");
+                    } else {
+                        panic!("Expected bytes for 'arg', got {:?}", arg);
+                    }
+                } else {
+                    panic!("Expected map for 'reply', got {:?}", reply);
+                }
+            }
+            other => panic!("Expected CBOR map response, got {:?}", other),
         }
     }
 
