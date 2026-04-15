@@ -1192,6 +1192,18 @@ pub mod nns {
             .await
         }
 
+        pub async fn get_proposal_info(
+            pocket_ic: &PocketIc,
+            proposal_id: u64,
+        ) -> Option<ProposalInfo> {
+            nns_agent::governance::get_proposal_info(
+                &PocketIcAgent::new(pocket_ic, Principal::anonymous()),
+                ProposalId { id: proposal_id },
+            )
+            .await
+            .unwrap()
+        }
+
         pub async fn nns_get_proposal_info(
             pocket_ic: &PocketIc,
             proposal_id: ProposalId,
