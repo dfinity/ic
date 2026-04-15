@@ -82,7 +82,14 @@ def parse_args():
     parser.add_argument(
         "--communication-data-path", type=Path, help="Path to canister-to-canister communication data", required=True
     )
-    parser.add_argument("--output-path", type=Path, help="Path to output data", required=True)
+    parser.add_argument(
+        "--output-path",
+        type=Path,
+        help="Path to output data which will contain the list of canister ranges. "
+        "It's up to the user to decide whether these canisters should stay on the source subnet or be migrated. "
+        "From this script's point of view the decision is symmetric.",
+        required=True,
+    )
     parser.add_argument(
         "--load-type",
         type=str,
@@ -94,7 +101,7 @@ def parse_args():
         "--epsilon-load",
         type=float,
         default=DEFAULT_EPSILON_LOAD_DEFAULT,
-        help="Allowed primary load deviation fraction",
+        help="Allowed load deviation fraction",
     )
     parser.add_argument("--max-cuts", type=int, default=DEFAULT_MAX_CUTS, help="Maximum number of routing cuts")
     return parser.parse_args()
