@@ -740,7 +740,13 @@ impl CanisterManager {
                     subnet_size,
                     cost_schedule,
                 )
-                .map_err(CanisterManagerError::LogResizeNotEnoughCycles)?;
+                .map_err(
+                    |err| CanisterManagerError::InsufficientCyclesInMemoryAllocation {
+                        memory_allocation: canister.memory_allocation(),
+                        available: err.available,
+                        threshold: err.threshold + err.requested,
+                    },
+                )?;
             round_limits.instructions -= as_round_instructions(log_resize_instructions);
         }
 
