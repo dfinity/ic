@@ -27,7 +27,7 @@ def compute_targets(load_c):
     total_load_c = sum(load_c)
     max_canister_load = max(load_c)
     average_load = total_load_c / 2
-    # If there is a single canister which has is responsible for majority of the load on the subnet
+    # If there is a single canister which is responsible for majority of the load on the subnet
     # it will be impossible to split the subnet in such a way that the load is balanced equally
     # across both of the post-split subnets. In that case we relax the constraints a bit.
     target_load_0 = max(max_canister_load, average_load)
