@@ -545,10 +545,10 @@ impl CanisterManager {
                 .management_canister_cost(log_resize_instructions, subnet_size, cost_schedule)
                 .real();
             if canister_cycles_balance < threshold + log_resize_cycles {
-                return Err(CanisterManagerError::LogResizeNotEnoughCycles {
+                return Err(CanisterManagerError::InsufficientCyclesInMemoryAllocation {
+                    memory_allocation: new_memory_allocation,
                     available: canister_cycles_balance,
-                    threshold,
-                    requested: log_resize_cycles,
+                    threshold: threshold + log_resize_cycles,
                 });
             }
         }
@@ -740,11 +740,13 @@ impl CanisterManager {
                     subnet_size,
                     cost_schedule,
                 )
-                .map_err(|err| CanisterManagerError::LogResizeNotEnoughCycles {
-                    available: err.available,
-                    threshold: err.threshold,
-                    requested: err.requested,
-                })?;
+                .map_err(
+                    |err| CanisterManagerError::InsufficientCyclesInMemoryAllocation {
+                        memory_allocation: canister.memory_allocation(),
+                        available: err.available,
+                        threshold: err.threshold + err.requested,
+                    },
+                )?;
             round_limits.instructions -= as_round_instructions(log_resize_instructions);
         }
 
@@ -2396,6 +2398,12 @@ impl CanisterManager {
                     round_limits,
                     compilation_cost_handling,
                 );
+            debug_assert!(
+                instructions_for_execution <= prepaid_execution_instructions,
+                "instructions_for_execution {:?} exceeds prepaid_execution_instructions {:?}",
+                instructions_for_execution,
+                prepaid_execution_instructions,
+            );
             let instructions_to_refund =
                 prepaid_execution_instructions.saturating_sub(&instructions_for_execution);
             self.cycles_account_manager.refund_unused_execution_cycles(
