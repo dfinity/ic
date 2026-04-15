@@ -202,7 +202,7 @@ pub fn test(env: TestEnv) {
         registry_url: None,
         validate_nns_url: nns_node.get_public_url(),
         download_node: Some(download_node.get_ip_addr()),
-        download_state_height: Some(highest_cup),
+        download_state_height: (highest_cup != 0).then_some(highest_cup),
         upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
         parent_nns_host_ip: Some(parent_nns_node.get_ip_addr()),
         replacement_nodes: Some(replacement_nodes),

@@ -442,7 +442,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         download_pool_node: Some(download_pool_node.get_ip_addr()),
         admin_access_location: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
         keep_downloaded_state: Some(false),
-        download_state_height: Some(highest_cup),
+        download_state_height: (highest_cup != 0).then_some(highest_cup),
         wait_for_cup_node: (!cfg.fix_dfinity_owned_node_like_np)
             .then_some(dfinity_owned_node.get_ip_addr()),
         backup_key_file: Some(ssh_backup_priv_key_path),
