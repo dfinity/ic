@@ -28,12 +28,10 @@ async fn test_create_canister_and_install_code() {
         .build_async()
         .await;
 
-    // Step 1.2: Install NNS canisters with the test governance canister
-    // (which has the CreateCanisterAndInstallCode feature flag enabled).
+    // Step 1.2: Install NNS canisters.
     {
         let mut nns_installer = NnsInstaller::default();
         nns_installer.with_current_nns_canister_versions();
-        nns_installer.with_test_governance_canister();
         nns_installer.install(&pocket_ic).await;
     }
 
