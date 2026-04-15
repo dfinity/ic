@@ -46,7 +46,7 @@ use ic_types::{
 };
 use ic_types_cycles::{
     CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, CyclesUseCaseKind,
-    IngressInduction, Instructions, NominalCycles, Uninstall,
+    CyclesUseCaseRefundableKind, IngressInduction, Instructions, NominalCycles, Uninstall,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -1824,7 +1824,7 @@ impl SystemState {
     /// Similar to `add_cycles` but additionally updates the metrics to match
     /// the refund that was provided. Should be used after a prepayment has been
     /// made.
-    pub fn refund_cycles<T: CyclesUseCaseKind>(
+    pub fn refund_cycles<T: CyclesUseCaseRefundableKind>(
         &mut self,
         prepayment: CompoundCycles<T>,
         refund: CompoundCycles<T>,

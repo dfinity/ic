@@ -364,6 +364,7 @@ impl PocketIcBuilder {
             SubnetKind::II => config.ii = Some(subnet_spec),
             SubnetKind::Fiduciary => config.fiduciary = Some(subnet_spec),
             SubnetKind::Bitcoin => config.bitcoin = Some(subnet_spec),
+            SubnetKind::TestThresholdKeys => config.test_threshold_keys = Some(subnet_spec),
             SubnetKind::Application => config.application.push(subnet_spec),
             SubnetKind::CloudEngine => config.cloud_engine.push(subnet_spec),
             SubnetKind::System => config.system.push(subnet_spec),
@@ -401,6 +402,14 @@ impl PocketIcBuilder {
     pub fn with_bitcoin_subnet(mut self) -> Self {
         let mut config = self.config.unwrap_or_default();
         config.bitcoin = Some(config.bitcoin.unwrap_or_default());
+        self.config = Some(config);
+        self
+    }
+
+    /// Add an empty test threshold keys subnet unless a test threshold keys subnet has already been added.
+    pub fn with_test_threshold_keys_subnet(mut self) -> Self {
+        let mut config = self.config.unwrap_or_default();
+        config.test_threshold_keys = Some(config.test_threshold_keys.unwrap_or_default());
         self.config = Some(config);
         self
     }

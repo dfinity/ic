@@ -1666,11 +1666,9 @@ impl PocketIc {
 
     pub(crate) async fn do_drop(&mut self) {
         if self.owns_instance {
-            self.reqwest_client
-                .delete(self.instance_url())
-                .send()
-                .await
-                .expect("Failed to send delete request");
+            if let Err(err) = self.reqwest_client.delete(self.instance_url()).send().await {
+                warn!("Failed to send delete request: {err:?}");
+            }
         } else {
             self.stop_http_gateway().await;
         }

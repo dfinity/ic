@@ -152,6 +152,8 @@ impl InstallCode {
 }
 
 impl CallCanister for InstallCode {
+    type Reply = ();
+
     fn canister_and_function(&self) -> Result<(CanisterId, &str), GovernanceError> {
         let canister_id = self.valid_canister_id()?;
         // Most canisters are upgraded indirectly via root. In such cases, we call root's

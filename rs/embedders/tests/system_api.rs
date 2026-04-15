@@ -1489,6 +1489,61 @@ fn call_perform_not_enough_cycles_does_not_trap() {
     assert_eq!(call_context_manager.callbacks().len(), 0);
 }
 
+/// If the canister does not have the requested number of cycles to burn, then
+/// it clamps the amount to the available cycles minus freeze threshold.
+#[test]
+fn cycles_burn128_clamps_to_available_cycles() {
+    const INITIAL_CYCLES: Cycles = Cycles::new(1000);
+
+    let cycles_account_manager = CyclesAccountManagerBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    // Set a non-zero freeze threshold.
+    let mut system_state = SystemStateBuilder::new()
+        .initial_cycles(INITIAL_CYCLES)
+        .freeze_threshold(NumSeconds::from(10))
+        .build();
+    let mut api = get_system_api(
+        ApiTypeBuilder::build_update_api(),
+        &system_state,
+        cycles_account_manager,
+    );
+
+    // Make sure the memory usage is non-zero.
+    api.try_grow_wasm_memory(0, 1).unwrap();
+
+    // Get the actually available cycle balance (above the freeze limit).
+    let mut heap = vec![0; 16];
+    api.ic0_canister_liquid_cycle_balance128(0, &mut heap)
+        .unwrap();
+    let liquid_cycles = Cycles::from(&heap);
+    // Sanity check.
+    assert!(liquid_cycles < INITIAL_CYCLES);
+    let freeze_limit = INITIAL_CYCLES - liquid_cycles;
+
+    // Burn more cycles than the available balance.
+    let mut heap = vec![0; 16];
+    api.ic0_cycles_burn128(liquid_cycles + Cycles::new(10), 0, &mut heap)
+        .unwrap();
+
+    // Only the available cycle balance was burned.
+    assert_eq!(liquid_cycles, Cycles::from(&heap));
+
+    // The balance is equal to the freeze limit.
+    let system_state_modifications = api.take_system_state_modifications();
+    system_state_modifications
+        .apply_changes(
+            UNIX_EPOCH,
+            &mut system_state,
+            &default_network_topology(),
+            subnet_test_id(1),
+            false,
+            &no_op_logger(),
+        )
+        .unwrap();
+    assert_eq!(system_state.balance(), freeze_limit);
+}
+
 #[test]
 fn growing_wasm_memory_updates_subnet_available_memory() {
     let wasm_page_size = 64 << 10;
