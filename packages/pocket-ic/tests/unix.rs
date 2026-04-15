@@ -844,3 +844,85 @@ fn test_sender_info_in_query_call() {
         .expect("query call failed");
     assert_eq!(result, signer);
 }
+
+#[test]
+fn test_cost_threshold_keys() {
+    // We create a PocketIC instance with the II subnet (holding `key_1` with 34 nodes)
+    // and the test threshold keys subnet (holding `test_key_1` and `dfx_test_key` with 13 nodes).
+    let pic = PocketIcBuilder::new()
+        .with_ii_subnet() // this subnet has `key_1`
+        .with_test_threshold_keys_subnet() // this subnet has `test_key_1` and `dfx_test_key`
+        .with_application_subnet()
+        .build();
+
+    let canister = deploy_universal_canister(&pic);
+
+    // `key_1` is on the II subnet (34 nodes): base fee 10B scaled by 34/13.
+    // `test_key_1` and `dfx_test_key` are on the test threshold keys subnet (13 nodes): base fee 10B.
+    let cases = [
+        ("key_1", 26_153_846_153_u128),
+        ("test_key_1", 10_000_000_000_u128),
+        ("dfx_test_key", 10_000_000_000_u128),
+    ];
+
+    for (name, expected_cost) in cases {
+        let name_bytes = name.as_bytes();
+
+        // ic0.cost_sign_with_ecdsa (curve `Secp256k1` = 0)
+        let bytes = pic
+            .update_call(
+                canister,
+                Principal::anonymous(),
+                "update",
+                wasm()
+                    .cost_sign_with_ecdsa(name_bytes, 0)
+                    .reply_data_append()
+                    .reply()
+                    .build(),
+            )
+            .unwrap();
+        assert_eq!(
+            u128::from_le_bytes(bytes.try_into().unwrap()),
+            expected_cost,
+            "`ic0.cost_sign_with_ecdsa` mismatch for key `{name}`"
+        );
+
+        // ic0.cost_sign_with_schnorr (algorithm `Bip340Secp256k1` = 0)
+        let bytes = pic
+            .update_call(
+                canister,
+                Principal::anonymous(),
+                "update",
+                wasm()
+                    .cost_sign_with_schnorr(name_bytes, 0)
+                    .reply_data_append()
+                    .reply()
+                    .build(),
+            )
+            .unwrap();
+        assert_eq!(
+            u128::from_le_bytes(bytes.try_into().unwrap()),
+            expected_cost,
+            "`ic0.cost_sign_with_schnorr` mismatch for key `{name}`"
+        );
+
+        // ic0.cost_vetkd_derive_key (curve `Bls12_381_G2` = 0)
+        let bytes = pic
+            .update_call(
+                canister,
+                Principal::anonymous(),
+                "update",
+                wasm()
+                    .cost_vetkd_derive_key(name_bytes, 0)
+                    .reply_data_append()
+                    .reply()
+                    .build(),
+            )
+            .unwrap();
+        assert_eq!(
+            u128::from_le_bytes(bytes.try_into().unwrap()),
+            expected_cost,
+            "`ic0.cost_vetkd_derive_key` mismatch for key `{name}`"
+        );
+    }
+}

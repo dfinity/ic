@@ -57,14 +57,23 @@ pub fn create_bare_metal_session(env: &TestEnv) -> BareMetalIpmiSession {
     bare_metal
 }
 
-/// Creates a `NestedNodes` with a single bare metal TEE node.
-pub fn create_bare_metal_tee_node(bare_metal: &BareMetalIpmiSession) -> NestedNode {
+/// Creates a bare-metal nested node. Set `enable_trusted_execution_environment` when the host
+/// runs AMD SEV-SNP (same meaning as the `TRUSTED_EXECUTION_ENVIRONMENT` env var in `setup()`).
+pub fn create_bare_metal_node(
+    bare_metal: &BareMetalIpmiSession,
+    enable_trusted_execution_environment: bool,
+) -> NestedNode {
     NestedNode::new_bare_metal(
         HOST_VM_NAME.to_string(),
         bare_metal.hostos_address(),
         bare_metal.mgmt_mac(),
-        /*enable_trusted_execution_environment=*/ true,
+        enable_trusted_execution_environment,
     )
+}
+
+/// Creates a `NestedNodes` with a single bare metal TEE (SEV-SNP) node.
+pub fn create_bare_metal_tee_node(bare_metal: &BareMetalIpmiSession) -> NestedNode {
+    create_bare_metal_node(bare_metal, true)
 }
 
 pub fn get_bare_metal_login_info() -> LoginInfo {

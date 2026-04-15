@@ -1,5 +1,5 @@
 use crate::{
-    CountBytes, ReplicaVersion,
+    CanisterId, CountBytes, ReplicaVersion,
     canister_http::{
         CanisterHttpReject, CanisterHttpRequestId, CanisterHttpResponse,
         CanisterHttpResponseArtifact, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
@@ -83,10 +83,57 @@ pub struct FlexibleCanisterHttpResponseWithProof {
     pub proof: CanisterHttpResponseShare,
 }
 
+impl FlexibleCanisterHttpResponseWithProof {
+    pub fn count_bytes(
+        response: &CanisterHttpResponse,
+        proof: &CanisterHttpResponseShare,
+    ) -> usize {
+        Self::count_bytes_from_parts(&response.canister_id, response.content.count_bytes(), proof)
+    }
+
+    /// Same calculation as [`Self::count_bytes`] but from decomposed parts.
+    pub fn count_bytes_from_parts(
+        canister_id: &CanisterId,
+        content_size: usize,
+        proof: &CanisterHttpResponseShare,
+    ) -> usize {
+        let response_size = CanisterHttpResponse::count_bytes_from_parts(canister_id, content_size);
+        response_size + proof.count_bytes()
+    }
+}
+
 impl CountBytes for FlexibleCanisterHttpResponseWithProof {
     fn count_bytes(&self) -> usize {
         let Self { response, proof } = self;
-        response.count_bytes() + proof.count_bytes()
+        Self::count_bytes(response, proof)
+    }
+}
+
+impl CountBytes for FlexibleCanisterHttpError {
+    fn count_bytes(&self) -> usize {
+        match self {
+            Self::Timeout { callback_id } => callback_id.count_bytes(),
+            Self::ResponsesTooLarge {
+                callback_id,
+                metadata_shares,
+            } => {
+                callback_id.count_bytes()
+                    + metadata_shares
+                        .iter()
+                        .map(|s| s.count_bytes())
+                        .sum::<usize>()
+            }
+            Self::TooManyRequestErrors {
+                callback_id,
+                reject_responses,
+            } => {
+                callback_id.count_bytes()
+                    + reject_responses
+                        .iter()
+                        .map(|r| r.count_bytes())
+                        .sum::<usize>()
+            }
+        }
     }
 }
 
@@ -152,6 +199,7 @@ impl From<CanisterHttpResponseWithConsensus> for pb::CanisterHttpResponseWithCon
                 })
                 .collect(),
             content_size: payload.proof.content.content_size,
+            is_reject: payload.proof.content.is_reject,
         }
     }
 }
@@ -193,6 +241,7 @@ impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWith
                         payload.hash,
                     )),
                     content_size: payload.content_size,
+                    is_reject: payload.is_reject,
                     registry_version: RegistryVersion::new(payload.registry_version),
                     replica_version: ReplicaVersion::try_from(payload.replica_version)
                         .map_err(|err| ProxyDecodeError::ReplicaVersionParseError(Box::new(err)))?,
@@ -288,6 +337,7 @@ impl From<CanisterHttpResponseShare> for pb::CanisterHttpShare {
                 registry_version: share.content.registry_version.get(),
                 replica_version: share.content.replica_version.into(),
                 content_size: share.content.content_size,
+                is_reject: share.content.is_reject,
             }),
             signature: Some(pb::CanisterHttpResponseSignature {
                 signer: share.signature.signer.get().into_vec(),
@@ -316,6 +366,7 @@ impl TryFrom<pb::CanisterHttpShare> for CanisterHttpResponseShare {
                 id,
                 content_hash,
                 content_size: metadata.content_size,
+                is_reject: metadata.is_reject,
                 registry_version,
                 replica_version,
             },
@@ -536,6 +587,7 @@ mod tests {
                     4, 5, 6, 7,
                 ])),
                 content_size: 42,
+                is_reject: false,
                 registry_version: RegistryVersion::new(2),
                 replica_version: ReplicaVersion::default(),
             },
