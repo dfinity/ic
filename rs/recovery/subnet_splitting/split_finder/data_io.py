@@ -22,7 +22,6 @@ def load_subnet_data(load_path: Path, load_type: str, communication_data_path: P
     """
     canister_data = pd.read_csv(load_path)
     canister_data = canister_data[["canister_id", load_type]]
-    canister_data["original_index"] = range(len(canister_data))
 
     communication_data = pd.read_csv(communication_data_path)
     communication_data = communication_data[["sender_canister_id", "receiver_canister_id", "count"]]
