@@ -125,7 +125,7 @@ use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
     page_map::Buffer,
     replicated_state::ReplicatedStateMessageRouting,
-    testing::{CanisterQueuesTesting, SystemStateTesting},
+    testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_state_manager::StateManagerImpl;
@@ -2806,6 +2806,13 @@ impl StateMachine {
             .unwrap_or_else(|| panic!("No buffered ingress with id {}", message_id))
     }
 
+    /// Each step in the ordering is executed with the following sequence:
+    ///
+    /// 1. Ensure message is available (rotate sender schedule / induct loopback).
+    /// 2. Set budget (prioritise canister or subnet execution).
+    /// 3. Set scheduling hints (next_scheduled_method, next_input_source, ordering_target).
+    /// 4. Tick (execute one round).
+    /// 5. Complete DTS (drain any deterministic time-slicing continuations).
     pub fn execute_with_ordering(&self, ordering: MessageOrdering) {
         let fmo = self.fmo();
         const MAX_TICKS: usize = 100;
@@ -2852,12 +2859,12 @@ impl StateMachine {
                 }
 
                 OrderedMessage::Heartbeat(canister) | OrderedMessage::Timer(canister) => {
-                    fmo.prioritise_canister_execution();
                     let method = match msg {
                         OrderedMessage::Heartbeat(_) => NextScheduledMethod::Heartbeat,
                         OrderedMessage::Timer(_) => NextScheduledMethod::GlobalTimer,
                         _ => unreachable!(),
                     };
+                    fmo.prioritise_canister_execution();
                     self.set_next_scheduled_method(canister, method);
                     fmo.set_ordering_target(Some(canister));
                     self.tick();
@@ -2883,15 +2890,10 @@ impl StateMachine {
 
                 OrderedMessage::Request { source, target }
                 | OrderedMessage::Response { source, target } => {
+                    self.set_next_sender_in_queue(source, target);
                     fmo.prioritise_canister_execution();
-                    self.set_next_input_source(target, InputSource::LocalSubnet);
-                    assert!(
-                        self.next_sender_in_queue(source, target),
-                        "Message from {} not next in {}'s queue",
-                        source,
-                        target,
-                    );
                     self.set_next_scheduled_method(target, NextScheduledMethod::Message);
+                    self.set_next_input_source(target, InputSource::LocalSubnet);
                     fmo.set_ordering_target(Some(target));
                     self.tick();
                     self.complete_dts(target, MAX_TICKS);
@@ -2942,13 +2944,17 @@ impl StateMachine {
         }
     }
 
-    fn next_sender_in_queue(&self, source: CanisterId, target: CanisterId) -> bool {
-        let state = self.get_latest_state();
-        let queues = match state.canister_state(&target) {
-            Some(c) => c.system_state.queues(),
-            None => return false,
-        };
-        queues.local_sender_schedule().front() == Some(&source)
+    fn set_next_sender_in_queue(&self, source: CanisterId, target: CanisterId) {
+        let (_, mut state) = self.state_manager.take_tip();
+        let canister = state
+            .canister_state_make_mut(&target)
+            .unwrap_or_else(|| panic!("Canister {} not found", target));
+        canister
+            .system_state
+            .queues_mut()
+            .rotate_local_sender_to_front(source);
+        self.state_manager
+            .commit_and_certify(state, CertificationScope::Metadata, None);
     }
 
     fn set_next_sender_in_subnet_queue(&self, source: CanisterId, target: CanisterId) {
@@ -2958,33 +2964,29 @@ impl StateMachine {
                 if self.has_loopback_message_for(subnet_canister_id, target) {
                     self.message_routing.induct_loopback_stream();
                 }
-                let state = self.get_latest_state();
-                let queues = state
-                    .canister_state(&target)
-                    .unwrap_or_else(|| panic!("Canister {} not found", target))
+                let (_, mut state) = self.state_manager.take_tip();
+                let canister = state
+                    .canister_state_make_mut(&target)
+                    .unwrap_or_else(|| panic!("Canister {} not found", target));
+                canister
                     .system_state
-                    .queues();
-                assert!(
-                    queues.local_sender_schedule().front() == Some(&subnet_canister_id),
-                    "No response from IC_00 to {} in canister's input schedule",
-                    target,
-                );
+                    .queues_mut()
+                    .rotate_local_sender_to_front(subnet_canister_id);
+                self.state_manager
+                    .commit_and_certify(state, CertificationScope::Metadata, None);
             }
             (source, IC_00) => {
                 if self.has_loopback_message_for(source, subnet_canister_id) {
                     self.message_routing.induct_loopback_stream();
                 }
-                assert!(
-                    self.get_latest_state()
-                        .subnet_queues()
-                        .local_sender_schedule()
-                        .front()
-                        == Some(&source),
-                    "No request from {} to IC_00 in subnet queue",
-                    source,
-                );
+                let (_, mut state) = self.state_manager.take_tip();
+                state
+                    .subnet_queues_mut()
+                    .rotate_local_sender_to_front(source);
+                self.state_manager
+                    .commit_and_certify(state, CertificationScope::Metadata, None);
             }
-            _ => panic!("Management canister is not involved; use next_sender_in_queue"),
+            _ => panic!("Management canister is not involved; use set_next_sender_in_queue"),
         }
     }
 

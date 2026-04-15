@@ -279,6 +279,10 @@ pub mod testing {
 
         /// Sets which input source the scheduler will try next.
         fn set_next_input_source(&mut self, source: InputSource);
+
+        /// Rotates the local sender schedule so that `sender` is at the front.
+        /// Panics if `sender` is not in the schedule.
+        fn rotate_local_sender_to_front(&mut self, sender: CanisterId);
     }
 
     impl InputScheduleTesting for InputSchedule {
@@ -292,6 +296,15 @@ pub mod testing {
 
         fn set_next_input_source(&mut self, source: InputSource) {
             self.next_input_source = source;
+        }
+
+        fn rotate_local_sender_to_front(&mut self, sender: CanisterId) {
+            let pos = self
+                .local_sender_schedule
+                .iter()
+                .position(|&id| id == sender)
+                .unwrap_or_else(|| panic!("{} not found in local sender schedule", sender));
+            self.local_sender_schedule.rotate_left(pos);
         }
     }
 }

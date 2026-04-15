@@ -2023,6 +2023,10 @@ pub mod testing {
         /// Sets which input source the scheduler will try next.
         fn set_next_input_source(&mut self, source: InputSource);
 
+        /// Rotates the local sender schedule so that `sender` is at the front.
+        /// Panics if `sender` is not in the schedule.
+        fn rotate_local_sender_to_front(&mut self, sender: CanisterId);
+
         /// Returns an iterator over the raw contents of the output queue to
         /// `canister_id`; or `None` if no such output queue exists.
         fn output_queue_iter_for_testing(
@@ -2062,6 +2066,10 @@ pub mod testing {
 
         fn set_next_input_source(&mut self, source: InputSource) {
             self.input_schedule.set_next_input_source(source);
+        }
+
+        fn rotate_local_sender_to_front(&mut self, sender: CanisterId) {
+            self.input_schedule.rotate_local_sender_to_front(sender);
         }
 
         fn output_queue_iter_for_testing(
