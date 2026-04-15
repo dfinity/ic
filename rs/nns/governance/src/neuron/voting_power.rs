@@ -30,6 +30,11 @@ pub(crate) fn age_bonus_multiplier(age_seconds: u64) -> Decimal {
     t / Decimal::from(4) + Decimal::from(1)
 }
 
+pub(crate) fn eight_year_gang_bonus(eight_year_gang_bonus_base_e8s: u64) -> Decimal {
+    // 10% of the base e8s.
+    Decimal::from(eight_year_gang_bonus_base_e8s) / Decimal::from(10)
+}
+
 #[cfg(test)]
 #[path = "voting_power_tests.rs"]
 mod tests;

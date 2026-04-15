@@ -3,7 +3,7 @@ use crate::{
     governance::{LOG_PREFIX, MAX_NUM_HOT_KEYS_PER_NEURON, max_dissolve_delay_seconds},
     neuron::{
         age_bonus_multiplier, combine_aged_stakes, dissolve_delay_bonus_multiplier,
-        dissolve_state_and_age::DissolveStateAndAge, neuron_stake_e8s,
+        dissolve_state_and_age::DissolveStateAndAge, eight_year_gang_bonus, neuron_stake_e8s,
     },
     neuron_store::NeuronStoreError,
     pb::v1::{
@@ -367,7 +367,12 @@ impl Neuron {
         voting_power_economics: &VotingPowerEconomics,
         now_seconds: u64,
     ) -> (u64, u64) {
-        let potential_voting_power = Decimal::from(self.stake_e8s())
+        // Cap the bonus base to the current stake because rejection fees can cause the
+        // bonus base to exceed stake_e8s.
+        let eight_year_gang_bonus_base_e8s =
+            self.eight_year_gang_bonus_base_e8s.min(self.stake_e8s());
+        let potential_voting_power = (Decimal::from(self.stake_e8s())
+            + eight_year_gang_bonus(eight_year_gang_bonus_base_e8s))
             * dissolve_delay_bonus_multiplier(self.dissolve_delay_seconds(now_seconds))
             * age_bonus_multiplier(self.age_seconds(now_seconds));
 

@@ -931,3 +931,27 @@ fn test_eight_year_gang_bonus_base_e8s_is_lost_after_dissolving() {
     assert_eq!(neuron.state(now), NeuronState::Dissolving);
     assert_eq!(neuron.eight_year_gang_bonus_base_e8s, 0);
 }
+
+#[test]
+fn test_eight_year_gang_bonus_is_capped_to_stake_e8s() {
+    let now = 123_456_789;
+
+    // 100 ICP stake, 100 ICP bonus base, 50 ICP in fees from rejected proposals.
+    // stake_e8s = 100 - 50 = 50 ICP, so bonus base is capped to 50 ICP.
+    // eight_year_gang_bonus = 50 / 10 = 5 ICP.
+    // With 0 dissolve delay and 0 age, both multipliers are 1.0.
+    // potential_voting_power = (50 + 5) * 1 * 1 = 55 ICP.
+    let neuron = NeuronBuilder::new_for_test(
+        1,
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 0,
+            aging_since_timestamp_seconds: now,
+        },
+    )
+    .with_cached_neuron_stake_e8s(100 * E8)
+    .with_eight_year_gang_bonus_base_e8s(100 * E8)
+    .with_neuron_fees_e8s(50 * E8)
+    .build();
+
+    assert_eq!(neuron.potential_voting_power(now), 55 * E8);
+}
