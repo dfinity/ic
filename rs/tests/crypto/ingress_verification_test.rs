@@ -1098,7 +1098,11 @@ pub fn requests_with_sender_info(env: TestEnv) {
                         }),
                     },
                 };
-                let signature = id.sign_update(&content);
+                // Compute message ID from ic-types (includes sender_info in
+                // the hash) so the envelope signature is correct and the
+                // server reaches sender_info validation.
+                let message_id = MessageId::from(content.representation_independent_hash());
+                let signature = id.sign_bytes(&message_id.as_signed_bytes());
                 let response = send_request(
                     api_ver,
                     &test_info,
@@ -1130,7 +1134,8 @@ pub fn requests_with_sender_info(env: TestEnv) {
                         }),
                     },
                 };
-                let signature = id.sign_query(&content);
+                let message_id = MessageId::from(content.representation_independent_hash());
+                let signature = id.sign_bytes(&message_id.as_signed_bytes());
                 let response = send_request(
                     api_ver,
                     &test_info,
