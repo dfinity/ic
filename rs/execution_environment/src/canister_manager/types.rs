@@ -445,6 +445,11 @@ pub(crate) enum CanisterManagerError {
         limit: usize,
     },
     CanisterSnapshotNotEnoughCycles(CanisterOutOfCyclesError),
+    LogResizeNotEnoughCycles {
+        available: Cycles,
+        threshold: Cycles,
+        requested: Cycles,
+    },
     CanisterSnapshotImmutable,
     CanisterSnapshotInconsistent {
         message: String,
@@ -672,6 +677,11 @@ impl AsErrorHelp for CanisterManagerError {
             CanisterManagerError::CanisterSnapshotNotEnoughCycles { .. } => ErrorHelp::UserError {
                 suggestion: "Try sending more cycles with the request.".to_string(),
                 doc_link: "canister-snapshot-not-enough-cycles".to_string(),
+            },
+            CanisterManagerError::LogResizeNotEnoughCycles { .. } => ErrorHelp::UserError {
+                suggestion: "Top up the canister with more cycles before resizing log memory."
+                    .to_string(),
+                doc_link: "".to_string(),
             },
             CanisterManagerError::CanisterSnapshotImmutable => ErrorHelp::UserError {
                 suggestion: "Only canister snapshots created by metadata upload can be mutated.".to_string(),
@@ -1062,6 +1072,18 @@ impl From<CanisterManagerError> for UserError {
             CanisterSnapshotNotEnoughCycles(err) => Self::new(
                 ErrorCode::CanisterOutOfCycles,
                 format!("Canister snapshotting failed with: `{err}`{additional_help}"),
+            ),
+            LogResizeNotEnoughCycles {
+                available,
+                threshold,
+                requested,
+            } => Self::new(
+                ErrorCode::CanisterOutOfCycles,
+                format!(
+                    "Canister log memory resize failed: requested {requested} cycles \
+                     but only {available} available with {threshold} reserved \
+                     for freezing threshold.{additional_help}"
+                ),
             ),
             CanisterSnapshotImmutable => Self::new(
                 ErrorCode::CanisterSnapshotImmutable,

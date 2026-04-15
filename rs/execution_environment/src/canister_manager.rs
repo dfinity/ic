@@ -80,6 +80,17 @@ pub(crate) mod types;
 /// Maximum binary slice size allowed per single message download.
 const MAX_SLICE_SIZE_BYTES: u64 = 2_000_000;
 
+/// Instructions charged per byte of stored log data during log memory resize.
+///
+/// Log resize is more expensive per byte than snapshot operations (1 instr/byte)
+/// because it involves deserializing records from the old ring buffer,
+/// re-encoding them, and writing into a new one — not a simple memory copy.
+///
+/// TODO(DSM-11): 32 instr/byte is a preliminary estimate based on devenv
+/// benchmarks (~12-13 ns/byte at ~2B instr/sec). Validate on representative
+/// replica hardware and adjust. Consider moving to SchedulerConfig.
+const LOG_RESIZE_COST_PER_BYTE: u64 = 32;
+
 /// Contains validated cycles and memory usage:
 /// - cycles for instructions that can be consumed safely;
 /// - new memory usage (to compute the new freezing threshold);
@@ -326,6 +337,7 @@ impl CanisterManager {
     ///     - it cannot be lower than the current canister memory usage.
     ///     - there must be enough available subnet capacity for the change.
     ///     - there must be enough cycles for storage reservation.
+    ///     - there must be enough cycles for resizing log storage.
     ///     - there must be enough cycles to avoid freezing the canister.
     /// - compute allocation:
     ///     - there must be enough available compute capacity for the change.
@@ -357,6 +369,7 @@ impl CanisterManager {
         cost_schedule: CanisterCyclesCostSchedule,
         canister_reserved_balance: Cycles,
         canister_reserved_balance_limit: Option<Cycles>,
+        canister_log_bytes_used: NumBytes,
     ) -> Result<ValidatedCanisterSettings, CanisterManagerError> {
         self.validate_environment_variables(&settings)?;
 
@@ -504,17 +517,38 @@ impl CanisterManager {
             });
         }
 
+        // When the user explicitly sets log_memory_limit: validate the limit
+        // and check the canister can afford the resize cost.
+        // When not set: default to DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT so that
+        // new canisters get a log memory store initialized via do_update_settings.
+        let user_set_log_memory_limit = settings.log_memory_limit().is_some();
         let log_memory_limit = settings.log_memory_limit().or(Some(NumBytes::new(
             DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64,
         )));
         if let Some(requested_limit) = log_memory_limit {
-            // User can setup a zero log memory limit to disable logging.
-            // But cannot set it higher than the maximum limit.
             let max_limit = NumBytes::new(MAX_AGGREGATE_LOG_MEMORY_LIMIT as u64);
             if requested_limit > max_limit {
                 return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooHigh {
                     bytes: requested_limit,
                     limit: max_limit,
+                });
+            }
+        }
+        if user_set_log_memory_limit {
+            // Resizing reads all stored log records from the old ring buffer and
+            // rewrites them into a new one. Cost is proportional to bytes_used
+            // (actual stored data), not allocated capacity.
+            let log_resize_instructions =
+                NumInstructions::new(canister_log_bytes_used.get() * LOG_RESIZE_COST_PER_BYTE);
+            let log_resize_cycles = self
+                .cycles_account_manager
+                .management_canister_cost(log_resize_instructions, subnet_size, cost_schedule)
+                .real();
+            if canister_cycles_balance < threshold + log_resize_cycles {
+                return Err(CanisterManagerError::LogResizeNotEnoughCycles {
+                    available: canister_cycles_balance,
+                    threshold,
+                    requested: log_resize_cycles,
                 });
             }
         }
@@ -560,6 +594,7 @@ impl CanisterManager {
             cost_schedule,
             Cycles::zero(),
             None,
+            NumBytes::new(0),
         )
     }
 
@@ -639,6 +674,7 @@ impl CanisterManager {
 
         validate_controller(canister, &sender)?;
 
+        let user_set_log_memory_limit = settings.log_memory_limit().is_some();
         let validated_settings = self.validate_canister_settings(
             settings,
             canister.memory_usage(),
@@ -654,6 +690,7 @@ impl CanisterManager {
             cost_schedule,
             canister.system_state.reserved_balance(),
             canister.system_state.reserved_balance_limit(),
+            NumBytes::new(canister.system_state.log_memory_store.bytes_used() as u64),
         )?;
 
         let old_usage = canister.memory_usage();
@@ -687,6 +724,28 @@ impl CanisterManager {
                 NumBytes::from(0),
                 NumBytes::from(0),
             );
+        }
+
+        // Deduct cycles and account instructions for log resize.
+        // Validation was done in validate_canister_settings; this is the actual deduction.
+        if user_set_log_memory_limit {
+            let bytes_used = canister.system_state.log_memory_store.bytes_used() as u64;
+            let log_resize_instructions =
+                NumInstructions::new(bytes_used * LOG_RESIZE_COST_PER_BYTE);
+            self.cycles_account_manager
+                .consume_cycles_for_management_canister_instructions(
+                    &sender,
+                    canister,
+                    log_resize_instructions,
+                    subnet_size,
+                    cost_schedule,
+                )
+                .map_err(|err| CanisterManagerError::LogResizeNotEnoughCycles {
+                    available: err.available,
+                    threshold: err.threshold,
+                    requested: err.requested,
+                })?;
+            round_limits.instructions -= as_round_instructions(log_resize_instructions);
         }
 
         canister.system_state.bump_canister_version();
