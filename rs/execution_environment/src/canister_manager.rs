@@ -520,7 +520,6 @@ impl CanisterManager {
             });
         }
 
-        let user_set_log_memory_limit = settings.log_memory_limit().is_some();
         let log_memory_limit = if let Some(requested_limit) = settings.log_memory_limit() {
             // User explicitly sets log_memory_limit: validate the limit
             // and check the canister can afford the resize cost.
