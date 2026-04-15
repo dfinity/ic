@@ -31,7 +31,7 @@ end::catalog[] */
 use crate::utils::{
     NodeHeights, READONLY_USERNAME, RECOVERY_USERNAME, SshKeys, assert_subnet_is_broken,
     break_nodes, get_ssh_keys_for_user, halt_subnet, local::app_subnet_recovery_local_cli_args,
-    node_with_highest_cert_share_and_cup_heights, remote_recovery, unhalt_subnet,
+    node_with_highest_cup_and_cert_share_heights, remote_recovery, unhalt_subnet,
 };
 use canister_test::Canister;
 use ic_base_types::NodeId;
@@ -1116,9 +1116,9 @@ fn get_recovery_parameters(
 
         let NodeHeights {
             node: download_pool_node,
-            cert_share: highest_cert_share,
             cup: highest_cup,
-        } = node_with_highest_cert_share_and_cup_heights(app_subnet, &logger);
+            cert_share: highest_cert_share,
+        } = node_with_highest_cup_and_cert_share_heights(app_subnet, &logger);
 
         let download_state_node = app_subnet
             .nodes()

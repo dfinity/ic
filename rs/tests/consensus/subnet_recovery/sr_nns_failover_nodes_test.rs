@@ -25,7 +25,7 @@ use anyhow::Result;
 use canister_http::get_universal_vm_address;
 use ic_agent::Agent;
 use ic_consensus_system_test_subnet_recovery::utils::{
-    NodeHeights, assert_subnet_is_broken, break_nodes, node_with_highest_cert_share_and_cup_heights,
+    NodeHeights, assert_subnet_is_broken, break_nodes, node_with_highest_cup_and_cert_share_heights,
 };
 use ic_consensus_system_test_utils::{
     rw_message::{
@@ -173,9 +173,9 @@ pub fn test(env: TestEnv) {
 
     let NodeHeights {
         node: download_node,
-        cert_share: highest_cert_share,
         cup: highest_cup,
-    } = node_with_highest_cert_share_and_cup_heights(&orig_nns_subnet, &logger);
+        cert_share: highest_cert_share,
+    } = node_with_highest_cup_and_cert_share_heights(&orig_nns_subnet, &logger);
     info!(
         logger,
         "Selected download node {} ({:?}) with highest certification share height {}",
