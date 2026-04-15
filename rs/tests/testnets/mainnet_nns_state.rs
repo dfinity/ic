@@ -20,7 +20,7 @@
 // to unpack and 59G of disk space.
 //
 // ```
-// $ ict testnet create mainnet_nns --verbose --set-required-host-features=dc=zh1 -- --test_tmpdir=./mainnet_nns
+// $ ict testnet create mainnet_nns_state --verbose --set-required-host-features=dc=zh1 -- --test_tmpdir=./mainnet_nns_state
 // ```
 //
 // Additional configuration:
