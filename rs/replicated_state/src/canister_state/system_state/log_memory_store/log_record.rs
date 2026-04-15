@@ -4,7 +4,7 @@ use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsF
 ///
 /// Unlike `CanisterLogRecord`, it stores the content length explicitly
 /// to enable serialization and deserialization of content.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub(super) struct LogRecord {
     pub idx: u64,
     pub timestamp: u64,
