@@ -998,12 +998,15 @@ def fmt_time(t):
 
 
 def get_git_since_arg(args) -> str:
-    """Convert the time filter args into a --since argument for git log."""
+    """Convert the time filter args into a --since argument for git log.
+
+    When --since is specified, parses it via parse_datetime (which returns a
+    UTC-aware datetime) and formats it as ISO-8601 with a Z suffix so that
+    git log --since uses the same UTC time window as the SQL query.
+    """
     if args.since:
-        if is_git_commit_sha(args.since):
-            dt = get_commit_timestamp(args.since)
-            return dt.strftime("%Y-%m-%d %H:%M:%S")
-        return args.since
+        dt = parse_datetime(args.since)
+        return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
     return f"last {period(args)}"
 
 
