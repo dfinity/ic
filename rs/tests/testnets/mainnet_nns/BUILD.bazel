@@ -35,6 +35,7 @@ rust_library(
         "@crate_index//:serde",
         "@crate_index//:slog",
         "@crate_index//:ssh2",
+        "@crate_index//:tokio",
         "@crate_index//:url",
     ],
 )

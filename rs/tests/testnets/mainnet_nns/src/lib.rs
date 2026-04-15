@@ -25,9 +25,9 @@ use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::process::Output;
 use std::str::FromStr;
-use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 use std::{io::Write, process::Command};
+use tokio::sync::oneshot;
 use url::Url;
 
 use crate::proposals::NEURON_CONTROLLER;
@@ -80,107 +80,114 @@ pub mod proposals;
 /// Proposals can be made (and will instantly execute) using the relevant functions in
 /// `crate::proposals`.
 pub fn setup(env: TestEnv, dkg_interval: Option<u64>) {
-    // Since we're creating the IC concurrently with fetching the state we use a channel to tell the
-    // thread fetching the state when the IC is ready such that it can scp the ic.json5 config file
-    // from the NNS node once it's online, used by ic-replay.
-    let (tx_finished_ic_setup, rx_finished_ic_setup): (mpsc::Sender<()>, mpsc::Receiver<()>) =
-        mpsc::channel();
-    // The aux node will be sent to the recovery thread once it's setup.
-    let (tx_aux_node, rx_aux_node): (
-        std::sync::mpsc::Sender<DeployedUniversalVm>,
-        Receiver<DeployedUniversalVm>,
-    ) = mpsc::channel();
+    block_on(async {
+        // Since we're creating the IC concurrently with fetching the state we use a channel to tell
+        // the task fetching the state when the IC is ready such that it can scp the ic.json5 config
+        // file from the NNS node once it's online, used by ic-replay.
+        let (tx_finished_ic_setup, rx_finished_ic_setup) = oneshot::channel();
+        // The aux node will be sent to the recovery task once it's setup.
+        let (tx_aux_node, rx_aux_node) = oneshot::channel();
 
-    // Recover the NNS concurrently:
-    let env_clone = env.clone();
-    let recover_nns_thread = std::thread::spawn(move || {
-        setup_recovered_nns(env_clone, dkg_interval, rx_finished_ic_setup, rx_aux_node)
+        // Recover the NNS concurrently:
+        let env_clone = env.clone();
+        let recover_nns_task = tokio::task::spawn_blocking(move || {
+            block_on(setup_recovered_nns(
+                env_clone,
+                dkg_interval,
+                rx_finished_ic_setup,
+                rx_aux_node,
+            ))
+        });
+
+        // Setup and start the aux UVM concurrently:
+        let env_clone = env.clone();
+        let uvm_task = tokio::task::spawn_blocking(move || {
+            UniversalVm::new(AUX_NODE_NAME.to_string())
+                .start(&env_clone)
+                .expect("Failed to start Universal VM")
+        });
+
+        let env_clone = env.clone();
+        setup_ic(env_clone);
+
+        // Once the IC is setup, we signal the other task that it can now scp the ic.json5 config
+        // file
+        tx_finished_ic_setup.send(()).expect("receiver dropped");
+
+        // Deploy the HTTP gateway
+        let env_clone = env.clone();
+        let deploy_gateway_task = tokio::task::spawn_blocking(move || {
+            IcGatewayVm::new(IC_GATEWAY_VM_NAME)
+                .start(&env_clone)
+                .expect("Failed to setup ic-gateway");
+
+            env_clone
+                .get_deployed_ic_gateway(IC_GATEWAY_VM_NAME)
+                .unwrap()
+        });
+
+        // When the aux host is ready, we send it to the other task so that it can start the
+        // recovery
+        uvm_task.await.unwrap();
+        let deployed_universal_vm = env.get_deployed_universal_vm(AUX_NODE_NAME).unwrap();
+        tx_aux_node
+            .send(deployed_universal_vm)
+            .expect("receiver dropped");
+
+        let http_gateway = deploy_gateway_task.await.unwrap();
+        let neuron_id = recover_nns_task.await.unwrap();
+        // After the NNS has been recovered and the API BN fixed, we should restart the HTTP
+        // gateway to let it fetch the new root public key from the API BN.
+        // Alternatively, we could start deploying the HTTP gateway only now. But deploying it in
+        // parallel earlier and only having to restart the container now is faster.
+        http_gateway
+            .block_on_bash_script("docker restart ic-gateway")
+            .unwrap();
+
+        let http_gateway_url = http_gateway.get_public_url();
+        info!(
+            env.logger(),
+            "NNS Dapp: https://{MAINNET_NNS_DAPP_CANISTER_ID}.{domain}",
+            domain = http_gateway_url.host_str().unwrap()
+        );
+
+        write_sh_lib(&env, neuron_id, &http_gateway_url);
+
+        info!(
+            env.logger(),
+            "Patching test environment's registry local store..."
+        );
+        patch_env_local_store(&env);
+        info!(
+            env.logger(),
+            "Patching test environment's root public key..."
+        );
+        patch_env_root_public_key(&env);
+        info!(
+            env.logger(),
+            "Removing large files to speed up subsequent test tasks..."
+        );
+        remove_large_files(&env);
     });
-
-    // Setup and start the aux UVM concurrently:
-    let env_clone = env.clone();
-    let uvm_thread = std::thread::spawn(move || {
-        UniversalVm::new(AUX_NODE_NAME.to_string())
-            .start(&env_clone)
-            .expect("Failed to start Universal VM")
-    });
-
-    let env_clone = env.clone();
-    setup_ic(env_clone);
-
-    // Once the IC is setup, we signal the other thread that it can now scp the ic.json5 config file
-    tx_finished_ic_setup.send(()).unwrap();
-
-    // Deploy the HTTP gateway
-    let env_clone = env.clone();
-    let deploy_gateway_thread = std::thread::spawn(move || {
-        IcGatewayVm::new(IC_GATEWAY_VM_NAME)
-            .start(&env_clone)
-            .expect("Failed to setup ic-gateway");
-
-        env_clone
-            .get_deployed_ic_gateway(IC_GATEWAY_VM_NAME)
-            .unwrap()
-    });
-
-    // When the aux host is ready, we send it to the other thread so that it can start the recovery
-    uvm_thread.join().unwrap();
-    let deployed_universal_vm = env.get_deployed_universal_vm(AUX_NODE_NAME).unwrap();
-    tx_aux_node.send(deployed_universal_vm).unwrap();
-
-    let http_gateway = deploy_gateway_thread.join().unwrap();
-    let neuron_id = recover_nns_thread.join().unwrap();
-    // After the NNS has been recovered and the API BN fixed, we should restart the HTTP gateway to
-    // let it fetch the new root public key from the API BN.
-    // Alternatively, we could start deploying the HTTP gateway only now. But deploying it in
-    // parallel earlier and only having to restart the container now is faster.
-    http_gateway
-        .block_on_bash_script("docker restart ic-gateway")
-        .unwrap();
-
-    let http_gateway_url = http_gateway.get_public_url();
-    info!(
-        env.logger(),
-        "NNS Dapp: https://{MAINNET_NNS_DAPP_CANISTER_ID}.{domain}",
-        domain = http_gateway_url.host_str().unwrap()
-    );
-
-    write_sh_lib(&env, neuron_id, &http_gateway_url);
-
-    info!(
-        env.logger(),
-        "Patching test environment's registry local store..."
-    );
-    patch_env_local_store(&env);
-    info!(
-        env.logger(),
-        "Patching test environment's root public key..."
-    );
-    patch_env_root_public_key(&env);
-    info!(
-        env.logger(),
-        "Removing large files to speed up subsequent test tasks..."
-    );
-    remove_large_files(&env);
 }
 
-fn setup_recovered_nns(
+async fn setup_recovered_nns(
     env: TestEnv,
     dkg_interval: Option<u64>,
-    rx_finished_ic_setup: Receiver<()>,
-    rx_aux_node: Receiver<DeployedUniversalVm>,
+    rx_finished_ic_setup: oneshot::Receiver<()>,
+    rx_aux_node: oneshot::Receiver<DeployedUniversalVm>,
 ) -> NeuronId {
     let env_clone = env.clone();
-    let fetch_mainnet_ic_replay_thread =
-        std::thread::spawn(move || fetch_mainnet_ic_replay(&env_clone));
+    let fetch_mainnet_ic_replay_task =
+        tokio::task::spawn_blocking(move || fetch_mainnet_ic_replay(&env_clone));
     let env_clone = env.clone();
-    let fetch_mainnet_ic_recovery_thread =
-        std::thread::spawn(move || fetch_mainnet_ic_recovery(&env_clone));
+    let fetch_mainnet_ic_recovery_task =
+        tokio::task::spawn_blocking(move || fetch_mainnet_ic_recovery(&env_clone));
     fetch_nns_state_from_backup_pod(&env);
 
     // Wait until the IC setup is finished such that we can scp the ic.json5 config file from the
     // NNS
-    rx_finished_ic_setup.recv().unwrap();
+    rx_finished_ic_setup.await.unwrap();
 
     let topology = env.topology_snapshot();
     let nns_node = topology.root_subnet().nodes().next().unwrap();
@@ -188,16 +195,16 @@ fn setup_recovered_nns(
     fetch_ic_config(&env, &nns_node);
 
     // Wait until we have fetched ic-replay before setting the test neuron (which needs ic-replay)
-    fetch_mainnet_ic_replay_thread
-        .join()
+    fetch_mainnet_ic_replay_task
+        .await
         .unwrap_or_else(|e| panic!("Failed to fetch the mainnet ic-replay because {e:?}"));
 
     let neuron_id: NeuronId = setup_test_neuron(&env);
 
     // Wait until the aux node is setup and we have fetched ic-recovery before starting the recovery
-    let aux_node = rx_aux_node.recv().unwrap();
-    fetch_mainnet_ic_recovery_thread
-        .join()
+    let aux_node = rx_aux_node.await.unwrap();
+    fetch_mainnet_ic_recovery_task
+        .await
         .unwrap_or_else(|e| panic!("Failed to fetch the mainnet ic-recovery because {e:?}"));
 
     recover_nns_subnet(&env, &nns_node, &recovered_nns_node, &aux_node);
