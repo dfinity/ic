@@ -2214,15 +2214,22 @@ impl StateMachine {
             )
         });
 
-        let ordering_target: Arc<RwLock<Option<CanisterId>>> = Arc::new(RwLock::new(None));
-        let scheduler: Box<dyn Scheduler<State = ReplicatedState>> = if flexible_ordering {
-            Box::new(FlexibleOrderingScheduler {
-                inner: execution_services.scheduler,
-                target: Arc::clone(&ordering_target),
-            })
-        } else {
-            execution_services.scheduler
-        };
+        let mut flexible_message_ordering = None;
+        let mut scheduler: Box<dyn Scheduler<State = ReplicatedState>> =
+            execution_services.scheduler;
+
+        if flexible_ordering {
+            let ordering_target: Arc<RwLock<Option<CanisterId>>> = Arc::new(RwLock::new(None));
+            flexible_message_ordering = Some(FlexibleMessageOrdering {
+                ordering_target: Arc::clone(&ordering_target),
+                scheduler_config: execution_services.scheduler_config.clone(),
+                ingress_buffer: RwLock::new(BTreeMap::new()),
+            });
+            scheduler = Box::new(FlexibleOrderingScheduler {
+                inner: scheduler,
+                target: ordering_target,
+            });
+        }
 
         let message_routing = SyncMessageRouting::new(
             Arc::clone(&state_manager) as _,
@@ -2458,15 +2465,7 @@ impl StateMachine {
             cycles_account_manager: execution_services.cycles_account_manager,
             cost_schedule,
             hypervisor_config,
-            flexible_message_ordering: if flexible_ordering {
-                Some(FlexibleMessageOrdering {
-                    ordering_target,
-                    scheduler_config: execution_services.scheduler_config.clone(),
-                    ingress_buffer: RwLock::new(BTreeMap::new()),
-                })
-            } else {
-                None
-            },
+            flexible_message_ordering,
         }
     }
 
