@@ -2118,6 +2118,43 @@ mod sender_info {
     }
 
     #[test]
+    fn should_reject_sender_info_with_malformed_sender_pubkey() {
+        let verifier = default_verifier()
+            .with_root_of_trust(hard_coded_root_of_trust().public_key)
+            .build();
+
+        // Use a canister signature auth scheme but override the public key
+        // with garbage bytes.
+        let rng = &mut reproducible_rng();
+        let root_of_trust = RootOfTrust::new_random(rng);
+        let signer = CanisterSigner {
+            seed: CANISTER_SIGNATURE_SEED.to_vec(),
+            canister_id: CANISTER_ID_SIGNER,
+            root_public_key: root_of_trust.public_key,
+            root_secret_key: root_of_trust.secret_key,
+        };
+        let request = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(Direct(CanisterSignature(signer)))
+            .with_authentication_sender_public_key(Some(Blob(vec![0xDE, 0xAD])))
+            .with_sender_info(RawSignedSenderInfo {
+                info: Blob(vec![1, 2, 3]),
+                signer: Blob(CANISTER_ID_SIGNER.get().into_vec()),
+                sig: Blob(vec![4, 5, 6]),
+            })
+            .build();
+
+        let result = verifier.validate_request(&request);
+        // The envelope signature check fails first (before sender_info is checked),
+        // because the malformed public key can't verify the request signature.
+        assert_matches!(
+            result,
+            Err(RequestValidationError::InvalidSignature(_))
+                | Err(RequestValidationError::UserIdDoesNotMatchPublicKey(..))
+        );
+    }
+
+    #[test]
     fn should_reject_sender_info_with_anonymous_authentication() {
         let verifier = default_verifier()
             .with_root_of_trust(hard_coded_root_of_trust().public_key)

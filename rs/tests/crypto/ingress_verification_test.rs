@@ -1249,6 +1249,32 @@ pub fn requests_with_valid_sender_info(env: TestEnv) {
                 .expect_query_ok(api_ver);
             }
 
+            // Helper: build a query call with the given sender_info.
+            let send_query = |api_ver, sender_info| {
+                let content = HttpQueryContent::Query {
+                    query: HttpUserQuery {
+                        canister_id: Blob(test_info.canister_id.get().as_slice().to_vec()),
+                        method_name: "query".to_string(),
+                        arg: Blob(wasm().reply_data(b"query_reply").build()),
+                        sender: Blob(id.principal().as_slice().to_vec()),
+                        ingress_expiry: expiry_time().as_nanos() as u64,
+                        nonce: None,
+                        sender_info: Some(sender_info),
+                    },
+                };
+                let message_id = MessageId::from(content.representation_independent_hash());
+                let signature = id.sign_bytes(&message_id.as_signed_bytes());
+                send_request(
+                    api_ver,
+                    &test_info,
+                    "query",
+                    content,
+                    id.public_key_der(),
+                    None,
+                    signature,
+                )
+            };
+
             let sender_info_error_text = "Invalid sender info:";
 
             ///////////////////////////////////////////////////////////////////
@@ -1260,6 +1286,13 @@ pub fn requests_with_valid_sender_info(env: TestEnv) {
                 assert_eq!(response.status(), 400);
                 response.expect_text_error(sender_info_error_text);
             }
+            for &api_ver in ALL_QUERY_API_VERSIONS {
+                let mut si = valid_sender_info();
+                si.signer = Blob(CanisterId::ic_00().get().as_slice().to_vec());
+                let response = send_query(api_ver, si).await;
+                assert_eq!(response.status(), 400);
+                response.expect_text_error(sender_info_error_text);
+            }
 
             ///////////////////////////////////////////////////////////////////
             // sender_info with tampered info bytes should be rejected
@@ -1267,6 +1300,13 @@ pub fn requests_with_valid_sender_info(env: TestEnv) {
                 let mut si = valid_sender_info();
                 si.info = Blob(b"tampered info".to_vec());
                 let response = send_update(api_ver, si).await;
+                assert_eq!(response.status(), 400);
+                response.expect_text_error(sender_info_error_text);
+            }
+            for &api_ver in ALL_QUERY_API_VERSIONS {
+                let mut si = valid_sender_info();
+                si.info = Blob(b"tampered info".to_vec());
+                let response = send_query(api_ver, si).await;
                 assert_eq!(response.status(), 400);
                 response.expect_text_error(sender_info_error_text);
             }

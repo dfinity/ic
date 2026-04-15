@@ -203,8 +203,9 @@ where
     R::Error: std::error::Error,
 {
     validate_nonce(request)?;
-    validate_sender_info(request, ingress_signature_verifier, root_of_trust_provider)?;
-    validate_user_id_and_signature(
+    // Validate the envelope signature first (cheap check) before performing
+    // expensive canister signature verification in validate_sender_info.
+    let targets = validate_user_id_and_signature(
         ingress_signature_verifier,
         &request.sender(),
         &request.id(),
@@ -214,7 +215,9 @@ where
         },
         current_time,
         root_of_trust_provider,
-    )
+    )?;
+    validate_sender_info(request, ingress_signature_verifier, root_of_trust_provider)?;
+    Ok(targets)
 }
 
 fn validate_request_target<C: HasCanisterId>(
@@ -428,6 +431,31 @@ fn validate_nonce<C: HttpRequestContent>(
     }
 }
 
+/// Verifies a canister signature, trying the additional root of trust first
+/// (e.g., mainnet) and falling back to the local root of trust.
+///
+/// This avoids duplicating the "try additional, then fall back to local"
+/// pattern across signature, delegation, and sender_info verification.
+macro_rules! verify_canister_sig_with_fallback {
+    ($validator:expr, $sig:expr, $message:expr, $pk:expr, $root_provider:expr,
+     $map_verify_err:expr, $map_root_err:expr) => {{
+        let verified_with_additional =
+            $root_provider
+                .additional_root_of_trust()
+                .is_some_and(|additional_root_of_trust| {
+                    $validator
+                        .verify_canister_sig($sig, $message, $pk, &additional_root_of_trust)
+                        .is_ok()
+                });
+        if !verified_with_additional {
+            let root_of_trust = $root_provider.root_of_trust().map_err($map_root_err)?;
+            $validator
+                .verify_canister_sig($sig, $message, $pk, &root_of_trust)
+                .map_err($map_verify_err)?;
+        }
+    }};
+}
+
 fn validate_sender_info<C: HttpRequestContent, R: RootOfTrustProvider>(
     request: &HttpRequest<C>,
     ingress_signature_verifier: &dyn IngressSigVerifier,
@@ -502,34 +530,17 @@ where
     let sender_info_content = SenderInfoContent(sender_info.info.clone());
     let canister_sig = CanisterSigOf::from(CanisterSig(sender_info.sig.clone()));
 
-    // Try verification with the additional root of trust (mainnet) first,
-    // then fall back to the local root of trust.
-    let verified_with_additional = root_of_trust_provider
-        .additional_root_of_trust()
-        .is_some_and(|additional_root_of_trust| {
-            validator
-                .verify_canister_sig(
-                    &canister_sig,
-                    &sender_info_content,
-                    &public_key,
-                    &additional_root_of_trust,
-                )
-                .is_ok()
-        });
-    if !verified_with_additional {
-        let root_of_trust = root_of_trust_provider
-            .root_of_trust()
-            .map_err(|e| InvalidSenderInfo(format!("failed to get root of trust: {e}")))?;
-        validator
-            .verify_canister_sig(
-                &canister_sig,
-                &sender_info_content,
-                &public_key,
-                &root_of_trust,
-            )
-            .map_err(|e| InvalidSenderInfo(format!("signature verification failed: {e}")))?;
-    }
-
+    verify_canister_sig_with_fallback!(
+        validator,
+        &canister_sig,
+        &sender_info_content,
+        &public_key,
+        root_of_trust_provider,
+        |e| InvalidSenderInfo(format!("signature verification failed: {e}")),
+        |e: <R as RootOfTrustProvider>::Error| InvalidSenderInfo(format!(
+            "failed to get root of trust: {e}"
+        ))
+    );
     Ok(())
 }
 
@@ -666,28 +677,17 @@ where
         }
         KeyBytesContentType::IcCanisterSignatureAlgPublicKeyDer => {
             let canister_sig = CanisterSigOf::from(CanisterSig(signature.signature.clone()));
-            let verified_with_mainnet = root_of_trust_provider
-                .additional_root_of_trust()
-                .is_some_and(|additional_root_of_trust| {
-                    validator
-                        .verify_canister_sig(
-                            &canister_sig,
-                            message_id,
-                            &pk,
-                            &additional_root_of_trust,
-                        )
-                        .is_ok()
-                });
-            if !verified_with_mainnet {
-                let root_of_trust = root_of_trust_provider
-                    .root_of_trust()
-                    .map_err(|e| InvalidCanisterSignature(e.to_string()))
-                    .map_err(InvalidSignature)?;
-                validator
-                    .verify_canister_sig(&canister_sig, message_id, &pk, &root_of_trust)
-                    .map_err(|e| InvalidCanisterSignature(e.to_string()))
-                    .map_err(InvalidSignature)?;
-            }
+            verify_canister_sig_with_fallback!(
+                validator,
+                &canister_sig,
+                message_id,
+                &pk,
+                root_of_trust_provider,
+                |e| InvalidSignature(InvalidCanisterSignature(e.to_string())),
+                |e: <R as RootOfTrustProvider>::Error| InvalidSignature(InvalidCanisterSignature(
+                    e.to_string()
+                ))
+            );
             Ok(targets)
         }
         KeyBytesContentType::RsaSha256PublicKeyDer => {
@@ -816,26 +816,15 @@ where
         }
         KeyBytesContentType::IcCanisterSignatureAlgPublicKeyDer => {
             let canister_sig = CanisterSigOf::from(CanisterSig(signature.to_vec()));
-            let verified_with_mainnet = root_of_trust_provider
-                .additional_root_of_trust()
-                .is_some_and(|additional_root_of_trust| {
-                    validator
-                        .verify_canister_sig(
-                            &canister_sig,
-                            delegation,
-                            &pk,
-                            &additional_root_of_trust,
-                        )
-                        .is_ok()
-                });
-            if !verified_with_mainnet {
-                let root_of_trust = root_of_trust_provider
-                    .root_of_trust()
-                    .map_err(|e| InvalidCanisterSignature(e.to_string()))?;
-                validator
-                    .verify_canister_sig(&canister_sig, delegation, &pk, &root_of_trust)
-                    .map_err(|e| InvalidCanisterSignature(e.to_string()))?;
-            }
+            verify_canister_sig_with_fallback!(
+                validator,
+                &canister_sig,
+                delegation,
+                &pk,
+                root_of_trust_provider,
+                |e| InvalidCanisterSignature(e.to_string()),
+                |e: <R as RootOfTrustProvider>::Error| InvalidCanisterSignature(e.to_string())
+            );
         }
     }
 
