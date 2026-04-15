@@ -17,7 +17,7 @@ class TestCsvLoading(unittest.TestCase):
         # this corresponds to the "ingress_messages_executed" column in "fake_load_sample.csv"
         self.assertEqual(result["load"], [2, 1, 3, 1, 3, 1, 3, 1, 3, 1, 3, 1, 3, 1, 3, 1, 3, 1, 3, 1])
         # the canisters in "fake_communication_sample.csv" form a cycling graph
-        self.assertEqual(result["edges"], [(i, (i - 1) % 20, 1) for i in range(20)])
+        self.assertEqual(result["edges"], {(i, (i - 1) % 20): 1 for i in range(20)})
         self.assertEqual(len(result["index_to_canister_id"]), len(result["load"]))
 
     def test_solver_sanity_check(self):
@@ -28,11 +28,11 @@ class TestCsvLoading(unittest.TestCase):
         self.assertEqual(
             result,
             [
-                ("rwlgt-iiaaa-aaaaa-aaaaa-cai", "rkp4c-7iaaa-aaaaa-aaaca-cai"),
-                ("qaa6y-5yaaa-aaaaa-aaafa-cai", "qhbym-qaaaa-aaaaa-aaafq-cai"),
-                ("qvhpv-4qaaa-aaaaa-aaagq-cai", "q4eej-kyaaa-aaaaa-aaaha-cai"),
-                ("sp3hj-caaaa-aaaaa-aaajq-cai", "sp3hj-caaaa-aaaaa-aaajq-cai"),
+                ("r7inp-6aaaa-aaaaa-aaabq-cai", "rno2w-sqaaa-aaaaa-aaacq-cai"),
+                ("qoctq-giaaa-aaaaa-aaaea-cai", "qjdve-lqaaa-aaaaa-aaaeq-cai"),
+                ("q4eej-kyaaa-aaaaa-aaaha-cai", "si2b5-pyaaa-aaaaa-aaaja-cai"),
             ],
+            msg=f"`find_split` returned unexpected split: {result}",
         )
 
 

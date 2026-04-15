@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
 
 import pandas as pd
 
@@ -38,7 +38,7 @@ def load_subnet_data(load_path: Path, load_type: str, communication_data_path: P
     canister_id_to_index = dict(zip(communicating_canisters["canister_id"], communicating_canisters["index"]))
     index_to_canister_id = dict(zip(communicating_canisters["index"], communicating_canisters["canister_id"]))
 
-    edges: List[Tuple[int, int, float]] = []
+    edges: Dict[Tuple[int, int], int] = {}
     for _, row in communication_data.iterrows():
         sender_id = row["sender_canister_id"]
         receiver_id = row["receiver_canister_id"]
@@ -46,7 +46,7 @@ def load_subnet_data(load_path: Path, load_type: str, communication_data_path: P
         if sender_id in canister_id_to_index and receiver_id in canister_id_to_index:
             i = canister_id_to_index[sender_id]
             j = canister_id_to_index[receiver_id]
-            edges.append((i, j, count))
+            edges[(i, j)] = count
 
     load = communicating_canisters[load_type].tolist()
 

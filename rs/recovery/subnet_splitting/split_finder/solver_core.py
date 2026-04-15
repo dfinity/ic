@@ -5,7 +5,7 @@ import pulp
 
 def solve_partition(
     load_c: List[float],
-    edges: List[Tuple[int, int, float]],
+    edges: Dict[Tuple[int, int], int],
     target_load_0: float,
     target_load_1: float,
     epsilon: float,
@@ -21,37 +21,38 @@ def solve_partition(
     addition to incoming messages).
     Returns assignments and key metrics to allow testing and reuse.
     """
-    N_c = len(load_c)
-    prob = pulp.LpProblem("CanisterSubgroupAssignment", pulp.LpMinimize)
+    canister_count = len(load_c)
+    problem = pulp.LpProblem("CanisterSubgroupAssignment", pulp.LpMinimize)
 
-    t = pulp.LpVariable.dicts("t", range(N_c), cat=pulp.LpBinary)
-    transitions = pulp.LpVariable.dicts("transition", range(N_c - 1), cat=pulp.LpBinary)
-
-    prob += pulp.lpSum([transitions[i] for i in range(N_c - 1)]) <= max_cuts, "MaxCuts"
-
-    for i in range(N_c - 1):
-        prob += transitions[i] >= t[i] - t[i + 1], f"TransitionLower1_{i}"
-        prob += transitions[i] >= t[i + 1] - t[i], f"TransitionLower2_{i}"
-        prob += transitions[i] <= t[i] + t[i + 1], f"TransitionUpper1_{i}"
-        prob += transitions[i] <= 2 - t[i] - t[i + 1], f"TransitionUpper2_{i}"
+    t = pulp.LpVariable.dicts("t", range(canister_count), cat=pulp.LpBinary)
 
     z = {}
-    for i, j, weight in edges:
+    # for each pair of consecutive canisters which don't talk to each other, we add an edge of
+    # 0 weight, so that we can later add an constraint that the number of pairs of consecutive
+    # canisters is bounded
+    for i in range(canister_count - 1):
+        if (i, i + 1) not in edges:
+            edges[(i, i + 1)] = 0
+
+    for (i, j), weight in edges.items():
         z[(i, j)] = pulp.LpVariable(f"z_{i}_{j}", cat="Binary")
-        prob += z[(i, j)] >= t[i] - t[j], f"InterGroupCommLower1_{i}_{j}"
-        prob += z[(i, j)] >= t[j] - t[i], f"InterGroupCommLower2_{i}_{j}"
-        prob += z[(i, j)] <= t[i] + t[j], f"InterGroupCommUpper1_{i}_{j}"
-        prob += z[(i, j)] <= 2 - t[i] - t[j], f"InterGroupCommUpper2_{i}_{j}"
+        # z[(i, j)] = XOR(t[i], t[j])
+        problem += z[(i, j)] >= t[i] - t[j], f"InterGroupCommLower1_{i}_{j}"
+        problem += z[(i, j)] >= t[j] - t[i], f"InterGroupCommLower2_{i}_{j}"
+        problem += z[(i, j)] <= t[i] + t[j], f"InterGroupCommUpper1_{i}_{j}"
+        problem += z[(i, j)] <= 2 - t[i] - t[j], f"InterGroupCommUpper2_{i}_{j}"
 
-    prob += pulp.lpSum([count * z[(i, j)] for i, j, count in edges]), "TotalInterGroupCommunication"
+    problem += pulp.lpSum([z[(i, i + 1)] for i in range(canister_count - 1)]) <= max_cuts, "MaxCuts"
 
-    load_0 = pulp.lpSum([load_c[k] * (1 - t[k]) for k in range(N_c)])
-    load_1 = pulp.lpSum([load_c[k] * t[k] for k in range(N_c)])
+    problem += pulp.lpSum([count * z[(i, j)] for (i, j), count in edges.items()]), "TotalInterGroupCommunication"
 
-    prob += load_0 >= target_load_0 * (1 - epsilon), "LoadBalanceLower_0"
-    prob += load_0 <= target_load_0 * (1 + epsilon), "LoadBalanceUpper_0"
-    prob += load_1 >= target_load_1 * (1 - epsilon), "LoadBalanceLower_1"
-    prob += load_1 <= target_load_1 * (1 + epsilon), "LoadBalanceUpper_1"
+    load_0 = pulp.lpSum([load_c[k] * (1 - t[k]) for k in range(canister_count)])
+    load_1 = pulp.lpSum([load_c[k] * t[k] for k in range(canister_count)])
+
+    problem += load_0 >= target_load_0 * (1 - epsilon), "LoadBalanceLower_0"
+    problem += load_0 <= target_load_0 * (1 + epsilon), "LoadBalanceUpper_0"
+    problem += load_1 >= target_load_1 * (1 - epsilon), "LoadBalanceLower_1"
+    problem += load_1 <= target_load_1 * (1 + epsilon), "LoadBalanceUpper_1"
 
     load_sec_0 = load_sec_1 = None
     if (
@@ -60,29 +61,19 @@ def solve_partition(
         and target_sec_1 is not None
         and epsilon_secondary is not None
     ):
-        load_sec_0 = pulp.lpSum([load_secondary[k] * (1 - t[k]) for k in range(N_c)])
-        load_sec_1 = pulp.lpSum([load_secondary[k] * t[k] for k in range(N_c)])
-        prob += load_sec_0 >= target_sec_0 * (1 - epsilon_secondary), "LoadSecBalanceLower_0"
-        prob += load_sec_0 <= target_sec_0 * (1 + epsilon_secondary), "LoadSecBalanceUpper_0"
-        prob += load_sec_1 >= target_sec_1 * (1 - epsilon_secondary), "LoadSecBalanceLower_1"
-        prob += load_sec_1 <= target_sec_1 * (1 + epsilon_secondary), "LoadSecBalanceUpper_1"
+        load_sec_0 = pulp.lpSum([load_secondary[k] * (1 - t[k]) for k in range(canister_count)])
+        load_sec_1 = pulp.lpSum([load_secondary[k] * t[k] for k in range(canister_count)])
+        problem += load_sec_0 >= target_sec_0 * (1 - epsilon_secondary), "LoadSecBalanceLower_0"
+        problem += load_sec_0 <= target_sec_0 * (1 + epsilon_secondary), "LoadSecBalanceUpper_0"
+        problem += load_sec_1 >= target_sec_1 * (1 - epsilon_secondary), "LoadSecBalanceLower_1"
+        problem += load_sec_1 <= target_sec_1 * (1 + epsilon_secondary), "LoadSecBalanceUpper_1"
 
     solver = pulp.PULP_CBC_CMD(msg=False)
-    prob.solve(solver)
+    problem.solve(solver)
 
-    assignments = [int(pulp.value(t[k])) for k in range(N_c)]
-    total_transitions = sum(pulp.value(transitions[i]) for i in range(N_c - 1))
-    load_sec_0_value = pulp.value(load_sec_0) if load_sec_0 is not None else None
-    load_sec_1_value = pulp.value(load_sec_1) if load_sec_1 is not None else None
+    assignments = [int(pulp.value(t[k])) for k in range(canister_count)]
 
     return {
-        "prob": prob,
+        "problem": problem,
         "assignments": assignments,
-        "load_0_value": pulp.value(load_0),
-        "load_1_value": pulp.value(load_1),
-        "load_sec_0_value": load_sec_0_value,
-        "load_sec_1_value": load_sec_1_value,
-        "total_transitions": total_transitions,
-        "objective_value": pulp.value(prob.objective),
-        "status": prob.status,
     }
