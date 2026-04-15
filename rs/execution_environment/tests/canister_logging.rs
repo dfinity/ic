@@ -2112,18 +2112,15 @@ fn test_canister_resize_up_preserves_logs() {
     let logs_before =
         fetch_log_records_intercanister(&env, universal_canister, canister_id, cycles);
 
-    // Resize log memory store.
-    let balance_before = env.cycle_balance(canister_id);
+    // Resize log memory store up.
     let _ = env.update_settings(
         &canister_id,
         CanisterSettingsArgsBuilder::new()
             .with_log_memory_limit(log_memory_limit)
             .build(),
     );
-    let balance_after = env.cycle_balance(canister_id);
-    assert_gt!(balance_before, balance_after);
 
-    // After resizing.
+    // Verify logs are preserved after resize.
     let logs_after = fetch_log_records_intercanister(&env, universal_canister, canister_id, cycles);
     assert_eq!(logs_before.len(), logs_after.len());
     assert_eq!(logs_before, logs_after);
@@ -2177,18 +2174,15 @@ fn test_canister_resize_down_preserves_logs() {
     let logs_before =
         fetch_log_records_intercanister(&env, universal_canister, canister_id, cycles);
 
-    // Resize log memory store.
-    let balance_before = env.cycle_balance(canister_id);
+    // Resize log memory store down.
     let _ = env.update_settings(
         &canister_id,
         CanisterSettingsArgsBuilder::new()
             .with_log_memory_limit(log_memory_limit - 1)
             .build(),
     );
-    let balance_after = env.cycle_balance(canister_id);
-    assert_gt!(balance_before, balance_after);
 
-    // After resizing.
+    // Verify logs are preserved after resize.
     let logs_after = fetch_log_records_intercanister(&env, universal_canister, canister_id, cycles);
     assert_eq!(logs_before.len(), logs_after.len());
     assert_eq!(logs_before, logs_after);
@@ -2316,5 +2310,177 @@ fn test_canister_log_resize_rejected_insufficient_cycles() {
         result.is_err(),
         "Expected log resize to be rejected due to insufficient cycles, balance: {}",
         env.cycle_balance(canister_id),
+    );
+}
+
+#[test]
+fn test_canister_log_resize_empty_buffer_minimal_charge() {
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    let env = setup_env();
+    let controller = PrincipalId::new_anonymous();
+    let canister_id = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![controller])
+            .with_log_memory_limit(256 * KIB)
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
+        wat_canister().build_wasm(),
+    );
+
+    // Don't write any logs — buffer is allocated but empty.
+    // Measure the cost of a baseline update_settings (no log_memory_limit change).
+    let balance_before_baseline = env.cycle_balance(canister_id);
+    let _ = env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
+    );
+    let baseline_cost = balance_before_baseline - env.cycle_balance(canister_id);
+
+    // Now resize the empty buffer.
+    let balance_before_resize = env.cycle_balance(canister_id);
+    let result = env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(256 * KIB - 1)
+            .build(),
+    );
+    assert!(result.is_ok());
+    let resize_cost = balance_before_resize - env.cycle_balance(canister_id);
+
+    // With no log records, the resize charge should be near zero — roughly the
+    // same as a baseline update_settings call.
+    assert_le!(
+        resize_cost,
+        baseline_cost * 2,
+        "Empty buffer resize cost ({}) should be close to baseline ({})",
+        resize_cost,
+        baseline_cost
+    );
+}
+
+#[test]
+fn test_canister_log_resize_no_charge_without_limit() {
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    let log_memory_limit = 256 * KIB;
+    let log_records_per_call = 10_000;
+    const LOG_MESSAGE_LEN: usize = 100;
+
+    let env = setup_env();
+    let controller = PrincipalId::new_anonymous();
+    let canister_id = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![controller])
+            .with_log_memory_limit(log_memory_limit)
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
+        wat_canister()
+            .update(
+                "fill_logs",
+                wat_fn().repeat(
+                    log_records_per_call as u32,
+                    wat_fn().debug_print(&[b'a'; LOG_MESSAGE_LEN]),
+                ),
+            )
+            .build_wasm(),
+    );
+
+    // Fill the log memory store.
+    let record_size = LogMemoryStore::estimate_record_size(LOG_MESSAGE_LEN);
+    let calls = 1 + log_memory_limit as usize / (log_records_per_call * record_size);
+    for _ in 0..calls {
+        let _ = env.execute_ingress(canister_id, "fill_logs", vec![]);
+    }
+
+    // Call update_settings WITHOUT setting log_memory_limit.
+    // This should not trigger any resize charge even though the buffer is full.
+    let balance_before = env.cycle_balance(canister_id);
+    let _ = env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
+    );
+    let settings_cost = balance_before - env.cycle_balance(canister_id);
+
+    // Now call update_settings WITH log_memory_limit to get the resize charge.
+    let balance_before = env.cycle_balance(canister_id);
+    let _ = env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(log_memory_limit - 1)
+            .build(),
+    );
+    let resize_cost = balance_before - env.cycle_balance(canister_id);
+
+    // The resize cost should be higher than a plain settings update due to the
+    // cycle charge proportional to bytes_used.
+    assert_gt!(
+        resize_cost,
+        settings_cost,
+        "Resize cost ({}) should be higher than plain settings cost ({})",
+        resize_cost,
+        settings_cost
+    );
+}
+
+#[test]
+fn test_canister_log_resize_no_extra_charge_feature_disabled() {
+    if LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    let env = setup_env();
+    let controller = PrincipalId::new_anonymous();
+    let canister_id = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![controller])
+            .build(),
+        wat_canister()
+            .update("test", wat_fn().debug_print(b"hello"))
+            .build_wasm(),
+    );
+
+    // Write some logs (goes to old canister_log, not log_memory_store).
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+
+    // Baseline: update_settings without log_memory_limit.
+    let balance_before_baseline = env.cycle_balance(canister_id);
+    let _ = env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
+    );
+    let baseline_cost = balance_before_baseline - env.cycle_balance(canister_id);
+
+    // Update_settings with log_memory_limit — should cost the same as baseline
+    // because log_memory_store.bytes_used() is 0 when the feature is disabled.
+    let balance_before_resize = env.cycle_balance(canister_id);
+    let result = env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(4096)
+            .build(),
+    );
+    assert!(result.is_ok());
+    let resize_cost = balance_before_resize - env.cycle_balance(canister_id);
+
+    // Costs should be roughly equal — no extra charge for resize.
+    assert_le!(
+        resize_cost,
+        baseline_cost * 2,
+        "With feature disabled, resize cost ({}) should be close to baseline ({})",
+        resize_cost,
+        baseline_cost
     );
 }
