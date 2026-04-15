@@ -29,10 +29,7 @@ pub use execution_environment::{
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 pub use hypervisor::{Hypervisor, HypervisorMetrics};
 use ic_base_types::PrincipalId;
-use ic_config::{
-    execution_environment::Config,
-    subnet_config::SubnetConfig,
-};
+use ic_config::{execution_environment::Config, subnet_config::SubnetConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasm_executor::WasmExecutor;
 use ic_interfaces::execution_environment::{
