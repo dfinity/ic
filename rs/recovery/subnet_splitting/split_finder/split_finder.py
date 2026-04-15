@@ -9,8 +9,6 @@ import pulp
 from data_io import load_subnet_data
 from solver_core import solve_partition
 
-################################################################
-# Parameters
 DEFAULT_EPSILON_LOAD_DEFAULT = 0.05
 DEFAULT_MAX_CUTS = 20
 LOAD_TYPES = [
@@ -22,13 +20,12 @@ LOAD_TYPES = [
     "heartbeats_and_global_timers_executed",
 ]
 
-################################################################
-# Main pipeline functions
-
 
 def compute_targets(load_c):
+    assert len(load_c) > 0, "The provided load data is empty"
+
     total_load_c = sum(load_c)
-    max_canister_load = max(load_c) if len(load_c) > 0 else 0
+    max_canister_load = max(load_c)
     average_load = total_load_c / 2
     target_load_0 = max(max_canister_load, average_load)
     target_load_1 = total_load_c - target_load_0
