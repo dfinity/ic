@@ -781,20 +781,6 @@ impl CanisterHttpPayloadBuilderImpl {
                     let num_unseen = flex_committee.len().saturating_sub(all_seen_shares.len());
                     let min_known_ok_needed = min_responses.saturating_sub(num_unseen);
 
-                    let ok_count = all_seen_shares
-                        .iter()
-                        .filter(|s| !s.content.is_reject)
-                        .count();
-                    if ok_count < min_known_ok_needed {
-                        return invalid_artifact(
-                            InvalidCanisterHttpPayloadReason::FlexibleResponsesTooLargeInsufficientEvidence {
-                                callback_id,
-                                ok_count,
-                                min_known_ok_needed,
-                            },
-                        );
-                    }
-
                     let mut ok_entry_sizes: Vec<usize> = all_seen_shares
                         .iter()
                         .filter(|share| !share.content.is_reject)
@@ -806,6 +792,16 @@ impl CanisterHttpPayloadBuilderImpl {
                             )
                         })
                         .collect();
+                    if ok_entry_sizes.len() < min_known_ok_needed {
+                        return invalid_artifact(
+                            InvalidCanisterHttpPayloadReason::FlexibleResponsesTooLargeInsufficientEvidence {
+                                callback_id,
+                                ok_count: ok_entry_sizes.len(),
+                                min_known_ok_needed,
+                            },
+                        );
+                    }
+                    
                     ok_entry_sizes.sort_unstable();
                     let smallest_sum: usize = ok_entry_sizes[..min_known_ok_needed].iter().sum();
                     if smallest_sum <= MAX_CANISTER_HTTP_PAYLOAD_SIZE {
