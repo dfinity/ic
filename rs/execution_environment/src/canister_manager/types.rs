@@ -445,11 +445,7 @@ pub(crate) enum CanisterManagerError {
         limit: usize,
     },
     CanisterSnapshotNotEnoughCycles(CanisterOutOfCyclesError),
-    LogResizeNotEnoughCycles {
-        available: Cycles,
-        threshold: Cycles,
-        requested: Cycles,
-    },
+    LogResizeNotEnoughCycles(CanisterOutOfCyclesError),
     CanisterSnapshotImmutable,
     CanisterSnapshotInconsistent {
         message: String,
@@ -1073,17 +1069,9 @@ impl From<CanisterManagerError> for UserError {
                 ErrorCode::CanisterOutOfCycles,
                 format!("Canister snapshotting failed with: `{err}`{additional_help}"),
             ),
-            LogResizeNotEnoughCycles {
-                available,
-                threshold,
-                requested,
-            } => Self::new(
+            LogResizeNotEnoughCycles(err) => Self::new(
                 ErrorCode::CanisterOutOfCycles,
-                format!(
-                    "Canister log memory resize failed: requested {requested} cycles \
-                     but only {available} available with {threshold} reserved \
-                     for freezing threshold.{additional_help}"
-                ),
+                format!("Canister log memory resize failed with: `{err}`{additional_help}"),
             ),
             CanisterSnapshotImmutable => Self::new(
                 ErrorCode::CanisterSnapshotImmutable,
