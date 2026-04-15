@@ -731,23 +731,31 @@ impl CanisterManager {
 
         // Deduct cycles and account instructions for log resize.
         // Validation was done in validate_canister_settings; this is the actual deduction.
+        // Use consume_with_threshold with zero threshold instead of
+        // consume_cycles_for_management_canister_instructions to avoid
+        // recomputing the freezing threshold from post-mutation memory usage,
+        // which could fail despite validation having passed.
         if user_set_log_memory_limit {
             let bytes_used = canister.system_state.log_memory_store.bytes_used() as u64;
             let log_resize_instructions =
                 NumInstructions::new(bytes_used * LOG_RESIZE_COST_PER_BYTE);
+            let log_resize_cycles = self.cycles_account_manager.management_canister_cost(
+                log_resize_instructions,
+                subnet_size,
+                cost_schedule,
+            );
+            let reveal_top_up = canister.system_state.controllers.contains(&sender);
             self.cycles_account_manager
-                .consume_cycles_for_management_canister_instructions(
-                    &sender,
-                    canister,
-                    log_resize_instructions,
-                    subnet_size,
-                    cost_schedule,
+                .consume_with_threshold(
+                    &mut canister.system_state,
+                    log_resize_cycles,
+                    Cycles::zero(),
+                    reveal_top_up,
                 )
-                .map_err(|err| CanisterManagerError::InsufficientCyclesInLogResize {
-                    available: err.available,
-                    threshold: err.threshold,
-                    requested: err.requested,
-                })?;
+                .expect(
+                    "Consuming cycles for log resize should succeed because \
+                        the canister settings have been validated.",
+                );
             round_limits.instructions -= as_round_instructions(log_resize_instructions);
         }
 
