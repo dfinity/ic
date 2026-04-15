@@ -331,8 +331,8 @@ mod tests {
     use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages, PageMap, SystemState};
     use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::{
-        ComputeAllocation, NumBytes, NumInstructions, SubnetId, Time,
-        messages::{CallContextId, RequestMetadata},
+        CanisterId, ComputeAllocation, NumBytes, NumInstructions, SubnetId, Time,
+        messages::{CallContextId, RequestMetadata, SenderInfo},
         methods::{FuncRef, WasmMethod},
     };
     use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
@@ -436,6 +436,10 @@ mod tests {
             Cycles::new(100),
             NumSeconds::new(10),
         );
+        let sender_info = SenderInfo {
+            info: vec![42, 43, 44],
+            signer: CanisterId::from_u64(8),
+        };
         let msg = Request::StartExecution(StartExecutionRequest {
             exec_id: ExecId::new(),
             wasm_id: WasmId::new(),
@@ -449,6 +453,7 @@ mod tests {
                     Cycles::new(100),
                     canister_test_id(1).get(),
                     CallContextId::new(10),
+                    Some(sender_info),
                 ),
                 globals: vec![
                     Global::I32(10),

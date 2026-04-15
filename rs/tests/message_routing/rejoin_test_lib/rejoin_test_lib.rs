@@ -540,13 +540,14 @@ pub fn rejoin_test_long_rounds(
     // a high tip hash count metric (because it is expected that the state hash
     // cannot be derived from peer certifications immediately after a node falls behind);
     // hence, we only assert that the tip hash count metric of the restarted node is low
+    // relative to the number of rounds it skipped state cloning for
     let rejoin_node_tip_hash_count = tip_hash_count(rejoin_node, &logger);
     info!(
         logger,
         "Tip hash count of the restarted node: {rejoin_node_tip_hash_count}"
     );
     assert!(
-        rejoin_node_tip_hash_count < 10,
+        rejoin_node_tip_hash_count <= rejoin_node_no_state_clone_count / 2,
         "Tip hash count of the restarted node is too high",
     );
 }

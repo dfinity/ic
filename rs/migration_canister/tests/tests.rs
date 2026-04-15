@@ -191,7 +191,7 @@ async fn setup(
             pic.add_cycles(
                 migrated_canister,
                 if LOG_MEMORY_STORE_FEATURE_ENABLED {
-                    9_200_000
+                    11_200_000
                 } else {
                     2_000_000
                 },
@@ -227,7 +227,7 @@ async fn setup(
             pic.add_cycles(
                 replaced_canister,
                 if LOG_MEMORY_STORE_FEATURE_ENABLED {
-                    9_200_000
+                    11_200_000
                 } else {
                     2_000_000
                 },

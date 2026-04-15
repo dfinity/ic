@@ -1,7 +1,7 @@
 use std::{mem::size_of, sync::Arc, time::Duration};
 
 use axum::{
-    body::Body,
+    body::{Body, HttpBody},
     extract::{Request, State},
     middleware::Next,
     response::{IntoResponse, Response},
@@ -17,12 +17,8 @@ use moka::sync::Cache;
 
 use crate::{
     errors::{ApiError, buffer_body_to_bytes},
-    routes::RequestContext,
+    routes::ReadStatePaths,
 };
-
-type ReadStateLabel = Vec<u8>;
-type ReadStatePath = Vec<ReadStateLabel>;
-type ReadStatePaths = Vec<ReadStatePath>;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct CacheKey {
@@ -30,11 +26,13 @@ struct CacheKey {
     paths: ReadStatePaths,
 }
 
-fn weigh_entry(_key: &CacheKey, value: &Response<Bytes>) -> u32 {
+fn weigh_entry(key: &CacheKey, value: &Response<Bytes>) -> u32 {
     let size = size_of::<CacheKey>()
+        + key.paths.len()
         + size_of::<Response<Bytes>>()
         + calc_headers_size(value.headers())
         + value.body().len();
+
     size as u32
 }
 
@@ -107,35 +105,19 @@ impl SubnetReadStateCacheState {
     }
 }
 
-fn is_cacheable_path(path: &ReadStatePath) -> bool {
-    path.len() == 2 && (path[0] == b"canister_ranges" || path[0] == b"subnet")
-}
-
-fn should_cache_paths(paths: &ReadStatePaths) -> bool {
-    !paths.is_empty() && paths.iter().all(is_cacheable_path)
-}
-
-fn build_cache_key(subnet_id: SubnetId, paths: &ReadStatePaths) -> CacheKey {
-    let mut paths = paths.clone();
-    paths.sort();
-    CacheKey { subnet_id, paths }
-}
-
 pub async fn subnet_read_state_cache_middleware(
     State(state): State<Arc<SubnetReadStateCacheState>>,
-    request: Request,
+    mut request: Request,
     next: Next,
 ) -> Result<impl IntoResponse, ApiError> {
     let subnet_id = request.extensions().get::<SubnetId>().copied();
-    let ctx = request.extensions().get::<Arc<RequestContext>>().cloned();
-    let paths = ctx.as_ref().and_then(|ctx| ctx.read_state_paths.as_ref());
+    let paths = request.extensions_mut().remove::<ReadStatePaths>();
 
-    let (subnet_id, paths) = match (&subnet_id, &paths) {
-        (Some(sid), Some(paths)) if should_cache_paths(paths) => (*sid, *paths),
-        _ => return Ok(next.run(request).await),
+    let (Some(subnet_id), Some(paths)) = (subnet_id, paths) else {
+        return Ok(next.run(request).await);
     };
 
-    let cache_key = build_cache_key(subnet_id, paths);
+    let cache_key = CacheKey { subnet_id, paths };
 
     if let Some(cached) = state.cache.get(&cache_key) {
         state.hits.inc();
@@ -147,19 +129,21 @@ pub async fn subnet_read_state_cache_middleware(
 
     let response = next.run(request).await;
 
-    if response.status().is_success() {
-        let (parts, body) = response.into_parts();
-        let body_bytes =
-            buffer_body_to_bytes(body, state.max_item_size, state.body_timeout).await?;
-
-        let cached = Response::from_parts(parts, body_bytes);
-        state.cache.insert(cache_key, cached.clone());
-        state.update_gauges();
-
-        Ok(cached.map(Body::from))
-    } else {
-        Ok(response)
+    // Return response as-is if it failed or the advertised body size is too big
+    if !response.status().is_success()
+        || response.body().size_hint().exact() > Some(state.max_item_size as u64)
+    {
+        return Ok(response);
     }
+
+    let (parts, body) = response.into_parts();
+    let body_bytes = buffer_body_to_bytes(body, state.max_item_size, state.body_timeout).await?;
+
+    let cached = Response::from_parts(parts, body_bytes);
+    state.cache.insert(cache_key, cached.clone());
+    state.update_gauges();
+
+    Ok(cached.map(Body::from))
 }
 
 #[cfg(test)]
@@ -170,26 +154,29 @@ mod tests {
 
     use axum::{Router, body::Body, http::Request, middleware, routing::post};
     use http::StatusCode;
-    use ic_types::PrincipalId;
+    use ic_bn_lib_common::principal;
+    use ic_types::{PrincipalId, messages::Blob};
     use tower::Service;
 
-    use crate::{http::RequestType, routes::RequestContext};
+    use crate::http::middleware::process::should_cache_paths;
 
     const DEFAULT_TTL: Duration = Duration::from_secs(60);
     const DEFAULT_CACHE_SIZE: u64 = 1024 * 1024;
     const DEFAULT_MAX_ITEM_SIZE: usize = 1024 * 1024;
     const DEFAULT_BODY_TIMEOUT: Duration = Duration::from_secs(10);
 
-    fn make_request(subnet_id: SubnetId, paths: ReadStatePaths) -> Request<Body> {
-        let ctx = Arc::new(RequestContext {
-            request_type: RequestType::ReadStateSubnetV2,
-            read_state_paths: Some(paths),
-            ..Default::default()
-        });
+    fn make_request(subnet_id: SubnetId, paths: Vec<Vec<Vec<u8>>>) -> Request<Body> {
+        let paths = paths
+            .iter()
+            .map(|x| x.iter().map(|x| Blob(x.clone())).collect())
+            .collect::<Vec<_>>();
 
         let mut req = Request::post("/").body(Body::from("body")).unwrap();
+        if should_cache_paths(&paths) {
+            req.extensions_mut().insert(ReadStatePaths::from(paths));
+        }
+
         req.extensions_mut().insert(subnet_id);
-        req.extensions_mut().insert(ctx);
         req
     }
 
@@ -221,10 +208,12 @@ mod tests {
         (app, state)
     }
 
-    fn cacheable_paths() -> ReadStatePaths {
+    fn cacheable_paths() -> Vec<Vec<Vec<u8>>> {
+        let subnet_id = principal!("aaaaa-aa").as_slice().to_vec();
+
         vec![
-            vec![b"canister_ranges".to_vec(), b"subnet_id_1".to_vec()],
-            vec![b"subnet".to_vec(), b"subnet_id_1".to_vec()],
+            vec![b"canister_ranges".to_vec(), subnet_id.clone()],
+            vec![b"subnet".to_vec(), subnet_id],
         ]
     }
 
@@ -262,6 +251,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_different_paths_are_separate_entries() {
+        let subnet_id_1 = test_subnet_id(0).get().as_slice().to_vec();
+        let subnet_id_2 = test_subnet_id(1).get().as_slice().to_vec();
+
         let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_CACHE_SIZE);
 
         let subnet = test_subnet_id(1);
@@ -269,7 +261,10 @@ mod tests {
         // Request with canister_ranges for subnet A
         let req = make_request(
             subnet,
-            vec![vec![b"canister_ranges".to_vec(), b"aaa".to_vec()]],
+            vec![
+                vec![b"subnet".to_vec(), subnet_id_1.clone()],
+                vec![b"canister_ranges".to_vec(), subnet_id_1],
+            ],
         );
         app.call(req).await.unwrap();
         assert_eq!(state.misses.get(), 1);
@@ -277,8 +272,12 @@ mod tests {
         // Request with canister_ranges for subnet B: different paths = cache miss
         let req = make_request(
             subnet,
-            vec![vec![b"canister_ranges".to_vec(), b"bbb".to_vec()]],
+            vec![
+                vec![b"subnet".to_vec(), subnet_id_2.clone()],
+                vec![b"canister_ranges".to_vec(), subnet_id_2],
+            ],
         );
+
         app.call(req).await.unwrap();
         assert_eq!(state.misses.get(), 2);
         assert_eq!(state.hits.get(), 0);
@@ -306,10 +305,12 @@ mod tests {
     async fn test_path_order_does_not_matter() {
         let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_CACHE_SIZE);
 
-        let subnet = test_subnet_id(1);
+        let subnet = test_subnet_id(0);
+        let subnet_id_1 = test_subnet_id(0).get().as_slice().to_vec();
+        let subnet_id_2 = test_subnet_id(1).get().as_slice().to_vec();
 
-        let path_a = vec![b"canister_ranges".to_vec(), b"id_a".to_vec()];
-        let path_b = vec![b"subnet".to_vec(), b"id_b".to_vec()];
+        let path_a = vec![b"canister_ranges".to_vec(), subnet_id_1];
+        let path_b = vec![b"subnet".to_vec(), subnet_id_2];
 
         // Paths in order [A, B]
         let req = make_request(subnet, vec![path_a.clone(), path_b.clone()]);
@@ -326,16 +327,8 @@ mod tests {
     async fn test_no_paths_bypasses_cache() {
         let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_CACHE_SIZE);
 
-        // Request with no paths in context
-        let ctx = Arc::new(RequestContext {
-            request_type: RequestType::ReadStateSubnetV2,
-            read_state_paths: None,
-            ..Default::default()
-        });
-
         let mut req = Request::post("/").body(Body::from("body")).unwrap();
         req.extensions_mut().insert(test_subnet_id(1));
-        req.extensions_mut().insert(ctx);
 
         let resp = app.call(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -369,10 +362,11 @@ mod tests {
         let (mut app, state) = setup_app(DEFAULT_TTL, DEFAULT_CACHE_SIZE);
 
         let subnet = test_subnet_id(1);
+        let subnet_id = subnet.get().as_slice().to_vec();
 
         // Mix of cacheable (canister_ranges) and non-cacheable (time)
         let paths = vec![
-            vec![b"canister_ranges".to_vec(), b"subnet_id".to_vec()],
+            vec![b"canister_ranges".to_vec(), subnet_id],
             vec![b"time".to_vec()],
         ];
 

@@ -10,7 +10,7 @@ use ic_types::{
     DiskBytes, Time, UserId,
     batch::QueryStats,
     ingress::WasmResult,
-    messages::{CertificateDelegationFormat, CertificateDelegationMetadata, Query},
+    messages::{CertificateDelegationFormat, CertificateDelegationMetadata, Query, SenderInfo},
 };
 use ic_types_cycles::Cycles;
 use ic_utils_lru_cache::LruCache;
@@ -142,6 +142,8 @@ pub(crate) struct EntryKey {
     pub method_payload: Vec<u8>,
     /// Format of the certificate delegation.
     pub certificate_delegation_format: Option<CertificateDelegationFormat>,
+    /// Sender info attached to the query (info blob and signer canister).
+    pub sender_info: Option<SenderInfo>,
 }
 
 impl EntryKey {
@@ -156,6 +158,7 @@ impl EntryKey {
             method_payload: query.method_payload.clone(),
             certificate_delegation_format: certificate_delegation_metadata
                 .map(|metadata| metadata.format),
+            sender_info: query.sender_info(),
         }
     }
 }

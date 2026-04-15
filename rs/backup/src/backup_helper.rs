@@ -24,6 +24,7 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 
+const SPOOL_RSYNC_RETRY_DELAY: Duration = Duration::from_mins(1);
 const RETRIES_RSYNC_HOST: u64 = 5;
 const RETRIES_BINARY_DOWNLOAD: u64 = 3;
 const BUCKET_SIZE: u64 = 10000;
@@ -230,11 +231,7 @@ impl BackupHelper {
     }
 
     fn rsync_spool(&self, node_ip: &IpAddr) -> bool {
-        let _guard = self
-            .artifacts_guard
-            .lock()
-            .expect("artifacts mutex lock failed");
-        info!(self.log, "Sync backup data from the node: {}", node_ip,);
+        info!(self.log, "Sync backup data from the node: {node_ip}");
         let remote_dir = format!(
             "{}@[{}]:/var/lib/ic/backup/{}/",
             self.username(),
@@ -242,20 +239,26 @@ impl BackupHelper {
             self.subnet_id
         );
         for _ in 0..RETRIES_RSYNC_HOST {
+            let artifacts_guard = self
+                .artifacts_guard
+                .lock()
+                .expect("artifacts mutex lock failed");
             match self.rsync_remote_cmd(
                 remote_dir.clone(),
                 &self.spool_dir().into_os_string(),
-                &["-qam", "--ignore-existing"],
+                &["-qam", "--ignore-existing", "--exclude='*.tmp'"],
             ) {
                 Ok(_) => return true,
                 Err(e) => warn!(
                     self.log,
-                    "Problem syncing backup directory with host: {} : {}", node_ip, e
+                    "Problem syncing backup directory with host: {node_ip} : {e}. \
+                    Retrying in {SPOOL_RSYNC_RETRY_DELAY:?}"
                 ),
             }
-            sleep_secs(60);
+            drop(artifacts_guard);
+            std::thread::sleep(SPOOL_RSYNC_RETRY_DELAY);
         }
-        warn!(self.log, "Didn't sync at all with host: {}", node_ip);
+        warn!(self.log, "Didn't sync at all with host: {node_ip}");
         false
     }
 

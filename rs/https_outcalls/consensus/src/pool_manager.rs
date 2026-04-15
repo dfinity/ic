@@ -30,7 +30,6 @@ use std::{
     collections::{BTreeSet, HashSet},
     convert::TryInto,
     sync::{Arc, Mutex},
-    time::Duration,
 };
 
 pub type CanisterHttpAdapterClient =
@@ -290,14 +289,12 @@ impl CanisterHttpPoolManagerImpl {
             }
 
             if !request_ids_already_made.contains(id) {
-                let timeout = context.time + Duration::from_secs(5 * 60);
                 if let Err(err) = self
                     .http_adapter_shim
                     .lock()
                     .unwrap()
                     .send(CanisterHttpRequest {
                         id: *id,
-                        timeout,
                         context: context.clone(),
                         socks_proxy_addrs: socks_proxy_addrs.clone(),
                     })
@@ -368,10 +365,10 @@ impl CanisterHttpPoolManagerImpl {
 
                     let response_metadata = CanisterHttpResponseMetadata {
                         id: response.id,
-                        timeout: response.timeout,
                         registry_version,
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
+                        is_reject: response.content.is_reject(),
                         replica_version: ReplicaVersion::default(),
                     };
                     let signature = if let Ok(signature) = self
@@ -521,6 +518,13 @@ impl CanisterHttpPoolManagerImpl {
                             return Some(CanisterHttpChangeAction::HandleInvalid(
                                 share.clone(),
                                 "Content size does not match the response".to_string(),
+                            ));
+                        }
+
+                        if share.content.is_reject != response.content.is_reject() {
+                            return Some(CanisterHttpChangeAction::HandleInvalid(
+                                share.clone(),
+                                "is_reject does not match the response content".to_string(),
                             ));
                         }
 
@@ -688,7 +692,7 @@ pub mod test {
     use ic_types::CountBytes;
     use ic_types::crypto::crypto_hash;
     use ic_types::{
-        Height, NumBytes, RegistryVersion, Time,
+        Height, NumBytes, RegistryVersion,
         crypto::{CryptoHash, CryptoHashOf},
         messages::CallbackId,
         time::UNIX_EPOCH,
@@ -732,7 +736,6 @@ pub mod test {
         CanisterHttpResponse {
             id: CallbackId::from(id),
             canister_id: ic_types::CanisterId::from(0),
-            timeout: Time::from_nanos_since_unix_epoch(0),
             content: CanisterHttpResponseContent::Success(Vec::new()),
         }
     }
@@ -799,10 +802,10 @@ pub mod test {
                 {
                     let response_metadata = CanisterHttpResponseMetadata {
                         id: CallbackId::from(1),
-                        timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                         registry_version: RegistryVersion::from(1),
                         content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                         content_size: 0,
+                        is_reject: false,
                         replica_version: ReplicaVersion::default(),
                     };
 
@@ -896,10 +899,10 @@ pub mod test {
 
                 let response_metadata = CanisterHttpResponseMetadata {
                     id: CallbackId::from(0),
-                    timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                     registry_version: RegistryVersion::from(1),
                     content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                     content_size: 0,
+                    is_reject: false,
                     replica_version: ReplicaVersion::default(),
                 };
 
@@ -1002,10 +1005,10 @@ pub mod test {
 
                 let response_metadata = CanisterHttpResponseMetadata {
                     id: CallbackId::from(0),
-                    timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                     registry_version: RegistryVersion::from(1),
                     content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                     content_size: 0,
+                    is_reject: false,
                     replica_version: ReplicaVersion::default(),
                 };
 
@@ -1130,10 +1133,10 @@ pub mod test {
                 let response = empty_canister_http_response(0);
                 let response_metadata = CanisterHttpResponseMetadata {
                     id: CallbackId::from(0),
-                    timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                     registry_version: RegistryVersion::from(1),
                     content_hash: ic_types::crypto::crypto_hash(&response),
                     content_size: response.content.count_bytes() as u32,
+                    is_reject: false,
                     replica_version: ReplicaVersion::default(),
                 };
 
@@ -1251,6 +1254,38 @@ pub mod test {
                         CanisterHttpChangeAction::HandleInvalid(_, reason) if reason == "Content size does not match the response"
                     );
                 }
+
+                // TEST 4: Non-replicated request artifact has a mismatched is_reject flag.
+                // It should be marked as invalid.
+                {
+                    let response = empty_canister_http_response(0);
+                    let mut canister_http_pool =
+                        CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                    let mut bad_share = share.clone();
+                    bad_share.content.is_reject = !bad_share.content.is_reject;
+
+                    let artifact_with_mismatched_is_reject = CanisterHttpResponseArtifact {
+                        share: bad_share,
+                        response: Some(response),
+                    };
+                    canister_http_pool.insert(UnvalidatedArtifact {
+                        message: artifact_with_mismatched_is_reject,
+                        peer_id: delegated_node_id,
+                        timestamp: UNIX_EPOCH,
+                    });
+
+                    let changes = pool_manager.validate_shares(
+                        pool.get_cache().as_ref(),
+                        &canister_http_pool,
+                        Height::from(0),
+                    );
+
+                    assert_matches!(
+                        &changes[0],
+                        CanisterHttpChangeAction::HandleInvalid(_, reason) if reason == "is_reject does not match the response content"
+                    );
+                }
             })
         });
     }
@@ -1295,10 +1330,10 @@ pub mod test {
                 let response = empty_canister_http_response(callback_id.get());
                 let response_metadata = CanisterHttpResponseMetadata {
                     id: callback_id,
-                    timeout: response.timeout,
                     registry_version: RegistryVersion::from(1),
                     content_hash: ic_types::crypto::crypto_hash(&response),
                     content_size: response.content.count_bytes() as u32,
+                    is_reject: false,
                     replica_version: ReplicaVersion::default(),
                 };
                 let share = Signed {
@@ -1393,10 +1428,10 @@ pub mod test {
                 let response = empty_canister_http_response(0);
                 let response_metadata = CanisterHttpResponseMetadata {
                     id: CallbackId::from(0),
-                    timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                     registry_version: RegistryVersion::from(1),
                     content_hash: ic_types::crypto::crypto_hash(&response),
                     content_size: response.content.count_bytes() as u32,
+                    is_reject: false,
                     replica_version: ReplicaVersion::default(),
                 };
 
@@ -1526,16 +1561,15 @@ pub mod test {
                     let response = CanisterHttpResponse {
                         id: CallbackId::from(0),
                         canister_id: ic_types::CanisterId::from(0),
-                        timeout: Time::from_nanos_since_unix_epoch(0),
                         content: CanisterHttpResponseContent::Success(response_body_too_large),
                     };
 
                     let response_metadata = CanisterHttpResponseMetadata {
                         id: CallbackId::from(0),
-                        timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                         registry_version: RegistryVersion::from(1),
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
+                        is_reject: false,
                         replica_version: ReplicaVersion::default(),
                     };
                     let share = Signed {
@@ -1593,16 +1627,15 @@ pub mod test {
                     let response = CanisterHttpResponse {
                         id: CallbackId::from(0),
                         canister_id: ic_types::CanisterId::from(0),
-                        timeout: Time::from_nanos_since_unix_epoch(0),
                         content: CanisterHttpResponseContent::Success(response_body_ok),
                     };
 
                     let response_metadata = CanisterHttpResponseMetadata {
                         id: CallbackId::from(0),
-                        timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                         registry_version: RegistryVersion::from(1),
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
+                        is_reject: false,
                         replica_version: ReplicaVersion::default(),
                     };
                     let share = Signed {
@@ -1703,10 +1736,10 @@ pub mod test {
 
                 let response_metadata = CanisterHttpResponseMetadata {
                     id: CallbackId::from(0),
-                    timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                     registry_version: RegistryVersion::from(1),
                     content_hash: ic_types::crypto::crypto_hash(&response),
                     content_size: response.content.count_bytes() as u32,
+                    is_reject: true,
                     replica_version: ReplicaVersion::default(),
                 };
 
@@ -2035,10 +2068,10 @@ pub mod test {
                 let dishonest_hash = ic_types::crypto::crypto_hash(&dishonest_response);
                 let response_metadata = CanisterHttpResponseMetadata {
                     id: callback_id,
-                    timeout: dishonest_response.timeout,
                     registry_version: RegistryVersion::from(1),
                     content_hash: dishonest_hash,
                     content_size: dishonest_response.content.count_bytes() as u32,
+                    is_reject: true,
                     replica_version: ReplicaVersion::default(),
                 };
                 let share = Signed {
@@ -2174,10 +2207,10 @@ pub mod test {
 
                 let response_metadata = CanisterHttpResponseMetadata {
                     id: CallbackId::from(0),
-                    timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                     registry_version: RegistryVersion::from(1),
                     content_hash: ic_types::crypto::crypto_hash(&response),
                     content_size: response.content.count_bytes() as u32,
+                    is_reject: true,
                     replica_version: ReplicaVersion::default(),
                 };
 
@@ -2252,10 +2285,10 @@ pub mod test {
 
                 let response_metadata = CanisterHttpResponseMetadata {
                     id: CallbackId::from(7),
-                    timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                     registry_version: RegistryVersion::from(1),
                     content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                     content_size: 0,
+                    is_reject: false,
                     replica_version: ReplicaVersion::default(),
                 };
 
@@ -2434,7 +2467,6 @@ pub mod test {
                     assert_eq!(*response, expected_response);
 
                     assert_eq!(share.content.id, callback_id);
-                    assert_eq!(share.content.timeout, expected_response.timeout);
                     assert_eq!(
                         share.content.content_hash,
                         ic_types::crypto::crypto_hash(&expected_response)
@@ -2480,8 +2512,6 @@ pub mod test {
                     .expect_send()
                     .with(eq(CanisterHttpRequest {
                         id: CallbackId::from(7),
-                        timeout: ic_types::Time::from_nanos_since_unix_epoch(10)
-                            + Duration::from_secs(60 * 5),
                         context: request.clone(),
                         socks_proxy_addrs: vec![],
                     }))
@@ -2520,10 +2550,10 @@ pub mod test {
 
                 let response_metadata = CanisterHttpResponseMetadata {
                     id: CallbackId::from(7),
-                    timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                     registry_version: RegistryVersion::from(1),
                     content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                     content_size: 0,
+                    is_reject: false,
                     replica_version: ReplicaVersion::default(),
                 };
 
@@ -2684,10 +2714,10 @@ pub mod test {
                 let response = empty_canister_http_response(callback_id.get());
                 let response_metadata = CanisterHttpResponseMetadata {
                     id: callback_id,
-                    timeout: response.timeout,
                     registry_version: RegistryVersion::from(1),
                     content_hash: crypto_hash(&response),
                     content_size: response.content.count_bytes() as u32,
+                    is_reject: false,
                     replica_version: ReplicaVersion::default(),
                 };
                 let share = Signed {
@@ -2783,10 +2813,10 @@ pub mod test {
                 let response = empty_canister_http_response(callback_id.get());
                 let response_metadata = CanisterHttpResponseMetadata {
                     id: callback_id,
-                    timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                     registry_version: RegistryVersion::from(1),
                     content_hash: crypto_hash(&response),
                     content_size: response.content.count_bytes() as u32,
+                    is_reject: false,
                     replica_version: ReplicaVersion::default(),
                 };
 
@@ -2908,6 +2938,37 @@ pub mod test {
                         if reason == "Content size does not match the response"
                     );
                 }
+
+                // TEST 4: Flexible artifact has a mismatched is_reject flag -- should be invalid.
+                {
+                    let response = empty_canister_http_response(callback_id.get());
+                    let mut canister_http_pool =
+                        CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                    let mut bad_share = share.clone();
+                    bad_share.content.is_reject = !bad_share.content.is_reject;
+
+                    canister_http_pool.insert(UnvalidatedArtifact {
+                        message: CanisterHttpResponseArtifact {
+                            share: bad_share,
+                            response: Some(response),
+                        },
+                        peer_id: committee_member,
+                        timestamp: UNIX_EPOCH,
+                    });
+
+                    let changes = pool_manager.validate_shares(
+                        pool.get_cache().as_ref(),
+                        &canister_http_pool,
+                        Height::from(0),
+                    );
+
+                    assert_matches!(
+                        &changes[0],
+                        CanisterHttpChangeAction::HandleInvalid(_, reason)
+                        if reason == "is_reject does not match the response content"
+                    );
+                }
             })
         });
     }
@@ -2980,16 +3041,15 @@ pub mod test {
                     let response = CanisterHttpResponse {
                         id: callback_id,
                         canister_id: ic_types::CanisterId::from(0),
-                        timeout: Time::from_nanos_since_unix_epoch(0),
                         content: CanisterHttpResponseContent::Success(vec![0; oversized_len]),
                     };
 
                     let response_metadata = CanisterHttpResponseMetadata {
                         id: callback_id,
-                        timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                         registry_version: RegistryVersion::from(1),
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
+                        is_reject: false,
                         replica_version: ReplicaVersion::default(),
                     };
                     let share = Signed {
@@ -3041,7 +3101,6 @@ pub mod test {
                     let response = CanisterHttpResponse {
                         id: callback_id,
                         canister_id: ic_types::CanisterId::from(0),
-                        timeout: Time::from_nanos_since_unix_epoch(0),
                         content: CanisterHttpResponseContent::Success(vec![
                             0;
                             MAX_CANISTER_HTTP_RESPONSE_BYTES
@@ -3051,10 +3110,10 @@ pub mod test {
 
                     let response_metadata = CanisterHttpResponseMetadata {
                         id: callback_id,
-                        timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                         registry_version: RegistryVersion::from(1),
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
+                        is_reject: false,
                         replica_version: ReplicaVersion::default(),
                     };
                     let share = Signed {
@@ -3166,7 +3225,6 @@ pub mod test {
                         let expected_response = empty_response;
                         assert_eq!(*response, expected_response);
                         assert_eq!(share.content.id, callback_id);
-                        assert_eq!(share.content.timeout, expected_response.timeout);
                         assert_eq!(share.signature.signer, replica_config.node_id);
                         assert_eq!(
                             share.content.content_hash,

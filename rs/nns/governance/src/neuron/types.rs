@@ -1,10 +1,10 @@
 use crate::{
     DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
-    governance::{
-        LOG_PREFIX, MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NUM_HOT_KEYS_PER_NEURON,
-        max_dissolve_delay_seconds,
+    governance::{LOG_PREFIX, MAX_NUM_HOT_KEYS_PER_NEURON, max_dissolve_delay_seconds},
+    neuron::{
+        age_bonus_multiplier, combine_aged_stakes, dissolve_delay_bonus_multiplier,
+        dissolve_state_and_age::DissolveStateAndAge, neuron_stake_e8s,
     },
-    neuron::{combine_aged_stakes, dissolve_state_and_age::DissolveStateAndAge, neuron_stake_e8s},
     neuron_store::NeuronStoreError,
     pb::v1::{
         self as pb, AbridgedNeuron, Ballot, BallotInfo, Followees, GovernanceError,
@@ -22,7 +22,7 @@ use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance_api::{self as api, NeuronInfo};
 use icp_ledger::Subaccount;
-use rust_decimal::{Decimal, RoundingStrategy};
+use rust_decimal::{Decimal, RoundingStrategy, prelude::ToPrimitive};
 use std::{
     collections::{BTreeSet, HashMap},
     time::Duration,
@@ -300,14 +300,78 @@ impl Neuron {
             > 0
     }
 
-    /// How much sway this neuron has when it casts its vote on proposals.
+    /// If a neuron is "active" (defined below), then this is the same as
+    /// potential voting power. See the potential_voting_power method. This is
+    /// the amount of voting power that gets put into ballots.
+    ///
+    /// In this context, "active" means that the neuron has done one of the
+    /// following "recently" (where "recently" is defined by
+    /// start_reducing_voting_power_after_seconds , which as of Feb, 2026, is 6
+    /// months):
+    ///
+    /// 1. Voted DIRECTLY, not via following.
+    /// 2. Set their following.
+    /// 3. Confirmed their following, aka refershed their voting power.
+    ///
+    /// Otherwise, if the neuron continues to be "inactive" (as defined above),
+    /// their deciding voting power decreases linearly with time until it
+    /// reaches 0 (over a period specified by clear_following_after_seconds,
+    /// which as of Feb 2026 is 1 month).
+    ///
+    /// A neuron always has the opportunity to "re-activate".
+    ///
+    /// In production, it is usually (always?) the case that you also want
+    /// potential voting power. If you need both, use
+    /// potential_and_deciding_voting_power instead to avoid re-calculating
+    /// intermediate results.
     pub fn deciding_voting_power(
         &self,
         voting_power_economics: &VotingPowerEconomics,
         now_seconds: u64,
     ) -> u64 {
-        // Main inputs to main calculation.
+        self.potential_and_deciding_voting_power(voting_power_economics, now_seconds)
+            .1
+    }
 
+    /// Voting power is fundamentally based on the amount staked. From that
+    /// base, it is boosted by two factors:
+    ///
+    /// * Its current dissolve delay (i.e. how much time must pass before, the
+    ///   ICP can be taken out of the neuron). The maximum dissolve delay bonus
+    ///   is 3x, which occurs at 2 years. This bonus increases quadratically.
+    ///   Prior to Mission 70, this increased linearly up to 2x over 8 years.
+    ///
+    /// * How long the neuron has "aged". Basically, the amount of time since it
+    ///   last stopped dissolving. The maximum age bonus is 1.25x, which occurs
+    ///   at 4 years. This bonus increases linearly with age.
+    ///
+    /// These bonuses are multiplied together, not added. So the maximum total
+    /// bonus multiplier is 3.75x.
+    ///
+    /// In production, it is usually (always?) the case that you also want
+    /// deciding voting power. If you need both, use
+    /// potential_and_deciding_voting_power instead to avoid re-calculating
+    /// intermediate results.
+    pub fn potential_voting_power(&self, now_seconds: u64) -> u64 {
+        // VotingPowerEconomics is only used when calculating deciding voting
+        // power, not potential voting power.
+        let dummy_voting_power_economics = VotingPowerEconomics::default();
+
+        self.potential_and_deciding_voting_power(&dummy_voting_power_economics, now_seconds)
+            .0
+    }
+
+    /// See the potential_voting_power and deciding_voting_power methods.
+    pub fn potential_and_deciding_voting_power(
+        &self,
+        voting_power_economics: &VotingPowerEconomics,
+        now_seconds: u64,
+    ) -> (u64, u64) {
+        let potential_voting_power = Decimal::from(self.stake_e8s())
+            * dissolve_delay_bonus_multiplier(self.dissolve_delay_seconds(now_seconds))
+            * age_bonus_multiplier(self.age_seconds(now_seconds));
+
+        // For DECIDING voting power.
         let adjustment_factor: Decimal = {
             let time_since_last_refreshed = Duration::from_secs(
                 now_seconds.saturating_sub(self.voting_power_refreshed_timestamp_seconds),
@@ -317,16 +381,36 @@ impl Neuron {
                 .deciding_voting_power_adjustment_factor(time_since_last_refreshed)
         };
 
-        let potential_voting_power = self.potential_voting_power(now_seconds);
+        let deciding_voting_power = adjustment_factor * potential_voting_power.floor();
 
-        // Main calculation.
-        let result = adjustment_factor * Decimal::from(potential_voting_power);
+        // Convert potential voting power to u64 (from Decimal).
+        let potential_voting_power = potential_voting_power
+            // This clamping really shouldn't have an effect, because the most
+            // that the bonus multipliers can do is multiply stake by 3 * 1.25,
+            // and if anyone to have a sufficiently large stake amount to exceed
+            // u64::MAX, it almost certainly means that our record of their
+            // stake is bogus as a result of some bug.
+            .clamp(Decimal::from(0), Decimal::from(u64::MAX))
+            // Truncates. (Since we are non-negative, truncation is equivalent
+            // to rounding down.)
+            .to_u64()
+            .unwrap_or_else(|| {
+                // Because of clamping (above), it is not possible for this to
+                // be reached, but ofc, Rust is not smart enough to know that
+                // (and rust_decimal might contain a bug).
+                println!(
+                    "{LOG_PREFIX}ERROR: Unable to convert {potential_voting_power:?} \
+                     to u64. Using 0 instead."
+                );
+                self.stake_e8s()
+            });
 
         // Convert (back) to u64. The particular type of rounding used here does
         // not matter to us very much, because we are not for example
         // apportioning (where rounding down is best), nor anything like that.
-        let result = result.round_dp_with_strategy(0, RoundingStrategy::MidpointNearestEven);
-        u64::try_from(result).unwrap_or_else(|err| {
+        let deciding_voting_power =
+            deciding_voting_power.round_dp_with_strategy(0, RoundingStrategy::MidpointNearestEven);
+        let deciding_voting_power = u64::try_from(deciding_voting_power).unwrap_or_else(|err| {
             // Log and fall back to potential voting power. Assuming
             // adjustment_factor is in [0, 1], I see no way this can happen.
             println!(
@@ -334,44 +418,9 @@ impl Neuron {
                 LOG_PREFIX, adjustment_factor, potential_voting_power, err,
             );
             potential_voting_power
-        })
-    }
+        });
 
-    /// Return the voting power of this neuron.
-    ///
-    /// The voting power is the stake of the neuron modified by a
-    /// bonus of up to 100% depending on the dissolve delay, with
-    /// the maximum bonus of 100% received at an 8 year dissolve
-    /// delay. The voting power is further modified by the age of
-    /// the neuron giving up to 25% bonus after four years.
-    pub fn potential_voting_power(&self, now_seconds: u64) -> u64 {
-        // We compute the stake adjustments in u128.
-        let stake = self.stake_e8s() as u128;
-        // Dissolve delay is capped to eight years, but we cap it
-        // again here to make sure, e.g., if this changes in the
-        // future.
-        let d = std::cmp::min(
-            self.dissolve_delay_seconds(now_seconds),
-            max_dissolve_delay_seconds(),
-        ) as u128;
-        // 'd_stake' is the stake with bonus for dissolve delay.
-        let d_stake = stake
-            .saturating_add((stake.saturating_mul(d)) / (max_dissolve_delay_seconds() as u128));
-        // Sanity check.
-        assert!(d_stake <= 2 * stake);
-        // The voting power is also a function of the age of the
-        // neuron, giving a bonus of up to 25% at the four year mark.
-        let a = std::cmp::min(self.age_seconds(now_seconds), MAX_NEURON_AGE_FOR_AGE_BONUS) as u128;
-        let ad_stake = d_stake.saturating_add(
-            (d_stake.saturating_mul(a)) / (4 * MAX_NEURON_AGE_FOR_AGE_BONUS as u128),
-        );
-        // Final stake 'ad_stake' is at most 5/4 of the 'd_stake'.
-        assert!(ad_stake <= (5 * d_stake) / 4);
-        // The final voting power is the stake adjusted by both age
-        // and dissolve delay. If the stake is is greater than
-        // u64::MAX divided by 2.5, the voting power may actually not
-        // fit in a u64.
-        std::cmp::min(ad_stake, u64::MAX as u128) as u64
+        (potential_voting_power, deciding_voting_power)
     }
 
     /// Get the recent ballots, with most recent ballots first
@@ -865,8 +914,8 @@ impl Neuron {
         }
 
         let visibility = Some(self.visibility() as i32);
-        let deciding_voting_power = self.deciding_voting_power(voting_power_economics, now_seconds);
-        let potential_voting_power = self.potential_voting_power(now_seconds);
+        let (potential_voting_power, deciding_voting_power) =
+            self.potential_and_deciding_voting_power(voting_power_economics, now_seconds);
         let known_neuron_data = if multi_query {
             None
         } else {
@@ -1288,9 +1337,11 @@ impl Neuron {
         multi_query: bool,
     ) -> api::Neuron {
         let visibility = Some(self.visibility() as i32);
-        let deciding_voting_power =
-            Some(self.deciding_voting_power(voting_power_economics, now_seconds));
-        let potential_voting_power = Some(self.potential_voting_power(now_seconds));
+        let (potential_voting_power, deciding_voting_power) =
+            self.potential_and_deciding_voting_power(voting_power_economics, now_seconds);
+        let potential_voting_power = Some(potential_voting_power);
+        let deciding_voting_power = Some(deciding_voting_power);
+
         let recent_ballots = self.sorted_recent_ballots();
 
         let Neuron {

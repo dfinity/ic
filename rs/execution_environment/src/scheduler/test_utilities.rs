@@ -65,7 +65,9 @@ use ic_types::{
     },
     methods::{Callback, FuncRef, SystemMethod, WasmClosure, WasmMethod},
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, ECDSAOutcalls, HTTPOutcalls,
+};
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
 use std::{collections::BTreeSet, time::Duration};
@@ -681,18 +683,20 @@ impl SchedulerTest {
         self.state_mut().metadata.batch_time = time;
     }
 
+    /// Advances the time in `ReplicatedState` by the provided duration.
+    pub(crate) fn advance_time(&mut self, duration: Duration) {
+        self.state_mut().metadata.batch_time += duration;
+    }
+
     pub fn subnet_size(&self) -> usize {
         self.registry_settings.subnet_size
     }
 
-    pub fn ecdsa_signature_fee(&self) -> Cycles {
-        self.scheduler
-            .cycles_account_manager
-            .ecdsa_signature_fee(
-                self.registry_settings.subnet_size,
-                self.state().get_own_cost_schedule(),
-            )
-            .real()
+    pub fn ecdsa_signature_fee(&self) -> CompoundCycles<ECDSAOutcalls> {
+        self.scheduler.cycles_account_manager.ecdsa_signature_fee(
+            self.registry_settings.subnet_size,
+            self.state().get_own_cost_schedule(),
+        )
     }
 
     pub fn schnorr_signature_fee(&self) -> Cycles {
@@ -709,28 +713,41 @@ impl SchedulerTest {
         &self,
         request_size: NumBytes,
         response_size_limit: Option<NumBytes>,
-    ) -> Cycles {
-        self.scheduler
-            .cycles_account_manager
-            .http_request_fee(
-                request_size,
-                response_size_limit,
-                self.subnet_size(),
-                self.state.as_ref().unwrap().get_own_cost_schedule(),
-            )
-            .real()
+    ) -> CompoundCycles<HTTPOutcalls> {
+        self.scheduler.cycles_account_manager.http_request_fee(
+            request_size,
+            response_size_limit,
+            self.subnet_size(),
+            self.state.as_ref().unwrap().get_own_cost_schedule(),
+        )
     }
 
-    pub fn memory_cost(&self, bytes: NumBytes, duration: Duration) -> Cycles {
+    pub fn memory_cost(
+        &self,
+        bytes: NumBytes,
+        duration: Duration,
+    ) -> CompoundCycles<ic_types_cycles::Memory> {
+        self.scheduler.cycles_account_manager.memory_cost(
+            bytes,
+            duration,
+            self.subnet_size(),
+            self.state.as_ref().unwrap().get_own_cost_schedule(),
+        )
+    }
+
+    pub fn compute_allocation_cost(
+        &self,
+        compute_allocation: ComputeAllocation,
+        duration: Duration,
+    ) -> CompoundCycles<ic_types_cycles::ComputeAllocation> {
         self.scheduler
             .cycles_account_manager
-            .memory_cost(
-                bytes,
+            .compute_allocation_cost(
+                compute_allocation,
                 duration,
                 self.subnet_size(),
                 self.state.as_ref().unwrap().get_own_cost_schedule(),
             )
-            .real()
     }
 
     pub(crate) fn deliver_pre_signatures(

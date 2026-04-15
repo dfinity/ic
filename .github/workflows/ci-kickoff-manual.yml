@@ -52,6 +52,7 @@ jobs:
     secrets: inherit
     with:
       commit-sha: ${{ inputs.commit-sha }}
+      release-build: 'false'
     permissions:
       actions: write
       contents: read

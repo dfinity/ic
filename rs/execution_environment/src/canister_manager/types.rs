@@ -7,7 +7,6 @@ use ic_interfaces::execution_environment::{CanisterOutOfCyclesError, HypervisorE
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterInstallModeV2, InstallChunkedCodeArgs, InstallCodeArgsV2,
-    UploadChunkReply,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -301,15 +300,11 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
     }
 }
 
-pub(crate) struct UploadChunkResult {
-    pub(crate) reply: UploadChunkReply,
-    pub(crate) heap_delta_increase: NumBytes,
-}
-
 /// Bundles the reply (success) to a management canister request (referred to as "current request")
 /// with changes to `ReplicatedState` that must be applied separately.
 /// This is because `CanisterManager` only mutates a single `CanisterState` (but no other parts of `ReplicatedState`)
 /// in cases when it returns `CanisterManagerResponse`.
+#[derive(Eq, PartialEq, Debug)]
 pub(crate) struct CanisterManagerResponse {
     /// The target canister of the current request.
     /// Only `CanisterState` of that canister could have been mutated
@@ -498,6 +493,10 @@ pub(crate) enum CanisterManagerError {
     CanisterLogMemoryLimitIsTooHigh {
         bytes: NumBytes,
         limit: NumBytes,
+    },
+    CanisterSnapshotAccessDenied {
+        caller: PrincipalId,
+        method_name: String,
     },
 }
 
@@ -746,6 +745,11 @@ impl AsErrorHelp for CanisterManagerError {
             CanisterManagerError::CallerNotAuthorized => ErrorHelp::UserError {
                 suggestion: "The caller is not authorized to call this method.".to_string(),
                 doc_link: "".to_string(),
+            },
+            CanisterManagerError::CanisterSnapshotAccessDenied { .. } => ErrorHelp::UserError {
+                suggestion: "Execute this call from a principal with snapshot read access."
+                    .to_string(),
+                doc_link: doc_ref("invalid-controller"),
             },
             CanisterManagerError::CanisterLogMemoryLimitIsTooHigh { .. } => ErrorHelp::UserError {
                 suggestion: "Set a lower canister log memory limit.".to_string(),
@@ -1169,6 +1173,13 @@ impl From<CanisterManagerError> for UserError {
             CallerNotAuthorized => Self::new(
                 ErrorCode::CanisterRejectedMessage,
                 "The caller is not authorized to call this method.".to_string(),
+            ),
+            CanisterSnapshotAccessDenied {
+                caller,
+                method_name,
+            } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!("Caller {caller} is not allowed to call {method_name}"),
             ),
             CanisterLogMemoryLimitIsTooHigh { bytes, limit } => Self::new(
                 ErrorCode::CanisterRejectedMessage,
