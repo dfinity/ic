@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pulp
 from data_io import load_subnet_data
-from solver_core import solve_partition
+from solver_core import LoadConstraints, solve_partition
 
 DEFAULT_EPSILON_LOAD_DEFAULT = 0.05
 DEFAULT_MAX_CUTS = 20
@@ -20,8 +20,8 @@ LOAD_TYPES = [
 ]
 
 
-def compute_targets(load_c):
-    if len(load_c) == 0:
+def compute_targets(canister_loads):
+    if len(canister_loads) == 0:
         raise ValueError("The provided load data is empty")
 
     total_canister_loads = sum(canister_loads)
@@ -43,15 +43,9 @@ def find_split(path: Path, communication_data_path: Path, load_type: str, epsilo
     total_load_primary, max_load_primary, avg_load_primary, max_allowed_load_per_subnet = compute_targets(load)
 
     result = solve_partition(
-        load,
+        [LoadConstraints(load_type, load, max_allowed_load_per_subnet, epsilon_load)],
         edges,
-        max_allowed_load_per_subnet,
-        epsilon=epsilon_load,
-        max_cuts=max_cuts,
-        load_secondary=None,
-        target_sec_0=None,
-        target_sec_1=None,
-        epsilon_secondary=None,
+        max_cuts,
     )
 
     problem = result["problem"]

@@ -2,13 +2,22 @@ from typing import Dict, List, Tuple
 
 import pulp
 
+
 class LoadConstraints:
+    name: str
     canister_loads: List[float]
     max_allowed_load_per_subnet: float
     epsilon: float
 
+    def __init__(self, name, canister_loads, max_allowed_load_per_subnet, epsilon):
+        self.name = name
+        self.canister_loads = canister_loads
+        self.max_allowed_load_per_subnet = max_allowed_load_per_subnet
+        self.epsilon = epsilon
+
+
 def solve_partition(
-    constraints: List[LoadConstraints],
+    load_constraints: List[LoadConstraints],
     edges: Dict[Tuple[int, int], int],
     max_cuts: int,
 ) -> Dict:
@@ -18,7 +27,10 @@ def solve_partition(
     addition to incoming messages).
     Returns assignments and key metrics to allow testing and reuse.
     """
-    canister_count = len(load_c)
+    if len(load_constraints) == 0:
+        raise ValueError("The provided load constraints data is empty")
+
+    canister_count = len(load_constraints[0].canister_loads)
     problem = pulp.LpProblem("CanisterSubgroupAssignment", pulp.LpMinimize)
 
     t = pulp.LpVariable.dicts("t", range(canister_count), cat=pulp.LpBinary)
@@ -43,25 +55,15 @@ def solve_partition(
 
     problem += pulp.lpSum([count * z[(i, j)] for (i, j), count in edges.items()]), "TotalInterGroupCommunication"
 
-    load_0 = pulp.lpSum([load_c[k] * (1 - t[k]) for k in range(canister_count)])
-    load_1 = pulp.lpSum([load_c[k] * t[k] for k in range(canister_count)])
+    for load_constraint in load_constraints:
+        load_0 = pulp.lpSum([load_constraint.canister_loads[k] * (1 - t[k]) for k in range(canister_count)])
+        load_1 = pulp.lpSum([load_constraint.canister_loads[k] * t[k] for k in range(canister_count)])
+        max_allowed_load = load_constraint.max_allowed_load_per_subnet
+        epsilon = load_constraint.epsilon
+        name = load_constraint.name
 
-    problem += load_0 <= max_allowed_load_per_subnet * (1 + epsilon), "LoadBalanceUpper_0"
-    problem += load_1 <= max_allowed_load_per_subnet * (1 + epsilon), "LoadBalanceUpper_1"
-
-    load_sec_0 = load_sec_1 = None
-    if (
-        load_secondary is not None
-        and target_sec_0 is not None
-        and target_sec_1 is not None
-        and epsilon_secondary is not None
-    ):
-        load_sec_0 = pulp.lpSum([load_secondary[k] * (1 - t[k]) for k in range(canister_count)])
-        load_sec_1 = pulp.lpSum([load_secondary[k] * t[k] for k in range(canister_count)])
-        problem += load_sec_0 >= target_sec_0 * (1 - epsilon_secondary), "LoadSecBalanceLower_0"
-        problem += load_sec_0 <= target_sec_0 * (1 + epsilon_secondary), "LoadSecBalanceUpper_0"
-        problem += load_sec_1 >= target_sec_1 * (1 - epsilon_secondary), "LoadSecBalanceLower_1"
-        problem += load_sec_1 <= target_sec_1 * (1 + epsilon_secondary), "LoadSecBalanceUpper_1"
+        problem += load_0 <= max_allowed_load * (1 + epsilon), f"LoadUpper_0_{name}"
+        problem += load_1 <= max_allowed_load * (1 + epsilon), f"LoadUpper_1_{name}"
 
     solver = pulp.PULP_CBC_CMD(msg=False)
     problem.solve(solver)
