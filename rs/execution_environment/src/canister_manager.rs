@@ -82,13 +82,16 @@ const MAX_SLICE_SIZE_BYTES: u64 = 2_000_000;
 
 /// Instructions charged per byte of stored log data during log memory resize.
 ///
-/// Log resize is more expensive per byte than snapshot operations (1 instr/byte)
-/// because it involves deserializing records from the old ring buffer,
-/// re-encoding them, and writing into a new one — not a simple memory copy.
+/// When the log memory limit changes, all existing records must be read from
+/// the old ring buffer into heap memory, re-encoded, and written into a newly
+/// allocated ring buffer. The cost is proportional to the bytes currently
+/// stored (not the allocated capacity).
 ///
-/// TODO(DSM-11): 32 instr/byte is a preliminary estimate based on devenv
-/// benchmarks (~12-13 ns/byte at ~2B instr/sec). Validate on representative
-/// replica hardware and adjust. Consider moving to SchedulerConfig.
+/// TODO(DSM-11): This value is a preliminary estimate. It must be calibrated
+/// with benchmarks on representative replica hardware and adjusted accordingly.
+///
+/// TODO(DSM-11): Consider moving this constant into `CyclesAccountManagerConfig`
+/// alongside other per-byte fee parameters.
 const LOG_RESIZE_COST_PER_BYTE: u64 = 32;
 
 /// Contains validated cycles and memory usage:
