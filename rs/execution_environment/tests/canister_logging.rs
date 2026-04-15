@@ -13,6 +13,7 @@ use ic_management_canister_types_private::{
     FetchCanisterLogsResponse, LogVisibilityV2, Payload,
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::system_state::log_memory_store::LogMemoryStore;
 use ic_state_machine_tests::{
     ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, SubmitIngressError, UserError,
 };
@@ -28,6 +29,12 @@ use std::time::{Duration, SystemTime};
 const TEST_DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * KIB as usize;
 const MAX_LOG_MESSAGE_LEN: usize = 4 * KIB as usize;
 const TIME_STEP: Duration = Duration::from_nanos(111_111);
+
+/// Returns the number of log records needed to fill a buffer of the given size
+/// with messages of the given length.
+fn records_to_fill(buffer_size: u64, message_len: usize) -> u32 {
+    (buffer_size / LogMemoryStore::estimate_record_size(message_len) as u64 + 1) as u32
+}
 
 // Change limits in order not to duplicate prod values.
 // Setting the instruction limit per round equal to the instruction limit per slice
@@ -2063,8 +2070,6 @@ fn test_large_delta_log_in_single_execution() {
     assert_eq!(logs.len(), message_count as usize);
 }
 
-// --- Log preservation tests ---
-
 #[test]
 fn test_canister_resize_up_preserves_logs() {
     if !LOG_MEMORY_STORE_FEATURE_ENABLED {
@@ -2094,8 +2099,10 @@ fn test_canister_resize_up_preserves_logs() {
         wat_canister()
             .update(
                 "fill_logs",
-                // 20K records of 100B each (120B per record) fills 2 MiB in one call.
-                wat_fn().repeat(20_000, wat_fn().debug_print(&[b'a'; 100])),
+                wat_fn().repeat(
+                    records_to_fill(log_memory_limit, 100),
+                    wat_fn().debug_print(&[b'a'; 100]),
+                ),
             )
             .build_wasm(),
     );
@@ -2145,7 +2152,10 @@ fn test_canister_resize_down_preserves_logs() {
         wat_canister()
             .update(
                 "fill_logs",
-                wat_fn().repeat(20_000, wat_fn().debug_print(&[b'a'; 100])),
+                wat_fn().repeat(
+                    records_to_fill(log_memory_limit, 100),
+                    wat_fn().debug_print(&[b'a'; 100]),
+                ),
             )
             .build_wasm(),
     );
@@ -2167,8 +2177,6 @@ fn test_canister_resize_down_preserves_logs() {
     assert_eq!(logs_before, logs_after);
 }
 
-// --- Cycle charging tests ---
-
 #[test]
 fn test_canister_log_resize_deducts_cycles() {
     if !LOG_MEMORY_STORE_FEATURE_ENABLED {
@@ -2189,7 +2197,10 @@ fn test_canister_log_resize_deducts_cycles() {
             .update(
                 "fill_logs",
                 // 3K records of 100B each (120B per record) fills 256 KiB in one call.
-                wat_fn().repeat(3_000, wat_fn().debug_print(&[b'a'; 100])),
+                wat_fn().repeat(
+                    records_to_fill(log_memory_limit, 100),
+                    wat_fn().debug_print(&[b'a'; 100]),
+                ),
             )
             .build_wasm(),
     );
@@ -2238,7 +2249,10 @@ fn test_canister_log_resize_rejected_insufficient_cycles() {
         wat_canister()
             .update(
                 "fill_logs",
-                wat_fn().repeat(3_000, wat_fn().debug_print(&[b'a'; 100])),
+                wat_fn().repeat(
+                    records_to_fill(log_memory_limit, 100),
+                    wat_fn().debug_print(&[b'a'; 100]),
+                ),
             )
             .build_wasm(),
     );
@@ -2332,7 +2346,10 @@ fn test_canister_log_resize_no_charge_without_limit() {
         wat_canister()
             .update(
                 "fill_logs",
-                wat_fn().repeat(3_000, wat_fn().debug_print(&[b'a'; 100])),
+                wat_fn().repeat(
+                    records_to_fill(log_memory_limit, 100),
+                    wat_fn().debug_print(&[b'a'; 100]),
+                ),
             )
             .build_wasm(),
     );
