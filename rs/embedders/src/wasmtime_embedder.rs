@@ -1334,7 +1334,10 @@ impl WasmtimeInstance {
             CanisterMemoryType::Heap => WASM_HEAP_MEMORY_NAME,
             CanisterMemoryType::Stable => STABLE_MEMORY_NAME,
         };
-        NumWasmPages::from(self.get_memory(name).map_or(0, |mem| mem.size(&self.store)) as usize)
+        NumWasmPages::from(
+            self.get_memory(name)
+                .map_or(0, |mem| mem.size(&self.store)) as usize,
+        )
     }
 
     /// Returns true iff the Wasm memory is 32 bit.

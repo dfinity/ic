@@ -62,6 +62,40 @@ lazy_static! {
         );
 }
 
+/// Returns the extra instruction overhead charged by the deterministic memory
+/// tracker for `n_wasm_pages` Wasm pages first accessed without dirty tracking
+/// (e.g. read-only accesses or non-replicated execution).
+///
+/// Each first-accessed Wasm page (64 KiB) triggers `mark_wasm_page_accessed`,
+/// which charges one instruction per OS page in-band via the SIGSEGV handler
+/// when the deterministic memory tracker is enabled.  The number of OS pages
+/// per Wasm page varies by platform (4 KiB pages on Linux, 16 KiB on
+/// arm64-darwin).
+pub fn deterministic_tracker_overhead(n_wasm_pages: u64) -> u64 {
+    use ic_config::flag_status::FlagStatus;
+    const WASM_PAGE_SIZE: u64 = 65536;
+    if EmbeddersConfig::default()
+        .feature_flags
+        .deterministic_memory_tracker
+        == FlagStatus::Enabled
+    {
+        n_wasm_pages * (WASM_PAGE_SIZE / ic_sys::PAGE_SIZE as u64)
+    } else {
+        0
+    }
+}
+
+/// Returns the extra instruction overhead charged by the deterministic memory
+/// tracker for `n_wasm_pages` Wasm heap pages first written in replicated
+/// execution (DirtyPageTracking::Track).
+///
+/// Each first-written Wasm page triggers both `mark_wasm_page_accessed` and
+/// `mark_wasm_page_dirty` via the SIGSEGV handler, charging two instructions
+/// per OS page when the deterministic memory tracker is enabled.
+pub fn deterministic_tracker_write_overhead(n_wasm_pages: u64) -> u64 {
+    2 * deterministic_tracker_overhead(n_wasm_pages)
+}
+
 /// Pieces needed to execute a benchmark.
 #[derive(Clone)]
 pub struct BenchmarkArgs {
