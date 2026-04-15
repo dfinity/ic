@@ -20,8 +20,7 @@ impl LogRecord {
         Self::estimate_bytes_len(self.len as usize)
     }
 
-    #[inline]
-    pub fn estimate_bytes_len(content_len: usize) -> usize {
+    pub const fn estimate_bytes_len(content_len: usize) -> usize {
         8 + 8 + 4 + content_len
     }
 
