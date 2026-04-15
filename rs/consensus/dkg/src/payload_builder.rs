@@ -194,29 +194,23 @@ fn select_dealings_for_payload(
             *cap = cap.saturating_sub(1);
         }
     }
-    println!("remaining capacity: {:?}", remaining_capacity);
     // Filter dealings whose dealer has no dealing on the chain yet, and for which
     // the collection_threshold hasn't been reached. Prioritize remote DKGs.
     let (remote_priority, rest): (Vec<_>, Vec<_>) = dkg_pool
         .get_validated()
         .filter(|msg| {
-            println!("msg: {:?}", msg.content.dkg_id);
             // Make sure the message relates to one of the ongoing DKGs, it's from a unique
             // dealer, and the collection_threshold hasn't been reached yet.
             let Some(cap) = remaining_capacity.get_mut(&msg.content.dkg_id) else {
-                println!("no cap for dkg id: {:?}", msg.content.dkg_id);
                 return false;
             };
             if dealers_from_chain.contains(&(msg.content.dkg_id.clone(), msg.signature.signer)) {
-                println!("dealer from chain: {:?}", msg.signature.signer);
                 return false;
             }
             if *cap > 0 {
                 *cap -= 1;
-                println!("cap: {:?}", *cap);
                 true
             } else {
-                println!("cap is 0");
                 false
             }
         })
@@ -296,8 +290,7 @@ pub(crate) fn create_early_remote_transcripts(
         for config in configs.iter() {
             // Generate the transcript. We need to retry transient errors, as a payload containing
             // transient errors may not be verifiable by peers.
-            let transcript_result = match create_transcript(crypto, config, &all_dealings, &logger)
-            {
+            let transcript_result = match create_transcript(crypto, config, &all_dealings, logger) {
                 Ok(transcript) => Ok(transcript),
                 // Note that we handled the reproducible error case of not having enough dealings
                 // already beforehand.

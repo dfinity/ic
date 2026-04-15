@@ -141,6 +141,7 @@ pub fn validate_payload(
 }
 
 // Validates the payload containing dealings.
+#[allow(clippy::too_many_arguments)]
 #[allow(clippy::result_large_err)]
 fn validate_dealings_payload(
     subnet_id: SubnetId,

@@ -314,7 +314,7 @@ pub(crate) fn merge_configs<'a>(
     logger: &ReplicaLogger,
 ) -> BTreeMap<&'a NiDkgId, &'a NiDkgConfig> {
     let mut merged_configs: BTreeMap<&NiDkgId, &NiDkgConfig> = summary_configs.iter().collect();
-    for (_, config_result) in config_results {
+    for config_result in config_results.values() {
         let configs = match config_result {
             Ok(configs) => configs,
             Err(errs) => {
@@ -999,9 +999,6 @@ mod tests {
             }
         });
     }
-
-    #[test]
-    fn test_config_generation_failures_are_added_to_summary_blocks() {}
 
     /// These components are used for the validation tests.
     struct ValidationTestComponents {
