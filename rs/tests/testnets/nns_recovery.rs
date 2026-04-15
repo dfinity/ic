@@ -62,8 +62,8 @@ fn setup(env: TestEnv, use_mainnet_state: bool) {
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap_or(DKG_INTERVAL_HEIGHT);
 
-    let vm_resources = if use_mainnet_state {
-        MAINNET_NODE_VM_RESOURCE_OVERRIDES.layer(&NNS_RECOVERY_VM_RESOURCE_OVERRIDES);
+    let vm_resources_overrides = if use_mainnet_state {
+        MAINNET_NODE_VM_RESOURCE_OVERRIDES.layer(&NNS_RECOVERY_VM_RESOURCE_OVERRIDES)
     } else {
         NNS_RECOVERY_VM_RESOURCE_OVERRIDES
     };
@@ -74,7 +74,7 @@ fn setup(env: TestEnv, use_mainnet_state: bool) {
             use_mainnet_state,
             subnet_size,
             dkg_interval,
-            nested_nodes_vm_resources: vm_resources,
+            nested_nodes_vm_resources_overrides: vm_resources_overrides,
         },
     );
 }
