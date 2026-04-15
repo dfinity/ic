@@ -699,6 +699,7 @@ impl CanisterManager {
         let old_usage = canister.memory_usage();
         let old_mem = canister.memory_allocation().allocated_bytes(old_usage);
         let old_compute_allocation = canister.compute_allocation().as_percent();
+        let old_log_bytes_used = canister.system_state.log_memory_store.bytes_used() as u64;
 
         self.do_update_settings(&validated_settings, canister);
 
@@ -736,9 +737,11 @@ impl CanisterManager {
         // recomputing the freezing threshold from post-mutation memory usage,
         // which could fail despite validation having passed.
         if user_set_log_memory_limit {
-            let bytes_used = canister.system_state.log_memory_store.bytes_used() as u64;
+            // Use pre-mutation bytes_used so that downsize operations (which drop
+            // old records) are charged for the actual work of reading/rewriting
+            // the original buffer, matching what validation checked.
             let log_resize_instructions =
-                NumInstructions::new(bytes_used * LOG_RESIZE_COST_PER_BYTE);
+                NumInstructions::new(old_log_bytes_used * LOG_RESIZE_COST_PER_BYTE);
             let log_resize_cycles = self.cycles_account_manager.management_canister_cost(
                 log_resize_instructions,
                 subnet_size,
