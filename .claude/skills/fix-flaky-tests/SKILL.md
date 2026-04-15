@@ -66,6 +66,9 @@ This guide explains how to find flaky tests to fix and how to debug them. Flaky 
    ```
    as those are due to infrastructure issues unrelated to the test code.
 
+4. When asked to just figure out the root causes without fixing them,
+   document the root causes in a markdown file and finish without running the following steps.
+
 4. Once the root causes have been determined, pick the most common or recent one
    and fix the test by addressing that root cause taking `.claude/CLAUDE.md` into account.
 
