@@ -46,7 +46,7 @@ fn main() -> Result<()> {
         .map(|s| s.parse::<u64>().expect("DKG_INTERVAL must be a valid u64"));
 
     SystemTestGroup::new()
-        .with_timeout_per_test(Duration::from_secs(90 * 60))
+        .with_timeout_per_test(Duration::from_mins(90))
         .with_setup(move |env| setup_mainnet_nns(env, dkg_interval))
         .execute_from_args()?;
     Ok(())
