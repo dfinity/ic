@@ -557,7 +557,7 @@ fn register_non_local_subnet(
 ) {
     let principal_id = subnet_id.get();
     let principal_bytes = principal_id.as_slice();
-    let mut seed = [0u8; 32];
+    let mut seed = [0_u8; 32];
     seed[..principal_bytes.len()].copy_from_slice(principal_bytes);
     let (ni_dkg_transcript, _) =
         dummy_initial_dkg_transcript_with_master_key(&mut StdRng::from_seed(seed));
