@@ -9,7 +9,7 @@ use ic_base_types::{CanisterId, NumBytes, PrincipalId, SubnetId};
 use ic_config::{
     embedders::Config as HypervisorConfig,
     flag_status::FlagStatus,
-    subnet_config::{SchedulerConfig, SubnetConfig},
+    subnet_config::{SUBNET_MESSAGES_LIMIT_FRACTION, SchedulerConfig, SubnetConfig},
 };
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
@@ -628,8 +628,7 @@ impl SchedulerTest {
         );
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(
-                self.scheduler_config
-                    .subnet_messages_per_round_instruction_limit,
+                self.scheduler_config.max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
             ),
             subnet_available_memory: self
                 .scheduler
