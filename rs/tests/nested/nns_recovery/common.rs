@@ -245,12 +245,12 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
 
     if cfg.subnet_size > 0 {
         let host_vm_names = get_host_vm_names(cfg.subnet_size);
-        let vm_resources = if cfg.use_mainnet_state {
+        let vm_resource_overrides = if cfg.use_mainnet_state {
             MAINNET_NODE_VM_RESOURCE_OVERRIDES.layer(&cfg.nested_nodes_vm_resource_overrides)
         } else {
             cfg.nested_nodes_vm_resource_overrides
         };
-        NestedNodes::new_with_resource_overrides(&host_vm_names, vm_resources)
+        NestedNodes::new_with_resource_overrides(&host_vm_names, vm_resource_overrides)
             .setup_and_start(&env)
             .unwrap();
 

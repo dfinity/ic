@@ -41,7 +41,6 @@ use ic_consensus_system_test_subnet_recovery::utils::{
 };
 use ic_limits::DKG_INTERVAL_HEIGHT;
 use ic_nested_nns_recovery_common::{NNS_RECOVERY_VM_RESOURCE_OVERRIDES, SetupConfig};
-use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::nested::HasNestedVms;
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
@@ -62,7 +61,7 @@ fn setup(env: TestEnv, use_mainnet_state: bool) {
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap_or(DKG_INTERVAL_HEIGHT);
 
-    let vm_resources_overrides = if use_mainnet_state {
+    let vm_resource_overrides = if use_mainnet_state {
         MAINNET_NODE_VM_RESOURCE_OVERRIDES.layer(&NNS_RECOVERY_VM_RESOURCE_OVERRIDES)
     } else {
         NNS_RECOVERY_VM_RESOURCE_OVERRIDES
@@ -74,7 +73,7 @@ fn setup(env: TestEnv, use_mainnet_state: bool) {
             use_mainnet_state,
             subnet_size,
             dkg_interval,
-            nested_nodes_vm_resources_overrides: vm_resources_overrides,
+            nested_nodes_vm_resource_overrides: vm_resource_overrides,
         },
     );
 }
@@ -109,7 +108,7 @@ fn log_instructions(env: TestEnv) {
     }
 
     info!(logger, "Host <-> IPs mapping:");
-    for vm in nested_vms {
+    for vm in &nested_vms {
         let vm_name = vm.vm_name();
         let host_ip = vm.get_nested_network().unwrap().host_ip;
         let guest_ip = vm.get_nested_network().unwrap().guest_ip;
@@ -123,7 +122,7 @@ fn log_instructions(env: TestEnv) {
         logger,
         "To reboot host VMs run any, or some of the following commands:"
     );
-    for vm in nested_vms {
+    for vm in &nested_vms {
         let vm_name = vm.vm_name();
         info!(
             logger,
