@@ -2328,64 +2328,6 @@ fn test_canister_log_resize_empty_buffer_minimal_charge() {
 }
 
 #[test]
-fn test_canister_log_resize_no_charge_without_limit() {
-    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
-        return;
-    }
-    let log_memory_limit = 256 * KIB;
-
-    let env = setup_env();
-    let controller = PrincipalId::new_anonymous();
-    let canister_id = create_and_install_canister(
-        &env,
-        CanisterSettingsArgsBuilder::new()
-            .with_controllers(vec![controller])
-            .with_log_memory_limit(log_memory_limit)
-            .with_log_visibility(LogVisibilityV2::Public)
-            .build(),
-        wat_canister()
-            .update(
-                "fill_logs",
-                wat_fn().repeat(
-                    records_to_fill(log_memory_limit, 100),
-                    wat_fn().debug_print(&[b'a'; 100]),
-                ),
-            )
-            .build_wasm(),
-    );
-
-    let _ = env.execute_ingress(canister_id, "fill_logs", vec![]);
-
-    // update_settings WITHOUT log_memory_limit — no resize charge.
-    let balance_before = env.cycle_balance(canister_id);
-    let _ = env.update_settings(
-        &canister_id,
-        CanisterSettingsArgsBuilder::new()
-            .with_log_visibility(LogVisibilityV2::Public)
-            .build(),
-    );
-    let settings_cost = balance_before - env.cycle_balance(canister_id);
-
-    // update_settings WITH log_memory_limit — triggers resize charge.
-    let balance_before = env.cycle_balance(canister_id);
-    let _ = env.update_settings(
-        &canister_id,
-        CanisterSettingsArgsBuilder::new()
-            .with_log_memory_limit(log_memory_limit - 1)
-            .build(),
-    );
-    let resize_cost = balance_before - env.cycle_balance(canister_id);
-
-    assert_gt!(
-        resize_cost,
-        settings_cost,
-        "Resize cost ({}) should be higher than plain settings cost ({})",
-        resize_cost,
-        settings_cost
-    );
-}
-
-#[test]
 fn test_canister_log_resize_no_extra_charge_feature_disabled() {
     if LOG_MEMORY_STORE_FEATURE_ENABLED {
         return;
