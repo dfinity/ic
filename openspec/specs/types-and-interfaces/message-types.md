@@ -35,6 +35,14 @@ SenderInfo carries certified identity attributes attached to ingress messages, a
 - **THEN** `sender_info` is `None`
 - **AND** `msg_caller_info_data_size` returns 0
 
+#### Scenario: SenderInfo cryptographic verification
+- **WHEN** an ingress message includes a `SignedSenderInfo` field
+- **THEN** the signature is verified as an ICCSA canister signature using the signer's public key
+- **AND** the signer canister ID in the public key must match the `signer` field in the SenderInfo content
+- **AND** the signed message is the `SenderInfoContent` hash (sender + info bytes)
+- **AND** verification uses the same root of trust as other canister signature verification
+- **AND** if verification fails, the request is rejected with `InvalidSenderInfo`
+
 ### Requirement: SignedIngress Authenticated Ingress
 SignedIngress combines SignedIngressContent with Authentication (signatures and delegation), providing the complete ingress message as received by the HTTP handler.
 
