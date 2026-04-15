@@ -499,7 +499,29 @@ fn add_subnet_local_registry_records(
         .with_resource_limits(resource_limits)
         .build();
 
-    // Insert initial DKG transcripts
+    add_cup_contents_and_key_record(
+        subnet_id,
+        ni_dkg_transcript,
+        public_key,
+        &registry_data_provider,
+        registry_version,
+    );
+
+    add_single_subnet_record(
+        &registry_data_provider,
+        registry_version.get(),
+        subnet_id,
+        record,
+    );
+}
+
+fn add_cup_contents_and_key_record(
+    subnet_id: SubnetId,
+    ni_dkg_transcript: NiDkgTranscript,
+    public_key: ThresholdSigPublicKey,
+    registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+    registry_version: RegistryVersion,
+) {
     let mut high_threshold_transcript = ni_dkg_transcript.clone();
     high_threshold_transcript.dkg_id.dkg_tag = NiDkgTag::HighThreshold;
     let mut low_threshold_transcript = ni_dkg_transcript;
@@ -515,16 +537,9 @@ fn add_subnet_local_registry_records(
             registry_version,
             Some(cup_contents),
         )
-        .expect("Failed to add subnet record.");
-
-    add_single_subnet_record(
-        &registry_data_provider,
-        registry_version.get(),
-        subnet_id,
-        record,
-    );
+        .expect("Failed to add CUP contents record.");
     add_subnet_key_record(
-        &registry_data_provider,
+        registry_data_provider,
         registry_version.get(),
         subnet_id,
         public_key,
@@ -533,36 +548,28 @@ fn add_subnet_local_registry_records(
 
 /// Register minimal registry records for a non-local subnet so that it
 /// appears in the `NetworkTopology` and its routing table entries are not
-/// filtered out.
+/// filtered out. This is needed because `try_to_populate_network_topology`
+/// filters the routing table to only include entries for subnets with
+/// registry records.
 fn register_non_local_subnet(
-    extra_subnet_id: SubnetId,
+    subnet_id: SubnetId,
     registry_data_provider: &Arc<ProtoRegistryDataProvider>,
 ) {
+    let principal_id = subnet_id.get();
+    let principal_bytes = principal_id.as_slice();
     let mut seed = [0u8; 32];
-    let subnet_bytes = extra_subnet_id.get().to_vec();
-    for (i, b) in subnet_bytes.iter().enumerate() {
-        seed[i % 32] ^= b;
-    }
+    seed[..principal_bytes.len()].copy_from_slice(principal_bytes);
     let (ni_dkg_transcript, _) =
         dummy_initial_dkg_transcript_with_master_key(&mut StdRng::from_seed(seed));
     let public_key: ThresholdSigPublicKey = (&ni_dkg_transcript).try_into().unwrap();
 
-    let mut high_threshold_transcript = ni_dkg_transcript.clone();
-    high_threshold_transcript.dkg_id.dkg_tag = NiDkgTag::HighThreshold;
-    let mut low_threshold_transcript = ni_dkg_transcript;
-    low_threshold_transcript.dkg_id.dkg_tag = NiDkgTag::LowThreshold;
-    let cup_contents = CatchUpPackageContents {
-        initial_ni_dkg_transcript_high_threshold: Some(high_threshold_transcript.into()),
-        initial_ni_dkg_transcript_low_threshold: Some(low_threshold_transcript.into()),
-        ..Default::default()
-    };
-    registry_data_provider
-        .add(
-            &make_catch_up_package_contents_key(extra_subnet_id),
-            INITIAL_REGISTRY_VERSION,
-            Some(cup_contents),
-        )
-        .unwrap();
+    add_cup_contents_and_key_record(
+        subnet_id,
+        ni_dkg_transcript,
+        public_key,
+        registry_data_provider,
+        INITIAL_REGISTRY_VERSION,
+    );
 
     let record = SubnetRecordBuilder::from(&[])
         .with_subnet_type(SubnetType::Application)
@@ -570,14 +577,8 @@ fn register_non_local_subnet(
     add_single_subnet_record(
         registry_data_provider,
         INITIAL_REGISTRY_VERSION.get(),
-        extra_subnet_id,
+        subnet_id,
         record,
-    );
-    add_subnet_key_record(
-        registry_data_provider,
-        INITIAL_REGISTRY_VERSION.get(),
-        extra_subnet_id,
-        public_key,
     );
 }
 
