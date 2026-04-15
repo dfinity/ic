@@ -79,45 +79,14 @@ fn setup(env: TestEnv, use_mainnet_state: bool) {
     );
 }
 
-fn test(env: TestEnv) {
-    let logger = env.logger();
-
-    let is_external = Vec::<HostFeature>::try_read_attribute(&env)
-        .map(|features| features.contains(&HostFeature::DMZ))
-        .unwrap_or(false);
-    if is_external {
-        // If we are doing an external testnet, we are done and we wait forever for nodes to join.
+fn log_instructions(env: TestEnv) {
+    let nested_vms = env.get_all_nested_vms().unwrap();
+    if nested_vms.is_empty() {
+        // If there are no nested VMs, probably this testnet is meant to be public and we are now
+        // done. We wait forever for nodes to join.
         return;
     }
 
-    // In an internal testnet, we print instructions and possibly break nodes at a given height.
-    info!(logger, "Host <-> IPs mapping:");
-    for vm in env.get_all_nested_vms().unwrap() {
-        let vm_name = vm.vm_name();
-        let host_ip = vm.get_nested_network().unwrap().host_ip;
-        let guest_ip = vm.get_nested_network().unwrap().guest_ip;
-        info!(logger, "{vm_name}: HostOS {host_ip}, GuestOS {guest_ip}");
-    }
-
-    let farm_url = env.get_farm_url().expect("Unable to get Farm url.");
-    let group_setup = GroupSetup::read_attribute(&env);
-    let group_name: String = group_setup.infra_group_name;
-    info!(
-        logger,
-        "To reboot host VMs run any, or some of the following commands:"
-    );
-    for vm in env.get_all_nested_vms().unwrap() {
-        let vm_name = vm.vm_name();
-        info!(
-            logger,
-            "curl -X PUT '{farm_url}group/{group_name}/vm/{vm_name}/reboot'"
-        );
-    }
-
-    maybe_break_at_height(env.clone());
-}
-
-fn maybe_break_at_height(env: TestEnv) {
     let num_to_break = std::env::var("NUM_NODES_TO_BREAK")
         .ok()
         .and_then(|s| s.parse::<usize>().ok());
@@ -136,6 +105,29 @@ fn maybe_break_at_height(env: TestEnv) {
         warn!(
             logger,
             "NUM_NODES_TO_BREAK is {nb} but needs to be at least {minimum_to_break_subnet} to break a subnet of size {subnet_size}."
+        );
+    }
+
+    info!(logger, "Host <-> IPs mapping:");
+    for vm in nested_vms {
+        let vm_name = vm.vm_name();
+        let host_ip = vm.get_nested_network().unwrap().host_ip;
+        let guest_ip = vm.get_nested_network().unwrap().guest_ip;
+        info!(logger, "{vm_name}: HostOS {host_ip}, GuestOS {guest_ip}");
+    }
+
+    let farm_url = env.get_farm_url().expect("Unable to get Farm url.");
+    let group_setup = GroupSetup::read_attribute(&env);
+    let group_name: String = group_setup.infra_group_name;
+    info!(
+        logger,
+        "To reboot host VMs run any, or some of the following commands:"
+    );
+    for vm in nested_vms {
+        let vm_name = vm.vm_name();
+        info!(
+            logger,
+            "curl -X PUT '{farm_url}group/{group_name}/vm/{vm_name}/reboot'"
         );
     }
 
@@ -168,8 +160,7 @@ fn maybe_break_at_height(env: TestEnv) {
     }
 
     break_nodes(
-        &env.get_all_nested_vms()
-            .unwrap()
+        &nested_vms
             .iter()
             .map(|vm| vm.get_guest_ssh().unwrap())
             .take(num_to_break)
@@ -189,7 +180,7 @@ fn main() -> Result<()> {
         .with_timeout_per_test(Duration::from_secs(2 * 3600))
         .with_overall_timeout(Duration::from_secs(2 * 3600))
         .with_setup(move |env| setup(env, use_mainnet_state))
-        .add_test(systest!(test))
+        .add_test(systest!(log_instructions))
         .execute_from_args()?;
     Ok(())
 }
