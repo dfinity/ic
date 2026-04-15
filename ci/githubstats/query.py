@@ -1128,7 +1128,8 @@ def top(args):
             )
         )
         remaining = test_names[~fixed_by_commit]
-        with ThreadPoolExecutor() as executor:
+        max_pr_check_workers = max(1, min(4, len(remaining)))
+        with ThreadPoolExecutor(max_workers=max_pr_check_workers) as executor:
             pr_results = dict(zip(remaining.index, executor.map(has_open_pr, remaining)))
         fixed = fixed_by_commit | pd.Series({i: pr_results.get(i, False) for i in df.index})
         excluded_count = fixed.sum()
