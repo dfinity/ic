@@ -93,7 +93,7 @@ impl TryFrom<Nat> for U256 {
         if le_bytes.len() > 32 {
             return Err(format!("amount {n} does not fit into u256 token type"));
         }
-        let mut bytes = [0u8; 32];
+        let mut bytes = [0_u8; 32];
         bytes[0..le_bytes.len()].copy_from_slice(&le_bytes[..]);
         Ok(Self::new(u256::from_le_bytes(bytes)))
     }
@@ -106,7 +106,7 @@ impl Storable for U256 {
 
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         assert_eq!(bytes.len(), 32, "u256 representation is 32-bytes long");
-        let mut be_bytes = [0u8; 32];
+        let mut be_bytes = [0_u8; 32];
         be_bytes.copy_from_slice(bytes.as_ref());
         Self(u256::from_be_bytes(be_bytes))
     }

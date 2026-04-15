@@ -32,6 +32,7 @@ slog = { workspace = true }
 assert_matches = { workspace = true }
 ic-artifact-pool = { path = "../../artifact_pool" }
 ic-consensus-mocks = { path = "../mocks" }
+ic-interfaces-mocks = { path = "../../interfaces/mocks" }
 ic-crypto-interfaces-sig-verification = { path = "../../crypto/interfaces/sig_verification" }
 ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
 ic-crypto-test-utils-crypto-returning-ok = { path = "../../crypto/test_utils/crypto_returning_ok" }

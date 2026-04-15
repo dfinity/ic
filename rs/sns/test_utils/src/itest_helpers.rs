@@ -158,7 +158,10 @@ impl SnsTestsInitPayloadBuilder {
 
         let index_ng = Some(IndexArg::Init(InitArg {
             ledger_id: CanisterId::from_u64(0).into(),
-            retrieve_blocks_from_ledger_interval_seconds: Some(5),
+            #[allow(deprecated)]
+            retrieve_blocks_from_ledger_interval_seconds: None,
+            min_retrieve_blocks_from_ledger_interval_seconds: None,
+            max_retrieve_blocks_from_ledger_interval_seconds: None,
         }));
 
         let mut governance = GovernanceCanisterInitPayloadBuilder::new();
@@ -348,6 +351,16 @@ pub fn populate_canister_ids(
 
         swap.nns_governance_canister_id = NNS_GOVERNANCE_CANISTER_ID.to_string();
         swap.icp_ledger_canister_id = ICP_LEDGER_CANISTER_ID.to_string();
+    }
+
+    // Index
+    {
+        match sns_canister_init_payloads.index_ng.as_mut() {
+            Some(IndexArg::Init(init_arg)) => {
+                init_arg.ledger_id = ledger_canister_id.0;
+            }
+            other => panic!("bug: expected Some(IndexArg::Init(...)), got {other:?}"),
+        }
     }
 }
 

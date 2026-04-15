@@ -36,7 +36,7 @@ use ic_consensus_system_test_subnet_recovery::utils::{
 };
 use ic_limits::DKG_INTERVAL_HEIGHT;
 use ic_nested_nns_recovery_common::{
-    NNS_RECOVERY_VM_RESOURCES, SetupConfig, grant_backup_access_to_all_nns_nodes,
+    NNS_RECOVERY_VM_RESOURCE_OVERRIDES, SetupConfig, grant_backup_access_to_all_nns_nodes,
     replace_nns_with_unassigned_nodes,
 };
 use ic_system_test_driver::driver::nested::HasNestedVms;
@@ -64,7 +64,7 @@ fn setup(env: TestEnv) {
             impersonate_upstreams: false,
             subnet_size,
             dkg_interval,
-            nested_nodes_vm_resources: NNS_RECOVERY_VM_RESOURCES,
+            nested_nodes_vm_resource_overrides: NNS_RECOVERY_VM_RESOURCE_OVERRIDES,
         },
     );
 }

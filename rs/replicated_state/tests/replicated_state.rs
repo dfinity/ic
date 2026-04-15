@@ -14,12 +14,12 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterState, ExecutionTask, IngressHistoryState, InputSource, ReplicatedState,
     SchedulerState, StateError, SystemState,
-    canister_snapshots::CanisterSnapshot,
+    canister_state::canister_snapshots::{CanisterSnapshot, CanisterSnapshots},
     canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata},
     metadata_state::{
         subnet_call_context_manager::{
             BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, InstallCodeCallId,
-            SubnetCallContext,
+            StopCanisterCall, SubnetCallContext,
         },
         testing::NetworkTopologyTesting,
     },
@@ -31,6 +31,7 @@ use ic_replicated_state::{
 };
 use ic_test_utilities_state::{ExecutionStateBuilder, arb_replicated_state_with_output_queues};
 use ic_test_utilities_types::ids::{SUBNET_1, canister_test_id, message_test_id, user_test_id};
+use ic_test_utilities_types::messages::IngressBuilder;
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{
@@ -39,7 +40,8 @@ use ic_types::messages::{
 };
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::xnet::StreamIndex;
-use ic_types::{CountBytes, Cycles, MemoryAllocation, SnapshotId, Time};
+use ic_types::{CountBytes, MemoryAllocation, SnapshotId, Time};
+use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Cycles};
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::collections::{BTreeMap, VecDeque};
@@ -147,6 +149,7 @@ impl ReplicatedStateFixture {
                 system_state,
                 Some(execution_state),
                 scheduler_state,
+                CanisterSnapshots::default(),
             ));
         }
         ReplicatedStateFixture { state }
@@ -214,14 +217,20 @@ impl ReplicatedStateFixture {
     }
 
     fn stop_canister(&mut self) {
-        let canister = self.state.canister_state_make_mut(&CANISTER_ID).unwrap();
-        canister
-            .system_state
-            .begin_stopping(ic_types::messages::StopCanisterContext::Ingress {
-                sender: user_test_id(24),
-                message_id: [0; 32].into(),
-                call_id: None,
+        let mut msg = CanisterCall::Ingress(Arc::new(
+            IngressBuilder::new().method_name("stop_canister").build(),
+        ));
+        let call_id = self
+            .state
+            .metadata
+            .subnet_call_context_manager
+            .push_stop_canister_call(StopCanisterCall {
+                call: msg.clone(),
+                effective_canister_id: CANISTER_ID,
+                time: self.state.time(),
             });
+        let canister = self.state.canister_state_make_mut(&CANISTER_ID).unwrap();
+        canister.system_state.begin_stopping(&mut msg, call_id);
         assert!(canister.system_state.try_stop_canister(|_| false).0);
     }
 
@@ -1324,9 +1333,9 @@ fn online_split() {
         let snapshot = CanisterSnapshot::from_canister(canister, UNIX_EPOCH).unwrap();
         let snapshot_id =
             SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
-        fixture
-            .state
-            .create_snapshot_from_metadata(snapshot_id, snapshot.into());
+        canister
+            .canister_snapshots
+            .push(snapshot_id, snapshot.into());
         snapshot_id
     };
     let canister_1_snapshot_id = take_shapshot(CANISTER_1);
@@ -1340,8 +1349,11 @@ fn online_split() {
             .task_queue
             .enqueue(ExecutionTask::AbortedInstallCode {
                 message: CanisterCall::Request(RequestBuilder::default().build().into()),
-                call_id: InstallCodeCallId::new(3u64),
-                prepaid_execution_cycles: Cycles::new(3),
+                call_id: InstallCodeCallId::new(3_u64),
+                prepaid_execution_cycles: CompoundCycles::new(
+                    Cycles::new(3),
+                    CanisterCyclesCostSchedule::Normal,
+                ),
             });
     };
     add_aborted_install_code_task(CANISTER_1);
@@ -1361,13 +1373,16 @@ fn online_split() {
     // Only `CANISTER_1` should be left.
     expected.remove_canister(&CANISTER_2);
     // The input schedules of `CANISTER_1` should have been repartitioned.
-    let mut canister_state = expected.take_canister_state(&CANISTER_1).unwrap();
-    Arc::make_mut(&mut canister_state)
+    let mut canister_state_arc = expected.take_canister_state(&CANISTER_1).unwrap();
+    let canister_state = Arc::make_mut(&mut canister_state_arc);
+    canister_state
         .system_state
         .split_input_schedules(&CANISTER_1, expected.canister_states());
-    expected.put_canister_state(canister_state);
     // The snapshot of `CANISTER_2` should have been deleted.
-    expected.canister_snapshots.remove(canister_2_snapshot_id);
+    canister_state
+        .canister_snapshots
+        .remove(canister_2_snapshot_id);
+    expected.put_canister_state(canister_state_arc);
 
     // And the split marker should be set.
     expected.metadata.subnet_split_from = Some(SUBNET_A);
@@ -1391,15 +1406,18 @@ fn online_split() {
     // Only `CANISTER_2` should be hosted.
     expected.remove_canister(&CANISTER_1);
     // The input schedules of `CANISTER_2` should have been repartitioned.
-    let mut canister_state = expected.take_canister_state(&CANISTER_2).unwrap();
-    Arc::make_mut(&mut canister_state)
+    let mut canister_state_arc = expected.take_canister_state(&CANISTER_2).unwrap();
+    let canister_state = Arc::make_mut(&mut canister_state_arc);
+    canister_state
         .system_state
         .split_input_schedules(&CANISTER_2, expected.canister_states());
     // The in-progress `install_code` task should have been silently dropped.
-    Arc::make_mut(&mut canister_state).system_state.task_queue = Default::default();
-    expected.put_canister_state(canister_state);
+    canister_state.system_state.task_queue = Default::default();
     // The snapshot of `CANISTER_1` should have been deleted.
-    expected.canister_snapshots.remove(canister_1_snapshot_id);
+    canister_state
+        .canister_snapshots
+        .remove(canister_1_snapshot_id);
+    expected.put_canister_state(canister_state_arc);
 
     // Streams, subnet queues and refunds should be empty.
     expected.take_streams();

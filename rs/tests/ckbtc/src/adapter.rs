@@ -269,5 +269,5 @@ pub fn fund_with_tokens<T: RpcClientType>(
 fn calculate_regtest_reward<T: RpcClientType>(height: u64) -> Amount {
     let halvings = (height / 150) as u32;
     let base_reward = T::REGTEST_INITIAL_BLOCK_REWARDS;
-    base_reward / 2u64.pow(halvings)
+    base_reward / 2_u64.pow(halvings)
 }

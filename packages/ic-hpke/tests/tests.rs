@@ -81,7 +81,7 @@ fn smoke_test_noauth() {
     let pk = sk.public_key();
 
     for ptext_len in 0..128 {
-        let mut ptext = vec![0u8; ptext_len];
+        let mut ptext = vec![0_u8; ptext_len];
         rng.fill_bytes(&mut ptext);
         let aad = rng.r#gen::<[u8; 32]>();
         let ctext = pk.encrypt_noauth(&ptext, &aad, &mut rng).unwrap();
@@ -103,7 +103,7 @@ fn smoke_test_auth() {
     let aad = rng.r#gen::<[u8; 32]>();
 
     for ptext_len in 0..128 {
-        let mut ptext = vec![0u8; ptext_len];
+        let mut ptext = vec![0_u8; ptext_len];
         rng.fill_bytes(&mut ptext);
         let ctext = a_pk.encrypt(&ptext, &aad, &b_sk, &mut rng).unwrap();
         let rec = a_sk.decrypt(&ctext, &aad, &b_pk).unwrap();

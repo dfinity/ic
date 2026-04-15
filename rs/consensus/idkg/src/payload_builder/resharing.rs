@@ -2,6 +2,7 @@ use crate::{payload_builder::IDkgDealingContext, pre_signer::IDkgTranscriptBuild
 use ic_logger::{ReplicaLogger, warn};
 use ic_management_canister_types_private::ReshareChainKeyResponse;
 use ic_types::{
+    RegistryVersion,
     batch::ConsensusResponse,
     consensus::idkg::{self, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgReshareRequest},
     crypto::canister_threshold_sig::{
@@ -155,9 +156,12 @@ pub(crate) fn update_completed_reshare_requests(
 /// Translates the reshare requests in the replicated state to the internal format
 pub(super) fn get_reshare_requests(
     idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingContext<'_>>,
+    validation_context_registry_version: RegistryVersion,
 ) -> BTreeSet<idkg::IDkgReshareRequest> {
     idkg_dealings_contexts
         .values()
+        // Skip the context if we haven't reached the registry version yet.
+        .filter(|context| context.registry_version <= validation_context_registry_version)
         .map(reshare_request_from_dealings_context)
         .collect()
 }

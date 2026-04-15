@@ -1,9 +1,12 @@
 use crate::{
     CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS, Clock, IcClock,
     governance::{LOG_PREFIX, TimeWarp},
-    neuron::types::Neuron,
+    neuron::Neuron,
     neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
-    pb::v1::{GovernanceError, Topic, VotingPowerEconomics, governance_error::ErrorType},
+    pb::v1::{
+        GovernanceError, NeuronDissolveStateSnapshot, Topic, VotingPowerEconomics,
+        governance_error::ErrorType,
+    },
     storage::{
         neuron_indexes::CorruptedNeuronIndexes, neurons::NeuronSections,
         with_stable_neuron_indexes, with_stable_neuron_indexes_mut, with_stable_neuron_store,
@@ -806,6 +809,21 @@ impl NeuronStore {
                 })?
                 .map_err(|e| NeuronStoreError::InvalidData { reason: e })?;
             Ok(())
+        })
+    }
+
+    pub fn set_eight_year_gang_bonus_base_e8s_for_all_neurons_or_panic(&mut self) {
+        with_stable_neuron_store_mut(|stable_neuron_store| {
+            stable_neuron_store.set_eight_year_gang_bonus_base_e8s_for_all_neurons_or_panic();
+        });
+    }
+
+    pub fn clamp_dissolve_delay_for_all_neurons_or_panic(
+        &mut self,
+        now_seconds: u64,
+    ) -> HashMap<u64, NeuronDissolveStateSnapshot> {
+        with_stable_neuron_store_mut(|stable_neuron_store| {
+            stable_neuron_store.clamp_dissolve_delay_for_all_neurons_or_panic(now_seconds)
         })
     }
 

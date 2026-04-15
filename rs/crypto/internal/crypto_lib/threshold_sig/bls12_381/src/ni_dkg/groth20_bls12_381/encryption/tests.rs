@@ -41,14 +41,14 @@ fn constants_should_be_compatible() {
 #[test]
 fn keygen_should_work() {
     let rng = &mut ReproducibleRng::new();
-    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[2u8, 8u8, 1u8, 2u8];
+    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[2_u8, 8_u8, 1_u8, 2_u8];
     create_forward_secure_key_pair(Seed::from_rng(rng), KEY_GEN_ASSOCIATED_DATA);
 }
 
 #[test]
 fn epoch_of_a_new_key_should_be_zero() {
     let rng = &mut ReproducibleRng::new();
-    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[2u8, 3u8, 0u8, 6u8];
+    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[2_u8, 3_u8, 0_u8, 6_u8];
     let key_set = create_forward_secure_key_pair(Seed::from_rng(rng), KEY_GEN_ASSOCIATED_DATA);
     let epoch = SecretKey::deserialize(&key_set.secret_key)
         .current_epoch()
@@ -59,7 +59,7 @@ fn epoch_of_a_new_key_should_be_zero() {
 #[test]
 fn single_stepping_a_key_should_increment_current_epoch() {
     let rng = &mut ReproducibleRng::new();
-    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[0u8, 5u8, 0u8, 5u8];
+    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[0_u8, 5_u8, 0_u8, 5_u8];
 
     let key_with_pop = create_forward_secure_key_pair(Seed::from_rng(rng), KEY_GEN_ASSOCIATED_DATA);
     let mut secret_key = SecretKey::deserialize(&key_with_pop.secret_key);
@@ -99,7 +99,7 @@ fn should_not_update_key_on_current_or_past_epoch() {
 #[test]
 fn correct_keys_should_verify() {
     let rng = &mut ReproducibleRng::new();
-    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[11u8, 2u8, 19u8, 31u8];
+    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[11_u8, 2_u8, 19_u8, 31_u8];
     let key_set = create_forward_secure_key_pair(Seed::from_rng(rng), KEY_GEN_ASSOCIATED_DATA);
     let verification =
         verify_forward_secure_key(&key_set.public_key, &key_set.pop, KEY_GEN_ASSOCIATED_DATA);
@@ -108,9 +108,9 @@ fn correct_keys_should_verify() {
 
 #[test]
 fn wrong_pop_should_not_verify() {
-    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[1u8, 9u8, 0u8, 3u8];
-    let seed = Seed::from_bytes(&[62u8; 32]);
-    let different_seed = Seed::from_bytes(&[9u8; 32]);
+    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[1_u8, 9_u8, 0_u8, 3_u8];
+    let seed = Seed::from_bytes(&[62_u8; 32]);
+    let different_seed = Seed::from_bytes(&[9_u8; 32]);
     let FsEncryptionKeySetWithPop { public_key, .. } =
         create_forward_secure_key_pair(seed, KEY_GEN_ASSOCIATED_DATA);
     let FsEncryptionKeySetWithPop { pop, .. } =
@@ -376,7 +376,7 @@ fn zk_proofs_should_verify() {
 fn zk_proofs_should_not_verify_with_wrong_epoch() {
     const NUM_RECEIVERS: u8 = 3;
     let rng = &mut ReproducibleRng::new();
-    let mut associated_data = [0u8; 100];
+    let mut associated_data = [0_u8; 100];
     rng.fill_bytes(&mut associated_data[..]);
     let threshold = NumberOfNodes::from(2);
 

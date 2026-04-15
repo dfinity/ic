@@ -15,6 +15,7 @@ ic-icrc3-test-ledger = { path = "../../icrc1/test_utils/icrc3_test_ledger" }
 ic-ledger-core = { path = "../../common/ledger_core" }
 ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
+ic-types-cycles = { path = "../../../types/cycles" }
 ic-types = { path = "../../../types/types" }
 ic-universal-canister = { path = "../../../universal_canister/lib" }
 icp-ledger = { path = "../../icp" }

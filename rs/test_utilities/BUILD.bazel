@@ -24,6 +24,7 @@ rust_library(
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
         "//rs/test_utilities/types",
+        "//rs/types/cycles",
         "//rs/types/types",
         "//rs/universal_canister/lib",
         "@crate_index//:hex-literal",

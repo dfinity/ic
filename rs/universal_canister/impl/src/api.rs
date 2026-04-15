@@ -13,6 +13,10 @@ mod ic0 {
         pub fn msg_arg_data_size() -> u32;
         pub fn msg_caller_copy(dst: u32, offset: u32, size: u32) -> ();
         pub fn msg_caller_size() -> u32;
+        pub fn msg_caller_info_data_copy(dst: u32, offset: u32, size: u32) -> ();
+        pub fn msg_caller_info_data_size() -> u32;
+        pub fn msg_caller_info_signer_copy(dst: u32, offset: u32, size: u32) -> ();
+        pub fn msg_caller_info_signer_size() -> u32;
         pub fn msg_reject(src: u32, size: u32) -> ();
         pub fn msg_reject_code() -> u32;
         pub fn msg_reject_msg_copy(dst: u32, offset: u32, size: u32) -> ();
@@ -195,6 +199,46 @@ pub fn caller() -> Vec<u8> {
     msg_caller_copy(0, msg_caller_size())
 }
 
+/// Returns the size of the caller info data in bytes.
+pub fn msg_caller_info_data_size() -> u32 {
+    unsafe { ic0::msg_caller_info_data_size() }
+}
+
+/// Returns a buffer of the given size filled with the caller info data bytes
+/// starting from the given offset.
+pub fn msg_caller_info_data_copy(offset: u32, size: u32) -> Vec<u8> {
+    let mut bytes = vec![0; size as usize];
+    unsafe {
+        ic0::msg_caller_info_data_copy(bytes.as_mut_ptr() as u32, offset, size);
+    }
+    bytes
+}
+
+/// Returns the caller info data blob.
+pub fn caller_info_data() -> Vec<u8> {
+    msg_caller_info_data_copy(0, msg_caller_info_data_size())
+}
+
+/// Returns the size of the caller info signer in bytes.
+pub fn msg_caller_info_signer_size() -> u32 {
+    unsafe { ic0::msg_caller_info_signer_size() }
+}
+
+/// Returns a buffer of the given size filled with the caller info signer bytes
+/// starting from the given offset.
+pub fn msg_caller_info_signer_copy(offset: u32, size: u32) -> Vec<u8> {
+    let mut bytes = vec![0; size as usize];
+    unsafe {
+        ic0::msg_caller_info_signer_copy(bytes.as_mut_ptr() as u32, offset, size);
+    }
+    bytes
+}
+
+/// Returns the caller info signer blob.
+pub fn caller_info_signer() -> Vec<u8> {
+    msg_caller_info_signer_copy(0, msg_caller_info_signer_size())
+}
+
 /// Returns the canister id as a blob.
 pub fn id() -> Vec<u8> {
     let len: u32 = unsafe { ic0::canister_self_size() };
@@ -257,7 +301,7 @@ pub fn cycles_available() -> u64 {
 }
 
 pub fn cycles_available128() -> Vec<u8> {
-    let mut bytes = vec![0u8; CYCLES_SIZE];
+    let mut bytes = vec![0_u8; CYCLES_SIZE];
     unsafe { ic0::msg_cycles_available128(bytes.as_mut_ptr() as u32) }
     bytes
 }
@@ -267,7 +311,7 @@ pub fn cycles_refunded() -> u64 {
 }
 
 pub fn cycles_refunded128() -> Vec<u8> {
-    let mut bytes = vec![0u8; CYCLES_SIZE];
+    let mut bytes = vec![0_u8; CYCLES_SIZE];
     unsafe { ic0::msg_cycles_refunded128(bytes.as_mut_ptr() as u32) }
     bytes
 }
@@ -277,7 +321,7 @@ pub fn accept(amount: u64) -> u64 {
 }
 
 pub fn accept128(amount_high: u64, amount_low: u64) -> Vec<u8> {
-    let mut bytes = vec![0u8; CYCLES_SIZE];
+    let mut bytes = vec![0_u8; CYCLES_SIZE];
     unsafe { ic0::msg_cycles_accept128(amount_high, amount_low, bytes.as_mut_ptr() as u32) }
     bytes
 }
@@ -287,13 +331,13 @@ pub fn balance() -> u64 {
 }
 
 pub fn balance128() -> Vec<u8> {
-    let mut bytes = vec![0u8; CYCLES_SIZE];
+    let mut bytes = vec![0_u8; CYCLES_SIZE];
     unsafe { ic0::canister_cycle_balance128(bytes.as_mut_ptr() as u32) }
     bytes
 }
 
 pub fn liquid_balance128() -> Vec<u8> {
-    let mut bytes = vec![0u8; CYCLES_SIZE];
+    let mut bytes = vec![0_u8; CYCLES_SIZE];
     unsafe { ic0::canister_liquid_cycle_balance128(bytes.as_mut_ptr() as u32) }
     bytes
 }
@@ -431,7 +475,7 @@ pub fn trap_with(message: &str) -> ! {
 
 /// Mint cycles (only works on CMC).
 pub fn mint_cycles128(amount_high: u64, amount_low: u64) -> Vec<u8> {
-    let mut result_bytes = vec![0u8; CYCLES_SIZE];
+    let mut result_bytes = vec![0_u8; CYCLES_SIZE];
     unsafe { ic0::mint_cycles128(amount_high, amount_low, result_bytes.as_mut_ptr() as u32) }
     result_bytes
 }
@@ -446,34 +490,34 @@ pub fn in_replicated_execution() -> u32 {
 
 /// Burn cycles.
 pub fn cycles_burn128(amount_high: u64, amount_low: u64) -> Vec<u8> {
-    let mut bytes = vec![0u8; CYCLES_SIZE];
+    let mut bytes = vec![0_u8; CYCLES_SIZE];
     unsafe { ic0::cycles_burn128(amount_high, amount_low, bytes.as_mut_ptr() as u32) }
     bytes
 }
 
 pub fn cost_call(method_name_size: u64, payload_size: u64) -> Vec<u8> {
-    let mut bytes = vec![0u8; CYCLES_SIZE];
+    let mut bytes = vec![0_u8; CYCLES_SIZE];
     unsafe {
         ic0::cost_call(method_name_size, payload_size, bytes.as_mut_ptr() as u32);
     }
     bytes
 }
 pub fn cost_create_canister() -> Vec<u8> {
-    let mut bytes = vec![0u8; CYCLES_SIZE];
+    let mut bytes = vec![0_u8; CYCLES_SIZE];
     unsafe {
         ic0::cost_create_canister(bytes.as_mut_ptr() as u32);
     }
     bytes
 }
 pub fn cost_http_request(request_size: u64, max_res_bytes: u64) -> Vec<u8> {
-    let mut bytes = vec![0u8; CYCLES_SIZE];
+    let mut bytes = vec![0_u8; CYCLES_SIZE];
     unsafe {
         ic0::cost_http_request(request_size, max_res_bytes, bytes.as_mut_ptr() as u32);
     }
     bytes
 }
 pub fn cost_http_request_v2(data: &[u8]) -> Vec<u8> {
-    let mut bytes = vec![0u8; CYCLES_SIZE];
+    let mut bytes = vec![0_u8; CYCLES_SIZE];
     unsafe {
         ic0::cost_http_request_v2(
             data.as_ptr() as u32,
@@ -484,7 +528,7 @@ pub fn cost_http_request_v2(data: &[u8]) -> Vec<u8> {
     bytes
 }
 pub fn cost_sign_with_ecdsa(data: &[u8], ecdsa_curve: u32) -> Result<Vec<u8>, u32> {
-    let mut bytes = vec![0u8; CYCLES_SIZE];
+    let mut bytes = vec![0_u8; CYCLES_SIZE];
     let result = unsafe {
         ic0::cost_sign_with_ecdsa(
             data.as_ptr() as u32,
@@ -496,7 +540,7 @@ pub fn cost_sign_with_ecdsa(data: &[u8], ecdsa_curve: u32) -> Result<Vec<u8>, u3
     if result == 0 { Ok(bytes) } else { Err(result) }
 }
 pub fn cost_sign_with_schnorr(data: &[u8], algorithm: u32) -> Result<Vec<u8>, u32> {
-    let mut bytes = vec![0u8; CYCLES_SIZE];
+    let mut bytes = vec![0_u8; CYCLES_SIZE];
     let result = unsafe {
         ic0::cost_sign_with_schnorr(
             data.as_ptr() as u32,
@@ -508,7 +552,7 @@ pub fn cost_sign_with_schnorr(data: &[u8], algorithm: u32) -> Result<Vec<u8>, u3
     if result == 0 { Ok(bytes) } else { Err(result) }
 }
 pub fn cost_vetkd_derive_key(data: &[u8], vetkd_curve: u32) -> Result<Vec<u8>, u32> {
-    let mut bytes = vec![0u8; CYCLES_SIZE];
+    let mut bytes = vec![0_u8; CYCLES_SIZE];
     let result = unsafe {
         ic0::cost_vetkd_derive_key(
             data.as_ptr() as u32,

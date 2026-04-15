@@ -85,9 +85,9 @@ thread_local! {
     static LEDGER: RefCell<Option<Ledger>> = const { RefCell::new(None) };
     static PRE_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
     static POST_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
-    static TOTAL_VOLUME: RefCell<f64> = const { RefCell::new(0f64) };
-    static TOTAL_VOLUME_DENOMINATOR: RefCell<f64> = const { RefCell::new(1f64) };
-    static TOTAL_VOLUME_FEE_IN_DECIMALS: RefCell<f64> = const { RefCell::new(0f64) };
+    static TOTAL_VOLUME: RefCell<f64> = const { RefCell::new(0_f64) };
+    static TOTAL_VOLUME_DENOMINATOR: RefCell<f64> = const { RefCell::new(1_f64) };
+    static TOTAL_VOLUME_FEE_IN_DECIMALS: RefCell<f64> = const { RefCell::new(0_f64) };
 }
 
 declare_log_buffer!(name = LOG, capacity = 1000);
@@ -178,7 +178,7 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
 
     let mut magic_bytes_reader = StableReader::default();
     const MAGIC_BYTES: &[u8; 3] = b"MGR";
-    let mut first_bytes = [0u8; 3];
+    let mut first_bytes = [0_u8; 3];
     let memory_manager_found = match magic_bytes_reader.read_exact(&mut first_bytes) {
         Ok(_) => first_bytes == *MAGIC_BYTES,
         Err(_) => false,
@@ -198,13 +198,13 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
         let state = ciborium::de::from_reader(&mut buffered_reader).expect(
             "Failed to read the Ledger state from memory manager managed stable structures",
         );
-        let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
+        let mut pre_upgrade_instructions_counter_bytes = [0_u8; 8];
         pre_upgrade_instructions_consumed =
             match buffered_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
                 Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
                 Err(_) => {
                     // If upgrading from a version that didn't write the instructions counter to stable memory
-                    0u64
+                    0_u64
                 }
             };
         state
@@ -268,7 +268,7 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
 }
 
 fn initialize_total_volume() {
-    let denominator = 10f64.powf(Access::with_ledger(|ledger| ledger.decimals()) as f64);
+    let denominator = 10_f64.powf(Access::with_ledger(|ledger| ledger.decimals()) as f64);
     let fee = Access::with_ledger(|ledger| ledger.transfer_fee());
     TOTAL_VOLUME_DENOMINATOR.with(|n| *n.borrow_mut() = denominator);
     if fee != Tokens::ZERO {

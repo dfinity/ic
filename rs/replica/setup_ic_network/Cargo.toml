@@ -18,7 +18,7 @@ ic-consensus-features= { path = "../../consensus/features" }
 ic-consensus-idkg = { path = "../../consensus/idkg" }
 ic-consensus-manager = { path = "../../p2p/consensus_manager" }
 ic-consensus-utils = { path = "../../consensus/utils" }
-ic-consensus-vetkd = { path = "../../consensus/vetkd" }
+ic-consensus-chain-key = { path = "../../consensus/chain_key" }
 ic-crypto-interfaces-sig-verification = { path = "../../crypto/interfaces/sig_verification" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-cycles-account-manager = { path = "../../cycles_account_manager" }

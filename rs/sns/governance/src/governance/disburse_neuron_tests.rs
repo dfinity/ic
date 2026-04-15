@@ -124,7 +124,7 @@ impl ICRC1Ledger for MockLedger {
     ) -> Result<GetBlocksResult, NervousSystemError> {
         Ok(GetBlocksResult {
             blocks: vec![],
-            log_length: Nat::from(0u64),
+            log_length: Nat::from(0_u64),
             archived_blocks: vec![],
         })
     }

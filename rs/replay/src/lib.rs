@@ -176,7 +176,17 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
                             .map(|ingress| ingress.into())
                             .collect()
                     }
-                    _ => Vec::new(),
+                    Some(SubCommand::OverwriteSubnetListWithSingleton) => {
+                        cmd_overwrite_subnet_list_with_singleton(agent, player, time)
+                            .unwrap()
+                            .into_iter()
+                            .map(|ingress| ingress.into())
+                            .collect()
+                    }
+                    Some(SubCommand::UpdateRegistryLocalStore)
+                    | Some(SubCommand::GetRecoveryCup(_))
+                    | Some(SubCommand::RestoreFromBackup(_))
+                    | None => Vec::new(),
                 }
             };
 
@@ -248,6 +258,7 @@ fn cmd_get_recovery_cup(
         registry_store_uri: None,
         ecdsa_initializations: vec![],
         chain_key_initializations: vec![],
+        cup_type: None,
     };
 
     let cup = ic_consensus_cup_utils::make_registry_cup_from_cup_contents(

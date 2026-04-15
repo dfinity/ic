@@ -3,9 +3,9 @@ use ic_management_canister_types_private::{CanisterIdRecord, EmptyBlob, IC_00, M
 use ic_replica_tests as utils;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities::universal_canister::{call_args, wasm};
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 
-const BALANCE_EPSILON: Cycles = Cycles::new(2_000_000u128);
+const BALANCE_EPSILON: Cycles = Cycles::new(2_000_000_u128);
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 
 #[test]
