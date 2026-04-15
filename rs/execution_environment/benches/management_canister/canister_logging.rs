@@ -14,18 +14,17 @@ use ic_types_cycles::Cycles;
 const KIB: u64 = 1024;
 const MIB: u64 = 1024 * KIB;
 
-/// Zero-byte messages create the maximum number of records per buffer,
-/// which is the worst case for resize (most deserialization/re-encoding work).
-const LOG_MESSAGE_SIZE: usize = 0;
-
 fn run_bench_resize_canister_log<M: criterion::measurement::Measurement>(
     group: &mut BenchmarkGroup<M>,
     bench_name: &str,
     initial_log_memory_limit: u64,
     new_log_memory_limit: u64,
 ) {
-    let log_message = vec![b'a'; LOG_MESSAGE_SIZE];
-    let record_size = LogMemoryStore::estimate_record_size(LOG_MESSAGE_SIZE) as u64;
+    // Empty messages maximize records per buffer — worst case for resize
+    // since each record is deserialized and re-encoded individually.
+    let log_message_size = 0;
+    let log_message = vec![b'a'; log_message_size];
+    let record_size = LogMemoryStore::estimate_record_size(log_message_size) as u64;
     let records_to_fill = (initial_log_memory_limit / record_size + 1) as u32;
 
     group.bench_function(bench_name, |b| {
