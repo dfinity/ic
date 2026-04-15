@@ -119,6 +119,8 @@ pub(crate) struct SchedulerTest {
     xnet_canister_id: CanisterId,
     /// The actual scheduler.
     scheduler: SchedulerImpl,
+    /// The scheduler configuration.
+    scheduler_config: SchedulerConfig,
     /// The fake Wasm executor.
     wasm_executor: Arc<TestWasmExecutor>,
     /// Registry Execution Settings.
@@ -138,7 +140,7 @@ pub(crate) struct SchedulerTest {
 impl std::fmt::Debug for SchedulerTest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SchedulerTest")
-            .field("scheduler_cores", &self.scheduler.config().scheduler_cores)
+            .field("scheduler_cores", &self.scheduler_config.scheduler_cores)
             .field("canisters", &self.state().canister_states().len())
             .field(
                 "compute_allocations",
@@ -593,6 +595,7 @@ impl SchedulerTest {
             self.round_summary.clone(),
             round_type,
             self.registry_settings(),
+            &self.scheduler_config,
         );
         self.state = Some(state);
         self.check_invariants();
@@ -622,11 +625,11 @@ impl SchedulerTest {
         let compute_allocation_used = state.total_compute_allocation();
         let mut csprng = Csprng::from_randomness_and_purpose(
             &Randomness::from([0; 32]),
-            &ExecutionThread(self.scheduler.config().scheduler_cores as u32),
+            &ExecutionThread(self.scheduler_config.scheduler_cores as u32),
         );
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(
-                self.scheduler.config().max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
+                self.scheduler_config.max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
             ),
             subnet_available_memory: self
                 .scheduler
@@ -1071,7 +1074,7 @@ impl SchedulerTestBuilder {
         );
 
         let scheduler = SchedulerImpl::new(
-            self.scheduler_config,
+            self.scheduler_config.scheduler_cores,
             self.hypervisor_config.clone(),
             self.own_subnet_id,
             execution_services.ingress_history_writer,
@@ -1093,6 +1096,7 @@ impl SchedulerTestBuilder {
             user_id: user_test_id(1),
             xnet_canister_id: canister_test_id(first_xnet_canister),
             scheduler,
+            scheduler_config: self.scheduler_config,
             wasm_executor,
             registry_settings,
             metrics_registry: self.metrics_registry,

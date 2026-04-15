@@ -130,7 +130,7 @@ impl SchedulerRoundLimits {
 ////////////////////////////////////////////////////////////////////////
 /// Scheduler Implementation
 pub(crate) struct SchedulerImpl {
-    config: SchedulerConfig,
+    scheduler_cores: usize,
     hypervisor_config: HypervisorConfig,
     own_subnet_id: SubnetId,
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
@@ -148,7 +148,7 @@ pub(crate) struct SchedulerImpl {
 impl SchedulerImpl {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        config: SchedulerConfig,
+        scheduler_cores: usize,
         hypervisor_config: HypervisorConfig,
         own_subnet_id: SubnetId,
         ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
@@ -160,11 +160,10 @@ impl SchedulerImpl {
         rate_limiting_of_instructions: FlagStatus,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Self {
-        let scheduler_cores = config.scheduler_cores as u32;
         Self {
-            config,
+            scheduler_cores,
             hypervisor_config,
-            thread_pool: RefCell::new(scoped_threadpool::Pool::new(scheduler_cores)),
+            thread_pool: RefCell::new(scoped_threadpool::Pool::new(scheduler_cores as u32)),
             own_subnet_id,
             ingress_history_writer,
             exec_env,
@@ -178,11 +177,6 @@ impl SchedulerImpl {
         }
     }
 
-    /// Returns a reference to the scheduler config.
-    fn config(&self) -> &SchedulerConfig {
-        &self.config
-    }
-
     /// Makes progress in executing long-running `install_code` messages.
     fn advance_long_running_install_code(
         &self,
@@ -191,6 +185,7 @@ impl SchedulerImpl {
         long_running_canisters: &[CanisterId],
         measurement_scope: &MeasurementScope,
         subnet_size: usize,
+        config: &SchedulerConfig,
     ) -> ReplicatedState {
         let mut ongoing_long_install_code = false;
         for canister_id in long_running_canisters.iter() {
@@ -201,8 +196,8 @@ impl SchedulerImpl {
                 continue;
             }
             let instruction_limits = InstructionLimits::new(
-                self.config().max_instructions_per_install_code,
-                self.config().max_instructions_per_install_code_slice,
+                config.max_instructions_per_install_code,
+                config.max_instructions_per_install_code_slice,
             );
             let instructions_before = round_limits.instructions;
             let (new_state, execute_subnet_message_result_type) =
@@ -248,6 +243,7 @@ impl SchedulerImpl {
         registry_settings: &RegistryExecutionSettings,
         replica_version: &ReplicaVersion,
         chain_key_data: &ChainKeyData,
+        config: &SchedulerConfig,
     ) -> ReplicatedState {
         let mut ongoing_long_install_code = state
             .canisters_iter()
@@ -286,6 +282,7 @@ impl SchedulerImpl {
                     replica_version,
                     measurement_scope,
                     chain_key_data,
+                    config,
                 );
                 state = new_state;
 
@@ -314,8 +311,9 @@ impl SchedulerImpl {
         replica_version: &ReplicaVersion,
         measurement_scope: &MeasurementScope,
         chain_key_data: &ChainKeyData,
+        config: &SchedulerConfig,
     ) -> (ReplicatedState, ExecuteSubnetMessageResultType) {
-        let instruction_limits = get_instruction_limits_for_subnet_message(self.config(), &msg);
+        let instruction_limits = get_instruction_limits_for_subnet_message(config, &msg);
 
         let instructions_before = round_limits.instructions;
         let (new_state, execute_subnet_message_result_type) = self.exec_env.execute_subnet_message(
@@ -349,6 +347,7 @@ impl SchedulerImpl {
     fn add_heartbeat_and_global_timer_tasks(
         &self,
         state: &mut ReplicatedState,
+        config: &SchedulerConfig,
     ) -> BTreeSet<CanisterId> {
         let mut heartbeat_and_timer_canisters = BTreeSet::new();
         let now = state.time();
@@ -380,7 +379,7 @@ impl SchedulerImpl {
                 .cycles_account_manager
                 .can_prepay_execution_cycles(
                     canister,
-                    self.config().max_instructions_per_message,
+                    config.max_instructions_per_message,
                     subnet_size,
                     cost_schedule,
                 )
@@ -416,6 +415,7 @@ impl SchedulerImpl {
         canister_ingress_latencies: &mut CanisterIngressQueueLatencies,
         scheduler_round_limits: &mut SchedulerRoundLimits,
         root_measurement_scope: &MeasurementScope<'a>,
+        config: &SchedulerConfig,
     ) -> ReplicatedState {
         let cost_schedule = state.get_own_cost_schedule();
         let measurement_scope =
@@ -452,6 +452,7 @@ impl SchedulerImpl {
                     registry_settings,
                     replica_version,
                     chain_key_data,
+                    config,
                 );
                 scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
             }
@@ -472,7 +473,7 @@ impl SchedulerImpl {
                     .start_timer();
 
                 heartbeat_and_timer_canisters =
-                    self.add_heartbeat_and_global_timer_tasks(&mut state);
+                    self.add_heartbeat_and_global_timer_tasks(&mut state, config);
             }
 
             let measurement_scope =
@@ -520,6 +521,7 @@ impl SchedulerImpl {
                 &mut round_limits,
                 state.resource_limits(),
                 &measurement_scope,
+                config,
             );
             let instructions_consumed = instructions_before - round_limits.instructions;
             drop(execution_timer);
@@ -549,8 +551,7 @@ impl SchedulerImpl {
             );
 
             round_limits.instructions -= as_round_instructions(
-                self.config()
-                    .instruction_overhead_per_canister_for_finalization
+                config.instruction_overhead_per_canister_for_finalization
                     * state.num_canisters() as u64,
             );
             scheduler_round_limits.update_canister_round_limits(&round_limits);
@@ -568,7 +569,7 @@ impl SchedulerImpl {
                     .inc();
             }
 
-            if total_heap_delta >= self.config().max_heap_delta_per_iteration {
+            if total_heap_delta >= config.max_heap_delta_per_iteration {
                 break state;
             }
             {
@@ -629,6 +630,7 @@ impl SchedulerImpl {
         round_limits: &mut RoundLimits,
         resource_limits: ResourceLimits,
         measurement_scope: &MeasurementScope,
+        config: &SchedulerConfig,
     ) -> IterationResult {
         let thread_pool = &mut self.thread_pool.borrow_mut();
         let exec_env = self.exec_env.as_ref();
@@ -669,7 +671,7 @@ impl SchedulerImpl {
                 let logger = new_logger!(self.log; messaging.round => round_id.get());
                 let rate_limiting_of_heap_delta = self.rate_limiting_of_heap_delta;
                 let round_limits = round_limits_per_thread.clone();
-                let config = self.config().clone();
+                let config = config.clone();
                 scope.execute(move || {
                     *result = execute_canisters_on_thread(
                         canisters,
@@ -1014,7 +1016,11 @@ impl SchedulerImpl {
     }
 
     /// Aborts paused execution above `max_paused_executions` based on scheduler priority.
-    fn abort_paused_executions_above_limit(&self, state: &mut ReplicatedState) {
+    fn abort_paused_executions_above_limit(
+        &self,
+        state: &mut ReplicatedState,
+        config: &SchedulerConfig,
+    ) {
         let cost_schedule = state.get_own_cost_schedule();
         let mut paused_round_states = state
             .canisters_iter()
@@ -1032,7 +1038,7 @@ impl SchedulerImpl {
         let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
         paused_round_states
             .iter()
-            .skip(self.config().max_paused_executions)
+            .skip(config.max_paused_executions)
             .for_each(|rs| {
                 let canister = canister_states.get_mut(&rs.canister_id()).unwrap();
                 abort_canister(
@@ -1055,6 +1061,7 @@ impl SchedulerImpl {
         current_round: ExecutionRound,
         current_round_type: ExecutionRoundType,
         logger: &ReplicaLogger,
+        config: &SchedulerConfig,
     ) {
         let cost_schedule = state.get_own_cost_schedule();
         match current_round_type {
@@ -1069,7 +1076,7 @@ impl SchedulerImpl {
                 abort_all_paused_executions(state, &self.exec_env, &self.log, cost_schedule);
             }
             ExecutionRoundType::OrdinaryRound => {
-                self.abort_paused_executions_above_limit(state);
+                self.abort_paused_executions_above_limit(state, config);
             }
         }
 
@@ -1139,30 +1146,6 @@ impl Scheduler for SchedulerImpl {
     type State = ReplicatedState;
 
     fn execute_round(
-        &self,
-        state: ReplicatedState,
-        randomness: Randomness,
-        chain_key_data: ChainKeyData,
-        replica_version: &ReplicaVersion,
-        current_round: ExecutionRound,
-        round_summary: Option<ExecutionRoundSummary>,
-        current_round_type: ExecutionRoundType,
-        registry_settings: &RegistryExecutionSettings,
-    ) -> ReplicatedState {
-        self.execute_round_with_config(
-            state,
-            randomness,
-            chain_key_data,
-            replica_version,
-            current_round,
-            round_summary,
-            current_round_type,
-            registry_settings,
-            self.config(),
-        )
-    }
-
-    fn execute_round_with_config(
         &self,
         mut state: ReplicatedState,
         randomness: Randomness,
@@ -1249,7 +1232,7 @@ impl Scheduler for SchedulerImpl {
             // many threads to ensure a unique execution thread id.
             csprng = Csprng::from_randomness_and_purpose(
                 &randomness,
-                &ExecutionThread(config.scheduler_cores as u32),
+                &ExecutionThread(self.scheduler_cores as u32),
             );
 
             // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
@@ -1327,6 +1310,7 @@ impl Scheduler for SchedulerImpl {
                     replica_version,
                     &measurement_scope,
                     &chain_key_data,
+                    config,
                 );
                 state = new_state;
             }
@@ -1366,7 +1350,13 @@ impl Scheduler for SchedulerImpl {
                     scheduled_heap_delta_limit,
                     subnet_heap_delta_capacity,
                 );
-                self.finish_round(&mut state, current_round, current_round_type, &round_log);
+                self.finish_round(
+                    &mut state,
+                    current_round,
+                    current_round_type,
+                    &round_log,
+                    config,
+                );
                 self.metrics
                     .round_skipped_due_to_current_heap_delta_above_limit
                     .inc();
@@ -1404,6 +1394,7 @@ impl Scheduler for SchedulerImpl {
                     replica_version,
                     &measurement_scope,
                     &chain_key_data,
+                    config,
                 );
                 state = new_state;
             }
@@ -1424,6 +1415,7 @@ impl Scheduler for SchedulerImpl {
                 &long_running_canisters,
                 &measurement_scope,
                 registry_settings.subnet_size,
+                config,
             );
 
             scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
@@ -1435,7 +1427,7 @@ impl Scheduler for SchedulerImpl {
 
             RoundSchedule::apply_scheduling_strategy(
                 &mut state,
-                config.scheduler_cores,
+                self.scheduler_cores,
                 config.heap_delta_rate_limit,
                 self.rate_limiting_of_heap_delta,
                 config.install_code_rate_limit,
@@ -1459,6 +1451,7 @@ impl Scheduler for SchedulerImpl {
             &mut canister_ingress_latencies,
             &mut scheduler_round_limits,
             &root_measurement_scope,
+            config,
         );
 
         // Update [`SignWithThresholdContext`]s by assigning randomness and matching pre-signatures.
@@ -1578,6 +1571,7 @@ impl Scheduler for SchedulerImpl {
                 current_round,
                 current_round_type,
                 &round_log,
+                config,
             );
 
             final_state
@@ -1591,7 +1585,11 @@ impl Scheduler for SchedulerImpl {
         final_state
     }
 
-    fn checkpoint_round_with_no_execution(&self, state: &mut ReplicatedState) {
+    fn checkpoint_round_with_no_execution(
+        &self,
+        state: &mut ReplicatedState,
+        config: &SchedulerConfig,
+    ) {
         self.finish_round(
             state,
             // TODO(DSM-106) This is a workaround to avoid having to temporarily change the
@@ -1601,6 +1599,7 @@ impl Scheduler for SchedulerImpl {
             ExecutionRound::from(0),
             ExecutionRoundType::CheckpointRound,
             &self.log,
+            config,
         );
     }
 }

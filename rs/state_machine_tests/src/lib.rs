@@ -9,7 +9,7 @@ use ic_config::{
     execution_environment::Config as HypervisorConfig,
     message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES},
     state_manager::LsmtConfig,
-    subnet_config::SubnetConfig,
+    subnet_config::{SchedulerConfig, SubnetConfig},
 };
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_consensus_cup_utils::make_registry_cup_from_cup_contents;
@@ -271,7 +271,7 @@ impl MessageOrdering {
 struct FlexibleOrderingScheduler {
     inner: Box<dyn Scheduler<State = ReplicatedState>>,
     target: Arc<RwLock<Option<CanisterId>>>,
-    config: Arc<RwLock<ic_config::subnet_config::SchedulerConfig>>,
+    config: Arc<RwLock<SchedulerConfig>>,
 }
 
 impl Scheduler for FlexibleOrderingScheduler {
@@ -287,6 +287,7 @@ impl Scheduler for FlexibleOrderingScheduler {
         round_summary: Option<ic_interfaces::execution_environment::ExecutionRoundSummary>,
         current_round_type: ic_interfaces::execution_environment::ExecutionRoundType,
         registry_settings: &ic_interfaces::execution_environment::RegistryExecutionSettings,
+        _config: &SchedulerConfig,
     ) -> ReplicatedState {
         let target = self.target.write().unwrap().take();
         if let Some(canister_id) = target {
@@ -303,7 +304,7 @@ impl Scheduler for FlexibleOrderingScheduler {
         }
 
         let config = self.config.read().unwrap().clone();
-        let mut result = self.inner.execute_round_with_config(
+        let mut result = self.inner.execute_round(
             state,
             randomness,
             chain_key_data,
@@ -325,14 +326,18 @@ impl Scheduler for FlexibleOrderingScheduler {
         result
     }
 
-    fn checkpoint_round_with_no_execution(&self, state: &mut ReplicatedState) {
-        self.inner.checkpoint_round_with_no_execution(state)
+    fn checkpoint_round_with_no_execution(
+        &self,
+        state: &mut ReplicatedState,
+        config: &SchedulerConfig,
+    ) {
+        self.inner.checkpoint_round_with_no_execution(state, config)
     }
 }
 
 struct FlexibleMessageOrdering {
     ordering_target: Arc<RwLock<Option<CanisterId>>>,
-    scheduler_config: Arc<RwLock<ic_config::subnet_config::SchedulerConfig>>,
+    scheduler_config: Arc<RwLock<SchedulerConfig>>,
     ingress_buffer: RwLock<BTreeMap<MessageId, SignedIngress>>,
 }
 
@@ -2241,6 +2246,7 @@ impl StateMachine {
             Arc::clone(&state_manager) as _,
             Arc::clone(&execution_services.ingress_history_writer) as _,
             scheduler,
+            subnet_config.scheduler_config.clone(),
             hypervisor_config.clone(),
             Arc::clone(&execution_services.cycles_account_manager),
             subnet_id,

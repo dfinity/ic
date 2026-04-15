@@ -143,6 +143,7 @@ pub(crate) fn setup() -> (
         Arc::clone(&state_manager) as _,
         Arc::clone(&execution_services.ingress_history_writer) as _,
         execution_services.scheduler,
+        subnet_config.scheduler_config.clone(),
         config.hypervisor.clone(),
         Arc::clone(&execution_services.cycles_account_manager),
         replica_config.subnet_id,

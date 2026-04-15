@@ -4,6 +4,7 @@ use ic_config::execution_environment::{
     BitcoinConfig, Config as HypervisorConfig, DEFAULT_MAX_NUMBER_OF_CANISTERS,
 };
 use ic_config::message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES};
+use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::execution_environment::{
     IngressHistoryWriter, RegistryExecutionSettings, Scheduler,
@@ -680,6 +681,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
         ingress_history_writer: Arc<impl IngressHistoryWriter<State = ReplicatedState> + 'static>,
         scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
+        scheduler_config: SchedulerConfig,
         hypervisor_config: HypervisorConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
         subnet_id: SubnetId,
@@ -727,6 +729,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         ));
         let state_machine = Box::new(StateMachineImpl::new(
             scheduler,
+            scheduler_config,
             demux,
             stream_builder,
             hypervisor_config.clone(),
@@ -1692,6 +1695,7 @@ impl MessageRoutingImpl {
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
         ingress_history_writer: Arc<impl IngressHistoryWriter<State = ReplicatedState> + 'static>,
         scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
+        scheduler_config: SchedulerConfig,
         hypervisor_config: HypervisorConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
         subnet_id: SubnetId,
@@ -1706,6 +1710,7 @@ impl MessageRoutingImpl {
             certified_stream_store,
             ingress_history_writer,
             scheduler,
+            scheduler_config,
             hypervisor_config,
             cycles_account_manager,
             subnet_id,
@@ -1837,6 +1842,7 @@ impl SyncMessageRouting {
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
         ingress_history_writer: Arc<impl IngressHistoryWriter<State = ReplicatedState> + 'static>,
         scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
+        scheduler_config: SchedulerConfig,
         hypervisor_config: HypervisorConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
         subnet_id: SubnetId,
@@ -1854,6 +1860,7 @@ impl SyncMessageRouting {
             certified_stream_store,
             ingress_history_writer,
             scheduler,
+            scheduler_config,
             hypervisor_config,
             cycles_account_manager,
             subnet_id,

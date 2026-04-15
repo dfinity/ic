@@ -167,7 +167,7 @@ impl ExecutionServices {
         );
 
         let scheduler = Box::new(SchedulerImpl::new(
-            subnet_config.scheduler_config,
+            subnet_config.scheduler_config.scheduler_cores,
             config.embedders_config,
             own_subnet_id,
             Arc::clone(&ingress_history_writer) as Arc<_>,

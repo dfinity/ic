@@ -1568,45 +1568,15 @@ pub trait Scheduler: Send {
         round_summary: Option<ExecutionRoundSummary>,
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
+        config: &SchedulerConfig,
     ) -> Self::State;
-
-    /// Executes a round using the provided scheduler config for round budget
-    /// and scheduling computations.
-    ///
-    /// The default implementation ignores the config and delegates to
-    /// `execute_round`. Implementations that support config overrides (e.g.
-    /// for testing) should override this method.
-    #[allow(clippy::too_many_arguments)]
-    fn execute_round_with_config(
-        &self,
-        state: Self::State,
-        randomness: Randomness,
-        chain_key_data: ChainKeyData,
-        replica_version: &ReplicaVersion,
-        current_round: ExecutionRound,
-        round_summary: Option<ExecutionRoundSummary>,
-        current_round_type: ExecutionRoundType,
-        registry_settings: &RegistryExecutionSettings,
-        _config: &SchedulerConfig,
-    ) -> Self::State {
-        self.execute_round(
-            state,
-            randomness,
-            chain_key_data,
-            replica_version,
-            current_round,
-            round_summary,
-            current_round_type,
-            registry_settings,
-        )
-    }
 
     /// Code to be executed in a checkpoint round, iff `execute_round()` was not
     /// called (e.g. during a subnet split).
     ///
     /// This aborts all paused executions and resets transient state (such as heap
     /// delta estimate and compiled Wasms).
-    fn checkpoint_round_with_no_execution(&self, state: &mut Self::State);
+    fn checkpoint_round_with_no_execution(&self, state: &mut Self::State, config: &SchedulerConfig);
 }
 
 /// Combination of memory used by and reserved for guaranteed response messages
