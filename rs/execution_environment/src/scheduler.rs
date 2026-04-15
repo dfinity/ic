@@ -671,12 +671,11 @@ impl SchedulerImpl {
                 let logger = new_logger!(self.log; messaging.round => round_id.get());
                 let rate_limiting_of_heap_delta = self.rate_limiting_of_heap_delta;
                 let round_limits = round_limits_per_thread.clone();
-                let config = config.clone();
                 scope.execute(move || {
                     *result = execute_canisters_on_thread(
                         canisters,
                         exec_env,
-                        &config,
+                        config,
                         round_id,
                         time,
                         network_topology,
