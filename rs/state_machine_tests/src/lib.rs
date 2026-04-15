@@ -1256,7 +1256,7 @@ pub struct StateMachine {
     cycles_account_manager: Arc<CyclesAccountManager>,
     cost_schedule: CanisterCyclesCostSchedule,
     hypervisor_config: HypervisorConfig,
-    fmo: Option<FlexibleMessageOrdering>,
+    flexible_message_ordering: Option<FlexibleMessageOrdering>,
 }
 
 impl Default for StateMachine {
@@ -2450,7 +2450,7 @@ impl StateMachine {
             cycles_account_manager: execution_services.cycles_account_manager,
             cost_schedule,
             hypervisor_config,
-            fmo: if flexible_ordering {
+            flexible_message_ordering: if flexible_ordering {
                 Some(FlexibleMessageOrdering {
                     ordering_target,
                     scheduler_config: execution_services.scheduler_config.clone(),
@@ -2756,28 +2756,14 @@ impl StateMachine {
             .push(msg, self.get_time(), self.nodes[0].node_id);
     }
 
-    fn fmo(&self) -> &FlexibleMessageOrdering {
-        self.fmo
+    fn flexible_message_ordering(&self) -> &FlexibleMessageOrdering {
+        self.flexible_message_ordering
             .as_ref()
             .expect("build the StateMachine with with_flexible_ordering()")
     }
 
     pub fn set_ordering_target(&self, target: Option<CanisterId>) {
-        self.fmo().set_ordering_target(target);
-    }
-
-    /// Reset per-round ordering state so subsequent tick()/execute_ingress()
-    /// pass through normally.
-    pub fn clear_flexible_ordering(&self) {
-        let fmo = self.fmo();
-        let mut config = fmo.scheduler_config.write().unwrap();
-        let default = SubnetConfig::new(self.subnet_type).scheduler_config;
-        config.max_instructions_per_round = default.max_instructions_per_slice;
-        config.max_instructions_per_install_code_slice = default.max_instructions_per_slice;
-        config.subnet_messages_per_round_instruction_limit =
-            default.subnet_messages_per_round_instruction_limit;
-        drop(config);
-        fmo.set_ordering_target(None);
+        self.flexible_message_ordering().set_ordering_target(target);
     }
 
     pub fn buffer_ingress_as(
@@ -2789,7 +2775,7 @@ impl StateMachine {
     ) -> Result<MessageId, SubmitIngressError> {
         let msg = self.ingress_message(sender, canister_id, method, payload, None);
         let message_id = msg.id();
-        self.fmo()
+        self.flexible_message_ordering()
             .ingress_buffer
             .write()
             .unwrap()
@@ -2798,7 +2784,7 @@ impl StateMachine {
     }
 
     pub fn take_buffered_ingress(&self, message_id: &MessageId) -> SignedIngress {
-        self.fmo()
+        self.flexible_message_ordering()
             .ingress_buffer
             .write()
             .unwrap()
@@ -2814,13 +2800,13 @@ impl StateMachine {
     /// 4. Tick (execute one round).
     /// 5. Complete DTS (drain any deterministic time-slicing continuations).
     pub fn execute_with_ordering(&self, ordering: MessageOrdering) {
-        let fmo = self.fmo();
+        let flexible_message_ordering = self.flexible_message_ordering();
         const MAX_TICKS: usize = 100;
 
         for msg in ordering.messages {
             match msg {
                 OrderedMessage::Ingress(target, ref ingress_id) if target == IC_00 => {
-                    fmo.prioritise_subnet_execution();
+                    flexible_message_ordering.prioritise_subnet_execution();
                     let signed = self.take_buffered_ingress(ingress_id);
                     let payload = PayloadBuilder::new()
                         .with_max_expiry_time_from_now(self.get_time().into())
@@ -2846,10 +2832,10 @@ impl StateMachine {
                 }
 
                 OrderedMessage::Ingress(target, ref ingress_id) => {
-                    fmo.prioritise_canister_execution();
+                    flexible_message_ordering.prioritise_canister_execution();
                     self.set_next_scheduled_method(target, NextScheduledMethod::Message);
                     self.set_next_input_source(target, InputSource::Ingress);
-                    fmo.set_ordering_target(Some(target));
+                    flexible_message_ordering.set_ordering_target(Some(target));
                     let signed = self.take_buffered_ingress(ingress_id);
                     let payload = PayloadBuilder::new()
                         .with_max_expiry_time_from_now(self.get_time().into())
@@ -2864,26 +2850,26 @@ impl StateMachine {
                         OrderedMessage::Timer(_) => NextScheduledMethod::GlobalTimer,
                         _ => unreachable!(),
                     };
-                    fmo.prioritise_canister_execution();
+                    flexible_message_ordering.prioritise_canister_execution();
                     self.set_next_scheduled_method(canister, method);
-                    fmo.set_ordering_target(Some(canister));
+                    flexible_message_ordering.set_ordering_target(Some(canister));
                     self.tick();
                     self.complete_dts(canister, MAX_TICKS);
                 }
 
                 OrderedMessage::Request { source, target } if target == IC_00 => {
                     self.set_next_sender_in_subnet_queue(source, target);
-                    fmo.prioritise_subnet_execution();
+                    flexible_message_ordering.prioritise_subnet_execution();
                     self.tick();
                     self.complete_dts(source, MAX_TICKS);
                 }
 
                 OrderedMessage::Response { source, target } if source == IC_00 => {
                     self.set_next_sender_in_subnet_queue(source, target);
-                    fmo.prioritise_canister_execution();
+                    flexible_message_ordering.prioritise_canister_execution();
                     self.set_next_scheduled_method(target, NextScheduledMethod::Message);
                     self.set_next_input_source(target, InputSource::LocalSubnet);
-                    fmo.set_ordering_target(Some(target));
+                    flexible_message_ordering.set_ordering_target(Some(target));
                     self.tick();
                     self.complete_dts(target, MAX_TICKS);
                 }
@@ -2891,10 +2877,10 @@ impl StateMachine {
                 OrderedMessage::Request { source, target }
                 | OrderedMessage::Response { source, target } => {
                     self.set_next_sender_in_queue(source, target);
-                    fmo.prioritise_canister_execution();
+                    flexible_message_ordering.prioritise_canister_execution();
                     self.set_next_scheduled_method(target, NextScheduledMethod::Message);
                     self.set_next_input_source(target, InputSource::LocalSubnet);
-                    fmo.set_ordering_target(Some(target));
+                    flexible_message_ordering.set_ordering_target(Some(target));
                     self.tick();
                     self.complete_dts(target, MAX_TICKS);
                 }
