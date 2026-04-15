@@ -51,7 +51,7 @@ pub(super) fn update_pre_signatures_in_creation(
                 log,
                 "The IDKG payload is missing a key transcript with key_id: {}",
                 pre_signature.key_id());
-            idkg_payload_metrics.payload_errors_inc("missing_key_transcript");
+            idkg_payload_metrics.payload_errors_inc("pre_signature_missing_key_transcript");
 
             continue;
         };
