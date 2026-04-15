@@ -1985,7 +1985,6 @@ fn get_instruction_limits_for_subnet_message(
             | StoredChunks
             | ClearChunkStore
             | TakeCanisterSnapshot
-            | LoadCanisterSnapshot
             | ListCanisterSnapshots
             | DeleteCanisterSnapshot
             | ReadCanisterSnapshotMetadata
@@ -1993,6 +1992,13 @@ fn get_instruction_limits_for_subnet_message(
             | UploadCanisterSnapshotMetadata
             | UploadCanisterSnapshotData
             | RenameCanister => default_limits,
+            // `LoadCanisterSnapshot` compiles a Wasm module and charges for it
+            // similar to `InstallCode`. It does not support DTS, so the slice
+            // limit equals the message limit.
+            LoadCanisterSnapshot => InstructionLimits::new(
+                config.max_instructions_per_install_code,
+                config.max_instructions_per_install_code,
+            ),
             InstallCode | InstallChunkedCode => InstructionLimits::new(
                 config.max_instructions_per_install_code,
                 config.max_instructions_per_install_code_slice,

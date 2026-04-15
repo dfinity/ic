@@ -280,7 +280,6 @@ impl CanisterManagerBuilder {
             ),
             cycles_account_manager,
             Arc::new(TestPageAllocatorFileDescriptorImpl),
-            FlagStatus::Disabled,
         )
     }
 }
@@ -1632,9 +1631,7 @@ fn get_canister_status_of_stopping_canister() {
 
 #[test]
 fn canister_status_with_environment_variables() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_environment_variables_flag(FlagStatus::Enabled)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     let environment_variables = btreemap![
         "TEST_VAR".to_string() => "test_value".to_string(),
         "TEST_VAR2".to_string() => "test_value2".to_string(),
@@ -6141,12 +6138,7 @@ fn update_wasm_memory_limit_updates_hook_status_ready_to_not_satisfied() {
 
 #[test]
 fn test_environment_variables_are_changed_via_create_canister() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_execution_config(Config {
-            environment_variables: FlagStatus::Enabled,
-            ..Default::default()
-        })
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let env_vars = BTreeMap::from([
         ("KEY1".to_string(), "VALUE1".to_string()),
@@ -6179,12 +6171,7 @@ fn test_environment_variables_are_changed_via_create_canister() {
 
 #[test]
 fn test_environment_variables_are_updated_on_update_settings() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_execution_config(Config {
-            environment_variables: FlagStatus::Enabled,
-            ..Default::default()
-        })
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
 
     let env_vars = EnvironmentVariables::new(BTreeMap::from([
@@ -6230,70 +6217,8 @@ fn test_environment_variables_are_updated_on_update_settings() {
 }
 
 #[test]
-fn test_environment_variables_are_not_set_when_disabled() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_execution_config(Config {
-            environment_variables: FlagStatus::Disabled,
-            ..Default::default()
-        })
-        .build();
-
-    // Create environment variables.
-    let env_vars = BTreeMap::from([
-        ("KEY1".to_string(), "VALUE1".to_string()),
-        ("KEY2".to_string(), "VALUE2".to_string()),
-    ]);
-    let env_vars_args = env_vars
-        .iter()
-        .map(|(name, value)| EnvironmentVariable {
-            name: name.clone(),
-            value: value.clone(),
-        })
-        .collect::<Vec<_>>();
-    // Create canister with environment variables.
-    let canister_id = test
-        .create_canister_with_settings(
-            Cycles::new(1_000_000_000_000_000),
-            CanisterSettingsArgsBuilder::new()
-                .with_environment_variables(env_vars_args.clone())
-                .build(),
-        )
-        .unwrap();
-
-    // Verify environment variables are not set.
-    let canister = test.canister_state(canister_id);
-    assert_eq!(
-        canister.system_state.environment_variables,
-        EnvironmentVariables::new(BTreeMap::new())
-    );
-
-    // Set environment variables via `update_settings`.
-    let args = UpdateSettingsArgs {
-        canister_id: canister_id.get(),
-        settings: CanisterSettingsArgsBuilder::new()
-            .with_environment_variables(env_vars_args)
-            .build(),
-        sender_canister_version: None,
-    };
-    test.subnet_message(Method::UpdateSettings, args.encode())
-        .unwrap();
-
-    // Verify environment variables are not set.
-    let canister = test.canister_state(canister_id);
-    assert_eq!(
-        canister.system_state.environment_variables,
-        EnvironmentVariables::new(BTreeMap::new())
-    );
-}
-
-#[test]
 fn test_environment_variables_are_not_set_when_too_many_keys() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_execution_config(Config {
-            environment_variables: FlagStatus::Enabled,
-            ..Default::default()
-        })
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let env_vars = (0..MAX_ENVIRONMENT_VARIABLES + 1)
         .map(|i| (format!("KEY{i}"), "VAL".to_string()))
@@ -6325,12 +6250,7 @@ fn test_environment_variables_are_not_set_when_too_many_keys() {
 
 #[test]
 fn test_environment_variables_are_not_set_when_key_is_too_long() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_execution_config(Config {
-            environment_variables: FlagStatus::Enabled,
-            ..Default::default()
-        })
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let long_key = "K".repeat(MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH + 1);
     let env_vars = [
@@ -6366,12 +6286,7 @@ fn test_environment_variables_are_not_set_when_key_is_too_long() {
 
 #[test]
 fn test_environment_variables_are_not_set_when_value_is_too_long() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_execution_config(Config {
-            environment_variables: FlagStatus::Enabled,
-            ..Default::default()
-        })
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let long_value = "V".repeat(MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH + 1);
     let env_vars = [
@@ -6407,12 +6322,7 @@ fn test_environment_variables_are_not_set_when_value_is_too_long() {
 
 #[test]
 fn test_environment_variables_are_not_set_duplicate_keys() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_execution_config(Config {
-            environment_variables: FlagStatus::Enabled,
-            ..Default::default()
-        })
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let env_vars = [
         ("KEY1".to_string(), "VALUE1".to_string()),
@@ -6489,12 +6399,7 @@ fn check_environment_variables_via_canister_status(
 
 #[test]
 fn test_environment_variables() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_execution_config(Config {
-            environment_variables: FlagStatus::Enabled,
-            ..Default::default()
-        })
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let env_vars = [
         ("KEY1".to_string(), "VALUE1".to_string()),
