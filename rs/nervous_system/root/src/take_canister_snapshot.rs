@@ -1,10 +1,8 @@
-use crate::{LOG_PREFIX, private::exclusively_stop_and_start_canister};
+use crate::private::{OfflineMaintenanceError, Optimistic, perform_offline_canister_maintenance};
 use candid::CandidType;
 use ic_base_types::{CanisterId, PrincipalId, SnapshotId};
-use ic_cdk::{futures::spawn_017_compat, println};
 use ic_management_canister_types_private::{CanisterSnapshotResponse, TakeCanisterSnapshotArgs};
 use ic_nervous_system_clients::management_canister_client::ManagementCanisterClient;
-use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use serde::Deserialize;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
@@ -45,95 +43,43 @@ pub async fn take_canister_snapshot(
     take_canister_snapshot_request: TakeCanisterSnapshotRequest,
     management_canister_client: impl ManagementCanisterClient + 'static,
 ) -> TakeCanisterSnapshotResponse {
+    // Convert input.
     let operation_description = format!("{:?}", take_canister_snapshot_request);
-    // Retain our own copy, because the async block will take the original.
-    let operation_description_for_log = operation_description.clone();
+    let args = match TakeCanisterSnapshotArgs::try_from(take_canister_snapshot_request) {
+        Ok(args) => args,
+        Err(err) => return TakeCanisterSnapshotResponse::Err(err),
+    };
+    let canister_id = args.get_canister_id();
 
-    // Used later, but calculated now, because the main async block is going
-    // to take take_canister_snapshot_request.
-    let targets_governance =
-        take_canister_snapshot_request.canister_id == PrincipalId::from(GOVERNANCE_CANISTER_ID);
-
-    let operation = async move {
-        // Construct the request that we will be sending to the Management canister
-        // in the next (large) statement.
-        let take_canister_snapshot_args =
-            TakeCanisterSnapshotArgs::try_from(take_canister_snapshot_request)?;
-
-        // Call the Management canister (but make sure we are not already
-        // operating on the canister, and also, stop before and start
-        // again after).
-        let result = exclusively_stop_and_start_canister(
-            take_canister_snapshot_args.get_canister_id(),
+    let do_the_real_work = move || async move {
+        management_canister_client
+            .take_canister_snapshot(args)
+            .await
+    };
+    let result: Result<Result<CanisterSnapshotResponse, (i32, String)>, OfflineMaintenanceError> =
+        perform_offline_canister_maintenance(
+            canister_id,
             &operation_description,
             true, // stop_before
-            || async {
-                management_canister_client
-                    .take_canister_snapshot(take_canister_snapshot_args)
-                    .await
-            },
+            do_the_real_work,
         )
         .await;
 
-        // Handle errors.
-        let snapshot: CanisterSnapshotResponse = result
-            // Handle errors from exclusively_stop_and_start_canister.
-            .map_err(|err| TakeCanisterSnapshotError {
-                code: None,
-                description: format!("{err}"),
-            })?
-            // Handle errors from calling management_canister_client.
-            .map_err(|(code, description)| TakeCanisterSnapshotError {
-                code: Some(code),
-                description,
-            })?;
-
-        Ok(TakeCanisterSnapshotOk::from(snapshot))
-    };
-
-    // Log result.
-    let operation = async move {
-        let result = TakeCanisterSnapshotResponse::from(operation.await);
-        println!("{LOG_PREFIX}{operation_description_for_log}: {result:?}");
-        result
-    };
-
-    // In the case of Governance, do the operation in the background.
-    // This is necessary to avoid deadlock:
-    //
-    // 1. the Governance canister calls the Root canister's take_canister_snapshot
-    //    method, but
-    // 2. the first thing take_canister_snapshot does (via
-    //    exclusively_stop_and_start_canister) is to stop the target canister,
-    //    which in this case, is Governance, but
-    // 3. Governance is waiting for the call in step 1 to return.
-    //
-    // So, what we have is Governance waiting for Root to reply in order to stop, but Root
-    // is waiting for Governance to stop before it can reply. Circular waiting, i.e. deadlock.
-    if targets_governance {
-        spawn_017_compat(async move {
-            // It is ok to throw this away, because it is already logged above.
-            let _: TakeCanisterSnapshotResponse = operation.await;
-
-            // Because spawn_017_compat does not know what to do with
-            // a TakeCanisterSnapshotResponse.
-            ()
-        });
-
-        // Even though we do not yet know that the operation will succeed,
-        // we return Ok here, because we also do not know that it will fail.
-        // The important thing is that we launched the operation. That's
-        // the definition of success in the special case of Governance.
-        return TakeCanisterSnapshotResponse::Ok(TakeCanisterSnapshotOk {
-            id: vec![],
-            taken_at_timestamp: 0,
-            total_size: 0,
-        });
-    }
-
-    operation.await
+    // Convert output.
+    TakeCanisterSnapshotResponse::from(result)
 }
 
+impl Optimistic for Result<CanisterSnapshotResponse, (i32, String)> {
+    fn new_optimistic() -> Self {
+        Ok(CanisterSnapshotResponse {
+            id: SnapshotId::from((CanisterId::from_u64(0), 0_u64)),
+            taken_at_timestamp: 0,
+            total_size: 0,
+        })
+    }
+}
+
+// Convert input from ours to what Management canister wants.
 impl TryFrom<TakeCanisterSnapshotRequest> for TakeCanisterSnapshotArgs {
     type Error = TakeCanisterSnapshotError;
 
@@ -167,19 +113,28 @@ impl TryFrom<TakeCanisterSnapshotRequest> for TakeCanisterSnapshotArgs {
     }
 }
 
-impl From<TakeCanisterSnapshotError> for TakeCanisterSnapshotResponse {
-    fn from(err: TakeCanisterSnapshotError) -> Self {
-        TakeCanisterSnapshotResponse::Err(err)
-    }
-}
+// Convert output from Management canister to ours.
 
-impl From<Result<TakeCanisterSnapshotOk, TakeCanisterSnapshotError>>
+impl From<Result<Result<CanisterSnapshotResponse, (i32, String)>, OfflineMaintenanceError>>
     for TakeCanisterSnapshotResponse
 {
-    fn from(result: Result<TakeCanisterSnapshotOk, TakeCanisterSnapshotError>) -> Self {
+    fn from(
+        result: Result<Result<CanisterSnapshotResponse, (i32, String)>, OfflineMaintenanceError>,
+    ) -> Self {
         match result {
-            Ok(ok) => TakeCanisterSnapshotResponse::Ok(ok),
-            Err(err) => TakeCanisterSnapshotResponse::Err(err),
+            Ok(Ok(snapshot)) => {
+                TakeCanisterSnapshotResponse::Ok(TakeCanisterSnapshotOk::from(snapshot))
+            }
+            Ok(Err((code, description))) => {
+                TakeCanisterSnapshotResponse::Err(TakeCanisterSnapshotError {
+                    code: Some(code),
+                    description,
+                })
+            }
+            Err(err) => TakeCanisterSnapshotResponse::Err(TakeCanisterSnapshotError {
+                code: None,
+                description: format!("{err}"),
+            }),
         }
     }
 }
