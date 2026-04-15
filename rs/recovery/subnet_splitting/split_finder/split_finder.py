@@ -34,8 +34,10 @@ def compute_targets(canister_loads):
     return max_allowed_load
 
 
-def find_split(path: Path, communication_data_path: Path, load_type: str, epsilon_load: float, max_cuts: int):
-    data = load_subnet_data(path, load_type, communication_data_path)
+def find_split(
+    path: Path, baseline_path: Path, communication_data_path: Path, load_type: str, epsilon_load: float, max_cuts: int
+):
+    data = load_subnet_data(path, baseline_path, load_type, communication_data_path)
     edges = data["edges"]
     load = data["load"]
     index_to_canister_id = data["index_to_canister_id"]
@@ -80,6 +82,14 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Run subnet splitting MILP.")
     parser.add_argument("--load-path", type=Path, help="Path to load data", required=True)
     parser.add_argument(
+        "--load-baseline-path",
+        type=Path,
+        help="Path to load baseline data. "
+        "It should represent the snapshot of data taken before the data under `load-path` "
+        "so that the relative change in the metrics could be computed",
+        required=True,
+    )
+    parser.add_argument(
         "--communication-data-path", type=Path, help="Path to canister-to-canister communication data", required=True
     )
     parser.add_argument(
@@ -112,6 +122,7 @@ def main():
 
     canister_ranges = find_split(
         path=args.load_path,
+        baseline_path=args.load_baseline_path,
         communication_data_path=args.communication_data_path,
         load_type=args.load_type,
         epsilon_load=args.epsilon_load,

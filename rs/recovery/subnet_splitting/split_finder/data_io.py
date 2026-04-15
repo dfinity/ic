@@ -4,7 +4,7 @@ from typing import Dict, Tuple
 import pandas as pd
 
 
-def load_subnet_data(load_path: Path, load_type: str, communication_data_path: Path) -> Dict:
+def load_subnet_data(load_path: Path, load_baseline_path: Path, load_type: str, communication_data_path: Path) -> Dict:
     """
     Load canister metadata and communication edges for a subnet.
     Returns canister edge list (i, j, weight), load vector, and index mappings.
@@ -13,6 +13,8 @@ def load_subnet_data(load_path: Path, load_type: str, communication_data_path: P
     load_path -- path to a file in the csv format which contains load metrics for each canister.
                  see `rs/state_tool/src/commands/canister_metrics.rs` for how the data is generated
                  and `../test_data/fake_load_sample.csv` for an example.
+    load_baseline_path -- path to a file in the in the same format as `load_path`. Represents a
+                          sample collected at earlier time. Used to compute relative metrics.
     load_type -- which kind of load (e.g. instructions executed, ingress messages ingested) we want
                  to balance for.
     communication_data_path -- path to a file in the csv format which contains for each pair of
@@ -20,8 +22,11 @@ def load_subnet_data(load_path: Path, load_type: str, communication_data_path: P
                                `../test_data/fake_communication_sample.csv` for an example.
 
     """
-    canister_data = pd.read_csv(load_path)
-    canister_data = canister_data[["canister_id", load_type]]
+    canister_data = pd.read_csv(load_path).set_index("canister_id")
+    canister_baseline_data = pd.read_csv(load_baseline_path).set_index("canister_id")
+    canister_data = (canister_data.subtract(canister_baseline_data, fill_value=0)).loc[canister_data.index]
+
+    canister_data = canister_data.reset_index()[["canister_id", load_type]]
 
     communication_data = pd.read_csv(communication_data_path)
     communication_data = communication_data[["sender_canister_id", "receiver_canister_id", "count"]]

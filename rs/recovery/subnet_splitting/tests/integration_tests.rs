@@ -111,6 +111,10 @@ fn load_metrics_e2e_test() {
         let output = std::process::Command::new(split_finder_path)
             .args(["--load-path", &load_samples_path.display().to_string()])
             .args([
+                "--load-baseline-path",
+                &load_samples_baseline_path.display().to_string(),
+            ])
+            .args([
                 "--communication-data-path",
                 &communication_samples_path.display().to_string(),
             ])
