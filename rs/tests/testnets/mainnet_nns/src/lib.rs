@@ -26,6 +26,7 @@ use std::path::{Path, PathBuf};
 use std::process::Output;
 use std::str::FromStr;
 use std::sync::mpsc::{self, Receiver};
+use std::time::Duration;
 use std::{io::Write, process::Command};
 use url::Url;
 
@@ -606,8 +607,11 @@ fn patch_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcN
         .expect("Could not restart ic-replica on API BN");
 
     // Replicating mainnet registry can take a bit of time
-    block_on(api_bn.await_status_is_healthy_with_retries_async(secs(15 * 60), secs(30)))
-        .expect("API BN did not become healthy after patching");
+    block_on(api_bn.await_status_is_healthy_with_retries_async(
+        Duration::from_mins(15),
+        Duration::from_secs(30),
+    ))
+    .expect("API BN did not become healthy after patching");
 }
 
 fn delete_local_store(node: &IcNodeSnapshot, session: &Session) -> Result<String> {
