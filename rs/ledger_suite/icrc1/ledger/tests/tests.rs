@@ -2140,3 +2140,8 @@ fn test_icrc152_supported_standards() {
         encode_init_args,
     );
 }
+
+#[test]
+fn test_icrc152_total_volume() {
+    ic_ledger_suite_state_machine_tests::test_icrc152_total_volume(ledger_wasm(), encode_init_args);
+}

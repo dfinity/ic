@@ -6658,3 +6658,61 @@ pub fn test_icrc152_supported_standards<T>(
         "122burn should be in supported_block_types when enabled, got: {block_types_enabled:?}"
     );
 }
+
+pub fn test_icrc152_total_volume<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    use ic_ledger_suite_state_machine_helpers::parse_metric;
+
+    const TOTAL_VOLUME_METRIC: &str = "total_volume";
+
+    let p1 = PrincipalId::new_user_test_id(1);
+    let (env, canister_id) = setup_icrc152(ledger_wasm, encode_init_args, vec![]);
+    let controller = PrincipalId::new_anonymous();
+
+    // No transactions yet — total volume should be 0
+    assert_eq!(0, parse_metric(&env, canister_id, TOTAL_VOLUME_METRIC));
+
+    // Mint 1B (enough to register as >= 1 in the total_volume metric after dividing by 10^decimals)
+    let mint_amount = 1_000_000_000_u64;
+    icrc152_mint(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152MintArgs {
+            to: Account::from(p1.0),
+            amount: Nat::from(mint_amount),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    )
+    .expect("mint failed");
+
+    let volume_after_mint = parse_metric(&env, canister_id, TOTAL_VOLUME_METRIC);
+    assert!(
+        volume_after_mint > 0,
+        "total_volume should increase after authorized mint, got {volume_after_mint}"
+    );
+
+    // Burn 300M
+    let burn_amount = 300_000_000_u64;
+    icrc152_burn(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152BurnArgs {
+            from: Account::from(p1.0),
+            amount: Nat::from(burn_amount),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    )
+    .expect("burn failed");
+
+    let volume_after_burn = parse_metric(&env, canister_id, TOTAL_VOLUME_METRIC);
+    assert!(
+        volume_after_burn > volume_after_mint,
+        "total_volume should increase after authorized burn, got {volume_after_burn} (was {volume_after_mint})"
+    );
+}
