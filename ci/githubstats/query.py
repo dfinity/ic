@@ -1029,8 +1029,8 @@ def get_recent_commits(git_since: str) -> list[str]:
             check=True,
         )
         return result.stdout.strip().splitlines()
-    except subprocess.CalledProcessError as e:
-        print(f"Warning: git log failed: {e.stderr.strip()}", file=sys.stderr)
+    except (subprocess.CalledProcessError, OSError) as e:
+        print(f"Warning: git log failed: {e}", file=sys.stderr)
         return []
 
 
@@ -1045,8 +1045,8 @@ def has_open_pr(test_name: str) -> bool:
             check=True,
         )
         return bool(result.stdout.strip())
-    except subprocess.CalledProcessError as e:
-        print(f"Warning: gh pr list failed: {e.stderr.strip()}", file=sys.stderr)
+    except (subprocess.CalledProcessError, OSError) as e:
+        print(f"Warning: gh pr list failed: {e}", file=sys.stderr)
         return False
 
 
