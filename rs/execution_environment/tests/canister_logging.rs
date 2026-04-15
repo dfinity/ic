@@ -2290,14 +2290,14 @@ fn test_canister_log_resize_empty_buffer_minimal_charge() {
     if !LOG_MEMORY_STORE_FEATURE_ENABLED {
         return;
     }
-    let log_memory_limt = 2 * MIB;
+    let log_memory_limit = 2 * MIB;
     let env = setup_env();
     let controller = PrincipalId::new_anonymous();
     let canister_id = create_and_install_canister(
         &env,
         CanisterSettingsArgsBuilder::new()
             .with_controllers(vec![controller])
-            .with_log_memory_limit(log_memory_limt)
+            .with_log_memory_limit(log_memory_limit)
             .with_log_visibility(LogVisibilityV2::Public)
             .build(),
         wat_canister().build_wasm(),
@@ -2318,7 +2318,7 @@ fn test_canister_log_resize_empty_buffer_minimal_charge() {
     let result = env.update_settings(
         &canister_id,
         CanisterSettingsArgsBuilder::new()
-            .with_log_memory_limit(log_memory_limt - 1)
+            .with_log_memory_limit(log_memory_limit - 1)
             .build(),
     );
     assert!(result.is_ok());
