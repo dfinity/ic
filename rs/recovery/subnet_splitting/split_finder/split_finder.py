@@ -35,9 +35,7 @@ def compute_targets(load_c):
     return total_load_c, max_canister_load, average_load, target_load_0, target_load_1
 
 
-def run_partition(
-    path: Path, communication_data_path: Path, output_path: Path, load_type: str, epsilon_load: float, max_cuts: int
-):
+def find_split(path: Path, communication_data_path: Path, load_type: str, epsilon_load: float, max_cuts: int):
     data = load_subnet_data(path, load_type, communication_data_path)
     edges = data["edges"]
     load = data["load"]
@@ -66,25 +64,26 @@ def run_partition(
         print("Please check model constraints and settings.")
         sys.exit(1)
 
-    with open(output_path, "w") as output_file:
-        first_in_range = None
-        last_in_range = None
+    ranges = []
+    first_in_range = None
+    last_in_range = None
+    for k in range(len(assignments)):
+        is_to_be_migrated = assignments[k] == 1
 
-        for k in range(len(assignments)):
-            is_to_be_migrated = assignments[k] == 1
+        if is_to_be_migrated:
+            if first_in_range is not None and last_in_range is not None:
+                ranges.append((first_in_range, last_in_range))
+            first_in_range, last_in_range = None, None
+        else:
+            canister_id = index_to_canister_id[k]
+            last_in_range = canister_id
+            if first_in_range is None:
+                first_in_range = canister_id
 
-            if is_to_be_migrated:
-                if first_in_range is not None and last_in_range is not None:
-                    output_file.write(f"{first_in_range}:{last_in_range}\n")
-                first_in_range, last_in_range = None, None
-            else:
-                canister_id = index_to_canister_id[k]
-                last_in_range = canister_id
-                if first_in_range is None:
-                    first_in_range = canister_id
+    if first_in_range is not None and last_in_range is not None:
+        ranges.append((first_in_range, last_in_range))
 
-        if first_in_range is not None and last_in_range is not None:
-            output_file.write(f"{first_in_range}:{last_in_range}\n")
+    return ranges
 
 
 def parse_args():
@@ -114,14 +113,17 @@ def parse_args():
 def main():
     args = parse_args()
 
-    run_partition(
+    canister_ranges = find_split(
         path=args.load_path,
-        output_path=args.output_path,
         communication_data_path=args.communication_data_path,
         load_type=args.load_type,
         epsilon_load=args.epsilon_load,
         max_cuts=args.max_cuts,
     )
+
+    with open(args.output_path, "w") as output_file:
+        for first_in_range, last_in_range in canister_ranges:
+            output_file.write(f"{first_in_range}:{last_in_range}\n")
 
 
 if __name__ == "__main__":
