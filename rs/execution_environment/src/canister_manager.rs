@@ -520,15 +520,10 @@ impl CanisterManager {
             });
         }
 
-        // When the user explicitly sets log_memory_limit: validate the limit
-        // and check the canister can afford the resize cost.
-        // When not set: default to DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT so that
-        // new canisters get a log memory store initialized via do_update_settings.
         let user_set_log_memory_limit = settings.log_memory_limit().is_some();
-        let log_memory_limit = settings.log_memory_limit().or(Some(NumBytes::new(
-            DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64,
-        )));
-        if let Some(requested_limit) = log_memory_limit {
+        let log_memory_limit = if let Some(requested_limit) = settings.log_memory_limit() {
+            // User explicitly sets log_memory_limit: validate the limit
+            // and check the canister can afford the resize cost.
             let max_limit = NumBytes::new(MAX_AGGREGATE_LOG_MEMORY_LIMIT as u64);
             if requested_limit > max_limit {
                 return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooHigh {
@@ -536,8 +531,6 @@ impl CanisterManager {
                     limit: max_limit,
                 });
             }
-        }
-        if user_set_log_memory_limit {
             // Resizing reads all stored log records from the old ring buffer and
             // rewrites them into a new one. Cost is proportional to bytes_used
             // (actual stored data), not allocated capacity.
@@ -554,7 +547,14 @@ impl CanisterManager {
                     requested: log_resize_cycles,
                 });
             }
-        }
+            Some(requested_limit)
+        } else {
+            // User did not set log_memory_limit: default so that new canisters
+            // get a log memory store initialized via do_update_settings.
+            // For existing canisters this is a no-op (resize early-returns
+            // when capacity is unchanged). No cycles are charged.
+            Some(NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64))
+        };
 
         Ok(ValidatedCanisterSettings::new(
             settings.controllers(),
