@@ -1122,7 +1122,10 @@ def top(args):
         test_names = df["label"].apply(extract_test_name)
         # Check commits in-memory first, then only call gh for the rest:
         fixed_by_commit = test_names.apply(
-            lambda name: any(re.search(name.replace("_", "."), line, re.IGNORECASE) for line in commit_lines)
+            lambda name: any(
+                re.search(re.escape(name).replace("_", "[_. ]"), line, re.IGNORECASE)
+                for line in commit_lines
+            )
         )
         remaining = test_names[~fixed_by_commit]
         with ThreadPoolExecutor() as executor:
