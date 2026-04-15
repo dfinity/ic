@@ -444,8 +444,9 @@ pub(crate) fn find_flexible_result(
         // Unseen responses could still submit small OK responses, so we account for them.
         let min_minus_unseen = min_responses.saturating_sub(num_unseen);
 
-        let smallest_content_sum: usize = all_ok_shares_sorted_asc[..min_minus_unseen]
+        let smallest_content_sum: usize = all_ok_shares_sorted_asc
             .iter()
+            .take(min_minus_unseen)
             .map(|(_share, response_with_proof_size)| response_with_proof_size)
             .sum();
 

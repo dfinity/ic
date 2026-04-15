@@ -801,9 +801,9 @@ impl CanisterHttpPayloadBuilderImpl {
                             },
                         );
                     }
-                    
+
                     ok_entry_sizes.sort_unstable();
-                    let smallest_sum: usize = ok_entry_sizes[..min_known_ok_needed].iter().sum();
+                    let smallest_sum: usize = ok_entry_sizes.iter().take(min_known_ok_needed).sum();
                     if smallest_sum <= MAX_CANISTER_HTTP_PAYLOAD_SIZE {
                         return invalid_artifact(
                             InvalidCanisterHttpPayloadReason::FlexibleResponsesNotTooLarge(
