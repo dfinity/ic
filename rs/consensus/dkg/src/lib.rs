@@ -52,7 +52,7 @@ const MAX_REMOTE_DKGS_PER_INTERVAL: usize = 10;
 
 /// The maximum number of early remote DKG transcripts we want to include in a data payload.
 /// Note that responses for `SetupInitialDKG` requests contain two transcripts.
-const MAX_EARLY_REMOTE_TRANSCRIPTS: usize = 4;
+const MAX_EARLY_REMOTE_TRANSCRIPTS: usize = 2;
 
 /// The maximum number of intervals during which an initial DKG request is
 /// attempted.
@@ -313,8 +313,7 @@ pub(crate) fn merge_configs<'a>(
     config_results: &'a BTreeMap<CallbackId, ConfigResult>,
     logger: &ReplicaLogger,
 ) -> BTreeMap<&'a NiDkgId, &'a NiDkgConfig> {
-    let mut merged_configs =
-        BTreeMap::from_iter(summary_configs.iter().map(|(id, config)| (id, config)));
+    let mut merged_configs: BTreeMap<&NiDkgId, &NiDkgConfig> = summary_configs.iter().collect();
     for (_, config_result) in config_results {
         let configs = match config_result {
             Ok(configs) => configs,
@@ -328,20 +327,6 @@ pub(crate) fn merge_configs<'a>(
                 continue;
             }
         };
-        if configs
-            .iter()
-            .any(|config| summary_configs.contains_key(config.dkg_id()))
-        {
-            error!(
-                logger,
-                "Skipping DKG configs {:?} because they already exist in the summary",
-                configs
-                    .iter()
-                    .map(|config| config.dkg_id())
-                    .collect::<Vec<_>>()
-            );
-            continue;
-        }
         for config in configs {
             merged_configs.insert(config.dkg_id(), config);
         }
@@ -370,11 +355,10 @@ impl<T: DkgPool> PoolMutationsProducer<T> for DkgImpl {
             .and_then(|state| {
                 build_callback_id_config_map(
                     self.subnet_id,
-                    start_height,
                     self.registry_client.as_ref(),
                     state.get_ref(),
                     self.registry_client.get_latest_version(),
-                    dkg_summary.next_transcripts(),
+                    dkg_summary,
                     &self.logger,
                 )
                 .ok()
@@ -472,7 +456,7 @@ impl<Pool: DkgPool> BouncerFactory<DkgMessageId, Pool> for DkgBouncer {
 mod tests {
     use super::*;
     use crate::test_utils::{
-        complement_state_manager_with_dkg_contexts,
+        complement_state_manager_with_dkg_contexts, complement_state_manager_with_dkg_contexts_mut,
         complement_state_manager_with_reshare_chain_key_request,
         complement_state_manager_with_setup_initial_dkg_request, create_dealing,
         extract_dkg_configs_from_highest_block, extract_remote_dkg_ids_from_highest_block,
@@ -493,6 +477,7 @@ mod tests {
     };
     use ic_interfaces_mocks::crypto::MockCrypto;
     use ic_interfaces_registry::RegistryClient;
+    use ic_interfaces_state_manager::Labeled;
     use ic_logger::no_op_logger;
     use ic_management_canister_types_private::{MasterPublicKeyId, VetKdCurve, VetKdKeyId};
     use ic_metrics::MetricsRegistry;
@@ -501,6 +486,7 @@ mod tests {
     use ic_test_utilities_consensus::fake::{FakeContentSigner, FromParent};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
+    use ic_test_utilities_state::get_initial_state;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         NumberOfNodes, RegistryVersion, ReplicaVersion,
@@ -539,6 +525,8 @@ mod tests {
                     crypto,
                     mut pool,
                     dkg_pool,
+                    registry,
+                    state_manager,
                     ..
                 } = dependencies_with_subnet_params(
                     pool_config,
@@ -551,6 +539,13 @@ mod tests {
                             .build(),
                     )],
                 );
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_certified_state()
+                    .return_const(Some(Labeled::new(
+                        Height::new(0),
+                        Arc::new(get_initial_state(0, 0)),
+                    )));
 
                 // Now we instantiate the DKG component for node Id = 1, who is a dealer.
                 let replica_1 = node_test_id(1);
@@ -558,6 +553,9 @@ mod tests {
                     new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
                 let dkg = DkgImpl::new(
                     replica_1,
+                    subnet_id,
+                    registry.clone(),
+                    state_manager.clone(),
                     crypto.clone(),
                     pool.get_cache(),
                     dkg_key_manager.clone(),
@@ -625,6 +623,9 @@ mod tests {
                     new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
                 let dkg_2 = DkgImpl::new(
                     replica_2,
+                    subnet_id,
+                    registry,
+                    state_manager,
                     crypto,
                     pool.get_cache(),
                     dkg_key_manager_2.clone(),
@@ -688,14 +689,29 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let Dependencies {
-                    mut pool, crypto, ..
+                    mut pool,
+                    crypto,
+                    registry,
+                    state_manager,
+                    replica_config,
+                    ..
                 } = dependencies(pool_config.clone(), 2);
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_certified_state()
+                    .return_const(Some(Labeled::new(
+                        Height::new(0),
+                        Arc::new(get_initial_state(0, 0)),
+                    )));
                 let mut dkg_pool = DkgPoolImpl::new(MetricsRegistry::new(), logger.clone());
                 // Let's check that replica 3, who's not a dealer, does not produce dealings.
                 let dkg_key_manager =
                     new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
                 let dkg = DkgImpl::new(
                     node_test_id(3),
+                    replica_config.subnet_id,
+                    registry.clone(),
+                    state_manager.clone(),
                     crypto.clone(),
                     pool.get_cache(),
                     dkg_key_manager,
@@ -709,6 +725,9 @@ mod tests {
                     new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
                 let dkg = DkgImpl::new(
                     node_test_id(1),
+                    replica_config.subnet_id,
+                    registry,
+                    state_manager,
                     crypto,
                     pool.get_cache(),
                     dkg_key_manager.clone(),
@@ -777,6 +796,7 @@ mod tests {
                     crypto,
                     registry,
                     state_manager,
+                    dkg_pool,
                     ..
                 } = dependencies_with_subnet_records_with_raw_state_manager(
                     pool_config,
@@ -791,7 +811,7 @@ mod tests {
 
                 let target_id = NiDkgTargetId::new([0_u8; 32]);
                 complement_state_manager_with_setup_initial_dkg_request(
-                    state_manager,
+                    state_manager.clone(),
                     registry.get_latest_version(),
                     vec![10, 11, 12],
                     None,
@@ -803,6 +823,9 @@ mod tests {
                     new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
                 let dkg = DkgImpl::new(
                     node_test_id(1),
+                    subnet_id,
+                    registry.clone(),
+                    state_manager.clone(),
                     crypto,
                     pool.get_cache(),
                     dkg_key_manager.clone(),
@@ -810,42 +833,10 @@ mod tests {
                     logger.clone(),
                 );
 
-                // We did not advance the consensus pool yet. The configs for remote transcripts
-                // are not added to a summary block yet. That's why we see two dealings for
-                // local thresholds.
-                let mut dkg_pool = DkgPoolImpl::new(MetricsRegistry::new(), logger);
+                // We will create dealings for remote requests immediately, even if we haven't
+                // reached a summary block yet.
                 sync_dkg_key_manager(&dkg_key_manager, &pool);
-                let change_set = dkg.on_state_change(&dkg_pool);
-                match &change_set.as_slice() {
-                    &[
-                        ChangeAction::AddToValidated(a),
-                        ChangeAction::AddToValidated(b),
-                    ] => {
-                        assert_eq!(a.content.dkg_id.target_subnet, NiDkgTargetSubnet::Local);
-                        assert_eq!(b.content.dkg_id.target_subnet, NiDkgTargetSubnet::Local);
-                    }
-                    val => panic!("Unexpected change set: {:?}", val),
-                };
-
-                // Apply the changes and make sure, we do not produce any dealings anymore.
-                dkg_pool.apply(change_set);
-                assert!(dkg.on_state_change(&dkg_pool).is_empty());
-
-                // Advance _past_ the new summary to make sure the configs for remote
-                // transcripts are added into the summary.
-                pool.advance_round_normal_operation_n(dkg_interval_length + 1);
-
-                // First we expect a new purge.
-                let change_set = dkg.on_state_change(&dkg_pool);
-                match &change_set.as_slice() {
-                    &[ChangeAction::Purge(purge_height)]
-                        if *purge_height == Height::from(dkg_interval_length + 1) => {}
-                    val => panic!("Unexpected change set: {:?}", val),
-                };
-                dkg_pool.apply(change_set);
-
-                // And then we validate two local and two remote dealings.
-                let change_set = dkg.on_state_change(&dkg_pool);
+                let change_set = dkg.on_state_change(&*dkg_pool.read().unwrap());
                 match &change_set.as_slice() {
                     &[
                         ChangeAction::AddToValidated(a),
@@ -873,14 +864,73 @@ mod tests {
                     val => panic!("Unexpected change set: {:?}", val),
                 };
                 // Just check again, we do not reproduce a dealing once changes are applied.
-                dkg_pool.apply(change_set);
-                assert!(dkg.on_state_change(&dkg_pool).is_empty());
+                dkg_pool.write().unwrap().apply(change_set);
+                assert!(dkg.on_state_change(&*dkg_pool.read().unwrap()).is_empty());
+
+                pool.advance_round_normal_operation();
+                let dealings = extract_dealings_from_highest_block(&pool);
+                assert_eq!(dealings.len(), 4);
+                let remote_dealings = dealings
+                    .iter()
+                    .filter(|d| {
+                        d.content.dkg_id.target_subnet == NiDkgTargetSubnet::Remote(target_id)
+                    })
+                    .count();
+                assert_eq!(remote_dealings, 2);
+
+                // Once enough remote dealings are available on chain, they are turned into
+                // early remote transcripts in the data payload.
+                pool.advance_round_normal_operation();
+                let early_remote = extract_remote_dkgs_from_highest_block(&pool);
+                assert_eq!(early_remote.len(), 2);
+                for (dkg_id, _, result) in &early_remote {
+                    assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Remote(target_id));
+                    assert!(result.is_ok());
+                }
+
+                // After the next summary, remote transcripts are finalized and we should not
+                // attempt creating remote dealings again.
+                pool.advance_round_normal_operation_n(dkg_interval_length);
+                let latest_summary = PoolReader::new(&pool).get_highest_finalized_summary_block();
+                assert_eq!(
+                    latest_summary
+                        .payload
+                        .as_ref()
+                        .as_summary()
+                        .dkg
+                        .initial_dkg_attempts
+                        .get(&target_id),
+                    Some(&0),
+                    "Expected initial_dkg_attempts[{target_id:?}] to be 0"
+                );
+                let change_set = dkg.on_state_change(&*dkg_pool.read().unwrap());
+                match &change_set.as_slice() {
+                    &[ChangeAction::Purge(purge_height)] if *purge_height == Height::from(100) => {}
+                    val => panic!("Unexpected change set: {:?}", val),
+                };
+                dkg_pool.write().unwrap().apply(change_set);
+
+                let change_set = dkg.on_state_change(&*dkg_pool.read().unwrap());
+                let remote_dealings = change_set
+                    .iter()
+                    .filter(|change| match change {
+                        ChangeAction::AddToValidated(message) => {
+                            message.content.dkg_id.target_subnet
+                                == NiDkgTargetSubnet::Remote(target_id)
+                        }
+                        _ => false,
+                    })
+                    .count();
+                assert_eq!(
+                    remote_dealings, 0,
+                    "Unexpected remote dealings: {change_set:?}"
+                );
             });
         });
     }
 
     #[test]
-    fn test_config_generation_failures_are_added_to_the_summary() {
+    fn test_config_generation_failures_are_added_to_data_blocks() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             use ic_types::crypto::threshold_sig::ni_dkg::*;
             let node_ids = vec![node_test_id(0), node_test_id(1)];
@@ -911,12 +961,24 @@ mod tests {
                 Some(target_id),
             );
 
-            // Advance _past_ the new summary to make sure the replicas attempt to create
+            // Advance one round
+            pool.advance_round_normal_operation();
+            // Verify that the latest block contains errors for both requests
+            let block: Block = PoolReader::new(&pool).get_finalized_tip();
+            if let BlockPayload::Data(data) = block.payload.as_ref() {
+                assert_eq!(data.dkg.transcripts_for_remote_subnets.len(), 2);
+                for dkg in data.dkg.transcripts_for_remote_subnets.iter() {
+                    assert!(dkg.2.is_err());
+                }
+            } else {
+                panic!("block at height {} is not a data block", block.height.get());
+            }
+
+            // Advance _past_ the new summary to make sure the replicas don't attempt to create
             // the configs for remote transcripts.
             pool.advance_round_normal_operation_n(dkg_interval_length + 1);
 
-            // Verify that the first summary block contains only two local configs and the
-            // two errors for the remote DKG request.
+            // Verify that the first summary block contains only two local configs
             let block: Block = PoolReader::new(&pool).get_highest_finalized_summary_block();
             if let BlockPayload::Summary(summary) = block.payload.as_ref() {
                 assert_eq!(
@@ -928,11 +990,7 @@ mod tests {
                 for (dkg_id, _) in summary.dkg.configs.iter() {
                     assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Local);
                 }
-                assert_eq!(summary.dkg.transcripts_for_remote_subnets.len(), 2);
-                for (dkg_id, _, result) in summary.dkg.transcripts_for_remote_subnets.iter() {
-                    assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Remote(target_id));
-                    assert!(result.is_err());
-                }
+                assert_eq!(summary.dkg.transcripts_for_remote_subnets.len(), 0);
             } else {
                 panic!(
                     "block at height {} is not a summary block",
@@ -941,6 +999,9 @@ mod tests {
             }
         });
     }
+
+    #[test]
+    fn test_config_generation_failures_are_added_to_summary_blocks() {}
 
     /// These components are used for the validation tests.
     struct ValidationTestComponents {
@@ -963,8 +1024,29 @@ mod tests {
                 let node_id_1 = node_test_id(1);
                 // This is not a dealer!
                 let node_id_2 = node_test_id(0);
-                let consensus_pool_1 = dependencies(pool_config_1, 2).pool;
-                let consensus_pool_2 = dependencies(pool_config_2, 2).pool;
+                let Dependencies {
+                    pool: consensus_pool_1,
+                    registry: registry_1,
+                    state_manager: state_manager_1,
+                    replica_config: replica_config_1,
+                    ..
+                } = dependencies(pool_config_1, 2);
+                let Dependencies {
+                    pool: consensus_pool_2,
+                    registry: registry_2,
+                    state_manager: state_manager_2,
+                    replica_config: replica_config_2,
+                    ..
+                } = dependencies(pool_config_2, 2);
+                for state_manager in [&state_manager_1, &state_manager_2] {
+                    state_manager
+                        .get_mut()
+                        .expect_get_latest_certified_state()
+                        .return_const(Some(Labeled::new(
+                            Height::new(0),
+                            Arc::new(get_initial_state(0, 0)),
+                        )));
+                }
 
                 with_test_replica_logger(|logger| {
                     let dkg_pool_1 = DkgPoolImpl::new(MetricsRegistry::new(), logger.clone());
@@ -978,6 +1060,9 @@ mod tests {
                     );
                     let dkg_1 = DkgImpl::new(
                         node_id_1,
+                        replica_config_1.subnet_id,
+                        registry_1,
+                        state_manager_1,
                         crypto.clone(),
                         consensus_pool_1.get_cache(),
                         dkg_key_manager_1.clone(),
@@ -992,6 +1077,9 @@ mod tests {
                     );
                     let dkg_2 = DkgImpl::new(
                         node_id_2,
+                        replica_config_2.subnet_id,
+                        registry_2,
+                        state_manager_2,
                         crypto.clone(),
                         consensus_pool_2.get_cache(),
                         dkg_key_manager_2.clone(),
@@ -1435,6 +1523,12 @@ mod tests {
 
                     let crypto_1 = dependencies_1.crypto.clone();
                     let crypto_2 = dependencies_2.crypto.clone();
+                    let registry_1 = dependencies_1.registry.clone();
+                    let registry_2 = dependencies_2.registry.clone();
+                    let state_manager_1 = dependencies_1.state_manager.clone();
+                    let state_manager_2 = dependencies_2.state_manager.clone();
+                    let subnet_id_1 = dependencies_1.replica_config.subnet_id;
+                    let subnet_id_2 = dependencies_2.replica_config.subnet_id;
                     let mut pool_1 = dependencies_1.pool;
                     let mut pool_2 = dependencies_2.pool;
 
@@ -1479,6 +1573,9 @@ mod tests {
                     );
                     let dkg_1 = DkgImpl::new(
                         node_test_id(1),
+                        subnet_id_1,
+                        registry_1,
+                        state_manager_1,
                         crypto_1,
                         pool_1.get_cache(),
                         dgk_key_manager_1.clone(),
@@ -1488,6 +1585,9 @@ mod tests {
 
                     let dkg_2 = DkgImpl::new(
                         node_test_id(2),
+                        subnet_id_2,
+                        registry_2,
+                        state_manager_2,
                         crypto_2.clone(),
                         pool_2.get_cache(),
                         new_dkg_key_manager(crypto_2, logger.clone(), &PoolReader::new(&pool_2)),
@@ -1905,13 +2005,13 @@ mod tests {
         });
     }
 
-    /// Tests that no early remote transcripts are created when a
+    /// Tests that  early remote transcripts are created when a
     /// setup_initial_dkg target has only one of its expected two configs
     /// in the summary (because one transcript was already created in a
-    /// previous summary block). Instead, the next summary block should
-    /// contain both transcripts.
+    /// previous summary block). We will still retry both of the configs
+    /// as part of early remote transcript creation.
     #[test]
-    fn test_no_early_transcripts_for_single_setup_initial_dkg_config() {
+    fn test_early_transcripts_are_createdfor_single_setup_initial_dkg_config() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let (mut deps, target_id, remote_dkg_ids) = setup_initial_dkg_test(pool_config);
 
@@ -1977,6 +2077,19 @@ mod tests {
                 certified_height: Height::from(0),
                 time: UNIX_EPOCH,
             };
+            let state = deps
+                .state_manager
+                .get_state_at(validation_context.certified_height)
+                .unwrap();
+            let modified_callback_id_map = payload_builder::build_callback_id_config_map(
+                subnet_test_id(0),
+                deps.registry.as_ref(),
+                state.get_ref(),
+                validation_context.registry_version,
+                &modified_summary,
+                &no_op_logger(),
+            )
+            .unwrap();
 
             // Even though sufficient dealings exist on chain for both configs,
             // no early transcript should be created because the summary only
@@ -1985,17 +2098,15 @@ mod tests {
                 &pool_reader,
                 deps.crypto.as_ref(),
                 &parent,
-                &modified_summary,
-                deps.state_manager.as_ref(),
-                &validation_context,
-                no_op_logger(),
+                modified_callback_id_map,
+                &no_op_logger(),
             )
             .unwrap();
-            assert!(
-                early_transcripts.is_empty(),
-                "No early transcripts should be created for a single \
-                 setup_initial_dkg config, but got {early_transcripts:?}",
-            );
+            assert_eq!(early_transcripts.len(), 2,);
+            for (dkg_id, _callback_id, result) in &early_transcripts {
+                assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Remote(target_id));
+                assert!(result.is_ok());
+            }
 
             // The next summary should contain both transcripts: the one already
             // in the modified summary's transcripts_for_remote_subnets and the
@@ -2025,14 +2136,21 @@ mod tests {
 
             // Control: using the original summary with both configs DOES
             // produce early transcripts.
+            let original_callback_id_map = payload_builder::build_callback_id_config_map(
+                subnet_test_id(0),
+                deps.registry.as_ref(),
+                state.get_ref(),
+                validation_context.registry_version,
+                &original_summary,
+                &no_op_logger(),
+            )
+            .unwrap();
             let early_transcripts = payload_builder::create_early_remote_transcripts(
                 &pool_reader,
                 deps.crypto.as_ref(),
                 &parent,
-                &original_summary,
-                deps.state_manager.as_ref(),
-                &validation_context,
-                no_op_logger(),
+                original_callback_id_map,
+                &no_op_logger(),
             )
             .unwrap();
             assert_eq!(early_transcripts.len(), 2);
@@ -2053,14 +2171,24 @@ mod tests {
                 None,
                 Some(unrelated_target_id),
             );
+            let no_match_state = no_match_state_manager
+                .get_state_at(validation_context.certified_height)
+                .unwrap();
+            let no_match_callback_id_map = payload_builder::build_callback_id_config_map(
+                subnet_test_id(0),
+                deps.registry.as_ref(),
+                no_match_state.get_ref(),
+                validation_context.registry_version,
+                &original_summary,
+                &no_op_logger(),
+            )
+            .unwrap();
             let early_transcripts = payload_builder::create_early_remote_transcripts(
                 &pool_reader,
                 deps.crypto.as_ref(),
                 &parent,
-                &original_summary,
-                no_match_state_manager.as_ref(),
-                &validation_context,
-                no_op_logger(),
+                no_match_callback_id_map,
+                &no_op_logger(),
             )
             .unwrap();
             assert!(
@@ -2105,15 +2233,26 @@ mod tests {
                     certified_height: Height::from(0),
                     time: UNIX_EPOCH,
                 };
+                let state = deps
+                    .state_manager
+                    .get_state_at(validation_context.certified_height)
+                    .unwrap();
+                let callback_id_map = payload_builder::build_callback_id_config_map(
+                    subnet_test_id(0),
+                    deps.registry.as_ref(),
+                    state.get_ref(),
+                    validation_context.registry_version,
+                    last_summary,
+                    &no_op_logger(),
+                )
+                .unwrap();
 
                 let early_transcripts = payload_builder::create_early_remote_transcripts(
                     &pool_reader,
                     &mock_crypto,
                     &parent,
-                    last_summary,
-                    deps.state_manager.as_ref(),
-                    &validation_context,
-                    no_op_logger(),
+                    callback_id_map,
+                    &no_op_logger(),
                 )
                 .unwrap();
 
@@ -2204,21 +2343,35 @@ mod tests {
                 )],
             );
 
-            complement_state_manager_with_reshare_chain_key_request(
+            let contexts = Arc::new(Mutex::new(Vec::new()));
+            complement_state_manager_with_dkg_contexts_mut(
                 deps.state_manager.clone(),
-                deps.registry.get_latest_version(),
-                key_id.clone(),
-                vec![10, 11, 12, 13],
+                contexts.clone(),
                 None,
-                Some(target_id),
             );
 
+            // Advance until the first vetkd transcript is created
             deps.pool
-                .advance_round_normal_operation_n(EARLY_DKG_INTERVAL + 1);
-            let remote_dkg_ids = extract_remote_dkg_ids_from_highest_block(&deps.pool, target_id);
-            assert_eq!(remote_dkg_ids.len(), 1);
-            assert_eq!(extract_dkg_configs_from_highest_block(&deps.pool).len(), 4);
-            assert_eq!(extract_remote_dkgs_from_highest_block(&deps.pool).len(), 0);
+                .advance_round_normal_operation_n(EARLY_DKG_INTERVAL + 3);
+
+            contexts
+                .lock()
+                .unwrap()
+                .push(make_reshare_chain_key_context(
+                    deps.registry.get_latest_version(),
+                    key_id.clone(),
+                    vec![10, 11, 12, 13],
+                    target_id,
+                ));
+
+            let remote_dkg_ids = vec![NiDkgId {
+                start_block_height: Height::from(EARLY_DKG_INTERVAL + 1),
+                dealer_subnet: subnet_test_id(0),
+                dkg_tag: NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(
+                    key_id.clone(),
+                )),
+                target_subnet: NiDkgTargetSubnet::Remote(target_id),
+            }];
 
             add_dealings_for_configs(&mut deps, &remote_dkg_ids);
             // 2f + 1 dealings for high threshold VetKD resharing
@@ -2255,21 +2408,21 @@ mod tests {
     ///   (= 2), and only the first context's transcripts are included.
     #[test]
     fn test_early_remote_transcripts_respects_max() {
-        for (skipped_target_bytes, setup_target_bytes, reshare_target_bytes, desc) in [
-            ([0u8; 32], [1u8; 32], [2u8; 32], "SetupInitialDKG first"),
-            ([0u8; 32], [2u8; 32], [1u8; 32], "ReshareChainKey first"),
+        for (setup_first, desc) in [
+            (true, "SetupInitialDKG first"),
+            (false, "ReshareChainKey first"),
         ] {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-                let node_ids = (1..4).map(node_test_id).collect::<Vec<_>>();
+                let node_ids = (1..5).map(node_test_id).collect::<Vec<_>>();
                 let key_id = VetKdKeyId {
                     curve: VetKdCurve::Bls12_381_G2,
                     name: String::from("some_vetkey"),
                 };
                 // This context always comes first but will be
                 // skipped because one of its two configs lacks dealings.
-                let skipped_target_id = NiDkgTargetId::new(skipped_target_bytes);
-                let setup_target_id = NiDkgTargetId::new(setup_target_bytes);
-                let reshare_target_id = NiDkgTargetId::new(reshare_target_bytes);
+                let skipped_target_id = NiDkgTargetId::new([0u8; 32]);
+                let setup_target_id = NiDkgTargetId::new([1u8; 32]);
+                let reshare_target_id = NiDkgTargetId::new([2u8; 32]);
 
                 let mut deps = dependencies_with_subnet_records_with_raw_state_manager(
                     pool_config,
@@ -2293,26 +2446,30 @@ mod tests {
                 );
 
                 let registry_version = deps.registry.get_latest_version();
+                let mut contexts = vec![
+                    make_setup_initial_dkg_context(
+                        registry_version,
+                        vec![10, 11, 12, 13],
+                        skipped_target_id,
+                    ),
+                    make_setup_initial_dkg_context(
+                        registry_version,
+                        vec![10, 11, 12, 13],
+                        setup_target_id,
+                    ),
+                    make_reshare_chain_key_context(
+                        registry_version,
+                        key_id.clone(),
+                        vec![10, 11, 12, 13],
+                        reshare_target_id,
+                    ),
+                ];
+                if !setup_first {
+                    contexts.swap(1, 2);
+                }
                 complement_state_manager_with_dkg_contexts(
                     deps.state_manager.clone(),
-                    vec![
-                        make_setup_initial_dkg_context(
-                            registry_version,
-                            vec![10, 11, 12, 13],
-                            skipped_target_id,
-                        ),
-                        make_setup_initial_dkg_context(
-                            registry_version,
-                            vec![10, 11, 12, 13],
-                            setup_target_id,
-                        ),
-                        make_reshare_chain_key_context(
-                            registry_version,
-                            key_id.clone(),
-                            vec![10, 11, 12, 13],
-                            reshare_target_id,
-                        ),
-                    ],
+                    contexts,
                     None,
                 );
 
@@ -2441,7 +2598,7 @@ mod tests {
                         .chain(std::iter::once(&reshare_dkg_id))
                         .collect();
                 for dkg_id in &dkg_ids_with_dealings {
-                    let dealings: Vec<_> = (0..3)
+                    let dealings: Vec<_> = (1..5)
                         .map(|i| ChangeAction::AddToValidated(create_dealing(i, (*dkg_id).clone())))
                         .collect();
                     deps.dkg_pool.write().unwrap().apply(dealings);
@@ -2449,8 +2606,8 @@ mod tests {
                 deps.pool.advance_round_normal_operation();
                 assert_eq!(
                     extract_dealings_from_highest_block(&deps.pool).len(),
-                    12,
-                    "[{desc}] all 12 dealings should be in the block"
+                    9,
+                    "[{desc}] 9 dealings should be in the block"
                 );
                 assert_eq!(
                     extract_remote_dkgs_from_highest_block(&deps.pool).len(),
@@ -2465,7 +2622,7 @@ mod tests {
                 assert_eq!(extract_dealings_from_highest_block(&deps.pool).len(), 0);
                 let remote_dkgs = extract_remote_dkgs_from_highest_block(&deps.pool);
 
-                if setup_target_id < reshare_target_id {
+                if setup_first {
                     assert_eq!(
                         remote_dkgs.len(),
                         2,

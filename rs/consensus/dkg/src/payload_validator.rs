@@ -13,7 +13,7 @@ use ic_logger::{ReplicaLogger, info, warn};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    Height, SubnetId,
+    SubnetId,
     batch::ValidationContext,
     consensus::{
         Block, BlockPayload,
@@ -123,7 +123,6 @@ pub fn validate_payload(
 
             validate_dealings_payload(
                 subnet_id,
-                last_summary_block.height,
                 registry_client,
                 crypto,
                 pool_reader,
@@ -145,7 +144,6 @@ pub fn validate_payload(
 #[allow(clippy::result_large_err)]
 fn validate_dealings_payload(
     subnet_id: SubnetId,
-    start_block_height: Height,
     registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,
     pool_reader: &PoolReader<'_>,
@@ -198,11 +196,10 @@ fn validate_dealings_payload(
 
     let remote_config_results = build_callback_id_config_map(
         subnet_id,
-        start_block_height,
         registry_client,
         state.get_ref(),
         validation_context.registry_version,
-        last_summary.next_transcripts(),
+        last_summary,
         log,
     )?;
     let configs = merge_configs(&last_summary.configs, &remote_config_results, log);
@@ -270,11 +267,13 @@ mod tests {
         dkg::ChangeAction,
         p2p::consensus::{MutablePool, PoolMutationsProducer},
     };
+    use ic_interfaces_state_manager::Labeled;
     use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_registry_keys::make_subnet_record_key;
     use ic_test_utilities_consensus::fake::FakeContentSigner;
     use ic_test_utilities_registry::SubnetRecordBuilder;
+    use ic_test_utilities_state::get_initial_state;
     use ic_test_utilities_types::ids::{
         NODE_1, NODE_2, NODE_3, SUBNET_1, SUBNET_2, node_test_id, subnet_test_id,
     };
@@ -731,6 +730,13 @@ mod tests {
                         .build(),
                 )],
             );
+            state_manager
+                .get_mut()
+                .expect_get_latest_certified_state()
+                .return_const(Some(Labeled::new(
+                    Height::new(0),
+                    Arc::new(get_initial_state(0, 0)),
+                )));
 
             // Both summary registry versions should be 1 initially
             let summary_block = pool.as_cache().summary_block();
@@ -782,6 +788,9 @@ mod tests {
             let key_manager = Arc::new(Mutex::new(key_manager));
             let dkg_impl = DkgImpl::new(
                 node_id,
+                subnet_id,
+                registry.clone(),
+                state_manager.clone(),
                 crypto.clone(),
                 pool.get_cache(),
                 key_manager,
@@ -801,9 +810,10 @@ mod tests {
             };
 
             // It should be possible to validate the dealing
+            let configs = dkg_summary.configs.iter().collect();
             let result = dkg_impl.validate_dealings_for_dealer(
                 &dkg_pool,
-                &dkg_summary.configs,
+                &configs,
                 start_height,
                 vec![dealing],
             );

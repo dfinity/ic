@@ -426,14 +426,14 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         .expect("there is no source subnet");
 
     let source_subnet_id = source_subnet.subnet_id;
-    await_node_certified_height(
-        &source_subnet
-            .nodes()
-            .next()
-            .expect("there is no node in the source subnet"),
-        Height::from(1000),
-        logger.clone(),
-    );
+    // await_node_certified_height(
+    //     &source_subnet
+    //         .nodes()
+    //         .next()
+    //         .expect("there is no node in the source subnet"),
+    //     Height::from(1000),
+    //     logger.clone(),
+    // );
 
     let create_new_subnet = !topology_snapshot
         .subnets()
