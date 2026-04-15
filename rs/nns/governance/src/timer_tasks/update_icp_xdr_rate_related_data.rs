@@ -5,14 +5,12 @@ use crate::{
 use async_trait::async_trait;
 use ic_cdk::println;
 use ic_nervous_system_clients::exchange_rate_canister_client::{
-    ExchangeRateCanisterClient, RealExchangeRateCanisterClient, exchange_rate_to_permyriad,
-    validate_exchange_rate,
+    ExchangeRateCanisterClient, exchange_rate_to_permyriad, validate_exchange_rate,
 };
 use ic_nervous_system_governance::maturity_modulation::{
     MAX_MATURITY_MODULATION_PERMYRIAD, MIN_MATURITY_MODULATION_PERMYRIAD,
 };
 use ic_nervous_system_timer_task::RecurringAsyncTask;
-use ic_nns_constants::EXCHANGE_RATE_CANISTER_ID;
 use std::cell::RefCell;
 use std::sync::Arc;
 use std::thread::LocalKey;
@@ -178,17 +176,7 @@ pub(super) struct UpdateIcpXdrRateRelatedData {
 }
 
 impl UpdateIcpXdrRateRelatedData {
-    pub fn new(governance: &'static LocalKey<RefCell<Governance>>) -> Self {
-        Self {
-            governance,
-            xrc_client: Arc::new(RealExchangeRateCanisterClient::new(
-                EXCHANGE_RATE_CANISTER_ID,
-            )),
-        }
-    }
-
-    #[cfg(test)]
-    pub fn new_for_test(
+    pub fn new_with_client(
         governance: &'static LocalKey<RefCell<Governance>>,
         xrc_client: Arc<dyn ExchangeRateCanisterClient>,
     ) -> Self {
@@ -279,12 +267,11 @@ impl UpdateIcpXdrRateRelatedData {
     }
 }
 
-/// Returns the number of seconds until the next UTC midnight (i.e. the start of the next day).
-fn seconds_until_next_utc_midnight(timestamp_seconds: u64) -> u64 {
-    // Next multiple of ONE_DAY_SECONDS strictly greater than `timestamp_seconds`.
+/// Returns the duration until the next UTC midnight (i.e. the start of the next day).
+fn duration_until_next_midnight_utc(timestamp_seconds: u64) -> Duration {
     let next_midnight_timestamp_seconds =
         (timestamp_seconds / ONE_DAY_SECONDS + 1) * ONE_DAY_SECONDS;
-    next_midnight_timestamp_seconds - timestamp_seconds
+    Duration::from_secs(next_midnight_timestamp_seconds - timestamp_seconds)
 }
 
 impl From<&ic_xrc_types::ExchangeRate> for SampledPrice {
@@ -405,10 +392,7 @@ impl RecurringAsyncTask for UpdateIcpXdrRateRelatedData {
             });
 
             let now = self.governance.with_borrow(|gov| gov.env.now());
-            return (
-                Duration::from_secs(seconds_until_next_utc_midnight(now)),
-                self,
-            );
+            return (duration_until_next_midnight_utc(now), self);
         };
 
         // Fetch missing price.
@@ -459,10 +443,7 @@ impl RecurringAsyncTask for UpdateIcpXdrRateRelatedData {
         });
 
         let now = self.governance.with_borrow(|gov| gov.env.now());
-        (
-            Duration::from_secs(seconds_until_next_utc_midnight(now)),
-            self,
-        )
+        (duration_until_next_midnight_utc(now), self)
     }
 
     fn initial_delay(&self) -> Duration {
@@ -473,7 +454,7 @@ impl RecurringAsyncTask for UpdateIcpXdrRateRelatedData {
             Duration::ZERO
         } else {
             let now = self.governance.with_borrow(|gov| gov.env.now());
-            Duration::from_secs(seconds_until_next_utc_midnight(now))
+            duration_until_next_midnight_utc(now)
         }
     }
 

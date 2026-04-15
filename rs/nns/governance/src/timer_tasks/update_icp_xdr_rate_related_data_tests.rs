@@ -288,22 +288,22 @@ fn test_compute_maturity_modulation_respects_global_bounds() {
 }
 
 #[test]
-fn test_seconds_until_next_utc_midnight() {
+fn test_duration_until_next_midnight_utc() {
     assert_eq!(
-        seconds_until_next_utc_midnight(1_774_828_800),
-        ONE_DAY_SECONDS
+        duration_until_next_midnight_utc(1_774_828_800),
+        Duration::from_secs(ONE_DAY_SECONDS)
     );
     assert_eq!(
-        seconds_until_next_utc_midnight(1_774_828_800 + ONE_DAY_SECONDS),
-        ONE_DAY_SECONDS
+        duration_until_next_midnight_utc(1_774_828_800 + ONE_DAY_SECONDS),
+        Duration::from_secs(ONE_DAY_SECONDS)
     );
     assert_eq!(
-        seconds_until_next_utc_midnight(1_774_828_800 + ONE_DAY_SECONDS / 2),
-        ONE_DAY_SECONDS / 2
+        duration_until_next_midnight_utc(1_774_828_800 + ONE_DAY_SECONDS / 2),
+        Duration::from_secs(ONE_DAY_SECONDS / 2)
     );
     assert_eq!(
-        seconds_until_next_utc_midnight(1_774_828_800 + ONE_DAY_SECONDS + 1),
-        ONE_DAY_SECONDS - 1
+        duration_until_next_midnight_utc(1_774_828_800 + ONE_DAY_SECONDS + 1),
+        Duration::from_secs(ONE_DAY_SECONDS - 1)
     );
 }
 
@@ -328,7 +328,7 @@ async fn test_execute_stores_rate_and_computes_modulation() {
             ))
         });
 
-    let task = UpdateIcpXdrRateRelatedData::new_for_test(&GOV, Arc::new(mock_client));
+    let task = UpdateIcpXdrRateRelatedData::new_with_client(&GOV, Arc::new(mock_client));
     let (delay, _task) = task.execute().await;
 
     GOV.with_borrow(|gov| {
@@ -382,7 +382,7 @@ async fn test_execute_xrc_failure_leaves_state_unchanged() {
             })
         });
 
-    let task = UpdateIcpXdrRateRelatedData::new_for_test(&GOV, Arc::new(mock_client));
+    let task = UpdateIcpXdrRateRelatedData::new_with_client(&GOV, Arc::new(mock_client));
     let (delay, _task) = task.execute().await;
 
     // State must be unchanged.
@@ -435,7 +435,7 @@ async fn test_execute_zero_rate_is_ignored() {
         .expect_get_icp_to_xdr_exchange_rate()
         .return_once(|_| Ok(make_valid_exchange_rate(20_500 * ONE_DAY_SECONDS, 0)));
 
-    let task = UpdateIcpXdrRateRelatedData::new_for_test(&GOV, Arc::new(mock_client));
+    let task = UpdateIcpXdrRateRelatedData::new_with_client(&GOV, Arc::new(mock_client));
     let (delay, _task) = task.execute().await;
 
     // State must be unchanged.
@@ -506,7 +506,7 @@ async fn test_execute_backfill_then_daily() {
                 55_000,
             ))
         });
-    let task = UpdateIcpXdrRateRelatedData::new_for_test(&GOV, Arc::new(mock_client_1));
+    let task = UpdateIcpXdrRateRelatedData::new_with_client(&GOV, Arc::new(mock_client_1));
     let (delay_1, _task) = task.execute().await;
     assert_eq!(delay_1, Duration::from_secs(BACKFILL_INTERVAL_SECONDS));
 
@@ -517,12 +517,9 @@ async fn test_execute_backfill_then_daily() {
         .expect_get_icp_to_xdr_exchange_rate()
         .times(1)
         .return_once(move |_| Ok(make_valid_exchange_rate(now, 55_000)));
-    let task = UpdateIcpXdrRateRelatedData::new_for_test(&GOV, Arc::new(mock_client_2));
+    let task = UpdateIcpXdrRateRelatedData::new_with_client(&GOV, Arc::new(mock_client_2));
     let (delay_2, _task) = task.execute().await;
-    assert_eq!(
-        delay_2,
-        Duration::from_secs(seconds_until_next_utc_midnight(now))
-    );
+    assert_eq!(delay_2, duration_until_next_midnight_utc(now));
 
     GOV.with_borrow(|gov| {
         let mm = gov.heap_data.maturity_modulation.as_ref().unwrap();
@@ -544,7 +541,7 @@ async fn test_execute_repeated_calls_accumulate_rates() {
     mock_client
         .expect_get_icp_to_xdr_exchange_rate()
         .return_once(move |_| Ok(make_valid_exchange_rate(base_day * ONE_DAY_SECONDS, 50_000)));
-    let task = UpdateIcpXdrRateRelatedData::new_for_test(&GOV, Arc::new(mock_client));
+    let task = UpdateIcpXdrRateRelatedData::new_with_client(&GOV, Arc::new(mock_client));
     task.execute().await;
 
     GOV.with_borrow(|gov| {
@@ -569,7 +566,7 @@ async fn test_execute_repeated_calls_accumulate_rates() {
                 60_000,
             ))
         });
-    let task = UpdateIcpXdrRateRelatedData::new_for_test(&GOV, Arc::new(mock_client));
+    let task = UpdateIcpXdrRateRelatedData::new_with_client(&GOV, Arc::new(mock_client));
     task.execute().await;
 
     GOV.with_borrow(|gov| {
