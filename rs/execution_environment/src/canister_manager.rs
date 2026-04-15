@@ -548,10 +548,10 @@ impl CanisterManager {
                 .management_canister_cost(log_resize_instructions, subnet_size, cost_schedule)
                 .real();
             if canister_cycles_balance < threshold + log_resize_cycles {
-                return Err(CanisterManagerError::InsufficientCyclesInMemoryAllocation {
-                    memory_allocation: new_memory_allocation,
+                return Err(CanisterManagerError::InsufficientCyclesInLogResize {
                     available: canister_cycles_balance,
-                    threshold: threshold + log_resize_cycles,
+                    threshold,
+                    requested: log_resize_cycles,
                 });
             }
         }
@@ -743,13 +743,11 @@ impl CanisterManager {
                     subnet_size,
                     cost_schedule,
                 )
-                .map_err(
-                    |err| CanisterManagerError::InsufficientCyclesInMemoryAllocation {
-                        memory_allocation: canister.memory_allocation(),
-                        available: err.available,
-                        threshold: err.threshold + err.requested,
-                    },
-                )?;
+                .map_err(|err| CanisterManagerError::InsufficientCyclesInLogResize {
+                    available: err.available,
+                    threshold: err.threshold,
+                    requested: err.requested,
+                })?;
             round_limits.instructions -= as_round_instructions(log_resize_instructions);
         }
 

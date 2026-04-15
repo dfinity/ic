@@ -108,6 +108,9 @@ pub mod v1 {
                 ErrorCodePublic::ReservedCyclesLimitIsTooLow => {
                     ErrorCode::ReservedCyclesLimitIsTooLow
                 }
+                ErrorCodePublic::InsufficientCyclesInLogResize => {
+                    ErrorCode::InsufficientCyclesInLogResize
+                }
                 ErrorCodePublic::DeadlineExpired => ErrorCode::DeadlineExpired,
                 ErrorCodePublic::ResponseDropped => ErrorCode::ResponseDropped,
             }
@@ -245,6 +248,9 @@ pub mod v1 {
                 }
                 ErrorCode::ReservedCyclesLimitIsTooLow => {
                     Ok(ErrorCodePublic::ReservedCyclesLimitIsTooLow)
+                }
+                ErrorCode::InsufficientCyclesInLogResize => {
+                    Ok(ErrorCodePublic::InsufficientCyclesInLogResize)
                 }
                 ErrorCode::DeadlineExpired => Ok(ErrorCodePublic::DeadlineExpired),
                 ErrorCode::ResponseDropped => Ok(ErrorCodePublic::ResponseDropped),

@@ -444,6 +444,9 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         CanisterWasmModuleNotFound => "Canister Wasm Module Not Found",
         CanisterAlreadyInstalled => "Canister Already Installed",
         CanisterWasmMemoryLimitExceeded => "Canister exceeded its Wasm memory limit",
+        InsufficientCyclesInLogResize => {
+            "Canister does not have enough cycles to resize log memory"
+        }
         DeadlineExpired => "Best-effort call deadline has expired",
         ResponseDropped => "Best-effort response was dropped",
     }

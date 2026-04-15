@@ -122,6 +122,7 @@ impl From<ErrorCode> for RejectCode {
             InsufficientCyclesInComputeAllocation => CanisterError,
             InsufficientCyclesInMemoryAllocation => CanisterError,
             InsufficientCyclesInMemoryGrow => CanisterError,
+            InsufficientCyclesInLogResize => CanisterError,
             ReservedCyclesLimitExceededInMemoryAllocation => CanisterError,
             ReservedCyclesLimitExceededInMemoryGrow => CanisterError,
             ReservedCyclesLimitIsTooLow => CanisterError,
@@ -222,6 +223,7 @@ pub enum ErrorCode {
     CanisterWasmMemoryLimitExceeded = 539,
     ReservedCyclesLimitIsTooLow = 540,
     CanisterInvalidControllerOrSubnetAdmin = 541,
+    InsufficientCyclesInLogResize = 542,
     // 6xx -- `RejectCode::SysUnknown`
     DeadlineExpired = 601,
     ResponseDropped = 602,
@@ -350,6 +352,7 @@ impl UserError {
             | ErrorCode::InsufficientCyclesInComputeAllocation
             | ErrorCode::InsufficientCyclesInMemoryAllocation
             | ErrorCode::InsufficientCyclesInMemoryGrow
+            | ErrorCode::InsufficientCyclesInLogResize
             | ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
             | ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
             | ErrorCode::ReservedCyclesLimitIsTooLow
