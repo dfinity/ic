@@ -299,6 +299,7 @@ async fn upgrade_to(
     );
 
     // Concurrently assert that all orchestrators shut down gracefully
+    #[allow(clippy::redundant_iter_cloned)] // Need to clone to move the nodes into async tasks
     try_join_all(healthy_nodes.iter().cloned().map(|node| {
         tokio::task::spawn_blocking(move || assert_orchestrator_stopped_gracefully(&node))
     }))
@@ -393,7 +394,7 @@ fn find_latest_computed_root_hashes_from_logs(
             .previous_boot()
             .search(computed_root_hash_regex.as_str())
             .expect("Failed to fetch log entries")
-            .last()
+            .pop()
             .unwrap_or_else(|| {
                 panic!(
                     "No log entry with computed root hash found for node {}",
