@@ -140,8 +140,8 @@ pub fn exchange_rate_to_permyriad(rate: &ExchangeRate) -> u64 {
     // XRC decimals are bounded (ICP/XDR uses 9), so power_diff is small and
     // 10^power_diff fits comfortably in u64.
     match decimals.cmp(&PERMYRIAD_DECIMAL_PLACES) {
-        std::cmp::Ordering::Greater => rate.rate.saturating_div(10u64.pow(power_diff)),
-        std::cmp::Ordering::Less => rate.rate.saturating_mul(10u64.pow(power_diff)),
+        std::cmp::Ordering::Greater => rate.rate.saturating_div(10_u64.pow(power_diff)),
+        std::cmp::Ordering::Less => rate.rate.saturating_mul(10_u64.pow(power_diff)),
         std::cmp::Ordering::Equal => rate.rate,
     }
 }
