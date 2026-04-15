@@ -22,10 +22,8 @@ def solve_partition(
     max_cuts: int,
 ) -> Dict:
     """
-    Build and solve the MILP for a given load vector and communication edges.
-    Optionally enforce a second set of load-balance constraints (e.g., size in
-    addition to incoming messages).
-    Returns assignments and key metrics to allow testing and reuse.
+    Build and solve the MILP for a given load vector(s) and communication edges.
+    Returns the subnet assignment for each of the canisters.
     """
     if len(load_constraints) == 0:
         raise ValueError("The provided load constraints data is empty")
