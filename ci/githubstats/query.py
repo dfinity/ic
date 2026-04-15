@@ -998,7 +998,8 @@ def fmt_time(t):
 
 
 def get_git_since_arg(args) -> str:
-    """Convert the time filter args into a --since argument for git log.
+    """
+    Convert the time filter args into a --since argument for git log.
 
     When --since is specified, parses it via parse_datetime (which returns a
     UTC-aware datetime) and formats it as ISO-8601 with a Z suffix so that
@@ -1126,8 +1127,7 @@ def top(args):
         # Check commits in-memory first, then only call gh for the rest:
         fixed_by_commit = test_names.apply(
             lambda name: any(
-                re.search(re.escape(name).replace("_", "[_. ]"), line, re.IGNORECASE)
-                for line in commit_lines
+                re.search(re.escape(name).replace("_", "[_. ]"), line, re.IGNORECASE) for line in commit_lines
             )
         )
         remaining = test_names[~fixed_by_commit]
