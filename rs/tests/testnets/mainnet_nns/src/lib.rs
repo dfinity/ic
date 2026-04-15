@@ -502,7 +502,7 @@ fn recover_nns_subnet(
         // --validate-nns-url will not actually be used because the backup pod tarball also
         // contains the local store, which initializes ic-recovery
         .arg("--validate-nns-url")
-        .arg("https://icp0.io")
+        .arg("https://will.not.be.used.invalid")
         .arg("--upload-method")
         .arg(upload_ip.to_string())
         .arg("--parent-nns-host-ip")
