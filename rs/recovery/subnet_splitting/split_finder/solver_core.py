@@ -27,7 +27,8 @@ def solve_partition(
     """
     if len(load_constraints) == 0:
         raise ValueError("The provided load constraints data is empty")
-
+if any(len(constraint.canister_loads) != len(load_constratins[0].canister_loads) for constraint in load_constraints):
+    raise ValueError("All load constraints must have the same number of canisters")
     canister_count = len(load_constraints[0].canister_loads)
     problem = pulp.LpProblem("CanisterSubgroupAssignment", pulp.LpMinimize)
 
