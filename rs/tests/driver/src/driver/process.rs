@@ -4,12 +4,14 @@ use nix::{
 };
 use slog::{Logger, info};
 use std::process::{Command, ExitStatus, Stdio};
+use std::time::Duration;
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, BufReader},
     process::{Child, Command as AsyncCommand},
     select,
     sync::watch::{Receiver, channel},
     task::{self, JoinHandle},
+    time::timeout,
 };
 
 pub trait KillFn: FnOnce() + Send + Sync {}
@@ -93,21 +95,42 @@ impl Process {
     {
         let buffered_reader = BufReader::new(src);
         let mut lines = buffered_reader.lines();
+        let task_id_str = format!("{task_id}");
+        let output_channel_str = format!("{channel_tag:?}");
         loop {
             select! {
                 line_res = lines.next_line() => {
                     match line_res {
                         Ok(Some(line)) => {
-                            let task_id: String = format!("{task_id}");
-                            let output_channel: String = format!("{channel_tag:?}");
-                            info!(log, "{}", line; "task_id" => task_id, "output_channel" => output_channel)
+                            info!(log, "{}", line; "task_id" => &task_id_str, "output_channel" => &output_channel_str)
                         }
                         Ok(None) => break,
                         Err(e) => eprintln!("listen_on_channel(): {e:?}"),
                     }
                 }
                 _ = kill_watch.changed() => {
-                    info!(log, "({}|{:?}): Kill received.", task_id, channel_tag);
+                    info!(log, "({}|{:?}): Kill received. Draining remaining output ...", task_id, channel_tag);
+                    // Drain any remaining buffered lines before returning.
+                    // Use a short timeout to avoid blocking on grandchild
+                    // processes that keep the pipe open after the child is killed.
+                    let drain_timeout = Duration::from_secs(1);
+                    match timeout(drain_timeout, async {
+                        loop {
+                            match lines.next_line().await {
+                                Ok(Some(line)) => {
+                                    info!(log, "{}", line; "task_id" => &task_id_str, "output_channel" => &output_channel_str);
+                                }
+                                Ok(None) => break,
+                                Err(e) => {
+                                    info!(log, "({}|{:?}): Error during drain: {e:?}", task_id, channel_tag);
+                                    break;
+                                }
+                            }
+                        }
+                    }).await {
+                        Ok(()) => info!(log, "({}|{:?}): Drain complete.", task_id, channel_tag),
+                        Err(_) => info!(log, "({}|{:?}): Drain timed out.", task_id, channel_tag),
+                    }
                     return;
                 }
             }

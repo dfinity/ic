@@ -109,6 +109,10 @@ pub trait CyclesUseCaseKind: Copy + Clone + Debug {
     fn cycles_use_case() -> CyclesUseCase;
 }
 
+/// Marker trait to identify which use cases of `CyclesUseCase` are refundable,
+/// i.e. the ones that are prepaid and expected to be refunded if not fully consumed.
+pub trait CyclesUseCaseRefundableKind: CyclesUseCaseKind {}
+
 /*
  * Empty structs are added for each use case to act like tags that can be used
  * to allow the compiler to enforce type-safe operations on `CompoundCycles`
@@ -143,7 +147,7 @@ impl CyclesUseCaseKind for IngressInduction {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
 pub struct Instructions;
 
 impl CyclesUseCaseKind for Instructions {
@@ -152,7 +156,9 @@ impl CyclesUseCaseKind for Instructions {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+impl CyclesUseCaseRefundableKind for Instructions {}
+
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
 pub struct RequestAndResponseTransmission;
 
 impl CyclesUseCaseKind for RequestAndResponseTransmission {
@@ -160,6 +166,8 @@ impl CyclesUseCaseKind for RequestAndResponseTransmission {
         CyclesUseCase::RequestAndResponseTransmission
     }
 }
+
+impl CyclesUseCaseRefundableKind for RequestAndResponseTransmission {}
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct Uninstall;

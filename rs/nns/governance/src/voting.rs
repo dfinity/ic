@@ -595,7 +595,6 @@ mod test {
     use crate::test_utils::MockRandomness;
     use crate::{
         governance::{Governance, REWARD_DISTRIBUTION_PERIOD_SECONDS},
-        is_mission_70_voting_rewards_enabled,
         neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
         neuron_store::NeuronStore,
         pb::v1::{
@@ -603,6 +602,8 @@ mod test {
             VotingPowerEconomics, WaitForQuietState, proposal::Action,
         },
         storage::with_voting_state_machines_mut,
+        temporarily_disable_mission_70_voting_rewards,
+        temporarily_enable_mission_70_voting_rewards,
         test_utils::{
             ExpectedCallCanisterMethodCallArguments, MockEnvironment, StubCMC, StubIcpLedger,
         },
@@ -767,8 +768,37 @@ mod test {
         );
     }
 
+    /// Here, we have
+    ///
+    ///     1. A proposal (id = 1)
+    ///
+    ///     2. 7 neurons (IDs 1 through 7 inclusive):
+    ///
+    ///         a. Neuron 1 votes (Yes) directly (on the proposal).
+    ///
+    ///         b. Neurons 2 - 5 follow all neurons with a smaller ID (e.g.
+    ///            neuron 3 follows neurons 1 and 2), and as a result, they also
+    ///            vote (Yes), but indirectly.
+    ///
+    ///         c. Neuron 6 follows 1, but also 7.
+    ///
+    ///         d. Neuron 7 does not have a ballot for proposal 1. All the other
+    ///            neurons do have ballots.
     #[test]
+    fn test_cast_vote_and_cascade_works_pre_mission_70() {
+        let _restore_on_drop = temporarily_disable_mission_70_voting_rewards();
+        test_cast_vote_and_cascade_works();
+    }
+
+    #[test]
+    fn test_cast_vote_and_cascade_works_with_mission_70() {
+        let _restore_on_drop = temporarily_enable_mission_70_voting_rewards();
+        test_cast_vote_and_cascade_works();
+    }
+
     fn test_cast_vote_and_cascade_works() {
+        // Step 1: Prepare the world.
+
         let now = 1000;
         let topic = Topic::ApplicationCanisterManagement;
 
@@ -808,11 +838,13 @@ mod test {
             Box::new(MockRandomness::new()),
         );
 
+        // Before adding this to governance, the ballots field will be populated.
         let mut proposal = ProposalData {
             id: Some(ProposalId { id: 1 }),
             ..Default::default()
         };
 
+        // Add neurons 1 through 5 (as described directly above this test).
         for id in 1..=5 {
             // Each neuron follows all neurons with a lower id
             let followees = (1..id).collect();
@@ -825,7 +857,8 @@ mod test {
                 Vote::Unspecified,
             );
         }
-        // Add another neuron that follows both a neuron with a ballot and without a ballot
+
+        // Add neuron 6 (as described directly above this test).
         add_neuron_with_ballot(
             &mut governance.neuron_store,
             &mut proposal.ballots,
@@ -837,7 +870,11 @@ mod test {
         // Add a neuron without a ballot for neuron 6 to follow.
         add_neuron_without_ballot(&mut governance.neuron_store, 7, vec![1]);
 
+        // Now that proposal(.ballots) has been fully populated, add it to
+        // governance.
         governance.heap_data.proposals.insert(1, proposal);
+
+        // Step 2: Call the code under test.
 
         governance
             .cast_vote_and_cascade_follow(
@@ -849,6 +886,8 @@ mod test {
             .now_or_never()
             .unwrap();
 
+        // Step 3: Verify results.
+
         let deciding_voting_power = |neuron_id| {
             governance
                 .neuron_store
@@ -857,6 +896,19 @@ mod test {
                 })
                 .unwrap()
         };
+
+        // Step 3.1: The main thing is to look at who ended up voting (directly
+        // or indirectly). Neurons 1 - 5 vote, because
+        //
+        //     1. Voted directly.
+        //     2. Follows 1.
+        //     3. Follows 1 and 2.
+        //     4. Similarly...
+        //     5. Similarly...
+        //
+        // Whereas, 6 does not vote as a result of neuron 1 voting directly,
+        // because he has two followees (1 and 7), and only one of them voted,
+        // which is not enough (for a majority, only 50%, not 50% + 1).
         assert_eq!(
             governance.heap_data.proposals.get(&1).unwrap().ballots,
             hashmap! {
@@ -868,15 +920,14 @@ mod test {
                 6 => make_ballot(deciding_voting_power(NeuronId { id: 6 }), Vote::Unspecified),
             }
         );
-        // Each neuron has 100 stake and 6 months dissolve delay.
-        // With 2-year max (mission 70): 6 months / 2 years = 25% bonus → 1.25x → 100 * 1.25 = 125
-        // With 8-year max (pre mission 70): 6 months / 8 years = 6.25% bonus → 1.0625x → 100 * 1.0625 = 106
-        // 5 neurons voting yes, 6 neurons total.
-        let (expected_yes, expected_total) = if is_mission_70_voting_rewards_enabled() {
-            (625, 750) // 5 * 125, 6 * 125
-        } else {
-            (530, 636) // 5 * 106, 6 * 106
-        };
+
+        // Step 3.2: This is really just a secondary check that the tally also
+        // reflects who voted. Really, tally can be directly derived from just
+        // the ballots alone (since they contain voting power).
+        let expected_yes = (1..=5)
+            .map(|id| deciding_voting_power(NeuronId { id }))
+            .sum();
+        let expected_total = expected_yes + deciding_voting_power(NeuronId { id: 6 });
         let expected_tally = Tally {
             timestamp_seconds: 234,
             yes: expected_yes,
@@ -1404,7 +1455,22 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine() {
+    async fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine_pre_mission_70()
+     {
+        let _restore_on_drop = temporarily_disable_mission_70_voting_rewards();
+        test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine(5474).await;
+    }
+
+    #[tokio::test]
+    async fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine_with_mission_70()
+     {
+        let _restore_on_drop = temporarily_enable_mission_70_voting_rewards();
+        test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine(3464).await;
+    }
+
+    async fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine(
+        expected_neuron_1_maturity: u64,
+    ) {
         let now = 1733433219;
         let topic = Topic::Governance;
         let environment = MockEnvironment::new(
@@ -1540,7 +1606,7 @@ mod test {
                 .neuron_store
                 .with_neuron(&NeuronId { id: 1 }, |n| n.maturity_e8s_equivalent)
                 .unwrap(),
-            5474
+            expected_neuron_1_maturity,
         );
     }
 

@@ -39,7 +39,6 @@ use ic_system_test_driver::util::delegations::*;
 use ic_system_test_driver::util::{
     MetricsFetcher, agent_with_identity, block_on, random_ed25519_identity,
 };
-use ic_types::messages::Blob;
 use rand::Rng;
 use serde_bytes::ByteBuf;
 use slog::info;
@@ -104,19 +103,15 @@ pub fn test(env: TestEnv) {
         "Randomly generated num_users={num_users} and num_calls_per_user={num_calls_per_user}"
     );
     block_on(async move {
-        let (delegation_identities, users) =
-            new_random_users(&env, num_users, &ii_node, ii_canister_id, ctr_canister_id).await;
-        let app_agents_with_delegation: Vec<_> = delegation_identities
-            .iter()
-            .zip(users.iter())
-            .map(|(delegation_identity, user)| AgentWithDelegation {
-                node_url: app_node.get_public_url(),
-                pubkey: user.ii_derived_public_key.clone(),
-                signed_delegation: user.signed_delegation.clone(),
-                delegation_identity,
-                polling_timeout: UPDATE_POLLING_TIMEOUT,
-            })
-            .collect();
+        let app_agents_with_delegation = new_random_user_agents(
+            &env,
+            num_users,
+            &ii_node,
+            &app_node,
+            ii_canister_id,
+            ctr_canister_id,
+        )
+        .await;
 
         for user_i in 0..num_users {
             for call_j in 0..num_calls_per_user {
@@ -167,18 +162,14 @@ fn install_counter_canister(env: &TestEnv, app_node: &IcNodeSnapshot) -> Princip
     canister_id
 }
 
-struct UserData {
-    pub signed_delegation: SignedDelegation,
-    pub ii_derived_public_key: ByteBuf,
-}
-
-async fn new_random_users(
+async fn new_random_user_agents(
     env: &TestEnv,
     num_users: usize,
     ii_node: &IcNodeSnapshot,
+    app_node: &IcNodeSnapshot,
     ii_canister_id: Principal,
     ctr_canister_id: Principal,
-) -> (Vec<BasicIdentity>, Vec<UserData>) {
+) -> Vec<Agent> {
     let user_ii_agents = ii_agents_for_new_random_users(num_users, ii_node, ii_canister_id).await;
     info!(env.logger(), "{num_users} users registered successfully");
 
@@ -193,17 +184,22 @@ async fn new_random_users(
         .await;
     info!(env.logger(), "Delegations received");
 
-    (
-        delegation_identities,
-        signed_delegations
-            .into_iter()
-            .zip(ii_derived_public_keys)
-            .map(|(signed_delegation, ii_derived_public_key)| UserData {
-                signed_delegation,
-                ii_derived_public_key,
-            })
-            .collect(),
-    )
+    let mut agents = Vec::with_capacity(num_users);
+    for ((delegation_identity, signed_delegation), ii_derived_pk) in delegation_identities
+        .into_iter()
+        .zip(signed_delegations)
+        .zip(ii_derived_public_keys)
+    {
+        let agent = agent_with_delegation(
+            app_node.get_public_url().as_str(),
+            ii_derived_pk.into_vec(),
+            signed_delegation,
+            delegation_identity,
+        )
+        .await;
+        agents.push(agent);
+    }
+    agents
 }
 
 async fn ii_agents_for_new_random_users(
@@ -230,7 +226,11 @@ async fn new_random_delegations(
     ctr_canister_id: Principal,
     ii_canister_id: Principal,
     ii_node: &IcNodeSnapshot,
-) -> (Vec<BasicIdentity>, Vec<SignedDelegation>, Vec<ByteBuf>) {
+) -> (
+    Vec<BasicIdentity>,
+    Vec<ic_agent::identity::SignedDelegation>,
+    Vec<ByteBuf>,
+) {
     let mut delegation_identities = Vec::with_capacity(user_ii_agents.len());
     let mut signed_delegations = Vec::with_capacity(user_ii_agents.len());
     let mut ii_derived_pks = Vec::with_capacity(user_ii_agents.len());
@@ -274,7 +274,7 @@ fn copy_pk(identity: &BasicIdentity) -> Vec<u8> {
 
 async fn increment_counter_canister(
     env: &TestEnv,
-    app_agents_with_delegation: &[AgentWithDelegation<'_>],
+    app_agents_with_delegation: &[Agent],
     ctr_canister_id: Principal,
     user_i: usize,
     call_j: usize,
@@ -283,9 +283,12 @@ async fn increment_counter_canister(
         env.logger(),
         "Making an update call #{call_j} for user #{user_i} on counter canister with delegation (increment counter)"
     );
-    let _ = app_agents_with_delegation[user_i]
-        .update(&ctr_canister_id, "write", Blob(vec![]))
-        .await;
+    app_agents_with_delegation[user_i]
+        .update(&ctr_canister_id, "write")
+        .with_arg(vec![])
+        .call_and_wait()
+        .await
+        .unwrap();
 }
 
 async fn scrape_metrics_and_check_cache_stats(env: &TestEnv, user_i: usize, call_j: usize) {

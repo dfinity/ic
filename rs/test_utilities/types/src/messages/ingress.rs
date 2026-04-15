@@ -5,7 +5,7 @@ use ic_types::{
     crypto::DOMAIN_IC_REQUEST,
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, Ingress, MessageId,
-        RawSignedSenderInfo, SignedIngress,
+        RawSignedSenderInfo, SenderInfo, SignedIngress,
     },
     time::expiry_time_from_now,
 };
@@ -80,6 +80,12 @@ impl IngressBuilder {
     /// Sets the `expiry_time` field.
     pub fn expiry_time(mut self, expiry_time: Time) -> Self {
         self.ingress.expiry_time = expiry_time;
+        self
+    }
+
+    /// Sets the `sender_info` field.
+    pub fn sender_info(mut self, sender_info: SenderInfo) -> Self {
+        self.ingress.sender_info = Some(sender_info);
         self
     }
 

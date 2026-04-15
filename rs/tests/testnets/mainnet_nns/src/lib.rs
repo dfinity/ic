@@ -34,8 +34,9 @@ use std::sync::mpsc::{self, Receiver};
 use std::{io::Write, process::Command};
 use url::Url;
 
-use crate::proposals::RecoveredNnsDictatorNeuron;
-use crate::proposals::{ProposalWithMainnetState, RECOVERED_NNS_DICTATOR_NEURON_IDENTITY};
+use crate::proposals::{
+    ProposalWithMainnetState, RECOVERED_NNS_DICTATOR_NEURON_IDENTITY, RecoveredNnsDictatorNeuron,
+};
 
 pub const MAINNET_NODE_VM_RESOURCE_OVERRIDES: VmResourceOverrides = VmResourceOverrides {
     memory_kibibytes: Some(AmountOfMemoryKiB::new(67108864)), // 64 GiB
@@ -211,9 +212,7 @@ fn setup_recovered_nns(
     patch_subnet_list(&env);
     // Set up a dictator neuron with a large stake to be able to pass any proposal instantly during
     // the test
-    let neuron_identity = Ed25519KeyPair::generate(&mut rand::thread_rng());
-    let neuron_principal = Sender::SigKeys(SigKeys::Ed25519(neuron_identity)).get_principal_id();
-    let neuron_id = setup_test_neuron(&env, neuron_principal);
+    let (neuron_id, neuron_secret_key_pem) = setup_test_neuron(&env);
 
     // Wait until the aux node is setup and we have fetched ic-recovery before starting the recovery
     let aux_node = rx_aux_node.recv().unwrap();
@@ -226,7 +225,7 @@ fn setup_recovered_nns(
         &env,
         RecoveredNnsDictatorNeuron {
             neuron_id,
-            neuron_secret_key_pem: neuron_identity.to_pem(),
+            neuron_secret_key_pem,
         },
     );
 
@@ -500,10 +499,12 @@ fn patch_subnet_list(env: &TestEnv) {
     });
 }
 
-fn setup_test_neuron(env: &TestEnv, controller: PrincipalId) -> NeuronId {
-    let neuron_id = with_neuron_for_tests(env, controller);
-    with_trusted_neurons_following_neuron_for_tests(env, neuron_id, controller);
-    neuron_id
+fn setup_test_neuron(env: &TestEnv) -> (NeuronId, String) {
+    let neuron_identity = Ed25519KeyPair::generate(&mut rand::thread_rng());
+    let neuron_principal = Sender::SigKeys(SigKeys::Ed25519(neuron_identity)).get_principal_id();
+    let neuron_id = with_neuron_for_tests(env, neuron_principal);
+    with_trusted_neurons_following_neuron_for_tests(env, neuron_id, neuron_principal);
+    (neuron_id, neuron_identity.to_pem())
 }
 
 fn with_neuron_for_tests(env: &TestEnv, controller: PrincipalId) -> NeuronId {
@@ -541,12 +542,12 @@ fn with_neuron_for_tests(env: &TestEnv, controller: PrincipalId) -> NeuronId {
 
 fn with_trusted_neurons_following_neuron_for_tests(
     env: &TestEnv,
-    neuron_id: NeuronId,
+    NeuronId(neuron_id): NeuronId,
     controller: PrincipalId,
 ) {
     ic_replay(env, |cmd| {
         cmd.arg("with-trusted-neurons-following-neuron-for-tests")
-            .arg(neuron_id.0.to_string())
+            .arg(neuron_id.to_string())
             .arg(controller.to_string());
     });
 }
@@ -826,7 +827,7 @@ fn setup_ic(env: TestEnv) {
 /// This script can be sourced such that we can easily use the legacy
 /// nns-tools shell scripts in /testnet/tools/nns-tools/ with the dynamic
 /// testnet deployed by this system-test.
-fn write_sh_lib(env: &TestEnv, neuron_id: NeuronId, http_gateway: &Url) {
+fn write_sh_lib(env: &TestEnv, NeuronId(neuron_id): NeuronId, http_gateway: &Url) {
     let logger: slog::Logger = env.logger();
     let set_testnet_env_vars_sh_path = env.get_path(PATH_SET_TESTNET_ENV_VARS_SH);
     let set_testnet_env_vars_sh_str = set_testnet_env_vars_sh_path.display();
@@ -837,19 +838,18 @@ fn write_sh_lib(env: &TestEnv, neuron_id: NeuronId, http_gateway: &Url) {
         .write_all(
             RECOVERED_NNS_DICTATOR_NEURON_IDENTITY
                 .get()
-                .unwrap()
+                .expect("'write_dictator_neuron_identity_to_env' should have been called before 'write_sh_lib'")
                 .1
                 .as_bytes(),
         )
         .unwrap();
-    let neuron_id_number = neuron_id.0;
     fs::write(
         &set_testnet_env_vars_sh_path,
         format!(
             "export IC_ADMIN={ic_admin:?};\n\
              export PEM={pem:?};\n\
              export NNS_URL=\"{http_gateway}\";\n\
-             export NEURON_ID={neuron_id_number:?};\n\
+             export NEURON_ID={neuron_id:?};\n\
             "
         ),
     )

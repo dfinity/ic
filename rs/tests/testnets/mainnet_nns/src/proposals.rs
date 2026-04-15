@@ -51,7 +51,7 @@ use url::Url;
 * proposals.
 */
 
-// Test neuron ID and secret key of its controller encoded in PEM format.
+/// Test neuron ID and secret key of its controller encoded in PEM format.
 pub(crate) static RECOVERED_NNS_DICTATOR_NEURON_IDENTITY: OnceCell<(NeuronId, String)> =
     OnceCell::new();
 
@@ -73,8 +73,8 @@ pub struct ProposalWithMainnetState {
 }
 
 impl ProposalWithMainnetState {
-    /// Initializes a ProposalWithMainnetState instance reading the neuron identty from the static
-    /// variable, which must have been initialized before via
+    /// Initializes a [`ProposalWithMainnetState`] instance reading the neuron identity from the
+    /// static variable, which must have been initialized before via
     /// `read_dictator_neuron_identity_from_env`.
     ///
     /// This function is not intended to be called externally (thus it is not `pub`), but only called

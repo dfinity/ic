@@ -121,7 +121,10 @@ pub(crate) fn agent_with_principal_as_sender(principal: &PrincipalId) -> Result<
         .map_err(|err| err.to_string())
 }
 
-pub fn cmd_add_neuron(time: Time, cmd: &WithNeuronCmd) -> Result<Vec<IngressWithPrinter>, String> {
+pub(crate) fn cmd_add_neuron(
+    time: Time,
+    cmd: &WithNeuronCmd,
+) -> Result<Vec<IngressWithPrinter>, String> {
     let mut msgs = vec![];
 
     let controller = cmd.neuron_controller;
@@ -194,7 +197,7 @@ pub fn cmd_add_neuron(time: Time, cmd: &WithNeuronCmd) -> Result<Vec<IngressWith
     Ok(msgs)
 }
 
-pub fn cmd_make_trusted_neurons_follow_neuron(
+pub(crate) fn cmd_make_trusted_neurons_follow_neuron(
     time: Time,
     cmd: &WithTrustedNeuronsFollowingNeuronCmd,
 ) -> Result<Vec<SignedIngress>, String> {
@@ -290,7 +293,7 @@ pub fn cmd_make_trusted_neurons_follow_neuron(
     Ok(msgs)
 }
 
-pub fn cmd_add_ledger_account(
+pub(crate) fn cmd_add_ledger_account(
     time: Time,
     cmd: &WithLedgerAccountCmd,
 ) -> Result<Vec<SignedIngress>, String> {
@@ -376,7 +379,7 @@ pub(crate) fn cmd_upgrade_subnet_to_replica_version(
 
 /// Read the registry from the specified local store and send them to the
 /// registry canister with slight modifications.
-pub fn cmd_add_registry_content(
+pub(crate) fn cmd_add_registry_content(
     agent: &Agent,
     cmd: &AddRegistryContentCmd,
     subnet_id: SubnetId,
@@ -476,7 +479,7 @@ fn show_mutation_type(mutation_type: i32) -> &'static str {
 }
 
 /// Applies 'mutations' to the registry.
-pub fn atomic_mutate(
+fn atomic_mutate(
     agent: &Agent,
     canister_id: CanisterId,
     mutations: Vec<RegistryMutation>,
@@ -518,7 +521,7 @@ pub(crate) fn bless_replica_version(
 }
 
 /// Add a new replica version by mutating the registry canister.
-pub fn add_replica_version(
+fn add_replica_version(
     agent: &Agent,
     replica_version_id: String,
     record: ReplicaVersionRecord,
@@ -543,7 +546,7 @@ pub fn add_replica_version(
 }
 
 /// Update subnet record.
-pub fn update_subnet_record(
+fn update_subnet_record(
     agent: &Agent,
     subnet_id: SubnetId,
     record: SubnetRecord,
@@ -568,7 +571,7 @@ pub fn update_subnet_record(
 }
 
 /// Update subnet list record.
-pub fn update_subnet_list_record(
+fn update_subnet_list_record(
     agent: &Agent,
     record: SubnetListRecord,
     context_time: Time,

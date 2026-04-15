@@ -31,7 +31,7 @@ use ic_consensus_system_test_utils::upgrade::bless_replica_version;
 use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
     ssh_access::{
-        AuthMean, generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
+        AuthMean, generate_key_strings, get_update_subnet_payload_with_keys, update_subnet_record,
         wait_until_authentication_is_granted,
     },
     upgrade::{
@@ -211,7 +211,8 @@ pub fn test(env: TestEnv) {
     });
 
     info!(log, "Update the registry with the backup key");
-    let payload = get_updatesubnetpayload_with_keys(subnet_id, None, Some(vec![backup_public_key]));
+    let payload =
+        get_update_subnet_payload_with_keys(subnet_id, None, Some(vec![backup_public_key]));
     block_on(update_subnet_record(nns_node.get_public_url(), payload));
     let backup_mean = AuthMean::PrivateKey(backup_private_key);
     wait_until_authentication_is_granted(&log, &node_ip, "backup", &backup_mean);
