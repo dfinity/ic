@@ -997,6 +997,59 @@ def fmt_time(t):
     return t.strftime("%a %Y-%m-%d %X") if pd.notna(t) else ""
 
 
+def get_git_since_arg(args) -> str:
+    """
+    Convert the time filter args into a --since argument for git log.
+
+    When --since is specified, parses it via parse_datetime (which returns a
+    UTC-aware datetime) and formats it as ISO-8601 with a Z suffix so that
+    git log --since uses the same UTC time window as the SQL query.
+    """
+    if args.since:
+        dt = parse_datetime(args.since)
+        return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return f"last {period(args)}"
+
+
+def extract_test_name(label: str) -> str:
+    """Extract the test target name from a Bazel label (part after ':')."""
+    parts = label.rsplit(":", 1)
+    return parts[1] if len(parts) == 2 else label
+
+
+def get_recent_commits(git_since: str) -> list[str]:
+    """Run git log --oneline --since once and return the list of commit lines."""
+    repo_root = THIS_SCRIPT_DIR.parent.parent
+    try:
+        result = subprocess.run(
+            ["git", "log", "--oneline", "--since", git_since],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.strip().splitlines()
+    except (subprocess.CalledProcessError, OSError) as e:
+        print(f"Warning: git log failed: {e}", file=sys.stderr)
+        return []
+
+
+def has_open_pr(test_name: str) -> bool:
+    """Check if there is an open PR that mentions the test name."""
+    search_term = test_name.replace("_", " ")
+    try:
+        result = subprocess.run(
+            ["gh", "pr", "list", "--search", search_term, "--state", "open", "--repo", f"{ORG}/{REPO}", "--limit", "1"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return bool(result.stdout.strip())
+    except (subprocess.CalledProcessError, OSError) as e:
+        print(f"Warning: gh pr list failed: {e}", file=sys.stderr)
+        return False
+
+
 def top(args):
     """
     Get the top N non-successful / flaky / failed / timed-out tests
@@ -1065,6 +1118,30 @@ def top(args):
     df["impact"] = df["impact"].apply(normalize_duration)
     df["total_duration"] = df["total_duration"].apply(normalize_duration)
     df["duration_p90"] = df["duration_p90"].apply(normalize_duration)
+
+    # Optionally exclude tests that appear to already be fixed:
+    if args.exclude_fixed:
+        git_since = get_git_since_arg(args)
+        commit_lines = get_recent_commits(git_since)
+        test_names = df["label"].apply(extract_test_name)
+        # Check commits in-memory first, then only call gh for the rest:
+        fixed_by_commit = test_names.apply(
+            lambda name: any(
+                re.search(re.escape(name).replace("_", "[_. ]"), line, re.IGNORECASE) for line in commit_lines
+            )
+        )
+        remaining = test_names[~fixed_by_commit]
+        max_pr_check_workers = max(1, min(4, len(remaining)))
+        with ThreadPoolExecutor(max_workers=max_pr_check_workers) as executor:
+            pr_results = dict(zip(remaining.index, executor.map(has_open_pr, remaining)))
+        fixed = fixed_by_commit | pd.Series({i: pr_results.get(i, False) for i in df.index})
+        excluded_count = fixed.sum()
+        if excluded_count > 0:
+            excluded_labels = df.loc[fixed, "label"].tolist()
+            print(f"Excluded {excluded_count} test(s) that appear already fixed:", file=sys.stderr)
+            for lbl in excluded_labels:
+                print(f"  {lbl}", file=sys.stderr)
+        df = df[~fixed]
 
     # Find the CODEOWNERS for each test target:
     owners = codeowners.CodeOwners(Path(os.environ["CODEOWNERS_PATH"]).read_text())
@@ -1332,7 +1409,11 @@ duration_p90:\t\t90th percentile duration of all runs in the specified period"""
         "--include", metavar="TEST", type=str, help="Include only tests matching this SQL LIKE pattern"
     )
 
-    top_parser.set_defaults(func=top)
+    top_parser.add_argument(
+        "--exclude-fixed",
+        action="store_true",
+        help="Exclude tests that appear already fixed (mentioned in a recent git commit or an open PR)",
+    )
 
     top_parser.add_argument(
         "--tablefmt",
@@ -1343,6 +1424,8 @@ duration_p90:\t\t90th percentile duration of all runs in the specified period"""
     )
 
     add_columns_argument(top_parser, TOP_COLUMNS)
+
+    top_parser.set_defaults(func=top)
 
     ## last ###################################################################
 
@@ -1430,7 +1513,6 @@ logs
         help="""Return runs of bazel targets matching the given SQL LIKE pattern.
 If omitted retuns all bazel test runs in the specified period.""",
     )
-    last_runs_parser.set_defaults(func=last)
 
     last_runs_parser.add_argument(
         "--tablefmt",
@@ -1441,6 +1523,8 @@ If omitted retuns all bazel test runs in the specified period.""",
     )
 
     add_columns_argument(last_runs_parser, LAST_COLUMNS)
+
+    last_runs_parser.set_defaults(func=last)
 
     ###########################################################################
 

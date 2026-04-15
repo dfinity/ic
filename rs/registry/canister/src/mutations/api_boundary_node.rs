@@ -1,7 +1,8 @@
 use std::str::FromStr;
 
 use crate::{
-    common::LOG_PREFIX, mutations::node_management::common::get_key_family_iter, registry::Registry,
+    common::{LOG_PREFIX, key_family::get_key_family_iter},
+    registry::Registry,
 };
 
 use ic_base_types::NodeId;

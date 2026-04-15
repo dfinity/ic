@@ -41,6 +41,7 @@ use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_
 use ic_protobuf::registry::dc::v1::{DataCenterRecord, Gps};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
+    farm::HostFeature,
     group::SystemTestGroup,
     ic::{InternetComputer, Node, NodeOperatorConfig, Subnet},
     ic_gateway_vm::{HasIcGatewayVm, IC_GATEWAY_VM_NAME, IcGatewayVm},
@@ -52,6 +53,13 @@ use nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
 };
 use std::collections::BTreeMap;
+use std::net::Ipv4Addr;
+
+/// dm1-dmz datacenter and network constants
+const DM1_DMZ_DC: &str = "dm1-dmz";
+const DM1_DMZ_NETWORK: Ipv4Addr = Ipv4Addr::new(23, 142, 184, 224);
+const DM1_DMZ_PREFIX: u8 = 28;
+const DM1_DMZ_GATEWAY: Ipv4Addr = Ipv4Addr::new(23, 142, 184, 238);
 
 struct DcConfig {
     id: &'static str,
@@ -100,7 +108,11 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
-    let mut ic = InternetComputer::new().add_subnet(Subnet::new(SubnetType::System).add_nodes(4));
+    let dm1_dmz_features = vec![HostFeature::DC(DM1_DMZ_DC.to_string()), HostFeature::DMZ];
+
+    let mut ic = InternetComputer::new()
+        .with_required_host_features(dm1_dmz_features.clone())
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1));
 
     // Build CloudEngine subnet and unassigned nodes distributed across 4 datacenters.
     // Each datacenter gets its own node operator with 1 CloudEngine node + 1 unassigned node.
@@ -147,8 +159,23 @@ pub fn setup(env: TestEnv) {
         env.topology_snapshot(),
         nns_dapp_customizations(),
     );
-    // deploy ic-gateway
-    IcGatewayVm::new(IC_GATEWAY_VM_NAME)
+    // deploy ic-gateway on dm1-dmz with static IPv4
+    let mut ic_gateway_vm =
+        IcGatewayVm::new(IC_GATEWAY_VM_NAME).with_required_host_features(dm1_dmz_features);
+    if let Ok(ic_gw_ipv4) = std::env::var("IC_GW_IPV4") {
+        let ip: Ipv4Addr = ic_gw_ipv4
+            .parse()
+            .unwrap_or_else(|e| panic!("invalid IC_GW_IPV4 address '{ic_gw_ipv4}': {e}"));
+        let mask: u32 = !((1_u32 << (32 - DM1_DMZ_PREFIX)) - 1);
+        assert_eq!(
+            u32::from(ip) & mask,
+            u32::from(DM1_DMZ_NETWORK),
+            "IC_GW_IPV4 address {ip} is not within {DM1_DMZ_NETWORK}/{DM1_DMZ_PREFIX}"
+        );
+        let address = format!("{ip}/{DM1_DMZ_PREFIX}");
+        ic_gateway_vm = ic_gateway_vm.with_ipv4_config(&address, &DM1_DMZ_GATEWAY.to_string());
+    }
+    ic_gateway_vm
         .start(&env)
         .expect("failed to setup ic-gateway");
     let ic_gateway = env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME).unwrap();

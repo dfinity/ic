@@ -67,14 +67,61 @@ pub(crate) struct NeuronMetrics {
     pub(crate) fully_lost_voting_power_neuron_subset_metrics: NeuronSubsetMetrics,
 }
 
+/// Because we decided to start using rust_decimal, some simple repeated
+/// calculations became too expensive to repeat. This is to avoid such
+/// repetition. Otherwise, yes, this is "premature optimization".
+#[derive(Debug, Clone, Copy)]
+struct MemoizedNeuron<'a, 'b> {
+    base_neuron: &'a Neuron,
+    voting_power_economics: &'b VotingPowerEconomics,
+    now_seconds: u64,
+
+    // Derived (and therefore don't need to be re-derived; hence "Memoized").
+    potential_voting_power: u64,
+    deciding_voting_power: u64,
+    dissolve_delay_seconds: u64,
+}
+
+impl<'a, 'b> MemoizedNeuron<'a, 'b> {
+    fn new(
+        base_neuron: &'a Neuron,
+        voting_power_economics: &'b VotingPowerEconomics,
+        now_seconds: u64,
+    ) -> Self {
+        let (potential_voting_power, deciding_voting_power) =
+            base_neuron.potential_and_deciding_voting_power(voting_power_economics, now_seconds);
+        let dissolve_delay_seconds = base_neuron.dissolve_delay_seconds(now_seconds);
+
+        Self {
+            base_neuron,
+            voting_power_economics,
+            now_seconds,
+
+            potential_voting_power,
+            deciding_voting_power,
+            dissolve_delay_seconds,
+        }
+    }
+
+    fn controller(&self) -> PrincipalId {
+        self.base_neuron.controller()
+    }
+
+    fn visibility(&self) -> Visibility {
+        self.base_neuron.visibility()
+    }
+
+    fn voting_power_refreshed_timestamp_seconds(&self) -> u64 {
+        self.base_neuron.voting_power_refreshed_timestamp_seconds()
+    }
+}
+
 impl NeuronMetrics {
     fn increment_non_self_authenticating_controller_neuron_subset_metrics(
         &mut self,
-        voting_power_economics: &VotingPowerEconomics,
-        now_seconds: u64,
-        neuron: &Neuron,
+        neuron: MemoizedNeuron,
     ) {
-        let controller: PrincipalId = neuron.controller();
+        let controller = neuron.controller();
 
         if controller.is_self_authenticating() {
             return;
@@ -86,22 +133,16 @@ impl NeuronMetrics {
         }
 
         self.non_self_authenticating_controller_neuron_subset_metrics
-            .increment(voting_power_economics, now_seconds, neuron);
+            .increment(neuron);
     }
 
-    fn increment_public_neuron_subset_metrics(
-        &mut self,
-        voting_power_economics: &VotingPowerEconomics,
-        now_seconds: u64,
-        neuron: &Neuron,
-    ) {
+    fn increment_public_neuron_subset_metrics(&mut self, neuron: MemoizedNeuron) {
         let is_public = neuron.visibility() == Visibility::Public;
         if !is_public {
             return;
         }
 
-        self.public_neuron_subset_metrics
-            .increment(voting_power_economics, now_seconds, neuron);
+        self.public_neuron_subset_metrics.increment(neuron);
     }
 
     /// This could modify either declining_voting_power_neuron_subset_metrics, or
@@ -109,10 +150,14 @@ impl NeuronMetrics {
     /// those categories are mutually exclusive.
     fn increment_declining_voting_power_or_fully_lost_voting_power_neuron_subset_metrics(
         &mut self,
-        voting_power_economics: &VotingPowerEconomics,
-        now_seconds: u64,
-        neuron: &Neuron,
+        neuron: MemoizedNeuron,
     ) {
+        let MemoizedNeuron {
+            voting_power_economics,
+            now_seconds,
+            ..
+        } = neuron;
+
         // The substraction here assumes that the neuron was not refreshed in
         // the future. (This doesn't always hold in tests though, due to the
         // difficulty of constructing realistic data/scenarios.)
@@ -130,14 +175,11 @@ impl NeuronMetrics {
                 .get_start_reducing_voting_power_after_seconds()
                 .saturating_add(voting_power_economics.get_clear_following_after_seconds());
         if is_moderately_refreshed {
-            self.declining_voting_power_neuron_subset_metrics.increment(
-                voting_power_economics,
-                now_seconds,
-                neuron,
-            );
+            self.declining_voting_power_neuron_subset_metrics
+                .increment(neuron)
         } else {
             self.fully_lost_voting_power_neuron_subset_metrics
-                .increment(voting_power_economics, now_seconds, neuron);
+                .increment(neuron);
         }
     }
 }
@@ -176,20 +218,24 @@ pub(crate) struct NeuronSubsetMetrics {
 }
 
 impl NeuronSubsetMetrics {
-    fn increment(
-        &mut self,
-        voting_power_economics: &VotingPowerEconomics,
-        now_seconds: u64,
-        neuron: &Neuron,
-    ) {
+    fn increment(&mut self, memoized_neuron: MemoizedNeuron) {
+        let MemoizedNeuron {
+            base_neuron: neuron,
+
+            // Derived.
+            potential_voting_power,
+            deciding_voting_power,
+            dissolve_delay_seconds,
+
+            // Not used.
+            voting_power_economics: _,
+            now_seconds: _,
+        } = memoized_neuron;
+
         let staked_e8s = neuron.minted_stake_e8s();
         let staked_maturity_e8s_equivalent =
             neuron.staked_maturity_e8s_equivalent.unwrap_or_default();
         let maturity_e8s_equivalent = neuron.maturity_e8s_equivalent;
-
-        let potential_voting_power = neuron.potential_voting_power(now_seconds);
-        let deciding_voting_power =
-            neuron.deciding_voting_power(voting_power_economics, now_seconds);
 
         let increment = |total: &mut u64, additional_amount| {
             *total = total.saturating_add(additional_amount);
@@ -215,9 +261,7 @@ impl NeuronSubsetMetrics {
         );
 
         // Increment metrics broken out by dissolve delay.
-        let dissolve_delay_bucket = neuron
-            .dissolve_delay_seconds(now_seconds)
-            .saturating_div(6 * ONE_MONTH_SECONDS);
+        let dissolve_delay_bucket = dissolve_delay_seconds.saturating_div(6 * ONE_MONTH_SECONDS);
         let increment = |subtotals: &mut HashMap<u64, u64>, additional_amount| {
             let subtotal = subtotals.entry(dissolve_delay_bucket).or_default();
             *subtotal = subtotal.saturating_add(additional_amount);
@@ -266,20 +310,14 @@ impl NeuronStore {
 
             for neuron in stable_neuron_store.range_neurons_sections(.., neuron_sections) {
                 let neuron = &neuron;
+                let memoized_neuron =
+                    MemoizedNeuron::new(neuron, voting_power_economics, now_seconds);
                 metrics.increment_non_self_authenticating_controller_neuron_subset_metrics(
-                    voting_power_economics,
-                    now_seconds,
-                    neuron,
+                    memoized_neuron,
                 );
-                metrics.increment_public_neuron_subset_metrics(
-                    voting_power_economics,
-                    now_seconds,
-                    neuron,
-                );
+                metrics.increment_public_neuron_subset_metrics(memoized_neuron);
                 metrics.increment_declining_voting_power_or_fully_lost_voting_power_neuron_subset_metrics(
-                    voting_power_economics,
-                    now_seconds,
-                    neuron,
+                    memoized_neuron,
                 );
 
                 metrics.total_staked_e8s = metrics

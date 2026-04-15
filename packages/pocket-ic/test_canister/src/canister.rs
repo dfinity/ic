@@ -4,7 +4,7 @@ use ic_cdk::api::call::{RejectionCode, accept_message, arg_data_raw, reject};
 use ic_cdk::api::instruction_counter;
 use ic_cdk::api::management_canister::ecdsa::{
     EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgument, EcdsaPublicKeyResponse, SignWithEcdsaArgument,
-    ecdsa_public_key as ic_cdk_ecdsa_public_key, sign_with_ecdsa as ic_cdk_sign_with_ecdsa,
+    SignWithEcdsaResponse, ecdsa_public_key as ic_cdk_ecdsa_public_key,
 };
 use ic_cdk::api::management_canister::http_request::{
     CanisterHttpRequestArgument, HttpMethod, HttpResponse, TransformArgs, TransformContext,
@@ -162,6 +162,11 @@ async fn sign_with_schnorr(
     key_id: SchnorrKeyId,
     aux: Option<SignWithSchnorrAux>,
 ) -> Result<Vec<u8>, String> {
+    let fee = if key_id.name == "key_1" {
+        26_153_846_153
+    } else {
+        10_000_000_000
+    };
     let request = SignWithSchnorrArgument {
         message,
         derivation_path,
@@ -173,7 +178,7 @@ async fn sign_with_schnorr(
         Principal::management_canister(),
         "sign_with_schnorr",
         (request,),
-        26_153_846_153,
+        fee,
     )
     .await
     .map_err(|e| format!("sign_with_schnorr failed {e:?}"))?;
@@ -209,6 +214,11 @@ async fn sign_with_ecdsa(
     derivation_path: Vec<Vec<u8>>,
     name: String,
 ) -> Result<Vec<u8>, String> {
+    let fee: u128 = if name == "key_1" {
+        26_153_846_153
+    } else {
+        10_000_000_000
+    };
     let arg = SignWithEcdsaArgument {
         message_hash,
         derivation_path,
@@ -217,11 +227,15 @@ async fn sign_with_ecdsa(
             name,
         },
     };
-    Ok(ic_cdk_sign_with_ecdsa(arg)
-        .await
-        .map_err(|(code, msg)| format!("Reject code: {code:?}; Reject message: {msg}"))?
-        .0
-        .signature)
+    let (res,): (SignWithEcdsaResponse,) = ic_cdk::api::call::call_with_payment128(
+        Principal::management_canister(),
+        "sign_with_ecdsa",
+        (arg,),
+        fee,
+    )
+    .await
+    .map_err(|(code, msg)| format!("Reject code: {code:?}; Reject message: {msg}"))?;
+    Ok(res.signature)
 }
 
 // vetKd interface
@@ -297,6 +311,11 @@ async fn vetkd_derive_key(
     name: String,
     transport_public_key: Vec<u8>,
 ) -> Result<Vec<u8>, String> {
+    let fee = if name == "key_1" {
+        26_153_846_153
+    } else {
+        10_000_000_000
+    };
     let request = VetKdDeriveKeyArgument {
         context,
         input,
@@ -311,7 +330,7 @@ async fn vetkd_derive_key(
         Principal::management_canister(),
         "vetkd_derive_key",
         (request,),
-        26_153_846_153,
+        fee,
     )
     .await
     .map_err(|e| format!("vetkd_derive_key failed {e:?}"))?;

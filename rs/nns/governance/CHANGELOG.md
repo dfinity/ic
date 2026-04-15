@@ -11,6 +11,52 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-04-14: Proposal 141380
+
+http://dashboard.internetcomputer.org/proposal/141380
+
+## Fixed
+
+* When result in `get_node_providers_rewards_cached` is `Err`,
+  release INFLIGHT (i.e. set it to `false`).
+
+
+# 2026-04-11: Proposal 141331
+
+http://dashboard.internetcomputer.org/proposal/141331
+
+Maintenance release. New code is disabled by flags.
+
+
+# 2026-04-06: Proposal 141242
+
+http://dashboard.internetcomputer.org/proposal/141242
+
+## Added
+
+- Proposal type `DeleteSubnet`, currently limited to CloudEngine subnets.
+- Tag neurons that have the maximum dissolve delay of 8 years with their bonus base
+  (`eight_year_gang_bonus_base_e8s`), in preparation for the dissolve delay bonus
+  grandfathering when the maximum dissolve delay is reduced to 2 years.
+- Expose data that will be used to determine the bonus that "8 year gang" neurons
+  will receive, starting in the near future. This data consists of the staked amount
+  in neurons with 8 year dissolve delay at the beginning of Mission 70. This will be
+  used in the near future to determine voting power (and consequently, voting rewards),
+  once other aspects of voting power/rewards are in production.
+
+
+# 2026-03-27: Proposal 141090
+
+http://dashboard.internetcomputer.org/proposal/141090
+
+## Added
+
+- Support for `snapshot_visibility` in `UpdateCanisterSettings` proposals.
+- Tag neurons that have the maximum dissolve delay of 8 years with their bonus base
+  (`eight_year_gang_bonus_base_e8s`), in preparation for the dissolve delay bonus
+  grandfathering when the maximum dissolve delay is reduced to 2 years.
+
+
 # 2026-03-20: Proposal 140958
 
 http://dashboard.internetcomputer.org/proposal/140958

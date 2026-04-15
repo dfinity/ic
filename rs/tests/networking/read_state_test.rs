@@ -1091,15 +1091,6 @@ where
         .unwrap())
 }
 
-macro_rules! systest_all_variants {
-    ($group: expr, $function_name:path) => {
-        $group = $group.add_test(systest!($function_name; Endpoint::CanisterReadState(read_state::canister::Version::V2)));
-        $group = $group.add_test(systest!($function_name; Endpoint::CanisterReadState(read_state::canister::Version::V3)));
-        $group = $group.add_test(systest!($function_name; Endpoint::SubnetReadState(read_state::subnet::Version::V2)));
-        $group = $group.add_test(systest!($function_name; Endpoint::SubnetReadState(read_state::subnet::Version::V3)));
-    };
-}
-
 fn main() -> Result<()> {
     let mut parallel_group = SystemTestSubGroup::new()
         .add_test(systest!(test_non_utf8_metadata))
@@ -1128,12 +1119,20 @@ fn main() -> Result<()> {
         .add_test(systest!(test_metadata_path; read_state::canister::Version::V2))
         .add_test(systest!(test_metadata_path; read_state::canister::Version::V3));
 
-    systest_all_variants!(parallel_group, test_empty_paths_return_time);
-    systest_all_variants!(parallel_group, test_time_path_returns_time);
-    systest_all_variants!(parallel_group, test_subnet_path);
-    systest_all_variants!(parallel_group, test_invalid_request_rejected);
-    systest_all_variants!(parallel_group, test_invalid_path_rejected);
-    systest_all_variants!(parallel_group, test_deprecated_subnet_canister_ranges_paths);
+    for endpoint in [
+        Endpoint::CanisterReadState(read_state::canister::Version::V2),
+        Endpoint::CanisterReadState(read_state::canister::Version::V3),
+        Endpoint::SubnetReadState(read_state::subnet::Version::V2),
+        Endpoint::SubnetReadState(read_state::subnet::Version::V3),
+    ] {
+        parallel_group = parallel_group
+            .add_test(systest!(test_empty_paths_return_time; endpoint))
+            .add_test(systest!(test_time_path_returns_time; endpoint))
+            .add_test(systest!(test_subnet_path; endpoint))
+            .add_test(systest!(test_invalid_request_rejected; endpoint))
+            .add_test(systest!(test_invalid_path_rejected; endpoint))
+            .add_test(systest!(test_deprecated_subnet_canister_ranges_paths; endpoint));
+    }
 
     SystemTestGroup::new()
         .with_setup(setup)
