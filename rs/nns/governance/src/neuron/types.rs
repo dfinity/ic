@@ -333,8 +333,12 @@ impl Neuron {
             .1
     }
 
-    /// Voting power is fundamentally based on the amount staked. From that
-    /// base, it is boosted by two factors:
+    /// Voting power is fundamentally based on the amount staked plus the
+    /// 8 Year Gang bonus (10% of the bonus base, capped to the current stake).
+    /// The bonus base is set for neurons that had the maximum dissolve delay
+    /// before Mission 70 reduced it from 8 years to 2 years.
+    ///
+    /// From that effective stake, voting power is boosted by two factors:
     ///
     /// * Its current dissolve delay (i.e. how much time must pass before, the
     ///   ICP can be taken out of the neuron). The maximum dissolve delay bonus
@@ -367,11 +371,11 @@ impl Neuron {
         voting_power_economics: &VotingPowerEconomics,
         now_seconds: u64,
     ) -> (u64, u64) {
+        let stake_e8s = self.stake_e8s();
         // Cap the bonus base to the current stake because rejection fees can cause the
         // bonus base to exceed stake_e8s.
-        let eight_year_gang_bonus_base_e8s =
-            self.eight_year_gang_bonus_base_e8s.min(self.stake_e8s());
-        let potential_voting_power = (Decimal::from(self.stake_e8s())
+        let eight_year_gang_bonus_base_e8s = self.eight_year_gang_bonus_base_e8s.min(stake_e8s);
+        let potential_voting_power = (Decimal::from(stake_e8s)
             + eight_year_gang_bonus(eight_year_gang_bonus_base_e8s))
             * dissolve_delay_bonus_multiplier(self.dissolve_delay_seconds(now_seconds))
             * age_bonus_multiplier(self.age_seconds(now_seconds));
