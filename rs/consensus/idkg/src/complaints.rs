@@ -690,6 +690,7 @@ impl IDkgComplaintHandlerImpl {
             }
             Err(error) => {
                 warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Failed to resolve complaint ref: reason = {}, \
                      transcript_ref = {:?}, error = {:?}",
@@ -890,6 +891,7 @@ impl IDkgTranscriptLoader for IDkgComplaintHandlerImpl {
             }
             Err(err) => {
                 warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Failed to load transcript: transcript_id: {:?}, error = {:?}",
                     transcript.transcript_id,
@@ -940,6 +942,7 @@ impl IDkgTranscriptLoader for IDkgComplaintHandlerImpl {
             }
             Err(err) => {
                 warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Failed to load transcript with openings: transcript_id: {:?}, error = {:?}",
                     transcript.transcript_id,

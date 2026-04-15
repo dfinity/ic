@@ -179,6 +179,7 @@ pub(super) fn block_chain_reader(
         .map(IDkgBlockReaderImpl::new)
         .map_err(|err| {
             warn!(
+                every_n_seconds => 10,
                 log,
                 "block_chain_reader(): failed to build chain cache: {}", err
             );
@@ -427,6 +428,7 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
                             stats.transcript_resolution_errors += 1;
                         }
                         error!(
+                            every_n_seconds => 10,
                             log,
                             "{}: Failed to retrieve IDKg subnet master public key of key id {}: {:?}",
                             CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS,
@@ -448,6 +450,7 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
                     stats.transcript_resolution_errors += 1;
                 }
                 error!(
+                    every_n_seconds => 10,
                     log,
                     "{}: Failed to translate key transcript ref {:?} of key {}: {:?}",
                     CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS,
@@ -476,6 +479,7 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
                         stats.transcript_resolution_errors += 1;
                     }
                     error!(
+                        every_n_seconds => 10,
                         log,
                         "{}: Failed to translate Pre-signature ref of key {}: {:?}",
                         CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS,

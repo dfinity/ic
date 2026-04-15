@@ -135,6 +135,7 @@ pub fn make_bootstrap_summary_with_initial_dealings(
             None => {
                 // Leave the feature disabled if the initial dealings are incorrect.
                 warn!(
+                    every_n_seconds => 10,
                     log,
                     "make_idkg_genesis_summary(): failed to unpack initial dealings"
                 );

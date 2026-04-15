@@ -31,6 +31,7 @@ pub(crate) fn initiate_reshare_requests(
             .and_then(|key_transcript| key_transcript.current.as_ref())
         else {
             warn!(
+                every_n_seconds => 10,
                 log,
                 "Cannot initiate reshare request because key transcript is unavailable: {:?}",
                 request
@@ -102,6 +103,7 @@ pub(crate) fn update_completed_reshare_requests(
     for (request, reshare_param) in &payload.ongoing_xnet_reshares {
         if payload.current_key_transcript(&request.key_id()).is_none() {
             warn!(
+                every_n_seconds => 10,
                 log,
                 "Skipping ongoing reshare request without a current key transcript: {:?}", request
             );
@@ -118,6 +120,7 @@ pub(crate) fn update_completed_reshare_requests(
             Ok(params) => params,
             Err(err) => {
                 warn!(
+                    every_n_seconds => 10,
                     log,
                     "Failed to resolve reshare transcript params: {:?}", err
                 );
@@ -133,7 +136,11 @@ pub(crate) fn update_completed_reshare_requests(
             }
             Err(InitialIDkgDealingsValidationError::UnsatisfiedCollectionThreshold { .. }) => (),
             Err(err) => {
-                warn!(log, "Failed to create initial dealings: {:?}", err);
+                warn!(
+                    every_n_seconds => 10,
+                    log,
+                    "Failed to create initial dealings: {:?}", err
+                );
                 idkg_payload_metrics.payload_errors_inc("reshare_initial_dealings_creation");
             }
         };
@@ -166,6 +173,7 @@ pub(crate) fn update_completed_reshare_requests(
                 .insert(request, idkg::CompletedReshareRequest::Unreported(response));
         } else {
             warn!(
+                every_n_seconds => 10,
                 log,
                 "Cannot find the request for the initial dealings created: {:?}", request
             );

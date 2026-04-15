@@ -172,6 +172,7 @@ fn update_ecdsa_quadruple_in_creation(
         let lambda_config = quadruple.lambda_config.as_ref();
         if key_transcript.receivers() != lambda_config.receivers() {
             error!(
+                every_n_seconds => 10,
                 log,
                 "Key transcript has a different receiver set than lambda_config: {:?} {:?}",
                 key_transcript,
@@ -197,6 +198,7 @@ fn update_ecdsa_quadruple_in_creation(
         let kappa_config = quadruple.kappa_unmasked_config.as_ref();
         if kappa_config.receivers() != lambda_config.receivers() {
             error!(
+                every_n_seconds => 10,
                 log,
                 "kappa_config has a different receiver set than lambda_config: {:?} {:?}",
                 kappa_config,
