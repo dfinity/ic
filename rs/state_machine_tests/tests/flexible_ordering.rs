@@ -49,7 +49,7 @@ fn test_basic_inter_canister_ordering() {
         .build();
 
     let ingress_id = sm
-        .buffer_ingress_as(
+        .ingress_message_with_flexible_ordering(
             PrincipalId::new_anonymous(),
             canister_a,
             "update",
@@ -81,10 +81,20 @@ fn test_ingress_ordering_on_same_canister() {
     let payload_2 = wasm().set_global_data(b"second").reply_data(b"ok2").build();
 
     let id1 = sm
-        .buffer_ingress_as(PrincipalId::new_anonymous(), canister, "update", payload_1)
+        .ingress_message_with_flexible_ordering(
+            PrincipalId::new_anonymous(),
+            canister,
+            "update",
+            payload_1,
+        )
         .unwrap();
     let id2 = sm
-        .buffer_ingress_as(PrincipalId::new_anonymous(), canister, "update", payload_2)
+        .ingress_message_with_flexible_ordering(
+            PrincipalId::new_anonymous(),
+            canister,
+            "update",
+            payload_2,
+        )
         .unwrap();
 
     sm.execute_with_ordering(MessageOrdering::new(vec![
@@ -114,10 +124,20 @@ fn test_reversed_ingress_ordering() {
     let payload_2 = wasm().set_global_data(b"second").reply_data(b"ok2").build();
 
     let id1 = sm
-        .buffer_ingress_as(PrincipalId::new_anonymous(), canister, "update", payload_1)
+        .ingress_message_with_flexible_ordering(
+            PrincipalId::new_anonymous(),
+            canister,
+            "update",
+            payload_1,
+        )
         .unwrap();
     let id2 = sm
-        .buffer_ingress_as(PrincipalId::new_anonymous(), canister, "update", payload_2)
+        .ingress_message_with_flexible_ordering(
+            PrincipalId::new_anonymous(),
+            canister,
+            "update",
+            payload_2,
+        )
         .unwrap();
 
     sm.execute_with_ordering(MessageOrdering::new(vec![
@@ -159,7 +179,7 @@ fn test_three_canister_chain_ordering() {
         .build();
 
     let ingress_id = sm
-        .buffer_ingress_as(
+        .ingress_message_with_flexible_ordering(
             PrincipalId::new_anonymous(),
             canister_a,
             "update",
@@ -210,7 +230,7 @@ fn test_interleaved_inter_canister_calls() {
         .build();
 
     let ingress_a = sm
-        .buffer_ingress_as(
+        .ingress_message_with_flexible_ordering(
             PrincipalId::new_anonymous(),
             canister_a,
             "update",
@@ -218,7 +238,7 @@ fn test_interleaved_inter_canister_calls() {
         )
         .unwrap();
     let ingress_c = sm
-        .buffer_ingress_as(
+        .ingress_message_with_flexible_ordering(
             PrincipalId::new_anonymous(),
             canister_c,
             "update",
@@ -264,7 +284,7 @@ fn test_subnet_message_ordering() {
         .build();
 
     let ingress_a = sm
-        .buffer_ingress_as(
+        .ingress_message_with_flexible_ordering(
             PrincipalId::new_anonymous(),
             canister_a,
             "update",
@@ -276,7 +296,7 @@ fn test_subnet_message_ordering() {
     let install_args =
         InstallCodeArgs::new(CanisterInstallMode::Upgrade, canister_b, new_b_wasm, vec![]);
     let install_ingress = sm
-        .buffer_ingress_as(
+        .ingress_message_with_flexible_ordering(
             PrincipalId::new_anonymous(),
             IC_00,
             "install_code",
@@ -290,7 +310,7 @@ fn test_subnet_message_ordering() {
         .build();
 
     let ingress_a2 = sm
-        .buffer_ingress_as(
+        .ingress_message_with_flexible_ordering(
             PrincipalId::new_anonymous(),
             canister_a,
             "update",
@@ -343,7 +363,7 @@ fn test_canister_calls_management_canister() {
         .build();
 
     let ingress_a = sm
-        .buffer_ingress_as(
+        .ingress_message_with_flexible_ordering(
             PrincipalId::new_anonymous(),
             canister_a,
             "update",
@@ -387,7 +407,7 @@ fn test_one_subnet_message_per_round() {
     .encode();
 
     let id1 = sm
-        .buffer_ingress_as(
+        .ingress_message_with_flexible_ordering(
             PrincipalId::new_anonymous(),
             IC_00,
             Method::ProvisionalCreateCanisterWithCycles,
@@ -395,7 +415,7 @@ fn test_one_subnet_message_per_round() {
         )
         .unwrap();
     let id2 = sm
-        .buffer_ingress_as(
+        .ingress_message_with_flexible_ordering(
             PrincipalId::new_anonymous(),
             IC_00,
             Method::ProvisionalCreateCanisterWithCycles,
@@ -467,7 +487,12 @@ fn test_dts_execution_completes() {
         .unwrap();
 
     let ingress_id = sm
-        .buffer_ingress_as(PrincipalId::new_anonymous(), canister, "run", vec![])
+        .ingress_message_with_flexible_ordering(
+            PrincipalId::new_anonymous(),
+            canister,
+            "run",
+            vec![],
+        )
         .unwrap();
 
     sm.execute_with_ordering(MessageOrdering::new(vec![OrderedMessage::Ingress(
@@ -510,7 +535,7 @@ fn test_two_calls_same_source_separate_steps() {
         .build();
 
     let ingress_a = sm
-        .buffer_ingress_as(
+        .ingress_message_with_flexible_ordering(
             PrincipalId::new_anonymous(),
             canister_a,
             "update",
@@ -518,7 +543,7 @@ fn test_two_calls_same_source_separate_steps() {
         )
         .unwrap();
     let ingress_b = sm
-        .buffer_ingress_as(
+        .ingress_message_with_flexible_ordering(
             PrincipalId::new_anonymous(),
             canister_a,
             "update",
@@ -567,7 +592,7 @@ fn test_alternating_call_response() {
         .build();
 
     let ingress_a = sm
-        .buffer_ingress_as(
+        .ingress_message_with_flexible_ordering(
             PrincipalId::new_anonymous(),
             canister_a,
             "update",
@@ -575,7 +600,7 @@ fn test_alternating_call_response() {
         )
         .unwrap();
     let ingress_b = sm
-        .buffer_ingress_as(
+        .ingress_message_with_flexible_ordering(
             PrincipalId::new_anonymous(),
             canister_a,
             "update",
@@ -620,7 +645,7 @@ fn test_impossible_ordering_response_from_uninvolved() {
         .inter_update(canister_b, CallArgs::default().other_side(b_reply))
         .build();
     let ingress_id = sm
-        .buffer_ingress_as(
+        .ingress_message_with_flexible_ordering(
             PrincipalId::new_anonymous(),
             canister_a,
             "update",
@@ -655,7 +680,7 @@ fn test_impossible_ordering_wrong_source() {
         .inter_update(canister_b, CallArgs::default().other_side(b_reply))
         .build();
     let ingress_id = sm
-        .buffer_ingress_as(
+        .ingress_message_with_flexible_ordering(
             PrincipalId::new_anonymous(),
             canister_a,
             "update",
@@ -730,7 +755,7 @@ fn test_request_with_heartbeat() {
         .call_simple(canister_b, "read", CallArgs::default())
         .build();
     let ingress_a = sm
-        .buffer_ingress_as(
+        .ingress_message_with_flexible_ordering(
             PrincipalId::new_anonymous(),
             canister_a,
             "update",
@@ -820,7 +845,7 @@ fn test_request_with_timer() {
         .call_simple(canister_b, "read", CallArgs::default())
         .build();
     let ingress_a = sm
-        .buffer_ingress_as(
+        .ingress_message_with_flexible_ordering(
             PrincipalId::new_anonymous(),
             canister_a,
             "update",
@@ -863,7 +888,12 @@ fn test_self_call() {
         .build();
 
     let ingress_id = sm
-        .buffer_ingress_as(PrincipalId::new_anonymous(), canister, "update", payload)
+        .ingress_message_with_flexible_ordering(
+            PrincipalId::new_anonymous(),
+            canister,
+            "update",
+            payload,
+        )
         .unwrap();
 
     sm.execute_with_ordering(MessageOrdering::new(vec![
@@ -921,7 +951,7 @@ fn test_heartbeat_then_request() {
         .call_simple(canister_b, "read", CallArgs::default())
         .build();
     let ingress_id = sm
-        .buffer_ingress_as(
+        .ingress_message_with_flexible_ordering(
             PrincipalId::new_anonymous(),
             canister_a,
             "update",
@@ -966,7 +996,7 @@ fn test_ic00_tick_does_not_leak_canister_execution() {
         .inter_update(canister_b, CallArgs::default().other_side(b_reply))
         .build();
     let ingress_a = sm
-        .buffer_ingress_as(
+        .ingress_message_with_flexible_ordering(
             PrincipalId::new_anonymous(),
             canister_a,
             "update",
@@ -979,7 +1009,7 @@ fn test_ic00_tick_does_not_leak_canister_execution() {
     let install_args =
         InstallCodeArgs::new(CanisterInstallMode::Upgrade, canister_c, new_wasm, vec![]);
     let install_ingress = sm
-        .buffer_ingress_as(
+        .ingress_message_with_flexible_ordering(
             PrincipalId::new_anonymous(),
             IC_00,
             "install_code",

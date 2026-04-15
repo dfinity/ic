@@ -359,6 +359,14 @@ impl FlexibleMessageOrdering {
         config.max_instructions_per_install_code_slice = config.max_instructions_per_slice;
         config.subnet_messages_per_round_instruction_limit = NumInstructions::from(1);
     }
+
+    fn take_buffered_ingress(&self, message_id: &MessageId) -> SignedIngress {
+        self.ingress_buffer
+            .write()
+            .unwrap()
+            .remove(message_id)
+            .unwrap_or_else(|| panic!("No buffered ingress with id {}", message_id))
+    }
 }
 
 /// Adds global registry records to the registry managed by the registry data provider:
@@ -2766,7 +2774,7 @@ impl StateMachine {
         self.flexible_message_ordering().set_ordering_target(target);
     }
 
-    pub fn buffer_ingress_as(
+    pub fn ingress_message_with_flexible_ordering(
         &self,
         sender: PrincipalId,
         canister_id: CanisterId,
@@ -2781,15 +2789,6 @@ impl StateMachine {
             .unwrap()
             .insert(message_id.clone(), msg);
         Ok(message_id)
-    }
-
-    pub fn take_buffered_ingress(&self, message_id: &MessageId) -> SignedIngress {
-        self.flexible_message_ordering()
-            .ingress_buffer
-            .write()
-            .unwrap()
-            .remove(message_id)
-            .unwrap_or_else(|| panic!("No buffered ingress with id {}", message_id))
     }
 
     /// Each step in the ordering is executed with the following sequence:
@@ -2807,7 +2806,7 @@ impl StateMachine {
             match msg {
                 OrderedMessage::Ingress(target, ref ingress_id) if target == IC_00 => {
                     flexible_message_ordering.prioritise_subnet_execution();
-                    let signed = self.take_buffered_ingress(ingress_id);
+                    let signed = flexible_message_ordering.take_buffered_ingress(ingress_id);
                     let payload = PayloadBuilder::new()
                         .with_max_expiry_time_from_now(self.get_time().into())
                         .signed_ingress(signed);
@@ -2836,7 +2835,7 @@ impl StateMachine {
                     self.set_next_scheduled_method(target, NextScheduledMethod::Message);
                     self.set_next_input_source(target, InputSource::Ingress);
                     flexible_message_ordering.set_ordering_target(Some(target));
-                    let signed = self.take_buffered_ingress(ingress_id);
+                    let signed = flexible_message_ordering.take_buffered_ingress(ingress_id);
                     let payload = PayloadBuilder::new()
                         .with_max_expiry_time_from_now(self.get_time().into())
                         .signed_ingress(signed);
