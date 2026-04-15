@@ -22,7 +22,8 @@ LOAD_TYPES = [
 
 
 def compute_targets(load_c):
-    assert len(load_c) > 0, "The provided load data is empty"
+    if len(load_c) == 0:
+        raise ValueError("The provided load data is empty")
 
     total_load_c = sum(load_c)
     max_canister_load = max(load_c)
