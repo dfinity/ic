@@ -71,7 +71,6 @@ pub fn validate_payload(
                 last_dkg_summary,
                 &parent,
                 registry_version,
-                state_manager,
                 validation_context,
                 log.clone(),
             )?;
