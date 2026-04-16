@@ -7,7 +7,8 @@ use crate::execution::common::{
 use crate::execution::install_code::OriginalContext;
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
 use crate::execution_environment::{
-    CompilationCostHandling, RoundContext, RoundCounters, RoundLimits,
+    CompilationCostHandling, ConsumedCyclesForInstructions, RoundContext, RoundCounters,
+    RoundLimits,
 };
 use crate::execution_environment_metrics::ExecutionEnvironmentMetrics;
 use crate::hypervisor::Hypervisor;
@@ -1662,6 +1663,7 @@ impl CanisterManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
         resource_saturation: &ResourceSaturation,
+        consumed_cycles: &mut ConsumedCyclesForInstructions,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         // Allow the canister itself to perform this operation.
         if sender != canister.canister_id().into() {
@@ -1671,6 +1673,11 @@ impl CanisterManager {
         // Charge for the upload. We charge before checking if the chunk has already been uploaded
         // since that check involves hash computation that we also want to charge for.
         let instructions = self.config.upload_wasm_chunk_instructions;
+        let cost = self.cycles_account_manager.management_canister_cost(
+            instructions,
+            subnet_size,
+            cost_schedule,
+        );
         self.cycles_account_manager
             .consume_cycles_for_management_canister_instructions(
                 &sender,
@@ -1682,6 +1689,8 @@ impl CanisterManager {
             .map_err(|err| CanisterManagerError::WasmChunkStoreError {
                 message: format!("Error charging for 'upload_chunk': {err}"),
             })?;
+        // Record the charge so it survives the canister state rollback on failure.
+        consumed_cycles.add(cost, instructions);
         round_limits.instructions -= as_round_instructions(instructions);
 
         let validated_chunk = match canister
@@ -2222,6 +2231,7 @@ impl CanisterManager {
         resource_saturation: &ResourceSaturation,
         time: Time,
         metrics: &ExecutionEnvironmentMetrics,
+        consumed_cycles: &mut ConsumedCyclesForInstructions,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         let canister_id = canister.canister_id();
         // Check sender is a controller.
@@ -2338,6 +2348,21 @@ impl CanisterManager {
                 cost_schedule,
                 wasm_execution_mode,
                 &self.log,
+            );
+            // Record the net cycle charge (prepay minus refund) so it survives
+            // the canister state rollback if a subsequent step fails.
+            let cycles_to_refund = self
+                .cycles_account_manager
+                .variable_execution_cost(
+                    instructions_to_refund,
+                    subnet_size,
+                    cost_schedule,
+                    wasm_execution_mode,
+                )
+                .min(prepaid_execution_cycles);
+            consumed_cycles.add(
+                prepaid_execution_cycles - cycles_to_refund,
+                instructions_for_execution,
             );
 
             let mut new_execution_state = match new_execution_state {
@@ -2658,6 +2683,7 @@ impl CanisterManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
         round_limits: &mut RoundLimits,
+        consumed_cycles: &mut ConsumedCyclesForInstructions,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         let canister_id = canister.canister_id();
         validate_snapshot_visibility(canister, &sender, "read_canister_snapshot_data")?;
@@ -2678,6 +2704,12 @@ impl CanisterManager {
                 cost_schedule,
             )
             .map_err(CanisterManagerError::CanisterSnapshotNotEnoughCycles)?;
+        let cost = self.cycles_account_manager.management_canister_cost(
+            num_instructions,
+            subnet_size,
+            cost_schedule,
+        );
+        consumed_cycles.add(cost, num_instructions);
         round_limits.instructions -= as_round_instructions(num_instructions);
         let chunk: Result<Vec<u8>, CanisterManagerError> = match kind {
             CanisterSnapshotDataKind::StableMemory { offset, size } => {
@@ -2872,6 +2904,7 @@ impl CanisterManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
         resource_saturation: &ResourceSaturation,
+        consumed_cycles: &mut ConsumedCyclesForInstructions,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
@@ -2908,6 +2941,12 @@ impl CanisterManager {
                 cost_schedule,
             )
             .map_err(CanisterManagerError::CanisterSnapshotNotEnoughCycles)?;
+        let cost = self.cycles_account_manager.management_canister_cost(
+            instructions,
+            subnet_size,
+            cost_schedule,
+        );
+        consumed_cycles.add(cost, instructions);
         round_limits.instructions -= as_round_instructions(instructions);
 
         let snapshot: &mut Arc<CanisterSnapshot> = self.get_snapshot_mut(canister, snapshot_id)?;

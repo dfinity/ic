@@ -12,7 +12,9 @@ use crate::consensus::{
 use crate::crypto::SignedBytesWithoutDomainSeparator;
 use crate::crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing};
 use crate::crypto::vetkd::VetKdEncryptedKeyShareContent;
-use crate::messages::{Delegation, MessageId, QueryResponseHash, WebAuthnEnvelope};
+use crate::messages::{
+    Delegation, MessageId, QueryResponseHash, SenderInfoContent, WebAuthnEnvelope,
+};
 use std::convert::TryFrom;
 
 /// The domain separator to be used when calculating the sender signature for a
@@ -53,7 +55,7 @@ mod private {
     use super::*;
     use crate::{
         crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing},
-        messages::QueryResponseHash,
+        messages::{QueryResponseHash, SenderInfoContent},
     };
 
     pub trait SignatureDomainSeal {}
@@ -70,6 +72,7 @@ mod private {
     impl SignatureDomainSeal for Delegation {}
     impl SignatureDomainSeal for CanisterHttpResponseMetadata {}
     impl SignatureDomainSeal for MessageId {}
+    impl SignatureDomainSeal for SenderInfoContent {}
     impl SignatureDomainSeal for CertificationContent {}
     impl SignatureDomainSeal for CatchUpContent {}
     impl SignatureDomainSeal for CatchUpContentProtobufBytes {}
@@ -152,6 +155,12 @@ impl SignatureDomain for Delegation {
 impl SignatureDomain for MessageId {
     fn domain(&self) -> Vec<u8> {
         domain_with_prepended_length(DomainSeparator::IcRequest.as_str())
+    }
+}
+
+impl SignatureDomain for SenderInfoContent {
+    fn domain(&self) -> Vec<u8> {
+        domain_with_prepended_length("ic-sender-info")
     }
 }
 
