@@ -40,7 +40,7 @@ use std::{
 };
 use steps::*;
 use url::Url;
-use util::{DataLocation, block_on, parse_hex_str};
+use util::{DataLocation, block_on};
 
 pub mod admin_helper;
 pub mod app_subnet_recovery;
