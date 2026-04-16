@@ -899,7 +899,7 @@ pub fn build_callback_id_config_map(
         if context.registry_version > registry_version {
             continue;
         }
-        
+
         let get_transcript = |tag: &NiDkgTag| {
             dkg_summary
                 .next_transcripts()
