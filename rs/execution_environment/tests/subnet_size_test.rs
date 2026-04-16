@@ -35,6 +35,27 @@ pub const VETKD_FEE: Cycles = Cycles::new(10 * B as u128);
 const DEFAULT_CYCLES_PER_NODE: Cycles = Cycles::new(100 * B as u128);
 const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = 0;
 
+/// Returns the extra instruction overhead charged in-band by the deterministic
+/// memory tracker for `n_wasm_pages` Wasm pages first written in replicated
+/// mode (DirtyPageTracking::Track). Each such page triggers both
+/// `mark_wasm_page_accessed` and `mark_wasm_page_dirty`, charging two
+/// instructions per OS page per Wasm page.  The OS page size varies by
+/// platform (4 KiB on Linux, 16 KiB on arm64-darwin).
+fn deterministic_tracker_write_overhead(n_wasm_pages: u64) -> u64 {
+    use ic_config::flag_status::FlagStatus;
+    use ic_sys::PAGE_SIZE;
+    const WASM_PAGE_SIZE: u64 = 65536;
+    if EmbeddersConfig::default()
+        .feature_flags
+        .deterministic_memory_tracker
+        == FlagStatus::Enabled
+    {
+        n_wasm_pages * 2 * (WASM_PAGE_SIZE / PAGE_SIZE as u64)
+    } else {
+        0
+    }
+}
+
 // instruction cost of executing inc method on the test canister
 fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
     use ic_config::embedders::MeteringType;
@@ -1088,7 +1109,11 @@ fn test_subnet_size_execute_message_cost() {
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
     let reference_subnet_size = config.reference_subnet_size;
-    let reference_instructions_cost = inc_instruction_cost(HypervisorConfig::default());
+    // The `inc` method writes to the heap (first access), so the deterministic
+    // memory tracker charges an extra 32 instructions in-band (accessed + dirty
+    // for 1 Wasm page) when enabled.
+    let reference_instructions_cost =
+        inc_instruction_cost(HypervisorConfig::default()) + deterministic_tracker_write_overhead(1);
     let reference_cost = calculate_execution_cost(
         &config,
         NumInstructions::from(reference_instructions_cost),
@@ -1096,7 +1121,10 @@ fn test_subnet_size_execute_message_cost() {
     );
 
     // Check default cost.
-    assert_eq!(reference_instructions_cost, 2019);
+    assert_eq!(
+        reference_instructions_cost,
+        2019 + deterministic_tracker_write_overhead(1)
+    );
     let simulated_cost = simulate_execute_message_cost(subnet_type, reference_subnet_size);
     assert_eq!(
         simulated_cost, reference_cost,
