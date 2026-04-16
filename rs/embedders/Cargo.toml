@@ -26,8 +26,8 @@ ic-nns-constants = { path = "../nns/constants" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-sys = { path = "../sys" }
-ic-types-cycles = { path = "../types/cycles" }
 ic-types = { path = "../types/types" }
+ic-types-cycles = { path = "../types/cycles" }
 ic-utils = { path = "../utils" }
 ic-utils-lru-cache = { path = "../utils/lru_cache" }
 ic-wasm-types = { path = "../types/wasm_types" }

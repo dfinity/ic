@@ -31,6 +31,7 @@ use ic_types::{
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
 use memory_tracker::{
     DirtyPageTracking, MemoryLimits, MissingPageHandlerKind, SigsegvMemoryTracker,
+    signal_mutex::SignalMutex,
 };
 use signal_stack::WasmtimeSignalStack;
 
@@ -587,13 +588,13 @@ impl WasmtimeEmbedder {
         // 2. The Global is a lightweight handle that references data in the Store
         // 3. The memory tracker (which holds this closure) is also owned by WasmtimeInstance
         // 4. All are dropped together when WasmtimeInstance is dropped
-        let subtract_instruction_counter: Arc<Mutex<dyn FnMut(u64) + Send>> = {
+        let subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>> = {
             if let Some(global) = store.data().num_instructions_global {
                 // Store a wrapped pointer to the Store and a copy of the Global
                 let mut store_ptr = StorePtr(&mut store as *mut wasmtime::Store<StoreData>);
                 let global_copy = global;
 
-                Arc::new(Mutex::new(move |instructions_to_subtract: u64| {
+                Arc::new(SignalMutex::new(move |instructions_to_subtract: u64| {
                     // SAFETY: Accessing the Store and Global from the signal handler.
                     // Both pointers are guaranteed valid by the lifetime relationship described above.
                     unsafe {
@@ -605,7 +606,7 @@ impl WasmtimeEmbedder {
                     }
                 }))
             } else {
-                Arc::new(Mutex::new(|_| {}))
+                Arc::new(SignalMutex::new(|_| {}))
             }
         };
 
@@ -776,8 +777,8 @@ fn sigsegv_memory_tracker<S>(
     store: &mut wasmtime::Store<S>,
     log: ReplicaLogger,
     deterministic_memory_tracker: FlagStatus,
-    subtract_instruction_counter: Arc<Mutex<dyn FnMut(u64) + Send>>,
-) -> HashMap<CanisterMemoryType, Arc<Mutex<SigsegvMemoryTracker>>> {
+    subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
+) -> HashMap<CanisterMemoryType, Arc<SignalMutex<SigsegvMemoryTracker>>> {
     let maybe_missing_page_handler_kind = match deterministic_memory_tracker {
         FlagStatus::Enabled => Some(MissingPageHandlerKind::Deterministic),
         FlagStatus::Disabled => None,
@@ -812,7 +813,7 @@ fn sigsegv_memory_tracker<S>(
                 );
             }
 
-            Arc::new(Mutex::new(
+            Arc::new(SignalMutex::new(
                 memory_tracker::new(
                     base,
                     NumBytes::new(size as u64),
@@ -906,7 +907,7 @@ pub struct PageAccessResults {
 /// Encapsulates a Wasmtime instance on the Internet Computer.
 pub struct WasmtimeInstance {
     instance: wasmtime::Instance,
-    memory_trackers: HashMap<CanisterMemoryType, Arc<Mutex<SigsegvMemoryTracker>>>,
+    memory_trackers: HashMap<CanisterMemoryType, Arc<SignalMutex<SigsegvMemoryTracker>>>,
     signal_stack: WasmtimeSignalStack,
     log: ReplicaLogger,
     instance_stats: InstanceStats,
@@ -975,8 +976,7 @@ impl WasmtimeInstance {
                 .memory_trackers
                 .get(&CanisterMemoryType::Heap)
                 .unwrap()
-                .lock()
-                .unwrap();
+                .lock();
 
             let speculatively_dirty_pages = wasm_tracker.take_speculatively_dirty_pages();
             let dirty_pages = wasm_tracker.take_dirty_pages();
@@ -1027,8 +1027,7 @@ impl WasmtimeInstance {
                 .memory_trackers
                 .get(&CanisterMemoryType::Stable)
                 .unwrap()
-                .lock()
-                .unwrap();
+                .lock();
 
             let stable_sigsegv_handler_duration =
                 stable_tracker.metrics().sigsegv_handler_duration();
@@ -1207,7 +1206,7 @@ impl WasmtimeInstance {
                 .ok_or_else(|| HypervisorError::ToolchainContractViolation {
                     error: "No memory tracker for stable memory".to_string(),
                 })?;
-            let tracker = tracker.lock().unwrap();
+            let tracker = tracker.lock();
             let heap_memory = heap_memory.data(&self.store);
 
             fn handle_bytemap_entry(

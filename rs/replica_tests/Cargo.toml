@@ -52,6 +52,6 @@ assert_matches = { workspace = true }
 candid = { workspace = true }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-sys = { path = "../sys" }
-ic-types-cycles = { path = "../types/cycles" }
 ic-test-utilities = { path = "../test_utilities" }
+ic-types-cycles = { path = "../types/cycles" }
 maplit = "1.0.2"

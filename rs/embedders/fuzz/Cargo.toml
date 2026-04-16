@@ -26,17 +26,17 @@ ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-embedders = { path = "../../test_utilities/embedders" }
 ic-test-utilities-state = { path = "../../test_utilities/state" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
-ic-types-cycles = { path = "../../types/cycles" }
 ic-types = { path = "../../types/types" }
+ic-types-cycles = { path = "../../types/cycles" }
 ic-wasm-types = { path = "../../types/wasm_types" }
 lazy_static = { workspace = true }
+libfuzzer-sys = "0.4"
 num-traits = { workspace = true }
 tokio = { workspace = true }
 wasm-encoder = { workspace = true }
+wasm-smith = { version = "0.243.0", features = ["wasmparser"] }
 wasmparser = { workspace = true }
 wasmprinter = { workspace = true }
-libfuzzer-sys = "0.4"
-wasm-smith = { version = "0.243.0", features = ["wasmparser"] }
 wasmtime = { version = "43.0.1", default-features = false, features = [
     'cranelift',
     'gc',
