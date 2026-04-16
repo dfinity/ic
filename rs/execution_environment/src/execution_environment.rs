@@ -4658,6 +4658,11 @@ fn execute_canister_input(
         CanisterMessageOrTask::Message(CanisterMessage::Request(request)) => {
             if network_topology.route(request.sender.get()) == Some(exec_env.own_subnet_id) {
                 load_metrics.observe_local_subnet_message();
+                canister
+                    .system_state
+                    .canister_metrics_mut()
+                    .connection_metrics_mut()
+                    .increment(request.sender(), time);
             } else {
                 load_metrics.observe_remote_subnet_message();
             }

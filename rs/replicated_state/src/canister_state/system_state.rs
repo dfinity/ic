@@ -74,6 +74,48 @@ enum ConsumingCycles {
     Refund,
 }
 
+const MAX_CAPACITY: usize = 100;
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+struct ConnectionMetrics {
+    last_access_timestamp: Time,
+    count: u64,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
+pub struct LRUConnectionMetrics {
+    metrics_per_canister: BTreeMap<CanisterId, ConnectionMetrics>,
+}
+
+impl LRUConnectionMetrics {
+    pub fn increment(&mut self, canister_id: CanisterId, access_timestamp: Time) {
+        let entry = self
+            .metrics_per_canister
+            .entry(canister_id)
+            .or_insert_with(|| ConnectionMetrics {
+                last_access_timestamp: access_timestamp,
+                count: 0,
+            });
+        entry.count += 1;
+        entry.last_access_timestamp = access_timestamp;
+
+        self.evict();
+    }
+
+    fn evict(&mut self) {
+        if self.metrics_per_canister.len() > MAX_CAPACITY {
+            if let Some(canister_id) = self
+                .metrics_per_canister
+                .iter()
+                .min_by_key(|(_canister_id, counter)| counter.last_access_timestamp)
+                .map(|(canister_id, _)| *canister_id)
+            {
+                let _ = self.metrics_per_canister.remove(&canister_id);
+            }
+        }
+    }
+}
+
 /// Keeps track of the types of messages executed by the canister.
 /// This will be useful for load balancing purposes (e.g. subnet splitting) to determine which
 /// canisters contribute to heavy subnet load.
@@ -151,6 +193,7 @@ pub struct CanisterMetrics {
     interrupted_during_execution: u64,
     instructions_executed: NumInstructions,
     load_metrics: LoadMetrics,
+    connection_metrics: LRUConnectionMetrics,
     consumed_cycles: NominalCycles,
     consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
 }
@@ -175,6 +218,8 @@ impl CanisterMetrics {
             consumed_cycles_by_use_cases,
             instructions_executed,
             load_metrics,
+            // FIXME(kpop):
+            connection_metrics: LRUConnectionMetrics::default(),
         }
     }
 
@@ -229,6 +274,14 @@ impl CanisterMetrics {
 
     pub fn load_metrics_mut(&mut self) -> &mut LoadMetrics {
         &mut self.load_metrics
+    }
+
+    pub fn connection_metrics(&self) -> &LRUConnectionMetrics {
+        &self.connection_metrics
+    }
+
+    pub fn connection_metrics_mut(&mut self) -> &mut LRUConnectionMetrics {
+        &mut self.connection_metrics
     }
 }
 
