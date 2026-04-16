@@ -1,7 +1,7 @@
 use crate::{
     CHECKPOINTS, DataLocation, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH, IC_CONSENSUS_POOL_PATH,
-    IC_DATA_PATH, IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, MaybeRemote, NEW_IC_STATE,
-    OLD_IC_STATE, Recovery,
+    IC_DATA_PATH, IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, NEW_IC_STATE, OLD_IC_STATE,
+    Recovery,
     admin_helper::IcAdmin,
     command_helper::{confirm_exec_cmd, exec_cmd},
     error::{RecoveryError, RecoveryResult},
@@ -10,7 +10,7 @@ use crate::{
     registry_helper::RegistryHelper,
     replay_helper,
     ssh_helper::SshHelper,
-    util::{SshUser, block_on, parse_hex_str},
+    util::{MaybeRemote, SshUser, block_on, parse_hex_str},
 };
 use core::convert::From;
 use ic_artifact_pool::certification_pool::CertificationPoolImpl;

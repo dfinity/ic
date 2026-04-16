@@ -17,7 +17,7 @@ use clap::Parser;
 use ic_base_types::SubnetId;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_recovery::{
-    CUPS_DIR, IC_STATE_DIR, MaybeRemote, NeuronArgs, Recovery, RecoveryArgs,
+    CUPS_DIR, IC_STATE_DIR, NeuronArgs, Recovery, RecoveryArgs,
     cli::{consent_given, read_optional, wait_for_confirmation},
     error::{RecoveryError, RecoveryResult},
     get_available_nodes_heights_from_metrics,
@@ -26,7 +26,7 @@ use ic_recovery::{
     registry_helper::RegistryPollingStrategy,
     ssh_helper::SshHelper,
     steps::{AdminStep, Step, UploadStateAndRestartStep},
-    util::{DataLocation, SshUser},
+    util::{DataLocation, MaybeRemote, SshUser},
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;

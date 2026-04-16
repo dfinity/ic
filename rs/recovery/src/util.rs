@@ -1,10 +1,13 @@
 use crate::{
+    Recovery,
     error::{RecoveryError, RecoveryResult},
-    file_sync_helper::write_bytes,
+    file_sync_helper::{path_exists, write_bytes},
+    ssh_helper::SshHelper,
 };
 
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_crypto_utils_threshold_sig_der::public_key_der_to_pem;
+use ic_types::Height;
 use serde::{Deserialize, Serialize};
 use slog::{Drain, Logger, o};
 use std::{
@@ -50,6 +53,75 @@ pub fn data_location_from_str(s: &str) -> RecoveryResult<DataLocation> {
             RecoveryError::UnexpectedError(format!("Unable to parse ipv6 address {e:?}"))
         })?,
     )))
+}
+
+/// Helper struct to abstract over local and remote implementations of functions that need to access
+/// the filesystem of the node. Local implementations use the standard library, while remote
+/// implementations use ssh to execute commands on the remote node.
+pub enum MaybeRemote<'a> {
+    Local,
+    Remote(&'a SshHelper),
+}
+
+impl<'a> MaybeRemote<'a> {
+    pub fn path_exists(&self, path: &Path) -> RecoveryResult<bool> {
+        match self {
+            Self::Local => {
+                // Local implementation
+                path_exists(path)
+            }
+            Self::Remote(ssh_helper) => {
+                // Remote implementation
+                let command = format!("test -e {} && echo y || echo n", path.display());
+                Ok(ssh_helper
+                    .ssh(command.clone())?
+                    .ok_or_else(|| {
+                        RecoveryError::cmd_error(
+                            &ssh_helper.get_command(command),
+                            None,
+                            "Could not check if path exists remotely".to_string(),
+                        )
+                    })?
+                    .trim()
+                    == "y")
+            }
+        }
+    }
+
+    pub fn get_maybe_latest_checkpoint_name_and_height(
+        &self,
+        checkpoints_path: &Path,
+    ) -> RecoveryResult<Option<(String, Height)>> {
+        match self {
+            Self::Local => {
+                // Local implementation
+                let checkpoints = Recovery::get_checkpoint_names(checkpoints_path)?
+                    .into_iter()
+                    .map(|name| parse_hex_str(&name).map(|height| (name, Height::from(height))))
+                    .collect::<RecoveryResult<Vec<_>>>()?;
+
+                Ok(checkpoints
+                    .into_iter()
+                    .max_by_key(|(_name, height)| *height))
+            }
+            Self::Remote(ssh_helper) => {
+                // Remote implementation
+                let maybe_output = ssh_helper.ssh(format!(
+                    "ls -1 {} | sort | tail -n 1",
+                    checkpoints_path.display()
+                ))?;
+
+                let Some(output) = maybe_output else {
+                    return Ok(None);
+                };
+
+                let name = output.trim();
+                let height = parse_hex_str(name)?;
+
+                Ok(Some((name.to_string(), Height::from(height))))
+            }
+        }
+    }
 }
 
 pub fn block_on<F: Future>(f: F) -> F::Output {
