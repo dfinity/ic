@@ -2,8 +2,8 @@
 #[cfg(feature = "canbench-rs")]
 mod benches;
 
+use candid::Principal;
 use candid::types::number::Nat;
-use candid::{CandidType, Deserialize, Principal};
 use ic_canister_log::{declare_log_buffer, export, log};
 use ic_cdk::api::stable::StableReader;
 #[cfg(not(feature = "canbench-rs"))]
@@ -41,6 +41,10 @@ use icrc_ledger_types::icrc103::get_allowances::{
     Allowances, GetAllowancesArgs, GetAllowancesError,
 };
 use icrc_ledger_types::icrc106::errors::Icrc106Error;
+use icrc_ledger_types::icrc122::schema::{MTHD_152_BURN, MTHD_152_MINT};
+use icrc_ledger_types::icrc152::{
+    Icrc152BurnArgs, Icrc152BurnError, Icrc152MintArgs, Icrc152MintError,
+};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
     icrc::metadata_key::MetadataKey,
@@ -74,39 +78,6 @@ use std::{
 
 const MAX_MESSAGE_SIZE: u64 = 1024 * 1024;
 const MAX_REASON_LENGTH: usize = 1024;
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-pub struct Icrc152MintArgs {
-    pub to: Account,
-    pub amount: Nat,
-    pub created_at_time: u64,
-    pub reason: Option<String>,
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-pub enum Icrc152MintError {
-    Unauthorized(String),
-    InvalidAccount(String),
-    Duplicate { duplicate_of: Nat },
-    GenericError { error_code: Nat, message: String },
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-pub struct Icrc152BurnArgs {
-    pub from: Account,
-    pub amount: Nat,
-    pub created_at_time: u64,
-    pub reason: Option<String>,
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-pub enum Icrc152BurnError {
-    Unauthorized(String),
-    InvalidAccount(String),
-    InsufficientBalance { balance: Nat },
-    Duplicate { duplicate_of: Nat },
-    GenericError { error_code: Nat, message: String },
-}
 
 #[cfg(not(feature = "u256-tokens"))]
 pub type Tokens = ic_icrc1_tokens_u64::U64;
@@ -948,21 +919,17 @@ fn icrc152_mint_not_async(
                 "caller is not a controller".to_string(),
             ));
         }
-        let amount = match Tokens::try_from(args.amount.clone()) {
-            Ok(a) if a == Tokens::zero() => {
-                return Err(Icrc152MintError::GenericError {
-                    error_code: Nat::from(0u64),
-                    message: "amount must be greater than 0".to_string(),
-                });
-            }
-            Ok(a) => a,
-            Err(_) => {
-                return Err(Icrc152MintError::GenericError {
-                    error_code: Nat::from(0u64),
-                    message: "amount is too large".to_string(),
-                });
-            }
-        };
+        if args.amount == 0u64 {
+            return Err(Icrc152MintError::GenericError {
+                error_code: Nat::from(0u64),
+                message: "amount must be greater than 0".to_string(),
+            });
+        }
+        let amount =
+            Tokens::try_from(args.amount.clone()).map_err(|_| Icrc152MintError::GenericError {
+                error_code: Nat::from(0u64),
+                message: "amount is too large".to_string(),
+            })?;
         if args.to.owner == Principal::anonymous() {
             return Err(Icrc152MintError::InvalidAccount(
                 "anonymous principal is not allowed".to_string(),
@@ -987,7 +954,7 @@ fn icrc152_mint_not_async(
                 to: args.to,
                 amount,
                 caller: Some(caller),
-                mthd: Some("152mint".to_string()),
+                mthd: Some(MTHD_152_MINT.to_string()),
                 reason: args.reason,
             },
             created_at_time: Some(args.created_at_time),
@@ -1045,21 +1012,17 @@ fn icrc152_burn_not_async(
                 "caller is not a controller".to_string(),
             ));
         }
-        let amount = match Tokens::try_from(args.amount.clone()) {
-            Ok(a) if a == Tokens::zero() => {
-                return Err(Icrc152BurnError::GenericError {
-                    error_code: Nat::from(0u64),
-                    message: "amount must be greater than 0".to_string(),
-                });
-            }
-            Ok(a) => a,
-            Err(_) => {
-                return Err(Icrc152BurnError::GenericError {
-                    error_code: Nat::from(0u64),
-                    message: "amount is too large".to_string(),
-                });
-            }
-        };
+        if args.amount == 0u64 {
+            return Err(Icrc152BurnError::GenericError {
+                error_code: Nat::from(0u64),
+                message: "amount must be greater than 0".to_string(),
+            });
+        }
+        let amount =
+            Tokens::try_from(args.amount.clone()).map_err(|_| Icrc152BurnError::GenericError {
+                error_code: Nat::from(0u64),
+                message: "amount is too large".to_string(),
+            })?;
         if args.from.owner == Principal::anonymous() {
             return Err(Icrc152BurnError::InvalidAccount(
                 "anonymous principal is not allowed".to_string(),
@@ -1084,7 +1047,7 @@ fn icrc152_burn_not_async(
                 from: args.from,
                 amount,
                 caller: Some(caller),
-                mthd: Some("152burn".to_string()),
+                mthd: Some(MTHD_152_BURN.to_string()),
                 reason: args.reason,
             },
             created_at_time: Some(args.created_at_time),

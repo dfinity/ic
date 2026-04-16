@@ -6101,42 +6101,9 @@ pub fn test_http_request_decoding_quota(env: &StateMachine, canister_id: Caniste
     );
 }
 
-// ---------------------------------------------------------------------------
-// ICRC-152 types (mirrored from ic_icrc1_ledger::main for test use)
-// ---------------------------------------------------------------------------
-
-#[derive(Clone, Debug, CandidType, candid::Deserialize)]
-pub struct Icrc152MintArgs {
-    pub to: Account,
-    pub amount: Nat,
-    pub created_at_time: u64,
-    pub reason: Option<String>,
-}
-
-#[derive(Clone, Debug, CandidType, candid::Deserialize)]
-pub enum Icrc152MintError {
-    Unauthorized(String),
-    InvalidAccount(String),
-    Duplicate { duplicate_of: Nat },
-    GenericError { error_code: Nat, message: String },
-}
-
-#[derive(Clone, Debug, CandidType, candid::Deserialize)]
-pub struct Icrc152BurnArgs {
-    pub from: Account,
-    pub amount: Nat,
-    pub created_at_time: u64,
-    pub reason: Option<String>,
-}
-
-#[derive(Clone, Debug, CandidType, candid::Deserialize)]
-pub enum Icrc152BurnError {
-    Unauthorized(String),
-    InvalidAccount(String),
-    InsufficientBalance { balance: Nat },
-    Duplicate { duplicate_of: Nat },
-    GenericError { error_code: Nat, message: String },
-}
+use icrc_ledger_types::icrc152::{
+    Icrc152BurnArgs, Icrc152BurnError, Icrc152MintArgs, Icrc152MintError,
+};
 
 // ---------------------------------------------------------------------------
 // ICRC-152 test helpers
