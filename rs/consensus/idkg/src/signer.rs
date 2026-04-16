@@ -738,12 +738,13 @@ mod tests {
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, subnet_test_id, user_test_id};
     use ic_types::{
         Height, Randomness,
-        consensus::idkg::*,
+        consensus::{get_faults_tolerated, idkg::*},
         crypto::{
             AlgorithmId, ExtendedDerivationPath, canister_threshold_sig::idkg::IDkgReceivers,
         },
         time::UNIX_EPOCH,
     };
+    use ic_types_test_utils::ids::node_test_id;
     use std::sync::RwLock;
 
     impl ThresholdSignerImpl {
@@ -1387,6 +1388,122 @@ mod tests {
                         (id_2, BTreeSet::from([NODE_2])),
                         (id_3, BTreeSet::from([NODE_2])),
                     ])
+                );
+            })
+        });
+    }
+
+    // Tests that signature shares are validated only until the reconstruction threshold is
+    // reached, and shares received after that are not validated.
+    #[test]
+    fn test_validate_signature_shares_validates_only_necessary_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_validate_signature_shares_until_reconstruction_threshold(key_id);
+        }
+    }
+
+    fn test_validate_signature_shares_until_reconstruction_threshold(key_id: MasterPublicKeyId) {
+        let height = Height::from(100);
+        let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
+        let id = request_id(1, height);
+        let pid = generator.next_pre_signature_id();
+
+        let state = fake_state_with_signature_requests(
+            height,
+            [fake_signature_request_context_from_id(
+                key_id.clone(),
+                pid,
+                id,
+            )],
+        );
+
+        let n = 4;
+        let node_ids = (0..n)
+            .map(|i| node_test_id(i.try_into().unwrap()))
+            .collect::<Vec<_>>();
+        let expected_nb_sig_shares = match key_id {
+            MasterPublicKeyId::Ecdsa(_) => get_faults_tolerated(n) + 1,
+            MasterPublicKeyId::Schnorr(_) => get_faults_tolerated(n) + 1,
+            MasterPublicKeyId::VetKd(_) => n, // The optimization is disabled for VetKD for now
+        };
+
+        // Add unvalidated shares for all nodes
+        let mut msg_ids = vec![];
+        let mut artifacts = vec![];
+        for node_id in &node_ids {
+            let message = create_signature_share(&key_id, *node_id, id);
+            msg_ids.push(message.message_id());
+            artifacts.push(UnvalidatedArtifact {
+                message,
+                peer_id: *node_id,
+                timestamp: UNIX_EPOCH,
+            });
+        }
+
+        // In the single threaded case only 2f + 1 shares should be accepted, the rest dropped
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut idkg_pool, signer) =
+                    create_signer_dependencies_with_threads(pool_config, logger, 1);
+                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+
+                let change_set = signer.validate_signature_shares(&idkg_pool, &state);
+                assert_eq!(change_set.len(), n);
+                let (accepted, dropped): (Vec<_>, Vec<_>) = msg_ids
+                    .clone()
+                    .into_iter()
+                    .partition(|msg_id| is_moved_to_validated(&change_set, msg_id));
+                assert!(
+                    dropped
+                        .iter()
+                        .all(|msg_id| is_removed_from_unvalidated(&change_set, msg_id))
+                );
+                assert_eq!(accepted.len(), expected_nb_sig_shares);
+                assert_eq!(dropped.len(), n - expected_nb_sig_shares);
+
+                assert_eq!(signer.validated_sig_share_signers().len(), 1);
+                assert!(
+                    signer
+                        .validated_sig_share_signers()
+                        .get(&id)
+                        .is_some_and(|signers| {
+                            signers.len() == expected_nb_sig_shares
+                                && signers.is_subset(&node_ids.iter().cloned().collect())
+                        })
+                );
+            })
+        });
+
+        // In the multi threaded case at least 2f + 1 shares should be accepted, the rest dropped
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
+                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+
+                let change_set = signer.validate_signature_shares(&idkg_pool, &state);
+                assert_eq!(change_set.len(), n);
+                let (accepted, dropped): (Vec<_>, Vec<_>) = msg_ids
+                    .clone()
+                    .into_iter()
+                    .partition(|msg_id| is_moved_to_validated(&change_set, msg_id));
+                assert!(
+                    dropped
+                        .iter()
+                        .all(|msg_id| is_removed_from_unvalidated(&change_set, msg_id))
+                );
+                assert!(accepted.len() >= expected_nb_sig_shares);
+                assert_eq!(dropped.len(), n - accepted.len());
+
+                assert_eq!(signer.validated_sig_share_signers().len(), 1);
+                assert!(
+                    signer
+                        .validated_sig_share_signers()
+                        .get(&id)
+                        .is_some_and(|signers| {
+                            signers.len() == accepted.len()
+                                && signers.is_subset(&node_ids.iter().cloned().collect())
+                        })
                 );
             })
         });

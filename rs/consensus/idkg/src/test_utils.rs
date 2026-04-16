@@ -453,10 +453,11 @@ pub(crate) fn create_pre_signer_dependencies_with_threads(
 }
 
 // Sets up the dependencies and creates the signer
-pub(crate) fn create_signer_dependencies_with_crypto(
+pub(crate) fn create_signer_dependencies_with_crypto_and_threads(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
     consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
+    threads: usize,
 ) -> (IDkgPoolImpl, ThresholdSignerImpl) {
     let metrics_registry = MetricsRegistry::new();
     let Dependencies {
@@ -468,7 +469,7 @@ pub(crate) fn create_signer_dependencies_with_crypto(
     let signer = ThresholdSignerImpl::new(
         NODE_1,
         consensus_crypto.unwrap_or(crypto),
-        build_thread_pool(MAX_IDKG_THREADS),
+        build_thread_pool(threads),
         state_manager as Arc<_>,
         metrics_registry.clone(),
         logger.clone(),
@@ -478,12 +479,33 @@ pub(crate) fn create_signer_dependencies_with_crypto(
     (idkg_pool, signer)
 }
 
+pub(crate) fn create_signer_dependencies_with_crypto(
+    pool_config: ArtifactPoolConfig,
+    logger: ReplicaLogger,
+    consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
+) -> (IDkgPoolImpl, ThresholdSignerImpl) {
+    create_signer_dependencies_with_crypto_and_threads(
+        pool_config,
+        logger,
+        consensus_crypto,
+        MAX_IDKG_THREADS,
+    )
+}
+
 // Sets up the dependencies and creates the signer
 pub(crate) fn create_signer_dependencies(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
 ) -> (IDkgPoolImpl, ThresholdSignerImpl) {
     create_signer_dependencies_with_crypto(pool_config, logger, None)
+}
+
+pub(crate) fn create_signer_dependencies_with_threads(
+    pool_config: ArtifactPoolConfig,
+    logger: ReplicaLogger,
+    threads: usize,
+) -> (IDkgPoolImpl, ThresholdSignerImpl) {
+    create_signer_dependencies_with_crypto_and_threads(pool_config, logger, None, threads)
 }
 
 pub(crate) fn create_signer_dependencies_and_state_manager(
