@@ -746,6 +746,15 @@ mod tests {
     };
     use std::sync::RwLock;
 
+    impl ThresholdSignerImpl {
+        fn validated_sig_share_signers(&self) -> BTreeMap<RequestId, BTreeSet<NodeId>> {
+            self.validated_sig_share_signers
+                .read()
+                .expect("ThresholdSignerImpl::validated_sig_share_signers(): RwLock poisoned")
+                .clone()
+        }
+    }
+
     #[test]
     fn test_ecdsa_signer_action() {
         let key_id = fake_ecdsa_idkg_master_public_key_id();
@@ -846,6 +855,12 @@ mod tests {
                     IDkgChangeAction::AddToValidated(share2),
                 ];
                 idkg_pool.apply(change_set);
+                {
+                    let mut valid_sig_share_signers =
+                        signer.validated_sig_share_signers.write().unwrap();
+                    valid_sig_share_signers.insert(id_1, BTreeSet::from([NODE_1]));
+                    valid_sig_share_signers.insert(id_2, BTreeSet::from([NODE_2]));
+                }
 
                 let schedule = IDkgSchedule::new(Height::from(0));
                 // Certified height doesn't increase, so share1 shouldn't be purged
@@ -859,6 +874,10 @@ mod tests {
                 assert_eq!(*schedule.last_purge.borrow(), new_height);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id1));
+                assert_eq!(
+                    signer.validated_sig_share_signers(),
+                    BTreeMap::from([(id_2, BTreeSet::from([NODE_2]))])
+                );
                 idkg_pool.apply(change_set);
 
                 // Certified height increases above share2, so it is purged
@@ -868,6 +887,7 @@ mod tests {
                 assert_eq!(height_30, new_height);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id2));
+                assert_eq!(signer.validated_sig_share_signers(), BTreeMap::new());
             })
         })
     }
@@ -937,6 +957,13 @@ mod tests {
                     &ids[4],
                     height,
                 ));
+                assert_eq!(
+                    signer.validated_sig_share_signers(),
+                    BTreeMap::from([
+                        (ids[3], BTreeSet::from([NODE_1])),
+                        (ids[4], BTreeSet::from([NODE_1])),
+                    ])
+                );
             })
         });
 
@@ -960,6 +987,7 @@ mod tests {
                 let change_set =
                     signer.send_signature_shares(&idkg_pool, &transcript_loader, &state);
                 assert!(change_set.is_empty());
+                assert_eq!(signer.validated_sig_share_signers(), BTreeMap::new());
             })
         });
     }
@@ -1017,6 +1045,10 @@ mod tests {
                     &ids[2],
                     height,
                 ));
+                assert_eq!(
+                    signer.validated_sig_share_signers(),
+                    BTreeMap::from([(ids[2], BTreeSet::from([NODE_1]))])
+                );
             })
         });
     }
@@ -1055,10 +1087,19 @@ mod tests {
                 if key_id.is_idkg_key() {
                     // No shares should be created for IDKG keys when transcripts fail to load
                     assert!(change_set.is_empty());
+                    assert_eq!(signer.validated_sig_share_signers(), BTreeMap::new());
                 } else {
                     // NiDKG transcripts are loaded ahead of time, so creation should succeed, even if
                     // IDKG transcripts fail to load.
                     assert_eq!(change_set.len(), 3);
+                    assert_eq!(
+                        signer.validated_sig_share_signers(),
+                        BTreeMap::from([
+                            (ids[0], BTreeSet::from([NODE_1])),
+                            (ids[1], BTreeSet::from([NODE_1])),
+                            (ids[2], BTreeSet::from([NODE_1])),
+                        ])
+                    );
                 }
                 idkg_pool.apply(change_set);
 
@@ -1070,9 +1111,25 @@ mod tests {
                 if key_id.is_idkg_key() {
                     // IDKG key siganture shares should be created when transcripts succeed to load
                     assert_eq!(change_set.len(), 3);
+                    assert_eq!(
+                        signer.validated_sig_share_signers(),
+                        BTreeMap::from([
+                            (ids[0], BTreeSet::from([NODE_1])),
+                            (ids[1], BTreeSet::from([NODE_1])),
+                            (ids[2], BTreeSet::from([NODE_1])),
+                        ])
+                    );
                 } else {
                     // No new shares should be created with NiDKG, as they were already created above
                     assert!(change_set.is_empty());
+                    assert_eq!(
+                        signer.validated_sig_share_signers(),
+                        BTreeMap::from([
+                            (ids[0], BTreeSet::from([NODE_1])),
+                            (ids[1], BTreeSet::from([NODE_1])),
+                            (ids[2], BTreeSet::from([NODE_1])),
+                        ])
+                    );
                 }
             })
         })
@@ -1133,6 +1190,7 @@ mod tests {
                         &NODE_1,
                     ));
                 }
+                assert_eq!(signer.validated_sig_share_signers(), BTreeMap::new());
             })
         })
     }
@@ -1323,6 +1381,13 @@ mod tests {
                 assert!(is_moved_to_validated(&change_set, &msg_id_2));
                 assert!(is_moved_to_validated(&change_set, &msg_id_3));
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
+                assert_eq!(
+                    signer.validated_sig_share_signers(),
+                    BTreeMap::from([
+                        (id_2, BTreeSet::from([NODE_2])),
+                        (id_3, BTreeSet::from([NODE_2])),
+                    ])
+                );
             })
         });
     }
@@ -1394,6 +1459,10 @@ mod tests {
                     &msg_id_2,
                     "Signature share validation(permanent error)"
                 ));
+                assert_eq!(
+                    signer.validated_sig_share_signers(),
+                    BTreeMap::from([(id_1, BTreeSet::from([NODE_2]))])
+                );
             })
         });
     }
@@ -1489,6 +1558,10 @@ mod tests {
                 assert_eq!(change_set.len(), 2);
                 assert!(is_moved_to_validated(&change_set, &msg_id_3));
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
+                assert_eq!(
+                    signer.validated_sig_share_signers(),
+                    BTreeMap::from([(ids[2], BTreeSet::from([NODE_2]))])
+                );
             })
         });
     }
@@ -1527,6 +1600,11 @@ mod tests {
                 let share = create_signature_share(&key_id, NODE_2, id_2);
                 let change_set = vec![IDkgChangeAction::AddToValidated(share)];
                 idkg_pool.apply(change_set);
+                {
+                    let mut valid_sig_share_signers =
+                        signer.validated_sig_share_signers.write().unwrap();
+                    valid_sig_share_signers.insert(id_2, BTreeSet::from([NODE_2]));
+                }
 
                 // Unvalidated pool has: {signature share 2, signer = NODE_2, height = 100}
                 let message = create_signature_share(&key_id, NODE_2, id_2);
@@ -1540,6 +1618,10 @@ mod tests {
                 let change_set = signer.validate_signature_shares(&idkg_pool, &state);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
+                assert_eq!(
+                    signer.validated_sig_share_signers(),
+                    BTreeMap::from([(id_2, BTreeSet::from([NODE_2]))])
+                );
             })
         })
     }
@@ -1610,6 +1692,11 @@ mod tests {
                 // One is considered duplicate
                 assert!(msg_1_valid || msg_2_valid);
                 assert!(is_moved_to_validated(&change_set, &msg_id_3));
+
+                assert_eq!(
+                    signer.validated_sig_share_signers(),
+                    BTreeMap::from([(id_1, BTreeSet::from([NODE_2, NODE_3]))])
+                );
             })
         })
     }
@@ -1732,9 +1819,24 @@ mod tests {
                 let change_set = vec![IDkgChangeAction::AddToValidated(share)];
                 idkg_pool.apply(change_set);
 
+                {
+                    let mut valid_sig_share_signers =
+                        signer.validated_sig_share_signers.write().unwrap();
+                    valid_sig_share_signers.insert(id_1, BTreeSet::from([NODE_2]));
+                    valid_sig_share_signers.insert(id_2, BTreeSet::from([NODE_2]));
+                    valid_sig_share_signers.insert(id_3, BTreeSet::from([NODE_2]));
+                }
+
                 let change_set = signer.purge_artifacts(&idkg_pool, &state);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id_2));
+                assert_eq!(
+                    signer.validated_sig_share_signers(),
+                    BTreeMap::from([
+                        (id_1, BTreeSet::from([NODE_2])),
+                        (id_3, BTreeSet::from([NODE_2])),
+                    ])
+                );
             })
         })
     }
