@@ -3562,12 +3562,38 @@ impl Payload<'_> for BitcoinGetSuccessorsArgs {}
 impl Payload<'_> for BitcoinGetSuccessorsResponse {}
 impl Payload<'_> for BitcoinSendTransactionInternalArgs {}
 
+/// A closed range of canister IDs, both endpoints inclusive.
+/// ```text
+/// record {
+///   start : principal;
+///   end   : principal;
+/// }
+/// ```
+#[derive(Clone, Debug, PartialEq, CandidType, Deserialize)]
+pub struct CanisterIdRange {
+    pub start: CanisterId,
+    pub end: CanisterId,
+}
+
+/// Response type for the `list_canisters` query method.
+/// ```text
+/// record {
+///   canisters : vec record { start : principal; end : principal };
+/// }
+/// ```
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct ListCanistersResponse {
+    pub canisters: Vec<CanisterIdRange>,
+}
+
+impl Payload<'_> for ListCanistersResponse {}
 /// Query methods exported by the management canister.
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Display, EnumIter, EnumString)]
 #[strum(serialize_all = "snake_case")]
 pub enum QueryMethod {
     FetchCanisterLogs,
     CanisterStatus,
+    ListCanisters,
 }
 
 /// `CandidType` for `SubnetInfoArgs`

@@ -1094,7 +1094,7 @@ impl SandboxSafeSystemState {
         self.update_balance_change_consuming(
             new_balance,
             ConsumedCyclesDuringExecution {
-                burned: Some(CompoundCycles::new(amount_to_burn, self.cost_schedule)),
+                burned: Some(CompoundCycles::new(burned_cycles, self.cost_schedule)),
                 ..Default::default()
             },
         );

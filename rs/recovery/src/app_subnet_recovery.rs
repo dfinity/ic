@@ -401,20 +401,18 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                     vec![]
                 };
 
-                if let Some((node_id, pub_key)) = self.params.write_node_id_and_pub_key.clone() {
-                    Ok(Box::new(self.recovery.take_subnet_offline_for_repairs(
+                Ok(Box::new(
+                    self.recovery.take_subnet_offline_for_repairs(
                         self.params.subnet_id,
                         &subnet_readonly_keys,
-                        &BTreeMap::from([(node_id, vec![pub_key])]),
-                    )))
-                } else {
-                    // TODO (CON-1637): Remove this branch and only use `take_subnet_offline_for_repairs`
-                    Ok(Box::new(self.recovery.halt_subnet(
-                        self.params.subnet_id,
-                        true,
-                        &subnet_readonly_keys,
-                    )))
-                }
+                        &self
+                            .params
+                            .write_node_id_and_pub_key
+                            .clone()
+                            .map(|(node_id, pub_key)| BTreeMap::from([(node_id, vec![pub_key])]))
+                            .unwrap_or_default(),
+                    ),
+                ))
             }
 
             StepType::DownloadCertifications => {
@@ -580,22 +578,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 }
             }
 
-            StepType::Unhalt => {
-                if self.params.write_node_id_and_pub_key.is_some() {
-                    Ok(Box::new(
-                        self.recovery
-                            .bring_subnet_back_online_after_repairs(self.params.subnet_id),
-                    ))
-                } else {
-                    // TODO (CON-1637): Remove this branch and only use
-                    // `bring_subnet_back_online_after_repairs`
-                    Ok(Box::new(self.recovery.halt_subnet(
-                        self.params.subnet_id,
-                        false,
-                        &["".to_string()],
-                    )))
-                }
-            }
+            StepType::Unhalt => Ok(Box::new(
+                self.recovery
+                    .bring_subnet_back_online_after_repairs(self.params.subnet_id),
+            )),
 
             StepType::Cleanup => Ok(Box::new(self.recovery.get_cleanup_step())),
         }

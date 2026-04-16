@@ -481,7 +481,7 @@ mod tests {
     fn test_create_dealings_payload() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let nodes: Vec<_> = (0..3).map(node_test_id).collect();
+                let nodes: Vec<_> = (0..4).map(node_test_id).collect();
                 let dkg_interval_len = 30;
                 let subnet_id = subnet_test_id(222);
                 let initial_registry_version = 112;
@@ -1642,7 +1642,7 @@ mod tests {
     fn setup_initial_dkg_test(
         pool_config: ic_config::artifact_pool::ArtifactPoolConfig,
     ) -> (Dependencies, NiDkgTargetId, Vec<NiDkgId>) {
-        let node_ids = (1..4).map(node_test_id).collect::<Vec<_>>();
+        let node_ids = (1..8).map(node_test_id).collect::<Vec<_>>();
 
         let mut deps = dependencies_with_subnet_records_with_raw_state_manager(
             pool_config,
@@ -2112,7 +2112,7 @@ mod tests {
     #[test]
     fn test_early_reshare_chain_key_transcripts() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let node_ids = (1..4).map(node_test_id).collect::<Vec<_>>();
+            let node_ids = (1..5).map(node_test_id).collect::<Vec<_>>();
             let key_id = VetKdKeyId {
                 curve: VetKdCurve::Bls12_381_G2,
                 name: String::from("some_vetkey"),
@@ -2157,6 +2157,7 @@ mod tests {
             assert_eq!(extract_remote_dkgs_from_highest_block(&deps.pool).len(), 0);
 
             add_dealings_for_configs(&mut deps, &remote_dkg_ids);
+            // 2f + 1 dealings for high threshold VetKD resharing
             assert_eq!(extract_dealings_from_highest_block(&deps.pool).len(), 3);
             assert_eq!(extract_remote_dkgs_from_highest_block(&deps.pool).len(), 0);
 
@@ -2195,7 +2196,7 @@ mod tests {
             ([0_u8; 32], [2_u8; 32], [1_u8; 32], "ReshareChainKey first"),
         ] {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-                let node_ids = (1..4).map(node_test_id).collect::<Vec<_>>();
+                let node_ids = (0..4).map(node_test_id).collect::<Vec<_>>();
                 let key_id = VetKdKeyId {
                     curve: VetKdCurve::Bls12_381_G2,
                     name: String::from("some_vetkey"),
@@ -2317,7 +2318,7 @@ mod tests {
                 let resharing_transcript = dummy_transcript_for_tests_with_params(
                     node_ids.clone(),
                     NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(key_id.clone())),
-                    2,
+                    3, // 2f + 1
                     10,
                 );
 
@@ -2382,10 +2383,11 @@ mod tests {
                     deps.dkg_pool.write().unwrap().apply(dealings);
                 }
                 deps.pool.advance_round_normal_operation();
+
                 assert_eq!(
                     extract_dealings_from_highest_block(&deps.pool).len(),
-                    12,
-                    "[{desc}] all 12 dealings should be in the block"
+                    9, // 3 * (f + 1) setup, plus 2f + 1 reshare, where f = 1
+                    "[{desc}] 9 dealings should be in the block"
                 );
                 assert_eq!(
                     extract_remote_dkgs_from_highest_block(&deps.pool).len(),

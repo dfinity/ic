@@ -1,3 +1,5 @@
+//! Trait abstraction over the AMD SEV guest firmware interface (`/dev/sev-guest`).
+
 use sev::error::UserApiError;
 use sev::firmware::guest::DerivedKey;
 #[cfg(target_os = "linux")]

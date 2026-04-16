@@ -21,6 +21,7 @@ use ic_nervous_system_root::change_canister::{
     AddCanisterRequest, CanisterAction, StopOrStartCanisterRequest, start_canister, stop_canister,
 };
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
+use ic_nervous_system_string::humanize_blob;
 use ic_nns_common::{
     registry::{get_value, mutate_registry},
     types::CallCanisterRequest,
@@ -299,7 +300,7 @@ pub async fn create_canister_and_install_code(
         })?;
         let create_canister_reply: CanisterIdRecord = response.candid().map_err(|err| {
             // Show raw bytes to aid debugging when the response can't be decoded.
-            let response = humanize_blob(response.as_ref());
+            let response = humanize_blob(response.as_ref(), 200);
             CreateCanisterAndInstallCodeError {
                 code: None,
                 description: format!(
@@ -333,15 +334,6 @@ pub async fn create_canister_and_install_code(
 }
 
 /// Hex-encodes `bytes`, truncating to the first 200 bytes with a suffix if longer.
-fn humanize_blob(bytes: &[u8]) -> String {
-    if bytes.len() <= 200 {
-        bytes.iter().map(|b| format!("{b:02x}")).collect()
-    } else {
-        let encoded: String = bytes[..200].iter().map(|b| format!("{b:02x}")).collect();
-        format!("{encoded}... ({} bytes total)", bytes.len())
-    }
-}
-
 fn convert_call_failed_to_create_canister_and_install_code_error(
     method_name: &str,
     err: CallFailed,
