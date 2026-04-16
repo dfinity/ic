@@ -942,6 +942,7 @@ fn process_reshare_chain_key_contexts(
         // Dealers must be in the same registry_version.
         let dealers = get_node_list(this_subnet_id, registry_client, context.registry_version)?;
 
+        let get_transcript = |tag: &NiDkgTag| reshared_transcripts.get(tag).cloned();
         match create_remote_dkg_config_for_key_id(
             key_id,
             start_block_height,
@@ -949,7 +950,7 @@ fn process_reshare_chain_key_contexts(
             context.target_id,
             &dealers,
             &context.nodes,
-            reshared_transcripts,
+            get_transcript,
             &context.registry_version,
         ) {
             Ok(config) => {
@@ -1147,6 +1148,13 @@ pub fn build_callback_id_config_map(
         // Return an error if the dealers cannot be retrieved
         let dealers = get_node_list(this_subnet_id, registry_client, context.registry_version)?;
 
+        let get_transcript = |tag: &NiDkgTag| {
+            dkg_summary
+                .next_transcripts()
+                .get(tag)
+                .cloned()
+                .or_else(|| dkg_summary.current_transcripts().get(tag).cloned())
+        };
         let result = create_remote_dkg_config_for_key_id(
             key_id,
             dkg_summary.height,
@@ -1154,7 +1162,7 @@ pub fn build_callback_id_config_map(
             context.target_id,
             &dealers,
             &context.nodes,
-            dkg_summary.next_transcripts(),
+            get_transcript,
             &context.registry_version,
         )
         .map(|config| vec![config])
@@ -1269,7 +1277,7 @@ fn create_remote_dkg_config_for_key_id(
     target_id: NiDkgTargetId,
     dealers: &BTreeSet<NodeId>,
     receivers: &BTreeSet<NodeId>,
-    reshared_transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
+    get_transcript: impl Fn(&NiDkgTag) -> Option<NiDkgTranscript>,
     registry_version: &RegistryVersion,
 ) -> Result<NiDkgConfig, Box<(NiDkgId, String)>> {
     let dkg_id = NiDkgId {
@@ -1280,7 +1288,7 @@ fn create_remote_dkg_config_for_key_id(
     };
 
     // Find the resharing transcript corresponding to the remote dkg id
-    let Some(resharing_transcript) = reshared_transcripts.get(&dkg_id.dkg_tag) else {
+    let Some(resharing_transcript) = get_transcript(&dkg_id.dkg_tag) else {
         let err = format!(
             "Failed to find resharing transcript for a remote dkg for tag {:?}",
             &dkg_id.dkg_tag
@@ -1293,7 +1301,7 @@ fn create_remote_dkg_config_for_key_id(
         dealers,
         receivers,
         registry_version,
-        Some(resharing_transcript.clone()),
+        Some(resharing_transcript),
     )
     .map_err(|err| Box::new((dkg_id, format!("{err:?}"))))
 }
