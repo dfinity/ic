@@ -173,7 +173,8 @@ pub fn canister_logging_benchmark(c: &mut Criterion) {
     {
         let mut group = c.benchmark_group("resize_canister_log");
         group.sample_size(60);
-        group.warm_up_time(Duration::from_secs(1));
+        group.warm_up_time(Duration::from_secs(3));
+        group.measurement_time(Duration::from_secs(12));
 
         // Baseline: update_settings with the same log_memory_limit (no-op resize).
         // Measures pure update_settings overhead without log migration work.
@@ -214,7 +215,8 @@ pub fn canister_logging_benchmark(c: &mut Criterion) {
     {
         let mut group = c.benchmark_group("fetch_canister_log");
         group.sample_size(60);
-        group.warm_up_time(Duration::from_secs(1));
+        group.warm_up_time(Duration::from_secs(5));
+        group.measurement_time(Duration::from_secs(35));
 
         // Baseline: inter-canister call to canister_status (same call overhead,
         // no log reading). Subtract this from fetch results to isolate fetch cost.
