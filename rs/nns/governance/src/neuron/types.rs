@@ -1,6 +1,7 @@
 use crate::{
     DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
     governance::{LOG_PREFIX, MAX_NUM_HOT_KEYS_PER_NEURON, max_dissolve_delay_seconds},
+    is_mission_70_voting_rewards_enabled,
     neuron::{
         age_bonus_multiplier, combine_aged_stakes, dissolve_delay_bonus_multiplier,
         dissolve_state_and_age::DissolveStateAndAge, neuron_stake_e8s,
@@ -379,9 +380,11 @@ impl Neuron {
 
         // 8 Year Gang bonus. Cap the bonus base to the current stake because
         // rejection fees can cause the bonus base to exceed stake_e8s.
-        let eight_year_gang_bonus_base_e8s = self.eight_year_gang_bonus_base_e8s.min(stake_e8s);
-        potential_voting_power +=
-            Decimal::from(eight_year_gang_bonus_base_e8s) / Decimal::from(10) * boost;
+        if is_mission_70_voting_rewards_enabled() {
+            let eight_year_gang_bonus_base_e8s = self.eight_year_gang_bonus_base_e8s.min(stake_e8s);
+            potential_voting_power +=
+                Decimal::from(eight_year_gang_bonus_base_e8s) / Decimal::from(10) * boost;
+        }
 
         // For DECIDING voting power.
         let adjustment_factor: Decimal = {
