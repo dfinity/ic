@@ -1,7 +1,7 @@
 # OpenSpec Coverage Audit Report
 
-**Date:** 2026-03-16 (updated after gap-filling for new crates)
-**Scope:** All 546 crates under `rs/` vs. 132 spec files under `openspec/specs/`
+**Date:** 2026-04-16 (re-verified after upstream sync — 100% maintained)
+**Scope:** All 526 crates under `rs/` vs. 134 spec files under `openspec/specs/`
 **Method:** Automated word-boundary grep of every crate name against all spec files (excluding this audit file)
 
 ---
@@ -10,11 +10,11 @@
 
 | Metric | Value |
 |--------|-------|
-| Total crates under `rs/` | 546 |
+| Total crates under `rs/` | 526 |
 | Top-level modules (with crates) | 66 |
-| Spec files | 132 |
-| Spec domains | 24 |
-| Crate names found in spec files (word-boundary grep) | **542 (100%)** |
+| Spec files | 134 |
+| Spec domains | 26 |
+| Crate names found in spec files (word-boundary grep) | **526 (100%)** |
 | Module-level coverage | **66/66 (100%)** |
 
 ---
@@ -188,10 +188,21 @@ done < /tmp/all_crates.txt
 echo "$found / $total"
 ```
 
-**Expected output: `522 / 522`**
+**Expected output: `526 / 526`**
 
 ---
 
 ## 5. Conclusion
 
-**522 of 522 crate names (100%)** appear by exact word-boundary match in spec files. Every top-level module has dedicated spec coverage. The 132 spec files across 24 domains provide comprehensive specification coverage of the entire IC codebase.
+**526 of 526 crate names (100%)** appear by exact word-boundary match in spec files. Every top-level module has dedicated spec coverage. The 134 spec files across 26 domains provide comprehensive specification coverage of the entire IC codebase.
+
+---
+
+## 6. Re-Verification Log
+
+| Date | Crates | Specs | Domains | Coverage |
+|------|--------|-------|---------|----------|
+| 2026-03-16 | 546 | 132 | 24 | 100% |
+| 2026-04-16 | 526 | 134 | 26 | 100% (re-verified post upstream sync) |
+
+Crate count decreased (546 → 526) due to upstream consolidation; all remaining crates remain covered. Two new spec domains added upstream retained in the inventory.
