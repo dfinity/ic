@@ -406,6 +406,10 @@ impl TryFrom<pb::Callback> for Callback {
             };
         let prepayment_for_call_transmission = match value.prepayment_for_call_transmission {
             Some(value) => CompoundCycles::try_from(value)?,
+            // Temporary code until the change is deployed and the field starts
+            // being populated in checkpoints. If no "old" callbacks exist,
+            // this can be changed to fail on `None` instead and always
+            // expect to find some value.
             None => CompoundCycles::new(Cycles::zero(), cost_schedule),
         };
 
