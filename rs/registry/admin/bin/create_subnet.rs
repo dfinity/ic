@@ -11,6 +11,7 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_common::types::NeuronId;
 use ic_prep_lib::subnet_configuration::get_default_config_params;
 use ic_protobuf::registry::subnet::v1::SubnetFeatures as SubnetFeaturesPb;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{NodeId, PrincipalId, ReplicaVersion};
@@ -90,7 +91,7 @@ pub(crate) struct ProposeToCreateSubnetCmd {
 
     #[clap(long)]
     /// The type of the subnet.
-    /// Can be either "application" or "system".
+    /// Can be "application", "system", "verified_application", or "cloud_engine".
     pub subnet_type: SubnetType,
 
     /// If set, the created subnet will be halted: it will not create or execute
@@ -168,6 +169,14 @@ pub(crate) struct ProposeToCreateSubnetCmd {
     /// The features that are enabled and disabled on the subnet.
     #[clap(long)]
     pub features: Option<SubnetFeatures>,
+
+    /// The list of principals that are subnet admins.
+    #[clap(long, num_args(1..))]
+    pub subnet_admins: Vec<PrincipalId>,
+
+    /// Limits on resource consumption (e.g., memory usage) of the subnet.
+    #[command(flatten)]
+    pub resource_limits: Option<ResourceLimits>,
 }
 
 fn parse_key_config_requests_option(
@@ -322,8 +331,8 @@ impl ProposeToCreateSubnetCmd {
             canister_cycles_cost_schedule: Some(
                 do_create_subnet::CanisterCyclesCostSchedule::Normal,
             ),
-            subnet_admins: Some(vec![]),
-            resource_limits: Default::default(),
+            subnet_admins: Some(self.subnet_admins.clone()),
+            resource_limits: self.resource_limits,
 
             // Deprecated fields.
             ingress_bytes_per_block_soft_cap: Default::default(),
@@ -400,6 +409,8 @@ mod tests {
             max_parallel_pre_signature_transcripts_in_creation: None,
             max_number_of_canisters: None,
             features: None,
+            subnet_admins: vec![],
+            resource_limits: None,
         }
     }
 

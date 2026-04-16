@@ -206,6 +206,7 @@ fn fake_ingress_message_with_arg_size(method_name: &str, arg_size: usize) -> Sig
             sender: Blob(vec![0x05]),
             nonce: Some(Blob(vec![1, 2, 3, 4])),
             ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
+            sender_info: None,
         },
     };
 

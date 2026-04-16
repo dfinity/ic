@@ -36,7 +36,7 @@ use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask,
     Ingress, NO_DEADLINE, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse,
-    Response, StopCanisterContext,
+    Response, SenderInfo, StopCanisterCallId, StopCanisterContext,
 };
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
@@ -44,7 +44,10 @@ use ic_types::{
     CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, MemoryAllocation, NumBytes,
     NumInstructions, PrincipalId, Time,
 };
-use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, CyclesUseCaseKind,
+    CyclesUseCaseRefundableKind, IngressInduction, Instructions, NominalCycles, Uninstall,
+};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use lazy_static::lazy_static;
@@ -65,9 +68,10 @@ lazy_static! {
 /// Maximum number of canister changes stored in the canister history.
 pub const MAX_CANISTER_HISTORY_CHANGES: u64 = 20;
 
+#[derive(PartialEq)]
 enum ConsumingCycles {
-    Yes,
-    No,
+    Prepayment,
+    Refund,
 }
 
 /// Keeps track of the types of messages executed by the canister.
@@ -527,7 +531,7 @@ pub enum ExecutionTask {
         input: CanisterMessageOrTask,
         /// The execution cost that has already been charged from the canister.
         /// Retried execution does not have to pay for it again.
-        prepaid_execution_cycles: Cycles,
+        prepaid_execution_cycles: CompoundCycles<Instructions>,
     },
 
     /// Any paused `install_code` that doesn't finish until the next checkpoint
@@ -541,7 +545,7 @@ pub enum ExecutionTask {
         call_id: InstallCodeCallId,
         /// The execution cost that has already been charged from the canister.
         /// Retried execution does not have to pay for it again.
-        prepaid_execution_cycles: Cycles,
+        prepaid_execution_cycles: CompoundCycles<Instructions>,
     },
 }
 
@@ -588,7 +592,6 @@ impl SystemState {
             freeze_threshold,
             CanisterStatus::new_running(),
             WasmChunkStore::new(fd_factory),
-            LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
         )
     }
 
@@ -600,7 +603,6 @@ impl SystemState {
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
         wasm_chunk_store: WasmChunkStore,
-        log_memory_store: LogMemoryStore,
     ) -> Self {
         Self {
             canister_id,
@@ -631,7 +633,7 @@ impl SystemState {
             // therefore it should not scale to memory limit from above.
             // Remove this field after migration is done.
             canister_log: CanisterLog::default_aggregate(),
-            log_memory_store,
+            log_memory_store: LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
         }
@@ -664,6 +666,7 @@ impl SystemState {
         log_visibility: LogVisibilityV2,
         snapshot_visibility: SnapshotVisibility,
         canister_log: CanisterLog,
+        next_canister_log_record_idx: u64,
         log_memory_store_data: Option<PageMap>,
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
@@ -701,6 +704,7 @@ impl SystemState {
             log_memory_store: LogMemoryStore::from_checkpoint(
                 LOG_MEMORY_STORE_FEATURE,
                 log_memory_store_data,
+                next_canister_log_record_idx,
             ),
             wasm_memory_limit,
             next_snapshot_id,
@@ -775,7 +779,6 @@ impl SystemState {
             freeze_threshold,
             status,
             WasmChunkStore::new_for_testing(),
-            LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
         )
     }
 
@@ -865,6 +868,7 @@ impl SystemState {
     pub fn apply_ingress_induction_cycles_debit(
         &mut self,
         canister_id: CanisterId,
+        cost_schedule: CanisterCyclesCostSchedule,
         log: &ReplicaLogger,
         charging_from_balance_error: &IntCounter,
     ) {
@@ -884,10 +888,10 @@ impl SystemState {
             // Continue the execution by dropping the remaining debit, which makes
             // some of the postponed charges free.
         }
-        self.remove_cycles(
+        self.consume_cycles(CompoundCycles::<IngressInduction>::new(
             self.ingress_induction_cycles_debit,
-            CyclesUseCase::IngressInduction,
-        );
+            cost_schedule,
+        ));
         self.ingress_induction_cycles_debit = Cycles::zero();
     }
 
@@ -931,10 +935,11 @@ impl SystemState {
         cycles: Cycles,
         time: Time,
         metadata: RequestMetadata,
+        sender_info: Option<SenderInfo>,
     ) -> Result<CallContextId, StateError> {
         Ok(call_context_manager_mut(&mut self.status)
             .ok_or(StateError::CanisterStopped(self.canister_id))?
-            .new_call_context(call_origin, cycles, time, metadata))
+            .new_call_context(call_origin, cycles, time, metadata, sender_info))
     }
 
     /// Withdraws cycles from the call context with the given ID.
@@ -1334,33 +1339,41 @@ impl SystemState {
 
     /// Transitions the canister into `Stopping` state.
     ///
-    /// If the canister was `Running` or `Stopping`, remembers the stop context, so
+    /// If the canister was `Running` or `Stopping`, creates and remembers the stop context, so
     /// that it can be responded to once the canister has fully stopped. If the
-    /// canister was already `Stopped`, returns the stop context.
-    pub fn begin_stopping(
-        &mut self,
-        stop_context: StopCanisterContext,
-    ) -> Option<StopCanisterContext> {
+    /// canister was already `Stopped`, this function is a no-op.
+    ///
+    /// The function returns `true` if and only if a stop context with the given `call_id`
+    /// was inserted into the canister state.
+    pub fn begin_stopping(&mut self, msg: &mut CanisterCall, call_id: StopCanisterCallId) -> bool {
         match &mut self.status {
-            // Return the stop context, nothing to do here.
-            CanisterStatus::Stopped => Some(stop_context),
+            // Nothing to do here.
+            CanisterStatus::Stopped => false,
 
             CanisterStatus::Stopping { stop_contexts, .. } => {
+                // Constructing a stop context moves the cycles from the message
+                // to the stop context and thus we must only do so if we store the call context
+                // in `SystemState` to not lose those cycles.
+                let stop_context = StopCanisterContext::from((msg, call_id));
                 // Add the message so we can respond to it once the canister has fully stopped.
                 stop_contexts.push(stop_context);
-                None
+                true
             }
 
             CanisterStatus::Running {
                 call_context_manager,
             } => {
+                // Constructing a stop context moves the cycles from the message
+                // to the stop context and thus we must only do so if we store the call context
+                // in `SystemState` to not lose those cycles.
+                let stop_context = StopCanisterContext::from((msg, call_id));
                 // Transition the canister into the stopping state.
                 self.status = CanisterStatus::Stopping {
                     call_context_manager: std::mem::take(call_context_manager),
                     // Track the stop message to respond to it once the canister is fully stopped.
                     stop_contexts: vec![stop_context],
                 };
-                None
+                true
             }
         }
     }
@@ -1793,26 +1806,73 @@ impl SystemState {
         debug_assert!(response.is_best_effort());
 
         if !response.refund.is_zero() {
-            self.add_cycles(response.refund, CyclesUseCase::NonConsumed);
+            self.add_cycles(response.refund);
         }
     }
 
-    /// Increments 'cycles_balance' and in case of refund for consumed cycles
-    /// decrements the metric `consumed_cycles`.
-    pub fn add_cycles(&mut self, amount: Cycles, use_case: CyclesUseCase) {
+    /// Increments the canister's cycles balance by the provided amount.
+    ///
+    /// If you need to have metrics about consumed cycles updated use
+    /// `refund_cycles` instead.
+    pub fn add_cycles(&mut self, amount: Cycles) {
         self.cycles_balance += amount;
-        self.observe_consumed_cycles_with_use_case(amount, use_case, ConsumingCycles::No);
     }
 
-    /// Decreases 'cycles_balance' for 'requested_amount'.
+    /// Increments the canister's balance as well as the consumed metrics for the
+    /// respetive use case based on the amounts provided.
+    ///
+    /// Similar to `add_cycles` but additionally updates the metrics to match
+    /// the refund that was provided. Should be used after a prepayment has been
+    /// made.
+    pub fn refund_cycles<T: CyclesUseCaseRefundableKind>(
+        &mut self,
+        prepayment: CompoundCycles<T>,
+        refund: CompoundCycles<T>,
+    ) {
+        debug_assert!(
+            prepayment.real() >= refund.real(),
+            "Expected real prepayment {prepayment:?} to be greater or equal to real refund {refund:?}"
+        );
+        debug_assert!(
+            prepayment.nominal() >= refund.nominal(),
+            "Expected nominal prepayment {prepayment:?} to be greater or equal to nominal refund {refund:?}"
+        );
+
+        self.add_cycles(refund.real());
+
+        let use_case = T::cycles_use_case();
+        self.observe_consumed_cycles_with_use_case(
+            prepayment.nominal(),
+            refund.nominal(),
+            use_case,
+            ConsumingCycles::Refund,
+        );
+    }
+
+    /// Decreases the canister's cycles balance by the provided amount.
+    ///
+    /// If you need to have metrics about consumed cycles updated use
+    /// `consume_cycles` instead.
+    pub fn remove_cycles(&mut self, requested_amount: Cycles) {
+        self.cycles_balance -= requested_amount;
+    }
+
+    /// Decreases the canister's cycles balance by the provided amount.
     /// The resource use cases first drain the `reserved_balance` and only after
     /// that drain the main `cycles_balance`.
-    pub fn remove_cycles(&mut self, requested_amount: Cycles, use_case: CyclesUseCase) {
+    ///
+    /// Similar to `remove_cycles` but additionally updates the metrics to match
+    /// the consumed amount. Should be used either for cases where a prepayment
+    /// needs to be made (that will be refunded later with `refund_cycles`) or
+    /// a direct charge happens without a prepayment (e.g. when paying for memory).
+    pub fn consume_cycles<T: CyclesUseCaseKind>(&mut self, requested_amount: CompoundCycles<T>) {
+        let requested_real = requested_amount.real();
+        let use_case = T::cycles_use_case();
         let remaining_amount = match use_case {
             CyclesUseCase::Memory | CyclesUseCase::ComputeAllocation | CyclesUseCase::Uninstall => {
-                let covered_by_reserved_balance = requested_amount.min(self.reserved_balance);
+                let covered_by_reserved_balance = requested_real.min(self.reserved_balance);
                 self.reserved_balance -= covered_by_reserved_balance;
-                requested_amount - covered_by_reserved_balance
+                requested_real - covered_by_reserved_balance
             }
             CyclesUseCase::IngressInduction
             | CyclesUseCase::Instructions
@@ -1825,13 +1885,14 @@ impl SystemState {
             | CyclesUseCase::DeletedCanisters
             | CyclesUseCase::NonConsumed
             | CyclesUseCase::BurnedCycles
-            | CyclesUseCase::DroppedMessages => requested_amount,
+            | CyclesUseCase::DroppedMessages => requested_real,
         };
         self.cycles_balance -= remaining_amount;
         self.observe_consumed_cycles_with_use_case(
-            requested_amount,
+            requested_amount.nominal(),
+            NominalCycles::zero(),
             use_case,
-            ConsumingCycles::Yes,
+            ConsumingCycles::Prepayment,
         );
     }
 
@@ -1875,14 +1936,18 @@ impl SystemState {
 
     /// Removes all cycles from `cycles_balance` and `reserved_balance` as part
     /// of canister uninstallation due to it running out of cycles.
-    pub fn burn_remaining_balance_for_uninstall(&mut self) {
+    pub fn burn_remaining_balance_for_uninstall(
+        &mut self,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) {
         let balance = self.cycles_balance + self.reserved_balance;
-        self.remove_cycles(balance, CyclesUseCase::Uninstall);
+        self.consume_cycles(CompoundCycles::<Uninstall>::new(balance, cost_schedule));
     }
 
     fn observe_consumed_cycles_with_use_case(
         &mut self,
-        amount: Cycles,
+        prepayment: NominalCycles,
+        refund: NominalCycles,
         use_case: CyclesUseCase,
         consuming_cycles: ConsumingCycles,
     ) {
@@ -1893,7 +1958,30 @@ impl SystemState {
         debug_assert_ne!(use_case, CyclesUseCase::DeletedCanisters);
         debug_assert_ne!(use_case, CyclesUseCase::DroppedMessages);
 
-        if use_case == CyclesUseCase::NonConsumed || amount.is_zero() {
+        // CyclesUseCase::NonConsumed should never be sent to this function.
+        debug_assert_ne!(
+            use_case,
+            CyclesUseCase::NonConsumed,
+            "Non-consumed cycles should not be tracked in the canister metrics."
+        );
+
+        // `prepayment` must be greater or equal to `refund`.
+        // `refund` must be 0 when we are handling a prepayment.
+        debug_assert!(
+            prepayment >= refund,
+            "Expected prepayment: {prepayment} to be greater or equal to refund {refund}."
+        );
+        match consuming_cycles {
+            ConsumingCycles::Prepayment => {
+                debug_assert_eq!(refund, NominalCycles::zero());
+            }
+            ConsumingCycles::Refund => {}
+        }
+
+        // Skip if the amounts are zero and no metric updates are needed.
+        if (consuming_cycles == ConsumingCycles::Prepayment && prepayment.is_zero())
+            || (consuming_cycles == ConsumingCycles::Refund && refund.is_zero())
+        {
             return;
         }
 
@@ -1902,16 +1990,14 @@ impl SystemState {
 
         let use_case_consumption = metric.entry(use_case).or_insert_with(NominalCycles::zero);
 
-        let nominal_amount = NominalCycles::from(amount.get());
-
         match consuming_cycles {
-            ConsumingCycles::Yes => {
-                *use_case_consumption += nominal_amount;
-                self.canister_metrics.consumed_cycles += nominal_amount;
+            ConsumingCycles::Prepayment => {
+                *use_case_consumption += prepayment;
+                self.canister_metrics.consumed_cycles += prepayment;
             }
-            ConsumingCycles::No => {
-                *use_case_consumption -= nominal_amount;
-                self.canister_metrics.consumed_cycles -= nominal_amount;
+            ConsumingCycles::Refund => {
+                *use_case_consumption -= refund;
+                self.canister_metrics.consumed_cycles -= refund;
             }
         }
     }
@@ -2014,7 +2100,7 @@ impl SystemState {
     /// Returns the aborted or paused `Request` at the head of the task queue, if
     /// any.
     fn aborted_or_paused_request(&self) -> Option<&Request> {
-        match self.task_queue.front() {
+        match self.task_queue.paused_or_aborted_task() {
             Some(ExecutionTask::AbortedExecution {
                 input: CanisterMessageOrTask::Message(CanisterMessage::Request(request)),
                 ..
@@ -2214,8 +2300,8 @@ fn invalid_callback() -> Arc<Callback> {
         CallContextId::from(u64::MAX), // Non-existent CallContext
         CanisterId::from_u64(0),
         Cycles::zero(),
-        Cycles::zero(),
-        Cycles::zero(),
+        CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
         WasmClosure::new(0, 0),
         WasmClosure::new(0, 0),
         None,
@@ -2312,14 +2398,15 @@ pub mod testing {
                 Cycles::zero(),
                 time,
                 RequestMetadata::new(0, time),
+                None,
             );
 
             let callback = Callback::new(
                 call_context_id,
                 respondent,
                 Cycles::new(13),
-                Cycles::new(42),
-                Cycles::new(84),
+                CompoundCycles::new(Cycles::new(42), CanisterCyclesCostSchedule::Normal),
+                CompoundCycles::new(Cycles::new(84), CanisterCyclesCostSchedule::Normal),
                 WasmClosure::new(0, 2),
                 WasmClosure::new(0, 2),
                 None,

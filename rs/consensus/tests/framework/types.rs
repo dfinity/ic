@@ -37,7 +37,7 @@ use ic_types::{
     NodeId, SubnetId,
     artifact::IdentifiableArtifact,
     consensus::{
-        CatchUpPackage, ConsensusMessage, certification::CertificationMessage,
+        CatchUpPackage, ConsensusMessage, HasHeight, certification::CertificationMessage,
         dkg::Message as DkgMessage, idkg::IDkgMessage,
     },
     replica_config::ReplicaConfig,
@@ -201,6 +201,8 @@ impl ConsensusDependencies {
         // let state_manager_arc = Rc::new(state_manager);
         let metrics_registry = MetricsRegistry::new();
 
+        let dkg_pool =
+            dkg_pool::DkgPoolImpl::new(metrics_registry.clone(), no_op_logger(), cup.height());
         let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
             replica_config.node_id,
             replica_config.subnet_id,
@@ -210,7 +212,6 @@ impl ConsensusDependencies {
             no_op_logger(),
             time_source,
         )));
-        let dkg_pool = dkg_pool::DkgPoolImpl::new(metrics_registry.clone(), no_op_logger());
         let idkg_pool = idkg_pool::IDkgPoolImpl::new(
             replica_config.node_id,
             pool_config,

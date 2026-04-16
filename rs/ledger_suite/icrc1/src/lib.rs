@@ -287,19 +287,19 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 | Burn { from, .. }
                 | Approve { from, .. }
                 | AuthorizedBurn { from, .. } => Some(*from),
-                AuthorizedMint { .. } => None,
-                _ => None,
+                Mint { .. } | FeeCollector { .. } | AuthorizedMint { .. } => None,
             },
             to: match &t.operation {
                 Mint { to, .. } | Transfer { to, .. } | AuthorizedMint { to, .. } => Some(*to),
-                AuthorizedBurn { .. } => None,
-                _ => None,
+                Burn { .. } | Approve { .. } | FeeCollector { .. } | AuthorizedBurn { .. } => None,
             },
             spender: match &t.operation {
                 Transfer { spender, .. } | Burn { spender, .. } => spender.to_owned(),
                 Approve { spender, .. } => Some(*spender),
-                AuthorizedMint { .. } | AuthorizedBurn { .. } => None,
-                _ => None,
+                Mint { .. }
+                | FeeCollector { .. }
+                | AuthorizedMint { .. }
+                | AuthorizedBurn { .. } => None,
             },
             amount: match &t.operation {
                 Burn { amount, .. }
@@ -321,34 +321,50 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 Approve {
                     expected_allowance, ..
                 } => expected_allowance.to_owned(),
-                AuthorizedMint { .. } | AuthorizedBurn { .. } => None,
-                _ => None,
+                Mint { .. }
+                | Transfer { .. }
+                | Burn { .. }
+                | FeeCollector { .. }
+                | AuthorizedMint { .. }
+                | AuthorizedBurn { .. } => None,
             },
             expires_at: match &t.operation {
                 Approve { expires_at, .. } => expires_at.to_owned(),
-                AuthorizedMint { .. } | AuthorizedBurn { .. } => None,
-                _ => None,
+                Mint { .. }
+                | Transfer { .. }
+                | Burn { .. }
+                | FeeCollector { .. }
+                | AuthorizedMint { .. }
+                | AuthorizedBurn { .. } => None,
             },
             fee_collector: match &t.operation {
                 FeeCollector { fee_collector, .. } => fee_collector.to_owned(),
-                AuthorizedMint { .. } | AuthorizedBurn { .. } => None,
-                _ => None,
+                Mint { .. }
+                | Transfer { .. }
+                | Burn { .. }
+                | Approve { .. }
+                | AuthorizedMint { .. }
+                | AuthorizedBurn { .. } => None,
             },
             caller: match &t.operation {
                 FeeCollector { caller, .. }
                 | AuthorizedMint { caller, .. }
                 | AuthorizedBurn { caller, .. } => caller.to_owned(),
-                _ => None,
+                Mint { .. } | Transfer { .. } | Burn { .. } | Approve { .. } => None,
             },
             mthd: match &t.operation {
                 FeeCollector { mthd, .. }
                 | AuthorizedMint { mthd, .. }
                 | AuthorizedBurn { mthd, .. } => mthd.to_owned(),
-                _ => None,
+                Mint { .. } | Transfer { .. } | Burn { .. } | Approve { .. } => None,
             },
             reason: match &t.operation {
                 AuthorizedMint { reason, .. } | AuthorizedBurn { reason, .. } => reason.to_owned(),
-                _ => None,
+                Mint { .. }
+                | Transfer { .. }
+                | Burn { .. }
+                | Approve { .. }
+                | FeeCollector { .. } => None,
             },
         }
     }
@@ -744,7 +760,7 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
             Operation::FeeCollector { .. } => {
                 panic!("FeeCollector107 not implemented")
             }
-            _ => None,
+            Operation::Mint { .. } | Operation::Burn { .. } => None,
         };
         let (fee_collector, fee_collector_block_index) = match fee_collector {
             Some(FeeCollector {

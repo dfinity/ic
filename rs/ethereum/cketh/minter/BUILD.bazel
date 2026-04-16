@@ -98,11 +98,13 @@ rust_test(
     name = "lib_tests",
     crate = ":minter",
     data = [
-        "test_resources/mainnet_events.gz",
-        "test_resources/sepolia_events.gz",
+        "@cketh_mainnet_events.gz//file",
+        "@cketh_sepolia_events.gz//file",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
+        "MAINNET_EVENTS_PATH": "$(rootpath @cketh_mainnet_events.gz//file)",
+        "SEPOLIA_EVENTS_PATH": "$(rootpath @cketh_sepolia_events.gz//file)",
     },
     deps = [
         # Keep sorted.
@@ -265,12 +267,12 @@ genrule(
     testonly = True,
     srcs = [
         ":cketh_minter_dump_stable_memory",
-        "test_resources/mainnet_events.gz",
+        "@cketh_mainnet_events.gz//file",
     ],
     outs = ["test_resources/mainnet_events.mem.gz"],
     cmd_bash = """
     export CARGO_MANIFEST_DIR=rs/ethereum/cketh/minter
-    $(location :cketh_minter_dump_stable_memory) $(location test_resources/mainnet_events.gz) $@
+    $(location :cketh_minter_dump_stable_memory) $(location @cketh_mainnet_events.gz//file) $@
     """,
     visibility = ["//visibility:private"],
 )

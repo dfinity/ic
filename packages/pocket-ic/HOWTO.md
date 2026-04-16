@@ -546,7 +546,7 @@ Now we create a PocketIC instance:
     };
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
-        .with_ii_subnet()          // to have tECDSA keys available
+        .with_test_threshold_keys_subnet() // to have tECDSA keys with names `test_key_1` and `dfx_test_key` available
         .with_bitcoin_subnet()
         .with_application_subnet() // to deploy the test dapp
         .with_bitcoind_addr(bitcoind.p2p_socket().unwrap().into())
@@ -631,7 +631,7 @@ Now we create a PocketIC instance:
     };
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
-        .with_ii_subnet()          // to have tECDSA keys available
+        .with_test_threshold_keys_subnet() // to have tECDSA keys with names `test_key_1` and `dfx_test_key` available
         .with_bitcoin_subnet()
         .with_application_subnet() // to deploy the test dapp
         .with_dogecoind_addrs(vec![dogecoind.p2p_socket().unwrap().into()])
@@ -684,15 +684,32 @@ can be transferred to a different address.
 For an example of a test canister that can be deployed to an application subnet of the PocketIC instance,
 we refer to the basic Dogecoin [example canister](https://github.com/dfinity/dogecoin-canister/tree/master/examples/basic_dogecoin).
 
-## VetKd
+## Threshold Keys
 
-To test the VetKd feature, you need to create a PocketIC instance with II or fiduciary subnet:
+PocketIC provides three subnet kinds that hold threshold keys (tECDSA, Schnorr, and VetKd):
+
+- **II subnet** (`with_ii_subnet`): holds keys named `key_1` for all algorithms.
+- **Fiduciary subnet** (`with_fiduciary_subnet`): holds keys named `key_1` for all algorithms.
+- **Test threshold keys subnet** (`with_test_threshold_keys_subnet`): holds keys named `test_key_1` and `dfx_test_key` for all algorithms.
+  Its canister range matches the mainnet subnet `fuqsr-in2lc-zbcjj-ydmcw-pzq7h-4xm2z-pto4i-dcyee-5z4rz-x63ji-nae`.
+
+To use `key_1`, add an II or fiduciary subnet to your PocketIC instance:
 
 ```rust
     // We create a PocketIC instance consisting of the II and one application subnet.
     let pic = PocketIcBuilder::new()
-        .with_ii_subnet()               // this subnet has threshold keys
-        .with_application_subnet()      // we deploy the dapp canister here
+        .with_ii_subnet()          // this subnet has threshold key `key_1`
+        .with_application_subnet() // we deploy the dapp canister here
+        .build();
+```
+
+To use `test_key_1` or `dfx_test_key`, add a test threshold keys subnet to your PocketIC instance:
+
+```rust
+    // We create a PocketIC instance consisting of the test threshold keys and one application subnet.
+    let pic = PocketIcBuilder::new()
+        .with_test_threshold_keys_subnet() // to have threshold keys with names `test_key_1` and `dfx_test_key` available
+        .with_application_subnet()         // we deploy the dapp canister here
         .build();
 ```
 

@@ -1,3 +1,7 @@
+//! Runs `fstrim` on GuestOS filesystems and reports Prometheus metrics on
+//! trim duration and success/failure. Skips the data directory if the node
+//! is assigned to a subnet (has a CatchUpPackage).
+
 use anyhow::{Context, Result, format_err};
 use ic_sys::fs::write_string_using_tmp_file;
 use std::fs::File;

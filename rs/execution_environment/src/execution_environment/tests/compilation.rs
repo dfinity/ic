@@ -264,12 +264,15 @@ mod execution_tests {
         assert_eq!(
             test.canister_state(canister_id2).system_state.balance(),
             initial_balance
-                - test.cycles_account_manager().execution_cost(
-                    reduced_compilation_instructions,
-                    test.subnet_size(),
-                    CanisterCyclesCostSchedule::Normal,
-                    WasmExecutionMode::Wasm32 // Does not matter if it is Wasm64 or Wasm32 for this test.
-                )
+                - test
+                    .cycles_account_manager()
+                    .execution_cost(
+                        reduced_compilation_instructions,
+                        test.subnet_size(),
+                        CanisterCyclesCostSchedule::Normal,
+                        WasmExecutionMode::Wasm32 // Does not matter if it is Wasm64 or Wasm32 for this test.
+                    )
+                    .real()
         );
     }
 
@@ -302,12 +305,15 @@ mod execution_tests {
         assert_eq!(
             test.canister_state(canister_id2).system_state.balance(),
             initial_balance
-                - test.cycles_account_manager().execution_cost(
-                    compilation_instructions,
-                    test.subnet_size(),
-                    CanisterCyclesCostSchedule::Normal,
-                    WasmExecutionMode::Wasm32 // Does not matter if it is Wasm64 or Wasm32 for this test.
-                )
+                - test
+                    .cycles_account_manager()
+                    .execution_cost(
+                        compilation_instructions,
+                        test.subnet_size(),
+                        CanisterCyclesCostSchedule::Normal,
+                        WasmExecutionMode::Wasm32 // Does not matter if it is Wasm64 or Wasm32 for this test.
+                    )
+                    .real()
         );
     }
 
