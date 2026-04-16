@@ -1809,7 +1809,7 @@ where
 }
 
 /// Error type for [`TryFrom<u64>`].
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum TryFromError {
     ValueOutOfRange(u64),
 }
@@ -1821,18 +1821,18 @@ pub enum TryFromError {
 /// code and the rest is just a sequentially assigned two-digit
 /// number.
 #[derive(
-    PartialOrd,
-    Ord,
-    Clone,
     Copy,
-    Debug,
-    PartialEq,
+    Clone,
     Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
     Hash,
-    Serialize,
+    Debug,
     Deserialize,
-    JsonSchema,
     EnumIter,
+    JsonSchema,
+    Serialize,
 )]
 pub enum ErrorCode {
     // 1xx -- `RejectCode::SysFatal`
@@ -1990,18 +1990,18 @@ impl std::fmt::Display for ErrorCode {
 /// They can be derived from the most significant digit of the
 /// corresponding error code.
 #[derive(
-    PartialOrd,
-    Ord,
-    Clone,
     Copy,
-    Debug,
-    PartialEq,
+    Clone,
     Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
     Hash,
-    Serialize,
+    Debug,
     Deserialize,
-    JsonSchema,
     EnumIter,
+    JsonSchema,
+    Serialize,
 )]
 pub enum RejectCode {
     SysFatal = 1,
@@ -2028,7 +2028,7 @@ impl TryFrom<u64> for RejectCode {
 }
 
 /// User-facing type describing an unsuccessful (also called reject) call response.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct RejectResponse {
     pub reject_code: RejectCode,
     pub reject_message: String,
@@ -2052,7 +2052,7 @@ impl std::fmt::Display for RejectResponse {
 /// if an optional caller is provided and a corresponding read state request
 /// for the status of the same update call signed by that specified caller
 /// was rejected because the update call was submitted by a different caller.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub enum IngressStatusResult {
     NotAvailable,
     Forbidden(String),
@@ -2361,7 +2361,7 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum DefaultEffectiveCanisterIdError {
     ReqwestError(#[from] reqwest::Error),
     JsonError(#[from] serde_json::Error),

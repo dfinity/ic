@@ -16,24 +16,24 @@ use strum_macros::EnumIter;
 
 pub type InstanceId = usize;
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct AutoProgressConfig {
     pub artificial_delay_ms: Option<u64>,
 }
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, JsonSchema, Serialize)]
 pub enum HttpGatewayBackend {
     Replica(String),
     PocketIcInstance(InstanceId),
 }
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct HttpsConfig {
     pub cert_path: String,
     pub key_path: String,
 }
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct InstanceHttpGatewayConfig {
     pub ip_addr: Option<String>,
     pub port: Option<u16>,
@@ -42,7 +42,7 @@ pub struct InstanceHttpGatewayConfig {
     pub domain_custom_provider_local_file: Option<String>,
 }
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct HttpGatewayConfig {
     pub ip_addr: Option<String>,
     pub port: Option<u16>,
@@ -52,7 +52,7 @@ pub struct HttpGatewayConfig {
     pub domain_custom_provider_local_file: Option<String>,
 }
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct HttpGatewayDetails {
     pub instance_id: InstanceId,
     pub port: u16,
@@ -61,19 +61,19 @@ pub struct HttpGatewayDetails {
     pub https_config: Option<HttpsConfig>,
 }
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct HttpGatewayInfo {
     pub instance_id: InstanceId,
     pub port: u16,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, JsonSchema, Serialize)]
 pub enum CreateHttpGatewayResponse {
     Created(HttpGatewayInfo),
     Error { message: String },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, JsonSchema, Serialize)]
 pub enum CreateInstanceResponse {
     Created {
         instance_id: InstanceId,
@@ -85,7 +85,7 @@ pub enum CreateInstanceResponse {
     },
 }
 
-#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct RawTime {
     pub nanos_since_epoch: u64,
 }
@@ -95,7 +95,7 @@ pub struct RawTime {
 /// If a canister ID is provided, the call will be sent to the management
 /// canister of the subnet where the canister is on.
 /// If None, the call will be sent to any management canister.
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, JsonSchema, Serialize)]
 pub enum RawEffectivePrincipal {
     None,
     SubnetId(
@@ -126,7 +126,7 @@ impl std::fmt::Display for RawEffectivePrincipal {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct RawMessageId {
     pub effective_principal: RawEffectivePrincipal,
     #[serde(deserialize_with = "base64::deserialize")]
@@ -134,13 +134,13 @@ pub struct RawMessageId {
     pub message_id: Vec<u8>,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct RawIngressStatusArgs {
     pub raw_message_id: RawMessageId,
     pub raw_caller: Option<RawPrincipalId>,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct RawSenderInfo {
     #[serde(deserialize_with = "base64::deserialize")]
     #[serde(serialize_with = "base64::serialize")]
@@ -150,7 +150,7 @@ pub struct RawSenderInfo {
     pub signer: Vec<u8>,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct RawCanisterCall {
     #[serde(deserialize_with = "base64::deserialize")]
     #[serde(serialize_with = "base64::serialize")]
@@ -167,7 +167,7 @@ pub struct RawCanisterCall {
     pub sender_info: Option<RawSenderInfo>,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 pub enum RawCanisterResult {
     Ok(
         #[serde(deserialize_with = "base64::deserialize")]
@@ -195,7 +195,7 @@ impl From<RawCanisterResult> for Result<Vec<u8>, RejectResponse> {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct RawSetStableMemory {
     #[serde(deserialize_with = "base64::deserialize")]
     #[serde(serialize_with = "base64::serialize")]
@@ -203,25 +203,25 @@ pub struct RawSetStableMemory {
     pub blob_id: BlobId,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct RawStableMemory {
     #[serde(deserialize_with = "base64::deserialize")]
     #[serde(serialize_with = "base64::serialize")]
     pub blob: Vec<u8>,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct ApiError {
     message: String,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct StartedOrBusyResponse {
     pub state_label: String,
     pub op_id: String,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(untagged)]
 pub enum ApiResponse<T> {
     Success(T),
@@ -277,7 +277,7 @@ impl<T: DeserializeOwned> ApiResponse<T> {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct RawAddCycles {
     #[serde(deserialize_with = "base64::deserialize")]
     #[serde(serialize_with = "base64::serialize")]
@@ -285,13 +285,13 @@ pub struct RawAddCycles {
     pub amount: u128,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct RawCycles {
     pub cycles: u128,
 }
 
 #[derive(
-    Clone, Serialize, Hash, Eq, PartialEq, Ord, PartialOrd, Deserialize, Debug, JsonSchema,
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, JsonSchema, Serialize,
 )]
 pub struct RawPrincipalId {
     // raw bytes of the principal
@@ -314,7 +314,7 @@ impl From<RawPrincipalId> for Principal {
     }
 }
 
-#[derive(Clone, Serialize, Eq, PartialEq, Ord, PartialOrd, Deserialize, Debug, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct RawCanisterId {
     // raw bytes of the principal
     #[serde(deserialize_with = "base64::deserialize")]
@@ -336,7 +336,7 @@ impl From<RawCanisterId> for Principal {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct RawSubnetId {
     #[serde(deserialize_with = "base64::deserialize")]
     #[serde(serialize_with = "base64::serialize")]
@@ -360,7 +360,7 @@ impl From<RawSubnetId> for Principal {
 }
 
 #[derive(
-    Clone, Serialize, Deserialize, Debug, JsonSchema, PartialEq, Eq, PartialOrd, Ord, Hash,
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, JsonSchema, Serialize,
 )]
 pub struct RawNodeId {
     #[serde(deserialize_with = "base64::deserialize")]
@@ -382,19 +382,19 @@ impl From<Principal> for RawNodeId {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, JsonSchema, Serialize)]
 pub struct RawTickConfigs {
     pub blockmakers: Option<Vec<RawSubnetBlockmakers>>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct RawSubnetBlockmakers {
     pub subnet: RawSubnetId,
     pub blockmaker: RawNodeId,
     pub failed_blockmakers: Vec<RawNodeId>,
 }
 
-#[derive(Serialize, Deserialize, JsonSchema)]
+#[derive(Deserialize, JsonSchema, Serialize)]
 pub struct RawVerifyCanisterSigArg {
     #[serde(deserialize_with = "base64::deserialize")]
     #[serde(serialize_with = "base64::serialize")]
@@ -410,7 +410,7 @@ pub struct RawVerifyCanisterSigArg {
     pub root_pubkey: Vec<u8>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct BlobId(
     #[serde(deserialize_with = "base64::deserialize")]
     #[serde(serialize_with = "base64::serialize")]
@@ -429,7 +429,7 @@ pub struct BinaryBlob {
     pub compression: BlobCompression,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, JsonSchema)]
 pub enum BlobCompression {
     Gzip,
     NoCompression,
@@ -456,18 +456,18 @@ pub mod base64 {
 // ================================================================================================================= //
 
 #[derive(
-    Debug,
-    Clone,
     Copy,
+    Clone,
     Eq,
-    Hash,
     PartialEq,
     Ord,
     PartialOrd,
-    Serialize,
+    Hash,
+    Debug,
     Deserialize,
-    JsonSchema,
     EnumIter,
+    JsonSchema,
+    Serialize,
 )]
 pub enum SubnetKind {
     Application,
@@ -484,7 +484,7 @@ pub enum SubnetKind {
 
 /// This represents which named subnets the user wants to create, and how
 /// many of the general app/system subnets, which are indistinguishable.
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, JsonSchema, Serialize)]
 pub struct SubnetConfigSet {
     pub nns: bool,
     pub sns: bool,
@@ -571,14 +571,14 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
     }
 }
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, JsonSchema, Serialize)]
 pub enum IcpConfigFlag {
     Disabled,
     Enabled,
 }
 
 /// Specifies ICP config of this instance.
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, JsonSchema, Serialize)]
 pub struct IcpConfig {
     /// Beta features (disabled on the ICP mainnet).
     pub beta_features: Option<IcpConfigFlag>,
@@ -589,7 +589,7 @@ pub struct IcpConfig {
     pub canister_execution_rate_limiting: Option<IcpConfigFlag>,
 }
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, JsonSchema, Serialize)]
 pub enum IcpFeaturesConfig {
     /// Default configuration of an ICP feature resembling mainnet configuration as closely as possible.
     #[default]
@@ -604,7 +604,7 @@ pub enum IcpFeaturesConfig {
 /// or `Some(config)` with `config.state_config = SubnetStateConfig::New`.
 /// An ICP feature is enabled if its `IcpFeaturesConfig` is provided, i.e.,
 /// if the corresponding field is not `None`.
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, JsonSchema, Serialize)]
 pub struct IcpFeatures {
     /// Deploys the NNS registry canister and keeps its content in sync with registry used internally by PocketIC.
     /// Subnets: NNS.
@@ -645,7 +645,7 @@ pub struct IcpFeatures {
     pub canister_migration: Option<IcpFeaturesConfig>,
 }
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, JsonSchema, Serialize)]
 pub enum InitialTime {
     /// Sets the initial timestamp of the new instance to the provided value which must be at least
     /// - 10 May 2021 10:00:01 AM CEST if the `cycles_minting` feature is enabled in `icp_features`;
@@ -657,14 +657,14 @@ pub enum InitialTime {
     AutoProgress(AutoProgressConfig),
 }
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, JsonSchema, Serialize)]
 pub enum IncompleteStateFlag {
     #[default]
     Disabled,
     Enabled,
 }
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, JsonSchema, Serialize)]
 pub struct InstanceConfig {
     pub subnet_config_set: ExtendedSubnetConfigSet,
     pub http_gateway_config: Option<InstanceHttpGatewayConfig>,
@@ -680,7 +680,7 @@ pub struct InstanceConfig {
     pub disable_ingress_validation: Option<bool>,
 }
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, JsonSchema, Serialize)]
 pub struct ExtendedSubnetConfigSet {
     pub nns: Option<SubnetSpec>,
     pub sns: Option<SubnetSpec>,
@@ -696,7 +696,7 @@ pub struct ExtendedSubnetConfigSet {
 }
 
 /// Specifies various configurations for a subnet.
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct SubnetSpec {
     state_config: SubnetStateConfig,
     instruction_config: SubnetInstructionConfig,
@@ -771,7 +771,7 @@ impl Default for SubnetSpec {
 
 /// Specifies instruction limits for canister execution on this subnet.
 #[derive(
-    Debug, Clone, Eq, Hash, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema,
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, JsonSchema, Serialize,
 )]
 pub enum SubnetInstructionConfig {
     /// Use default instruction limits as in production.
@@ -782,7 +782,7 @@ pub enum SubnetInstructionConfig {
 
 /// Specifies whether the subnet should be created from scratch or loaded
 /// from a path.
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, JsonSchema, Serialize)]
 pub enum SubnetStateConfig {
     /// Create new subnet with empty state.
     New,
@@ -961,18 +961,18 @@ impl ExtendedSubnetConfigSet {
 /// Specifies how to charge canisters for their use of computational resources (such as
 /// executing instructions, storing data, network, etc.).
 #[derive(
-    Debug,
-    Default,
-    Hash,
-    Clone,
     Copy,
+    Clone,
     Eq,
     PartialEq,
     Ord,
     PartialOrd,
-    Serialize,
+    Hash,
+    Debug,
+    Default,
     Deserialize,
     JsonSchema,
+    Serialize,
 )]
 pub enum CanisterCyclesCostSchedule {
     #[default]
@@ -981,7 +981,7 @@ pub enum CanisterCyclesCostSchedule {
 }
 
 /// Configuration details for a subnet, returned by PocketIc server
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct SubnetConfig {
     pub subnet_kind: SubnetKind,
     pub subnet_admins: Option<Vec<RawPrincipalId>>,
@@ -993,7 +993,7 @@ pub struct SubnetConfig {
     pub canister_ranges: Vec<CanisterIdRange>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct CanisterIdRange {
     pub start: RawCanisterId,
     pub end: RawCanisterId,
@@ -1006,7 +1006,7 @@ impl CanisterIdRange {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct Topology {
     pub subnet_configs: BTreeMap<SubnetId, SubnetConfig>,
     pub default_effective_canister_id: RawCanisterId,
@@ -1096,7 +1096,7 @@ impl Topology {
 }
 
 #[derive(
-    Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, JsonSchema,
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, JsonSchema, Serialize,
 )]
 pub enum CanisterHttpMethod {
     GET,
@@ -1107,14 +1107,14 @@ pub enum CanisterHttpMethod {
 }
 
 #[derive(
-    Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, JsonSchema,
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, JsonSchema, Serialize,
 )]
 pub struct CanisterHttpHeader {
     pub name: String,
     pub value: String,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct RawCanisterHttpRequest {
     pub subnet_id: RawSubnetId,
     pub request_id: u64,
@@ -1127,7 +1127,7 @@ pub struct RawCanisterHttpRequest {
     pub max_response_bytes: Option<u64>,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct CanisterHttpRequest {
     pub subnet_id: Principal,
     pub request_id: u64,
@@ -1171,7 +1171,7 @@ impl From<CanisterHttpRequest> for RawCanisterHttpRequest {
 }
 
 #[derive(
-    Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, JsonSchema,
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, JsonSchema, Serialize,
 )]
 pub struct CanisterHttpReply {
     pub status: u16,
@@ -1182,7 +1182,7 @@ pub struct CanisterHttpReply {
 }
 
 #[derive(
-    Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, JsonSchema,
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, JsonSchema, Serialize,
 )]
 pub struct CanisterHttpReject {
     pub reject_code: u64,
@@ -1190,14 +1190,14 @@ pub struct CanisterHttpReject {
 }
 
 #[derive(
-    Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, JsonSchema,
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, JsonSchema, Serialize,
 )]
 pub enum CanisterHttpResponse {
     CanisterHttpReply(CanisterHttpReply),
     CanisterHttpReject(CanisterHttpReject),
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct RawMockCanisterHttpResponse {
     pub subnet_id: RawSubnetId,
     pub request_id: u64,
@@ -1205,7 +1205,7 @@ pub struct RawMockCanisterHttpResponse {
     pub additional_responses: Vec<CanisterHttpResponse>,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct MockCanisterHttpResponse {
     pub subnet_id: Principal,
     pub request_id: u64,
@@ -1239,7 +1239,7 @@ impl From<MockCanisterHttpResponse> for RawMockCanisterHttpResponse {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct RawCanisterSnapshotDownload {
     pub sender: RawPrincipalId,
     pub canister_id: RawCanisterId,
@@ -1249,7 +1249,7 @@ pub struct RawCanisterSnapshotDownload {
     pub snapshot_dir: PathBuf,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct RawCanisterSnapshotUpload {
     pub sender: RawPrincipalId,
     pub canister_id: RawCanisterId,
@@ -1257,7 +1257,7 @@ pub struct RawCanisterSnapshotUpload {
     pub snapshot_dir: PathBuf,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct RawCanisterSnapshotId {
     #[serde(deserialize_with = "base64::deserialize")]
     #[serde(serialize_with = "base64::serialize")]

@@ -40,7 +40,7 @@ mod common;
 // 3T cycles
 const INIT_CYCLES: u128 = 3_000_000_000_000;
 
-#[derive(CandidType, Deserialize, Debug)]
+#[derive(Debug, CandidType, Deserialize)]
 enum RejectionCode {
     NoError,
     SysFatal,

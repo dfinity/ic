@@ -147,13 +147,13 @@ impl From<ErrorCode> for RejectCode {
     Copy,
     Clone,
     Eq,
-    DeterministicHeapBytes,
     PartialEq,
     Ord,
     PartialOrd,
     Hash,
     Debug,
     Deserialize,
+    DeterministicHeapBytes,
     EnumIter,
     Serialize,
 )]
@@ -236,13 +236,13 @@ const MAX_USER_ERROR_DESCRIPTION_LEN_BYTES: usize = 8 * 1024;
 #[derive(
     Clone,
     Eq,
-    DeterministicHeapBytes,
     PartialEq,
     Ord,
     PartialOrd,
     Hash,
     Debug,
     Deserialize,
+    DeterministicHeapBytes,
     Serialize,
 )]
 pub struct UserError {

@@ -903,13 +903,13 @@ impl std::fmt::Display for ApiType {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 enum ExecutionMemoryType {
     WasmMemory,
     StableMemory,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Copy, Clone, Debug)]
 /// Some cost API endpoints can fail in various ways. A return value of this
 /// type must be used by the caller to determine success or failure.
 pub enum CostReturnCode {

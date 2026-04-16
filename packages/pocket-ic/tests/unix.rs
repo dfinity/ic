@@ -52,7 +52,7 @@ mod common;
 // 2T cycles
 const INIT_CYCLES: u128 = 2_000_000_000_000;
 
-#[derive(CandidType, Deserialize, Debug)]
+#[derive(Debug, CandidType, Deserialize)]
 enum RejectionCode {
     NoError,
     SysFatal,
