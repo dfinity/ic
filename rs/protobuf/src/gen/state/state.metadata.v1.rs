@@ -589,6 +589,26 @@ pub struct SystemMetadata {
     #[prost(message, optional, tag = "24")]
     pub own_resource_limits:
         ::core::option::Option<super::super::super::registry::subnet::v1::ResourceLimits>,
+    #[prost(message, optional, tag = "25")]
+    pub subnet_schedule: ::core::option::Option<SubnetSchedule>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterSchedulingState {
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
+    #[prost(int64, tag = "2")]
+    pub accumulated_priority: i64,
+    #[prost(int64, tag = "3")]
+    pub executed_slices: i64,
+    #[prost(uint64, optional, tag = "4")]
+    pub long_execution_start_round: ::core::option::Option<u64>,
+    #[prost(uint64, tag = "5")]
+    pub last_full_execution_round: u64,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SubnetSchedule {
+    #[prost(message, repeated, tag = "1")]
+    pub entries: ::prost::alloc::vec::Vec<CanisterSchedulingState>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StableMemory {

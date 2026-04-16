@@ -84,26 +84,29 @@ fn main() {
 
     let mut criterion = Criterion::default();
     let mut group = criterion.benchmark_group("RoundSchedule");
+    let current_round = ExecutionRound::from(13);
 
     group.bench_function("iteration", |bench| {
         bench.iter(|| {
-            round_schedule.start_iteration(&mut state, true, &metrics, &log);
+            round_schedule.start_iteration(&mut state, current_round, true, &metrics, &log);
             round_schedule.end_iteration(
                 &mut state,
                 &executed_canisters,
                 &executed_canisters,
                 &BTreeSet::new(),
+                current_round,
             );
         });
     });
 
     // Populate the subnet schedule, even if the iteration benchmark is not run.
-    round_schedule.start_iteration(&mut state, true, &metrics, &log);
+    round_schedule.start_iteration(&mut state, current_round, true, &metrics, &log);
     round_schedule.end_iteration(
         &mut state,
         &executed_canisters,
         &executed_canisters,
         &BTreeSet::new(),
+        current_round,
     );
 
     group.bench_function("finish_round", |bench| {

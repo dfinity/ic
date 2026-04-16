@@ -5,7 +5,7 @@ pub mod subnet_schedule;
 mod tests;
 
 use self::subnet_call_context_manager::SubnetCallContextManager;
-use self::subnet_schedule::SubnetSchedule;
+use self::subnet_schedule::{CanisterPriority, SubnetSchedule};
 use crate::CanisterQueues;
 use crate::CheckpointLoadingMetrics;
 use ic_base_types::{CanisterId, SnapshotId};
@@ -24,7 +24,8 @@ use ic_registry_routing_table::{
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
+    AccumulatedPriority, CountBytes, CryptoHashOfPartialState, ExecutionRound, NodeId, NumBytes,
+    PrincipalId, SubnetId,
     batch::BlockmakerMetrics,
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus},
