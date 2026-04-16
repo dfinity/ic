@@ -297,6 +297,9 @@ impl RoundLimits {
     }
 }
 
+/// Accumulates instructions used and cycles consumed for those instructions while executing
+/// a management operation so that, if the operation fails, the cycles consumed before the
+/// failure can be charged and the instructions can be accounted for.
 pub(crate) struct ConsumedCyclesForInstructions<'a> {
     consumed_cycles: CompoundCycles<Instructions>,
     instructions_used: NumInstructions,
