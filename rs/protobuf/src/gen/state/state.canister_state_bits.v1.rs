@@ -13,6 +13,8 @@ pub struct CallContext {
     pub instructions_executed: u64,
     #[prost(message, optional, tag = "11")]
     pub metadata: ::core::option::Option<super::super::queues::v1::RequestMetadata>,
+    #[prost(message, optional, tag = "14")]
+    pub sender_info: ::core::option::Option<super::super::ingress::v1::SenderInfo>,
     #[prost(oneof = "call_context::CallOrigin", tags = "1, 2, 4, 7, 12")]
     pub call_origin: ::core::option::Option<call_context::CallOrigin>,
 }
