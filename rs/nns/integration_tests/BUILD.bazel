@@ -42,7 +42,7 @@ BASE_DEPENDENCIES = [
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//packages/ic-http-types",
         "//rs/canister_client/sender",
         "//rs/config",
