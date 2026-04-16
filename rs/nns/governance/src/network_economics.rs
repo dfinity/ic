@@ -381,11 +381,13 @@ impl VotingPowerEconomics {
                 );
                 defects.push(defect);
             }
+
             if delay > NEURON_MINIMUM_DISSOLVE_DELAY_TO_PROPOSE_SECONDS {
                 let defect = format!(
-                    "neuron_minimum_dissolve_delay_to_vote_seconds ({}) must not exceed \
-                     NEURON_MINIMUM_DISSOLVE_DELAY_TO_PROPOSE_SECONDS ({}).",
-                    delay, NEURON_MINIMUM_DISSOLVE_DELAY_TO_PROPOSE_SECONDS,
+                    "neuron_minimum_dissolve_delay_to_vote_seconds ({:?}) must not exceed \
+                     the minimum dissolve delay required to submit proposals ({}).",
+                    self.neuron_minimum_dissolve_delay_to_vote_seconds,
+                    NEURON_MINIMUM_DISSOLVE_DELAY_TO_PROPOSE_SECONDS,
                 );
                 defects.push(defect);
             }

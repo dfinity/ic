@@ -5239,11 +5239,9 @@ impl Governance {
         };
 
         // The proposer must have sufficient dissolve delay to submit proposals.
-        // This threshold is intentionally decoupled from the voting eligibility
-        // threshold, which can be lower.
         if proposer_dissolve_delay_seconds < min_dissolve_delay_seconds_to_propose {
             return Err(GovernanceError::new_with_message(
-                ErrorType::InsufficientFunds,
+                ErrorType::PreconditionFailed,
                 "Neuron's dissolve delay is too short.",
             ));
         }

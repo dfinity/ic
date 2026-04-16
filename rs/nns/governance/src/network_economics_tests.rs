@@ -118,8 +118,8 @@ fn test_neuron_minimum_dissolve_delay_to_vote_seconds_bounds() {
                     UPPER_BOUND_SECONDS + 1
                 ),
                 format!(
-                    "neuron_minimum_dissolve_delay_to_vote_seconds ({}) must not exceed \
-                     NEURON_MINIMUM_DISSOLVE_DELAY_TO_PROPOSE_SECONDS ({}).",
+                    "neuron_minimum_dissolve_delay_to_vote_seconds (Some({})) must not exceed \
+                     the minimum dissolve delay required to submit proposals ({}).",
                     UPPER_BOUND_SECONDS + 1,
                     crate::governance::NEURON_MINIMUM_DISSOLVE_DELAY_TO_PROPOSE_SECONDS,
                 ),
