@@ -37,10 +37,7 @@ use crate::utils::{
 use canister_test::Canister;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
-    node::{
-        assert_node_is_assigned_with_ssh_session, assert_node_is_unassigned_with_ssh_session,
-        await_node_certified_height,
-    },
+    node::{assert_node_is_assigned_with_ssh_session, assert_node_is_unassigned_with_ssh_session},
     rw_message::{install_nns_and_check_progress, store_message_with_retries},
     ssh_access::{disable_ssh_access_to_node, wait_until_authentication_is_granted},
     subnet::{
