@@ -1101,7 +1101,7 @@ fn returns_state_no_committed_for_future_states() {
 
 #[test]
 #[should_panic(expected = "failed to wait for hashing thread: RecvError")]
-// The hash thread panics with "failed to wait for hashing thread: RecvError", but we can't relay this.
+// The hash thread panics with "which is different from previously computed or delivered hash", but we can't relay this.
 fn panics_on_forked_history() {
     state_manager_test(|_metrics, state_manager| {
         // Create a checkpoint at h which we can fetch later.

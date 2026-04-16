@@ -122,7 +122,7 @@ const ARCHIVED_DIVERGED_CHECKPOINT_MAX_AGE: Duration = Duration::from_secs(30 * 
 /// The maximum number of consecutive rounds for which the optimization of
 /// skipping state cloning and computing certification metadata triggers
 /// while catching up.
-const MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING: u64 = 10;
+const MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING_AND_HASHING: u64 = 10;
 
 /// The maximum number of future heights starting at tip height
 /// that the state manager optimistically asks consensus to certify
@@ -3351,7 +3351,7 @@ impl StateManager for StateManagerImpl {
         // and this is not a checkpoint height (`matches!(scope, CertificationScope::Metadata)`),
         // and the state hash @ height is present in states.certifications (via consensus),
         // then we do not clone, do not hash, and do not store the state and certification metadata.
-        // This optimization is skipped every `MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING` heights
+        // This optimization is skipped every `MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING_AND_HASHING` heights
         // so that we always have a reasonably "recent" state snapshot and
         // its certification metadata available.
         let maybe_delivered_certification = {
@@ -3363,10 +3363,9 @@ impl StateManager for StateManagerImpl {
                 && height.get() < fast_forward_height
                 && !height
                     .get()
-                    .is_multiple_of(MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING)
+                    .is_multiple_of(MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING_AND_HASHING)
                 && maybe_delivered_certification.is_some()
             {
-                // let mut states = self.states.write();
                 #[cfg(debug_assertions)]
                 check_certifications_metadata_snapshots_and_states_metadata_are_consistent(&states);
 
@@ -3535,7 +3534,7 @@ enum HashRequest {
         latest_height_update_time: Arc<Mutex<Instant>>,
         /// A certification from consensus. If `Some`, we compare it with the state hash
         /// we calculate and panic on divergence. It should be `Some` whenever we are catching up and could
-        /// skip hashing, but do so anyway because we are at a height which is a multiple of
+        /// skip hashing, but we do hash anyway because we are at a height which is a multiple of
         /// `MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING`.
         reference_certification: Box<Option<Certification>>,
         scope: CertificationScope,
@@ -3665,7 +3664,7 @@ fn spawn_hash_thread(
 impl StateManagerImpl {
     /// After this method terminates, both `SharedState.snapshots` and `SharedState.certification_metadata`
     /// at the height from the previous `commit_and_certify` are populated. It also updates `latest_state_height`
-    /// to the maximum of the value before and the height passed.
+    /// to the maximum of the value before and the committed height.
     ///
     /// This used to happen synchronously inside `commit_and_certify`, but now happens in the hash thread
     /// at an unpredictable time.
