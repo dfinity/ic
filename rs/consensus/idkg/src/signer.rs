@@ -41,7 +41,7 @@ use rayon::{
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::{self, Debug, Formatter},
-    sync::Arc,
+    sync::{Arc, RwLock},
 };
 
 #[derive(Clone, Debug)]
@@ -115,6 +115,7 @@ pub(crate) struct ThresholdSignerImpl {
     crypto: Arc<dyn ConsensusCrypto>,
     thread_pool: Arc<ThreadPool>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    validated_sig_share_signers: RwLock<BTreeMap<RequestId, BTreeSet<NodeId>>>,
     metrics: ThresholdSignerMetrics,
     log: ReplicaLogger,
 }
@@ -133,6 +134,7 @@ impl ThresholdSignerImpl {
             crypto,
             thread_pool,
             state_reader,
+            validated_sig_share_signers: RwLock::new(BTreeMap::new()),
             metrics: ThresholdSignerMetrics::new(metrics_registry),
             log,
         }
@@ -146,7 +148,7 @@ impl ThresholdSignerImpl {
         transcript_loader: &dyn IDkgTranscriptLoader,
         state_snapshot: &dyn CertifiedStateSnapshot<State = ReplicatedState>,
     ) -> IDkgChangeSet {
-        self.thread_pool.install(|| {
+        let ret = self.thread_pool.install(|| {
             state_snapshot
                 .get_state()
                 .signature_request_contexts()
@@ -180,7 +182,22 @@ impl ThresholdSignerImpl {
                     )
                 })
                 .collect()
-        })
+        });
+
+        let mut valid_sig_share_signers = self.validated_sig_share_signers.write().unwrap();
+        for action in &ret {
+            if let &IDkgChangeAction::AddToValidated(ref action) = action
+                && let Some((request_id, signer)) = action.sig_share_request_id_and_signer()
+            {
+                // Record our share in the map of validated signature share signers
+                valid_sig_share_signers
+                    .entry(request_id)
+                    .or_default()
+                    .insert(signer);
+            }
+        }
+
+        ret
     }
 
     /// Processes the received signature shares
@@ -207,7 +224,7 @@ impl ThresholdSignerImpl {
 
         let shares: Vec<_> = idkg_pool.unvalidated().signature_shares().collect();
 
-        let results: Vec<_> = self.thread_pool.install(|| {
+        self.thread_pool.install(|| {
             // Iterate over all signature shares of all schemes
             shares
                 .into_par_iter()
@@ -225,25 +242,7 @@ impl ThresholdSignerImpl {
                     }
                 })
                 .collect()
-        });
-
-        let mut ret = Vec::new();
-        // Collection of validated shares
-        let mut validated_sig_shares = BTreeSet::new();
-        for action in results {
-            if let IDkgChangeAction::MoveToValidated(msg) = &action
-                && let Some(key) = msg.sig_share_dedup_key()
-                && !validated_sig_shares.insert(key)
-            {
-                self.metrics
-                    .sign_errors_inc("duplicate_sig_shares_in_batch");
-                ret.push(IDkgChangeAction::RemoveUnvalidated(msg.message_id()));
-                continue;
-            }
-            ret.push(action);
-        }
-
-        ret
+        })
     }
 
     fn validate_signature_share(
@@ -253,27 +252,40 @@ impl ThresholdSignerImpl {
         share: SigShare,
         inputs: &ThresholdSigInputs,
     ) -> Option<IDkgChangeAction> {
-        if self.signer_has_issued_share(
-            idkg_pool,
-            &share.signer(),
-            &share.request_id(),
-            share.scheme(),
-        ) {
+        {
+            let valid_sig_share_signers = self.validated_sig_share_signers.read().unwrap();
+            let maybe_signers = valid_sig_share_signers.get(&share.request_id());
+            if maybe_signers.is_some_and(|signers| signers.contains(&share.signer())) {
+                self.metrics
+                    .sign_errors_inc("duplicate_sig_share_cache_hit");
+                return Some(IDkgChangeAction::RemoveUnvalidated(id));
+            }
+
+            if self.inputs_already_have_enough_shares(inputs, maybe_signers) {
+                // We already have enough valid shares for this request
+                return Some(IDkgChangeAction::RemoveUnvalidated(id));
+            }
+        }
+
+        let request_id = share.request_id();
+        let signer = share.signer();
+        let scheme = share.scheme();
+        if self.signer_has_issued_share(idkg_pool, &signer, &request_id, scheme) {
             // The node already sent a valid share for this request
             self.metrics.sign_errors_inc("duplicate_sig_share");
             return Some(IDkgChangeAction::RemoveUnvalidated(id));
         }
 
         let share_string = share.to_string();
-        match self.crypto_verify_sig_share(inputs, share, idkg_pool.stats()) {
+        let ret = match self.crypto_verify_sig_share(inputs, share, idkg_pool.stats()) {
             Err(error) if error.is_reproducible() => {
                 self.metrics.sign_errors_inc("verify_sig_share_permanent");
-                Some(IDkgChangeAction::HandleInvalid(
+                return Some(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
                         "Signature share validation(permanent error): {share_string}, error = {error:?}"
                     ),
-                ))
+                ));
             }
             Err(error) => {
                 // Defer in case of transient errors
@@ -290,13 +302,27 @@ impl ThresholdSignerImpl {
                     "verify_sig_share_transient"
                 };
                 self.metrics.sign_errors_inc(label);
-                None
+                return None;
             }
             Ok(share) => {
                 self.metrics.sign_metrics_inc("sig_shares_received");
                 Some(IDkgChangeAction::MoveToValidated(share))
             }
+        };
+
+        // Although we already checked the cache for duplicate shares above, it could happen that a
+        // different thread validated a share for the same request_id  in the meantime, after we
+        // released the read lock. Therefore, we acquire the write lock here to check again with
+        // exclusive access.
+        let mut valid_sig_share_signers = self.validated_sig_share_signers.write().unwrap();
+        let signers = valid_sig_share_signers.entry(request_id).or_default();
+        if !signers.insert(signer) {
+            self.metrics
+                .sign_errors_inc("duplicate_sig_share_cache_miss");
+            return Some(IDkgChangeAction::RemoveUnvalidated(id));
         }
+
+        ret
     }
 
     /// Purges the entries no longer needed from the artifact pool
@@ -312,28 +338,33 @@ impl ThresholdSignerImpl {
             .cloned()
             .collect::<BTreeSet<_>>();
 
-        let mut ret = Vec::new();
         let current_height = state_snapshot.get_height();
 
         // Unvalidated signature shares.
-        let mut action = idkg_pool
+        let ret = idkg_pool
             .unvalidated()
             .signature_shares()
-            .filter(|(_, share)| self.should_purge(share, current_height, &in_progress))
-            .map(|(id, _)| IDkgChangeAction::RemoveUnvalidated(id))
-            .collect();
-        ret.append(&mut action);
+            .filter(|(_, share)| {
+                self.should_purge(share.request_id(), current_height, &in_progress)
+            })
+            .map(|(id, _)| IDkgChangeAction::RemoveUnvalidated(id));
 
         // Validated signature shares.
-        let mut action = idkg_pool
+        let mut valid_sig_share_signers = self.validated_sig_share_signers.write().unwrap();
+        let action = idkg_pool
             .validated()
             .signature_shares()
-            .filter(|(_, share)| self.should_purge(share, current_height, &in_progress))
-            .map(|(id, _)| IDkgChangeAction::RemoveValidated(id))
-            .collect();
-        ret.append(&mut action);
+            .filter(|(_, share)| {
+                self.should_purge(share.request_id(), current_height, &in_progress)
+            })
+            // Side-effect: remove from the validated_sig_share_signers map
+            .map(|(id, share)| {
+                valid_sig_share_signers.remove(&share.request_id());
+                IDkgChangeAction::RemoveValidated(id)
+            });
+        let ret = ret.chain(action);
 
-        ret
+        ret.collect()
     }
 
     /// Load necessary transcripts for the signature inputs
@@ -536,14 +567,31 @@ impl ThresholdSignerImpl {
         }
     }
 
+    fn inputs_already_have_enough_shares(
+        &self,
+        inputs: &ThresholdSigInputs,
+        maybe_signers: Option<&BTreeSet<NodeId>>,
+    ) -> bool {
+        let reconstruction_threshold = match inputs {
+            ThresholdSigInputs::Ecdsa(inputs) => inputs.reconstruction_threshold().get() as usize,
+            ThresholdSigInputs::Schnorr(inputs) => inputs.reconstruction_threshold().get() as usize,
+            // VetKd's API does not expose the number of shares needed for reconstruction directly.
+            // As this code path is an optimization, we conservatively assume that we do not have
+            // enough shares if the inputs are for VetKd.
+            // The worst thing that can happen is to validate a few extra shares.
+            ThresholdSigInputs::VetKd(_inputs) => return false,
+        };
+
+        maybe_signers.as_ref().map_or(0, |signers| signers.len()) >= reconstruction_threshold
+    }
+
     /// Checks if the signature share should be purged
     fn should_purge(
         &self,
-        share: &SigShare,
+        request_id: RequestId,
         current_height: Height,
         in_progress: &BTreeSet<CallbackId>,
     ) -> bool {
-        let request_id = share.request_id();
         request_id.height <= current_height && !in_progress.contains(&request_id.callback_id)
     }
 }
