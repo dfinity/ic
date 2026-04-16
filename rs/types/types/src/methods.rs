@@ -280,7 +280,7 @@ pub struct Callback {
     ///
     /// `Cycles::zero()` if the `Callback` was created before February 2022.
     pub prepayment_for_response_execution: CompoundCycles<Instructions>,
-    /// Cycles prepaid by the caller for response transimission.
+    /// Cycles prepaid by the caller for response transmission.
     ///
     /// `CompoundCycles::zero()` if the `Callback` was created before February 2022.
     pub prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
@@ -404,11 +404,10 @@ impl TryFrom<pb::Callback> for Callback {
                     cost_schedule,
                 ),
             };
-        let prepayment_for_call_transmission = try_from_option_field(
-            value.prepayment_for_call_transmission,
-            "Callback::prepayment_for_call_transmission",
-        )
-        .unwrap_or(CompoundCycles::new(Cycles::zero(), cost_schedule));
+        let prepayment_for_call_transmission = match value.prepayment_for_call_transmission {
+            Some(value) => CompoundCycles::try_from(value)?,
+            None => CompoundCycles::new(Cycles::zero(), cost_schedule),
+        };
 
         Ok(Self {
             call_context_id: CallContextId::from(value.call_context_id),

@@ -72,7 +72,7 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
             CanisterCyclesCostSchedule::Normal,
             WASM_EXECUTION_MODE,
         );
-    let prepayment_call_response_transmission = cycles_account_manager.xnet_total_transmission_fee(
+    let prepayment_for_call_transmission = cycles_account_manager.xnet_total_transmission_fee(
         request.payload_size_bytes(),
         SMALL_APP_SUBNET_MAX_SIZE,
         CanisterCyclesCostSchedule::Normal,
@@ -97,7 +97,7 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
             MessageMemoryUsage::ZERO,
             request.clone(),
             prepayment_for_response_execution,
-            prepayment_call_response_transmission,
+            prepayment_for_call_transmission,
         ),
         Err(request)
     );

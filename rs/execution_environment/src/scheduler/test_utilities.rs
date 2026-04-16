@@ -1484,9 +1484,11 @@ impl TestWasmExecutorCore {
         let prepayment_for_response_transmission = self
             .cycles_account_manager
             .prepayment_for_response_transmission(self.subnet_size, system_state.cost_schedule());
+        // Scheduler uses `TestCall` requests which have zero payload.
+        let payload_size = NumBytes::from(0);
         let prepayment_for_call_transmission =
             self.cycles_account_manager.xnet_total_transmission_fee(
-                NumBytes::from(0),
+                payload_size,
                 self.subnet_size,
                 system_state.cost_schedule(),
             );
