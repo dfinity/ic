@@ -223,7 +223,7 @@ thread_local! {
     //   4. Reduce the minimum dissolve delay needed to vote.
     //   5. 8 year gang 10% bonus.
     static ENABLE_MISSION_70_VOTING_REWARDS: Cell<bool>
-        = const { Cell::new(cfg!(feature = "test")) };
+        = const { Cell::new(true) };
 }
 
 thread_local! {
