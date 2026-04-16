@@ -1185,6 +1185,25 @@ impl CyclesAccountManager {
         )
     }
 
+    /// Returns the variable part of the execution cost (no fixed per-message fee)
+    /// for the given number of instructions. This matches exactly what
+    /// `refund_unused_execution_cycles` refunds, so callers can compute the net
+    /// charge as `prepaid - variable_execution_cost(instructions_to_refund)`.
+    #[doc(hidden)]
+    pub fn variable_execution_cost(
+        &self,
+        num_instructions: NumInstructions,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+        execution_mode: WasmExecutionMode,
+    ) -> CompoundCycles<Instructions> {
+        self.scale_cost(
+            self.convert_instructions_to_cycles(num_instructions, execution_mode),
+            subnet_size,
+            cost_schedule,
+        )
+    }
+
     /// Returns the cost of executing a management canister message with the given number of
     /// instructions. The cost only consists of the fee that depends on the number of instructions.
     /// In particular, there's no flat fee to account for sandboxed execution.

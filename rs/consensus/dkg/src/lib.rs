@@ -460,7 +460,7 @@ mod tests {
     fn test_create_dealings_payload() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let nodes: Vec<_> = (0..3).map(node_test_id).collect();
+                let nodes: Vec<_> = (0..4).map(node_test_id).collect();
                 let dkg_interval_len = 30;
                 let subnet_id = subnet_test_id(222);
                 let initial_registry_version = 112;

@@ -499,7 +499,29 @@ fn add_subnet_local_registry_records(
         .with_resource_limits(resource_limits)
         .build();
 
-    // Insert initial DKG transcripts
+    add_cup_contents_and_key_record(
+        subnet_id,
+        ni_dkg_transcript,
+        public_key,
+        &registry_data_provider,
+        registry_version,
+    );
+
+    add_single_subnet_record(
+        &registry_data_provider,
+        registry_version.get(),
+        subnet_id,
+        record,
+    );
+}
+
+fn add_cup_contents_and_key_record(
+    subnet_id: SubnetId,
+    ni_dkg_transcript: NiDkgTranscript,
+    public_key: ThresholdSigPublicKey,
+    registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+    registry_version: RegistryVersion,
+) {
     let mut high_threshold_transcript = ni_dkg_transcript.clone();
     high_threshold_transcript.dkg_id.dkg_tag = NiDkgTag::HighThreshold;
     let mut low_threshold_transcript = ni_dkg_transcript;
@@ -515,19 +537,54 @@ fn add_subnet_local_registry_records(
             registry_version,
             Some(cup_contents),
         )
-        .expect("Failed to add subnet record.");
-
-    add_single_subnet_record(
-        &registry_data_provider,
-        registry_version.get(),
-        subnet_id,
-        record,
-    );
+        .expect("Failed to add CUP contents record.");
     add_subnet_key_record(
-        &registry_data_provider,
+        registry_data_provider,
         registry_version.get(),
         subnet_id,
         public_key,
+    );
+}
+
+/// Register minimal registry records for a non-local subnet so that it
+/// appears in the `NetworkTopology` and its routing table entries are not
+/// filtered out. This is needed because `try_to_populate_network_topology`
+/// filters the routing table to only include entries for subnets with
+/// registry records.
+fn register_non_local_subnet(
+    subnet_id: SubnetId,
+    registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+) {
+    let principal_id = subnet_id.get();
+    let principal_bytes = principal_id.as_slice();
+    let mut seed = [0_u8; 32];
+    seed[..principal_bytes.len()].copy_from_slice(principal_bytes);
+    let (ni_dkg_transcript, _) =
+        dummy_initial_dkg_transcript_with_master_key(&mut StdRng::from_seed(seed));
+    let public_key: ThresholdSigPublicKey = (&ni_dkg_transcript).try_into().unwrap();
+
+    add_cup_contents_and_key_record(
+        subnet_id,
+        ni_dkg_transcript,
+        public_key,
+        registry_data_provider,
+        INITIAL_REGISTRY_VERSION,
+    );
+
+    // Assume Application as the type for this synthetic catch-all subnet:
+    // the only subnet type that gets filtered out is CloudEngine, and the
+    // real subnets whose canisters end up here should mainly be application
+    // subnets. Even if there are requests from canisters on System subnets,
+    // it shouldn't make a difference (at least, for the current callers of
+    // this function).
+    let record = SubnetRecordBuilder::from(&[])
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    add_single_subnet_record(
+        registry_data_provider,
+        INITIAL_REGISTRY_VERSION.get(),
+        subnet_id,
+        record,
     );
 }
 
@@ -1574,7 +1631,23 @@ impl StateMachineBuilder {
                 )
                 .expect("failed to assign a canister range");
         }
-        let subnet_list = vec![sm.get_subnet_id()];
+        // Register all subnet IDs referenced in the routing table (not just
+        // the local one) so that the routing table entries survive the
+        // filtering in `try_to_populate_network_topology`. Without this,
+        // entries for non-local subnets are silently dropped and any
+        // response destined for those subnets triggers a critical error
+        // in the stream builder.
+        let subnet_list: Vec<SubnetId> = routing_table
+            .iter()
+            .map(|(_, sid)| *sid)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        for &extra_subnet_id in &subnet_list {
+            if extra_subnet_id != subnet_id {
+                register_non_local_subnet(extra_subnet_id, &registry_data_provider);
+            }
+        }
         let chain_keys = chain_keys_enabled_status
             .into_iter()
             .filter_map(|(key_id, is_enabled)| {

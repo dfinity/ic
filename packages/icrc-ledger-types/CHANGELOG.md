@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The implementation of the `Storable` trait for `Account` and the dependency on the `ic-stable-structures` crate are now disabled by default. Enable the `storable` feature flag to opt in.
+
 ## 0.1.13
 
 ### Added

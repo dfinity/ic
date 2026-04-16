@@ -31,7 +31,7 @@ ic-ledger-core = { path = "../../common/ledger_core" }
 ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
 ic-metrics-encoder = "1.1.1"
 ic-stable-structures = { workspace = true }
-icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types", features = ["storable"] }
 minicbor = { workspace = true }
 num-traits = { workspace = true }
 serde = { workspace = true }
