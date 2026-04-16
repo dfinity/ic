@@ -572,8 +572,9 @@ fn test_inter_canister_call(
             SMALL_APP_SUBNET_MAX_SIZE,
             CanisterCyclesCostSchedule::Normal,
         );
+    let payload_size = NumBytes::from((method_name.len() + arg.len()) as u64);
     let prepayment_for_call_transmission = cycles_account_manager.xnet_total_transmission_fee(
-        NumBytes::from((method_name.len() + arg.len()) as u64),
+        payload_size,
         SMALL_APP_SUBNET_MAX_SIZE,
         CanisterCyclesCostSchedule::Normal,
     );
@@ -602,6 +603,9 @@ fn test_inter_canister_call(
         .method_payload(arg)
         .sender_reply_callback(callback_id)
         .build();
+
+    // Sanity check that the payload calculation is consistent.
+    assert_eq!(request.payload_size_bytes(), payload_size);
 
     // Enqueue the Request.
     sandbox_safe_system_state
