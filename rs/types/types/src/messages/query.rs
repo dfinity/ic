@@ -1,7 +1,7 @@
 use crate::{
     CanisterId, PrincipalId, UserId,
     messages::{
-        HasCanisterId, HttpRequestError, HttpUserQuery, MessageId, SignedSenderInfo,
+        HasCanisterId, HttpRequestError, HttpUserQuery, MessageId, SenderInfo, SignedSenderInfo,
         http::{
             CallOrQuery, RawSignedSenderInfoSlices, representation_independent_hash_call_or_query,
         },
@@ -46,6 +46,16 @@ pub struct Query {
 impl Query {
     pub fn source(&self) -> PrincipalId {
         self.source.user_id().get()
+    }
+
+    pub fn sender_info(&self) -> Option<SenderInfo> {
+        match &self.source {
+            QuerySource::User { sender_info, .. } => sender_info.as_ref().map(|si| SenderInfo {
+                info: si.info.clone(),
+                signer: si.signer,
+            }),
+            QuerySource::System => None,
+        }
     }
 
     pub fn id(&self) -> MessageId {

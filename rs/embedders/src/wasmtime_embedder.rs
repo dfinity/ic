@@ -31,6 +31,7 @@ use ic_types::{
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
 use memory_tracker::{
     DirtyPageTracking, MemoryLimits, MissingPageHandlerKind, SigsegvMemoryTracker,
+    signal_mutex::SignalMutex,
 };
 use signal_stack::WasmtimeSignalStack;
 
@@ -201,6 +202,31 @@ struct WasmMemoryInfo {
     memory_type: CanisterMemoryType,
     /// Indicates whether dirty page tracking should be enabled.
     dirty_page_tracking: DirtyPageTracking,
+}
+
+/// A wrapper around a raw pointer to the Store.
+/// This type is Send + Sync so that we can store it in a closure owned by a signal handler.
+///
+/// # Safety
+///
+/// The pointer is only valid as long as the WasmtimeInstance is alive.
+/// This construction is only safe because we store it in a closure which gets
+/// dropped along with the associated WasmtimeInstance.
+#[derive(Copy, Clone)]
+struct StorePtr(*mut wasmtime::Store<StoreData>);
+
+unsafe impl Send for StorePtr {}
+unsafe impl Sync for StorePtr {}
+
+impl StorePtr {
+    /// # Safety
+    ///
+    /// This method can only be called if the WasmtimeInstance is alive and we
+    /// have exclusive access to the store.
+    #[allow(unsafe_op_in_unsafe_fn)]
+    unsafe fn get(&mut self) -> &mut wasmtime::Store<StoreData> {
+        &mut *self.0
+    }
 }
 
 pub struct WasmtimeEmbedder {
@@ -420,7 +446,6 @@ impl WasmtimeEmbedder {
 
         let stable_memory_limits = MemoryLimits {
             max_memory_size: self.config.max_stable_memory_size,
-            max_accessed_pages: current_accessed_limit,
             max_dirty_pages: current_dirty_page_limit,
         };
         let max_heap_memory_size = self
@@ -429,7 +454,6 @@ impl WasmtimeEmbedder {
             .max(self.config.max_wasm64_memory_size);
         let heap_memory_limits = MemoryLimits {
             max_memory_size: max_heap_memory_size,
-            max_accessed_pages: NumOsPages::new(max_heap_memory_size.get() / PAGE_SIZE as u64),
             max_dirty_pages: NumOsPages::new(max_heap_memory_size.get() / PAGE_SIZE as u64),
         };
 
@@ -557,11 +581,41 @@ impl WasmtimeEmbedder {
             }
         }
 
+        // Create a closure to decrement the instruction counter.
+        // SAFETY: We store a raw pointer to the Store and a copy of the Global.
+        // These remain valid for the lifetime of the WasmtimeInstance because:
+        // 1. The Store is owned by WasmtimeInstance
+        // 2. The Global is a lightweight handle that references data in the Store
+        // 3. The memory tracker (which holds this closure) is also owned by WasmtimeInstance
+        // 4. All are dropped together when WasmtimeInstance is dropped
+        let subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>> = {
+            if let Some(global) = store.data().num_instructions_global {
+                // Store a wrapped pointer to the Store and a copy of the Global
+                let mut store_ptr = StorePtr(&mut store as *mut wasmtime::Store<StoreData>);
+                let global_copy = global;
+
+                Arc::new(SignalMutex::new(move |instructions_to_subtract: u64| {
+                    // SAFETY: Accessing the Store and Global from the signal handler.
+                    // Both pointers are guaranteed valid by the lifetime relationship described above.
+                    unsafe {
+                        let store_ref = store_ptr.get();
+                        if let Val::I64(current) = global_copy.get(&mut *store_ref) {
+                            let new_value = current.saturating_sub(instructions_to_subtract as i64);
+                            let _ = global_copy.set(store_ref, Val::I64(new_value));
+                        }
+                    }
+                }))
+            } else {
+                Arc::new(SignalMutex::new(|_| {}))
+            }
+        };
+
         let memory_trackers = sigsegv_memory_tracker(
             memories,
             &mut store,
             self.log.clone(),
             self.config.feature_flags.deterministic_memory_tracker,
+            subtract_instruction_counter,
         );
 
         let signal_stack = WasmtimeSignalStack::new();
@@ -723,7 +777,8 @@ fn sigsegv_memory_tracker<S>(
     store: &mut wasmtime::Store<S>,
     log: ReplicaLogger,
     deterministic_memory_tracker: FlagStatus,
-) -> HashMap<CanisterMemoryType, Arc<Mutex<SigsegvMemoryTracker>>> {
+    subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
+) -> HashMap<CanisterMemoryType, Arc<SignalMutex<SigsegvMemoryTracker>>> {
     let maybe_missing_page_handler_kind = match deterministic_memory_tracker {
         FlagStatus::Enabled => Some(MissingPageHandlerKind::Deterministic),
         FlagStatus::Disabled => None,
@@ -758,7 +813,7 @@ fn sigsegv_memory_tracker<S>(
                 );
             }
 
-            Arc::new(Mutex::new(
+            Arc::new(SignalMutex::new(
                 memory_tracker::new(
                     base,
                     NumBytes::new(size as u64),
@@ -767,6 +822,7 @@ fn sigsegv_memory_tracker<S>(
                     page_map,
                     maybe_missing_page_handler_kind,
                     memory_limits,
+                    subtract_instruction_counter.clone(),
                 )
                 .expect("failed to instantiate SIGSEGV memory tracker"),
             ))
@@ -851,7 +907,7 @@ pub struct PageAccessResults {
 /// Encapsulates a Wasmtime instance on the Internet Computer.
 pub struct WasmtimeInstance {
     instance: wasmtime::Instance,
-    memory_trackers: HashMap<CanisterMemoryType, Arc<Mutex<SigsegvMemoryTracker>>>,
+    memory_trackers: HashMap<CanisterMemoryType, Arc<SignalMutex<SigsegvMemoryTracker>>>,
     signal_stack: WasmtimeSignalStack,
     log: ReplicaLogger,
     instance_stats: InstanceStats,
@@ -920,8 +976,7 @@ impl WasmtimeInstance {
                 .memory_trackers
                 .get(&CanisterMemoryType::Heap)
                 .unwrap()
-                .lock()
-                .unwrap();
+                .lock();
 
             let speculatively_dirty_pages = wasm_tracker.take_speculatively_dirty_pages();
             let dirty_pages = wasm_tracker.take_dirty_pages();
@@ -972,8 +1027,7 @@ impl WasmtimeInstance {
                 .memory_trackers
                 .get(&CanisterMemoryType::Stable)
                 .unwrap()
-                .lock()
-                .unwrap();
+                .lock();
 
             let stable_sigsegv_handler_duration =
                 stable_tracker.metrics().sigsegv_handler_duration();
@@ -1152,7 +1206,7 @@ impl WasmtimeInstance {
                 .ok_or_else(|| HypervisorError::ToolchainContractViolation {
                     error: "No memory tracker for stable memory".to_string(),
                 })?;
-            let tracker = tracker.lock().unwrap();
+            let tracker = tracker.lock();
             let heap_memory = heap_memory.data(&self.store);
 
             fn handle_bytemap_entry(

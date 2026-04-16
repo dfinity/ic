@@ -144,6 +144,7 @@ fn test(env: TestEnv) {
                     node_ids,
                     version,
                     Some(CanisterCyclesCostSchedule::Normal),
+                    Some(0),
                 )
                 .await;
                 let start = Instant::now();

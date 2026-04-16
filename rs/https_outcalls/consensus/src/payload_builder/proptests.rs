@@ -172,6 +172,7 @@ fn prop_response_with_shares(
             id: response.id,
             content_hash: crypto_hash(&response),
             content_size: response.content.count_bytes() as u32,
+            is_reject: response.content.is_reject(),
             registry_version: RegistryVersion::new(1),
             replica_version: ReplicaVersion::default(),
         };
@@ -203,11 +204,12 @@ fn prop_response(max_size: usize) -> impl Strategy<Value = CanisterHttpResponse>
 
 /// Generate a random metadata with a random registry version value
 fn prop_random_metadata() -> impl Strategy<Value = CanisterHttpResponseMetadata> {
-    any::<(u64, [u8; 32], u32)>().prop_map(|(id, hash, content_size)| {
+    any::<(u64, [u8; 32], u32, bool)>().prop_map(|(id, hash, content_size, is_reject)| {
         CanisterHttpResponseMetadata {
             id: CallbackId::new(id),
             content_hash: CryptoHashOf::new(CryptoHash(hash.to_vec())),
             content_size,
+            is_reject,
             registry_version: RegistryVersion::new(1),
             replica_version: ReplicaVersion::default(),
         }

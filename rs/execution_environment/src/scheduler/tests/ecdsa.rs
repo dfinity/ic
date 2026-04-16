@@ -27,7 +27,7 @@ fn inject_ecdsa_signing_request(test: &mut SchedulerTest, key_id: &EcdsaKeyId) {
     test.inject_call_to_ic00(
         Method::SignWithECDSA,
         payload.clone(),
-        test.ecdsa_signature_fee(),
+        test.ecdsa_signature_fee().real(),
         canister_id,
         InputQueueType::RemoteSubnet,
     );

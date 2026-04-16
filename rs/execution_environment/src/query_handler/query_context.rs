@@ -36,7 +36,7 @@ use ic_types::{
     ingress::WasmResult,
     messages::{
         CallContextId, NO_DEADLINE, Payload, Query, QuerySource, RejectContext, Request,
-        RequestOrResponse, Response,
+        RequestOrResponse, Response, SenderInfo,
     },
     methods::{FuncRef, WasmClosure, WasmMethod},
 };
@@ -214,9 +214,11 @@ impl<'a> QueryContext<'a> {
         let query_kind = match &method {
             WasmMethod::Query(_) => NonReplicatedQueryKind::Pure {
                 caller: query.source(),
+                sender_info: query.sender_info(),
             },
             WasmMethod::CompositeQuery(_) => NonReplicatedQueryKind::Stateful {
                 call_origin: call_origin.clone(),
+                sender_info: query.sender_info(),
             },
             WasmMethod::Update(_) | WasmMethod::System(_) => {
                 unreachable!("Expected a Wasm query method");
@@ -635,6 +637,7 @@ impl<'a> QueryContext<'a> {
                 call_context_id,
                 call_responded,
                 call_context.instructions_executed(),
+                call_context.sender_info().cloned(),
             ),
             Payload::Reject(context) => ApiType::composite_reject_callback(
                 time,
@@ -644,6 +647,7 @@ impl<'a> QueryContext<'a> {
                 call_context_id,
                 call_responded,
                 call_context.instructions_executed(),
+                call_context.sender_info().cloned(),
             ),
         };
 
@@ -699,6 +703,7 @@ impl<'a> QueryContext<'a> {
                             canister_current_message_memory_usage,
                             execution_parameters,
                             call_context.instructions_executed(),
+                            call_context.sender_info().cloned(),
                         )
                     }
                 }
@@ -733,6 +738,7 @@ impl<'a> QueryContext<'a> {
         canister_current_message_memory_usage: MessageMemoryUsage,
         execution_parameters: ExecutionParameters,
         call_context_instructions_executed: NumInstructions,
+        sender_info: Option<SenderInfo>,
     ) -> (NumInstructions, Result<Option<WasmResult>, HypervisorError>) {
         let func_ref = match call_origin {
             CallOrigin::Ingress(..) | CallOrigin::CanisterUpdate(..) | CallOrigin::SystemTask => {
@@ -749,6 +755,7 @@ impl<'a> QueryContext<'a> {
                     caller: call_origin.get_principal(),
                     time,
                     call_context_instructions_executed,
+                    sender_info,
                 },
                 time,
                 canister.system_state.clone(),
@@ -846,6 +853,8 @@ impl<'a> QueryContext<'a> {
             request.method_payload.as_slice(),
             NonReplicatedQueryKind::Stateful {
                 call_origin: call_origin.clone(),
+                // this is a nested composite query call => no sender info available
+                sender_info: None,
             },
             measurement_scope,
         );

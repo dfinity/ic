@@ -36,7 +36,7 @@ use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask,
     Ingress, NO_DEADLINE, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse,
-    Response, StopCanisterCallId, StopCanisterContext,
+    Response, SenderInfo, StopCanisterCallId, StopCanisterContext,
 };
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
@@ -46,7 +46,7 @@ use ic_types::{
 };
 use ic_types_cycles::{
     CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, CyclesUseCaseKind,
-    IngressInduction, Instructions, NominalCycles, Uninstall,
+    CyclesUseCaseRefundableKind, IngressInduction, Instructions, NominalCycles, Uninstall,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -993,10 +993,11 @@ impl SystemState {
         cycles: Cycles,
         time: Time,
         metadata: RequestMetadata,
+        sender_info: Option<SenderInfo>,
     ) -> Result<CallContextId, StateError> {
         Ok(call_context_manager_mut(&mut self.status)
             .ok_or(StateError::CanisterStopped(self.canister_id))?
-            .new_call_context(call_origin, cycles, time, metadata))
+            .new_call_context(call_origin, cycles, time, metadata, sender_info))
     }
 
     /// Withdraws cycles from the call context with the given ID.
@@ -1881,7 +1882,7 @@ impl SystemState {
     /// Similar to `add_cycles` but additionally updates the metrics to match
     /// the refund that was provided. Should be used after a prepayment has been
     /// made.
-    pub fn refund_cycles<T: CyclesUseCaseKind>(
+    pub fn refund_cycles<T: CyclesUseCaseRefundableKind>(
         &mut self,
         prepayment: CompoundCycles<T>,
         refund: CompoundCycles<T>,
@@ -2455,6 +2456,7 @@ pub mod testing {
                 Cycles::zero(),
                 time,
                 RequestMetadata::new(0, time),
+                None,
             );
 
             let callback = Callback::new(
