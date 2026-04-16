@@ -199,8 +199,10 @@ pub fn duration_to_millis(unit_delay: Duration) -> u64 {
 /// 13 nodes. App subnets with more than 13 nodes will be deployed with the NNS
 /// subnet configs.
 pub fn get_default_config_params(subnet_type: SubnetType, nodes_num: usize) -> SubnetConfigParams {
-    let use_app_config =
-        subnet_type == SubnetType::Application && nodes_num <= ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
+    let use_app_config = matches!(
+        subnet_type,
+        SubnetType::Application | SubnetType::CloudEngine
+    ) && nodes_num <= ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 
     struct DynamicConfig {
         pub unit_delay: Duration,
