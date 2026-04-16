@@ -4,7 +4,6 @@ use crate::message_routing::{
 use crate::routing::demux::Demux;
 use crate::routing::stream_builder::StreamBuilder;
 use ic_config::execution_environment::Config as HypervisorConfig;
-use ic_config::subnet_config::SchedulerConfig;
 use ic_interfaces::execution_environment::{
     ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings, Scheduler,
 };
@@ -49,7 +48,6 @@ pub(crate) trait StateMachine: Send {
 }
 pub(crate) struct StateMachineImpl {
     scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
-    scheduler_config: SchedulerConfig,
     demux: Box<dyn Demux>,
     stream_builder: Box<dyn StreamBuilder>,
     best_effort_message_memory_capacity: NumBytes,
@@ -60,7 +58,6 @@ pub(crate) struct StateMachineImpl {
 impl StateMachineImpl {
     pub(crate) fn new(
         scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
-        scheduler_config: SchedulerConfig,
         demux: Box<dyn Demux>,
         stream_builder: Box<dyn StreamBuilder>,
         hypervisor_config: HypervisorConfig,
@@ -69,7 +66,6 @@ impl StateMachineImpl {
     ) -> Self {
         Self {
             scheduler,
-            scheduler_config,
             demux,
             stream_builder,
             best_effort_message_memory_capacity: hypervisor_config
@@ -106,7 +102,7 @@ impl StateMachineImpl {
     ) -> ReplicatedState {
         // Abort all paused executions and wipe `SystemMetadata` caches.
         self.scheduler
-            .checkpoint_round_with_no_execution(&mut state, &self.scheduler_config);
+            .checkpoint_round_with_no_execution(&mut state);
 
         let old_subnet_id = state.metadata.own_subnet_id;
         state
@@ -266,7 +262,6 @@ impl StateMachine for StateMachineImpl {
             round_summary,
             execution_round_type,
             registry_settings,
-            &self.scheduler_config,
         );
         if !state_after_execution.consensus_queue.is_empty() {
             fatal!(

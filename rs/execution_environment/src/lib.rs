@@ -22,9 +22,9 @@ pub use canister_manager::types::WasmSource;
 pub use canister_manager::wasm_execution_mode;
 use canister_manager::{CanisterManager, types::CanisterMgrConfig};
 pub use execution_environment::{
-    CompilationCostHandling, ExecuteMessageResult, ExecuteSubnetMessageResultType,
-    ExecutionEnvironment, ExecutionResponse, RoundInstructions, RoundLimits, as_num_instructions,
-    as_round_instructions, execute_canister,
+    CompilationCostHandling, ExecuteCanisterResult, ExecuteMessageResult,
+    ExecuteSubnetMessageResultType, ExecutionEnvironment, ExecutionResponse, RoundInstructions,
+    RoundLimits, as_num_instructions, as_round_instructions, execute_canister,
 };
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 pub use hypervisor::{Hypervisor, HypervisorMetrics};
@@ -32,6 +32,7 @@ use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config, subnet_config::SubnetConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasm_executor::WasmExecutor;
+pub use ic_embedders::wasmtime_embedder::system_api::InstructionLimits;
 use ic_interfaces::execution_environment::{
     IngressFilterService, IngressHistoryReader, QueryExecutionService, Scheduler,
     TransformExecutionService,
@@ -101,6 +102,7 @@ pub struct ExecutionServices {
     pub query_execution_service: QueryExecutionService,
     pub transform_execution_service: TransformExecutionService,
     pub scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
+    pub execution_environment: Arc<ExecutionEnvironment>,
     pub query_stats_payload_builder: QueryStatsPayloadBuilderParams,
     pub cycles_account_manager: Arc<CyclesAccountManager>,
 }
@@ -167,7 +169,7 @@ impl ExecutionServices {
         );
 
         let scheduler = Box::new(SchedulerImpl::new(
-            subnet_config.scheduler_config.scheduler_cores,
+            subnet_config.scheduler_config,
             config.embedders_config,
             own_subnet_id,
             Arc::clone(&ingress_history_writer) as Arc<_>,
@@ -187,6 +189,7 @@ impl ExecutionServices {
             query_execution_service,
             transform_execution_service,
             scheduler,
+            execution_environment,
             query_stats_payload_builder,
             cycles_account_manager,
         }

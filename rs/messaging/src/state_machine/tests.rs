@@ -3,7 +3,6 @@ use crate::message_routing::CRITICAL_ERROR_NON_INCREASING_BATCH_TIME;
 use crate::routing::demux::MockDemux;
 use crate::routing::stream_builder::MockStreamBuilder;
 use crate::state_machine::StateMachineImpl;
-use ic_config::subnet_config::SchedulerConfig;
 use ic_interfaces::execution_environment::Scheduler;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
@@ -45,10 +44,9 @@ mock! {
             round_summary: Option<ExecutionRoundSummary>,
             current_round_type: ExecutionRoundType,
             registry_settings: &RegistryExecutionSettings,
-            config: &SchedulerConfig,
         ) -> ReplicatedState;
 
-        fn checkpoint_round_with_no_execution(&self, state: &mut ReplicatedState, config: &SchedulerConfig);
+        fn checkpoint_round_with_no_execution(&self, state: &mut ReplicatedState);
     }
 }
 
@@ -111,9 +109,8 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
             eq(None),
             eq(round_type),
             eq(test_registry_settings()),
-            always(),
         )
-        .returning(|state, _, _, _, _, _, _, _, _| state);
+        .returning(|state, _, _, _, _, _, _, _| state);
 
     let mut stream_builder = Box::new(MockStreamBuilder::new());
     stream_builder
@@ -168,7 +165,6 @@ fn state_machine_populates_network_topology() {
         let _ = &fixture;
         let state_machine = Box::new(StateMachineImpl::new(
             fixture.scheduler,
-            SchedulerConfig::application_subnet(),
             fixture.demux,
             fixture.stream_builder,
             Default::default(),
@@ -205,7 +201,6 @@ fn test_delivered_batch(provided_batch: Batch) -> ReplicatedState {
         let _ = &fixture;
         let state_machine = Box::new(StateMachineImpl::new(
             fixture.scheduler,
-            SchedulerConfig::application_subnet(),
             fixture.demux,
             fixture.stream_builder,
             Default::default(),
@@ -297,7 +292,7 @@ fn split_fixture() -> StateMachineTestFixture {
         .expect_checkpoint_round_with_no_execution()
         .times(1)
         .in_sequence(&mut seq)
-        .with(always(), always())
+        .with(always())
         .return_const(());
 
     let subnets = btreemap! {
@@ -354,7 +349,6 @@ fn test_online_split(new_subnet_id: SubnetId, other_subnet_id: SubnetId) -> Repl
     let state_after_split = with_test_replica_logger(|log| {
         let state_machine = Box::new(StateMachineImpl::new(
             fixture.scheduler,
-            SchedulerConfig::application_subnet(),
             fixture.demux,
             fixture.stream_builder,
             Default::default(),
@@ -467,7 +461,6 @@ fn test_batch_time_impl(
         let _ = &fixture;
         let state_machine = StateMachineImpl::new(
             fixture.scheduler,
-            SchedulerConfig::application_subnet(),
             fixture.demux,
             fixture.stream_builder,
             Default::default(),

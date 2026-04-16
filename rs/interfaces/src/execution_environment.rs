@@ -3,7 +3,6 @@ mod errors;
 
 pub use errors::{CanisterBacktrace, CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
-use ic_config::subnet_config::SchedulerConfig;
 use ic_error_types::UserError;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -1568,7 +1567,6 @@ pub trait Scheduler: Send {
         round_summary: Option<ExecutionRoundSummary>,
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
-        config: &SchedulerConfig,
     ) -> Self::State;
 
     /// Code to be executed in a checkpoint round, iff `execute_round()` was not
@@ -1576,7 +1574,7 @@ pub trait Scheduler: Send {
     ///
     /// This aborts all paused executions and resets transient state (such as heap
     /// delta estimate and compiled Wasms).
-    fn checkpoint_round_with_no_execution(&self, state: &mut Self::State, config: &SchedulerConfig);
+    fn checkpoint_round_with_no_execution(&self, state: &mut Self::State);
 }
 
 /// Combination of memory used by and reserved for guaranteed response messages
