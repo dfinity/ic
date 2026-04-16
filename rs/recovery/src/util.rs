@@ -55,7 +55,7 @@ pub fn data_location_from_str(s: &str) -> RecoveryResult<DataLocation> {
     )))
 }
 
-/// Helper struct to abstract over local and remote implementations of functions that need to access
+/// Helper enum to abstract over local and remote implementations of functions that need to access
 /// the filesystem of the node. Local implementations use the standard library, while remote
 /// implementations use ssh to execute commands on the remote node.
 pub enum MaybeRemote<'a> {
