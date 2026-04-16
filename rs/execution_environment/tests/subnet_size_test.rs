@@ -807,8 +807,8 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
                 max_storage_reservation_period: Duration::from_secs(0),
                 default_reserved_balance_limit: CyclesAccountManagerConfig::application_subnet()
                     .default_reserved_balance_limit,
-                fetch_canister_logs_base_fee: Cycles::new(1_000_000),
-                fetch_canister_logs_per_byte_fee: Cycles::new(800),
+                fetch_canister_logs_base_fee: Cycles::new(5_000_000),
+                fetch_canister_logs_per_byte_fee: Cycles::new(80),
             }
         }
     }

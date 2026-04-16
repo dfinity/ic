@@ -2385,3 +2385,84 @@ fn test_canister_log_resize_no_extra_charge_feature_disabled() {
         baseline_cost
     );
 }
+
+#[test]
+fn test_fetch_canister_logs_update_call_rejected_insufficient_cycles() {
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let env = setup_env();
+    let canister_a = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![user_controller])
+            .build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+    let canister_b = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibilityV2::Controllers)
+            .with_controllers(vec![canister_a.get()])
+            .build(),
+        wat_canister()
+            .update("test", wat_fn().debug_print(b"message"))
+            .build_wasm(),
+    );
+    let _ = env.execute_ingress(canister_b, "test", vec![]);
+
+    // Send with 1 cycle — far below the required max fee.
+    let result = fetch_canister_logs_intercanister(&env, canister_a, canister_b, Cycles::new(1));
+    let reject_message = get_reject(result);
+    assert!(
+        reject_message.contains("cycles are required"),
+        "Expected insufficient cycles error, got: {reject_message}"
+    );
+}
+
+#[test]
+fn test_fetch_canister_logs_update_call_deducts_cycles() {
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let env = setup_env();
+    let canister_a = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![user_controller])
+            .build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+    let canister_b = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibilityV2::Controllers)
+            .with_controllers(vec![canister_a.get()])
+            .build(),
+        wat_canister()
+            .update("test", wat_fn().debug_print(b"message"))
+            .build_wasm(),
+    );
+    let _ = env.execute_ingress(canister_b, "test", vec![]);
+
+    let balance_before = env.cycle_balance(canister_a);
+
+    // Provide more than enough cycles for the fetch.
+    let cycles_sent = Cycles::new(5_000_000_000);
+    let records = fetch_log_records_intercanister(&env, canister_a, canister_b, cycles_sent);
+    assert_eq!(records.len(), 1);
+
+    let balance_after = env.cycle_balance(canister_a);
+    let cycles_spent = balance_before - balance_after;
+
+    // Some cycles must have been deducted (fetch fee + execution overhead).
+    assert!(
+        cycles_spent > 0,
+        "Expected some cycles to be spent, but balance is unchanged"
+    );
+    // The refund should have returned most of the overpayment.
+    // cycles_sent was 5B, and the actual fetch fee for a small response
+    // plus execution overhead should be well under 2B.
+    assert_lt!(
+        cycles_spent,
+        2_000_000_000,
+        "Expected most cycles to be refunded, but {} were spent",
+        cycles_spent
+    );
+}

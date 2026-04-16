@@ -490,8 +490,8 @@ impl CyclesAccountManagerConfig {
             http_response_per_byte_fee: Cycles::new(800),
             max_storage_reservation_period: Duration::from_secs(300_000_000),
             default_reserved_balance_limit: DEFAULT_RESERVED_BALANCE_LIMIT,
-            fetch_canister_logs_base_fee: Cycles::new(1_000_000),
-            fetch_canister_logs_per_byte_fee: Cycles::new(800),
+            fetch_canister_logs_base_fee: Cycles::new(5_000_000),
+            fetch_canister_logs_per_byte_fee: Cycles::new(80),
         }
     }
 
