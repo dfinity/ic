@@ -7,6 +7,7 @@ use std::{
 use ic_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::ReplicatedState;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_state_layout::CompleteCheckpointLayout;
 use ic_state_manager::{CheckpointMetrics, checkpoint::load_checkpoint};
@@ -16,7 +17,11 @@ const HEIGHT_IS_IRRELEVANT_BECAUSE_ITS_UNUSED: Height = Height::new(0);
 
 /// Loads the replicated state at the checkpoint and creates a csv file with all [`CanisterMetrics`]
 /// for each canister in the state.
-pub fn get(checkpoint_dir: PathBuf, output_path: &Path) -> Result<(), String> {
+pub fn get(
+    checkpoint_dir: PathBuf,
+    load_metrics_output_path: &Path,
+    connectivity_metrics_output_path: &Path,
+) -> Result<(), String> {
     let replicated_state = load_checkpoint(
         &CompleteCheckpointLayout::new_untracked(
             checkpoint_dir,
@@ -31,14 +36,27 @@ pub fn get(checkpoint_dir: PathBuf, output_path: &Path) -> Result<(), String> {
     )
     .map_err(|err| format!("Failed to load the checkpoint: {err:?}"))?;
 
+    write_load_metrics_file(&replicated_state, load_metrics_output_path)
+        .map_err(|err| format!("Failed to write load metrics: {err}"))?;
+
+    write_connectivity_metrics_file(&replicated_state, connectivity_metrics_output_path)
+        .map_err(|err| format!("Failed to write connectivity metrics: {err}"))?;
+
+    Ok(())
+}
+
+fn write_load_metrics_file(
+    replicated_state: &ReplicatedState,
+    output_path: &Path,
+) -> Result<(), String> {
     let mut output_file = std::fs::File::create(output_path)
         .map_err(|err| format!("Failed to create the output file: {err}"))?;
     // Write the header.
     writeln!(
-        output_file,
-        "canister_id,instructions_executed,ingress_messages_executed,remote_subnet_messages_executed,local_subnet_messages_executed,http_outcalls_executed,heartbeats_and_global_timers_executed"
-    )
-    .map_err(|err| format!("Failed to write header: {err}"))?;
+         output_file,
+         "canister_id,instructions_executed,ingress_messages_executed,remote_subnet_messages_executed,local_subnet_messages_executed,http_outcalls_executed,heartbeats_and_global_timers_executed"
+     )
+     .map_err(|err| format!("Failed to write header: {err}"))?;
 
     // Write rows.
     for (canister_id, canister_state) in replicated_state.canister_states() {
@@ -57,10 +75,41 @@ pub fn get(checkpoint_dir: PathBuf, output_path: &Path) -> Result<(), String> {
         let heartbeats_and_global_timers_executed =
             load_metrics.heartbeats_and_global_timers_executed();
         writeln!(
-            output_file,
-            "{canister_id},{instructions_executed},{ingress_messages_executed},{remote_subnet_messages_executed},{local_subnet_messages_executed},{http_outcalls_executed},{heartbeats_and_global_timers_executed}"
-        )
-        .map_err(|err| format!("Failed to write row: {err}"))?;
+             output_file,
+             "{canister_id},{instructions_executed},{ingress_messages_executed},{remote_subnet_messages_executed},{local_subnet_messages_executed},{http_outcalls_executed},{heartbeats_and_global_timers_executed}"
+         )
+         .map_err(|err| format!("Failed to write row: {err}"))?;
+    }
+
+    Ok(())
+}
+
+fn write_connectivity_metrics_file(
+    replicated_state: &ReplicatedState,
+    output_path: &Path,
+) -> Result<(), String> {
+    let mut output_file = std::fs::File::create(output_path)
+        .map_err(|err| format!("Failed to create the output file: {err}"))?;
+    // Write the header.
+    writeln!(output_file, "sender_canister_id,receiver_canister_id,count")
+        .map_err(|err| format!("Failed to write header: {err}"))?;
+
+    // Write rows.
+    for (receiver_canister_id, canister_state) in replicated_state.canister_states() {
+        for (sender_canister_id, metrics) in canister_state
+            .system_state
+            .canister_metrics()
+            .connection_metrics()
+            .get()
+            .iter()
+        {
+            let count = metrics.count;
+            writeln!(
+                output_file,
+                "{sender_canister_id},{receiver_canister_id},{count}"
+            )
+            .map_err(|err| format!("Failed to write row: {err}"))?;
+        }
     }
 
     Ok(())

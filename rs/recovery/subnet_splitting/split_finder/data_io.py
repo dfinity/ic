@@ -30,14 +30,14 @@ def load_subnet_data(load_path: Path, load_baseline_path: Path, load_type: str, 
     canister_data = canister_data.reset_index()[["canister_id", load_type]]
 
     communication_data = pd.read_csv(communication_data_path)
-    communication_data = communication_data[["sender_canister_id", "receiver_canister_id", "count"]]
 
     communicating_canister_ids = set(communication_data["sender_canister_id"]).union(
         set(communication_data["receiver_canister_id"])
     )
-    communicating_canisters = canister_data[canister_data["canister_id"].isin(communicating_canister_ids)].reset_index(
-        drop=True
-    )
+    communicating_canisters = canister_data
+    #communicating_canisters = canister_data[canister_data["canister_id"].isin(communicating_canister_ids)].reset_index(
+    #    drop=True
+    #)
 
     communicating_canisters["index"] = range(len(communicating_canisters))
 

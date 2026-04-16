@@ -821,6 +821,7 @@ pub fn load_canister_state(
             canister_state_bits.http_outcalls_executed,
             canister_state_bits.heartbeats_and_global_timers_executed,
         ),
+        canister_state_bits.connection_metrics,
     );
 
     let starting_time = Instant::now();

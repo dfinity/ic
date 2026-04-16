@@ -77,9 +77,9 @@ enum ConsumingCycles {
 const MAX_CAPACITY: usize = 100;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-struct ConnectionMetrics {
-    last_access_timestamp: Time,
-    count: u64,
+pub struct ConnectionMetrics {
+    pub last_access_timestamp: Time,
+    pub count: u64,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
@@ -113,6 +113,10 @@ impl LRUConnectionMetrics {
                 let _ = self.metrics_per_canister.remove(&canister_id);
             }
         }
+    }
+
+    pub fn get(&self) -> &BTreeMap<CanisterId, ConnectionMetrics> {
+        &self.metrics_per_canister
     }
 }
 
@@ -208,6 +212,7 @@ impl CanisterMetrics {
         consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
         instructions_executed: NumInstructions,
         load_metrics: LoadMetrics,
+        connection_metrics: BTreeMap<CanisterId, ConnectionMetrics>,
     ) -> Self {
         Self {
             rounds_scheduled,
@@ -218,8 +223,9 @@ impl CanisterMetrics {
             consumed_cycles_by_use_cases,
             instructions_executed,
             load_metrics,
-            // FIXME(kpop):
-            connection_metrics: LRUConnectionMetrics::default(),
+            connection_metrics: LRUConnectionMetrics {
+                metrics_per_canister: connection_metrics,
+            },
         }
     }
 
