@@ -117,5 +117,9 @@ path = "subnet_splitting_test.rs"
 name = "ic-systest-subnet-splitting-v2"
 path = "subnet_splitting_v2_test.rs"
 
+[[bin]]
+name = "ic-systest-nidkg-performance-test"
+path = "nidkg_performance_test.rs"
+
 [features]
 upload_perf_systest_results = []

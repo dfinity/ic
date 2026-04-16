@@ -1053,14 +1053,13 @@ mod crypto_hash_stability {
     fn canister_http_response_stability() {
         let data = CanisterHttpResponse {
             id: CanisterHttpRequestId::from(42),
-            timeout: UNIX_EPOCH,
             canister_id: ic_base_types::CanisterId::from_u64(42),
             content: CanisterHttpResponseContent::Success(vec![0x42; 16]),
         };
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "48f996c026833b51d8e34775ee8ca1354abe0b4fd29d9795290e3747ad477650",
+            "86afd80c0bbb31b1776437bee06ff99329e91b53a5afea4c46003874d3e9bf3d",
             "Hash of CanisterHttpResponse changed"
         );
     }
@@ -1070,15 +1069,16 @@ mod crypto_hash_stability {
     fn canister_http_response_metadata_stability() {
         let data = CanisterHttpResponseMetadata {
             id: CallbackId::from(42),
-            timeout: UNIX_EPOCH,
             content_hash: test_crypto_hash_of(0x42),
+            content_size: 0,
+            is_reject: false,
             registry_version: RegistryVersion::from(1),
             replica_version: ReplicaVersion::default(),
         };
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "5b1f5808c5e36cb70254914aeb76682e158889b6071c2c1c7b2a6667b2d5a699",
+            "ebf5373f06dadd9a3d7d3b59ce457533428ff27d4d588b8434f786d1d8c1a9db",
             "Hash of CanisterHttpResponseMetadata changed"
         );
     }
@@ -1088,8 +1088,9 @@ mod crypto_hash_stability {
     fn canister_http_response_share_stability() {
         let metadata = CanisterHttpResponseMetadata {
             id: CallbackId::from(42),
-            timeout: UNIX_EPOCH,
             content_hash: test_crypto_hash_of(0x42),
+            content_size: 0,
+            is_reject: false,
             registry_version: RegistryVersion::from(1),
             replica_version: ReplicaVersion::default(),
         };
@@ -1103,7 +1104,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "e1f245d7fafe2fc4db847ac67141ebe869dcc1901c6779fe46c876341c797b68",
+            "7bff0af6053ad0f648acffecf0434e299e9ce1d04b6752934935a13e390de986",
             "Hash of CanisterHttpResponseShare changed"
         );
     }

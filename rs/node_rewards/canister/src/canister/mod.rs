@@ -20,6 +20,7 @@ use ic_node_rewards_canister_api::providers_rewards::{
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
+use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_registry_canister_client::{CanisterRegistryClient, get_decoded_value};
 use ic_registry_keys::{
     DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
@@ -124,7 +125,22 @@ impl NodeRewardsCanister {
         });
         let registry_querier = RegistryQuerier::new(registry_client.clone());
         let version = registry_client.get_latest_version();
-        let subnets_list = registry_querier.subnets_list(version)?;
+        let subnets_list: Vec<SubnetId> = registry_querier
+            .subnets_list(version)?
+            .into_iter()
+            .filter(
+                |subnet_id| match registry_querier.get_subnet_record(*subnet_id, version) {
+                    Ok(Some(record)) if record.subnet_type() == SubnetType::CloudEngine => {
+                        ic_cdk::println!(
+                            "Excluding cloud engine subnet {} from metrics collection",
+                            subnet_id,
+                        );
+                        false
+                    }
+                    _ => true,
+                },
+            )
+            .collect();
         let last_day_synced: NaiveDate =
             metrics_manager.update_subnets_metrics(subnets_list).await?;
         canister.with_borrow(|canister| {

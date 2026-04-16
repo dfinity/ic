@@ -19,9 +19,11 @@ use ic_protobuf::registry::{
     crypto::v1::PublicKey,
     subnet::v1::{
         CanisterCyclesCostSchedule, CatchUpPackageContents, ChainKeyConfig, GenesisArgs,
-        InitialNiDkgTranscriptRecord, SubnetRecord, catch_up_package_contents::CupType,
+        InitialNiDkgTranscriptRecord, ResourceLimits as ResourceLimitsPb, SubnetRecord,
+        catch_up_package_contents::CupType,
     },
 };
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::crypto::threshold_sig::ni_dkg::ThresholdSigPublicKeyError;
@@ -112,6 +114,9 @@ pub struct SubnetConfig {
 
     /// Flags to mark which features are enabled for this subnet.
     pub features: SubnetFeatures,
+
+    /// Limits on resource consumption (e.g., memory usage) of the subnet.
+    pub resource_limits: Option<ResourceLimits>,
 
     /// Optional chain key configuration for this subnet.
     pub chain_key_config: Option<ChainKeyConfig>,
@@ -252,6 +257,7 @@ impl SubnetConfig {
         max_instructions_per_round: Option<u64>,
         max_instructions_per_install_code: Option<u64>,
         features: Option<SubnetFeatures>,
+        resource_limits: Option<ResourceLimits>,
         chain_key_config: Option<ChainKeyConfig>,
         max_number_of_canisters: Option<u64>,
         ssh_readonly_access: Vec<String>,
@@ -288,6 +294,7 @@ impl SubnetConfig {
             max_instructions_per_install_code: max_instructions_per_install_code
                 .unwrap_or_else(|| scheduler_config.max_instructions_per_install_code.get()),
             features: features.unwrap_or_default(),
+            resource_limits,
             chain_key_config,
             max_number_of_canisters: max_number_of_canisters.unwrap_or(0),
             ssh_readonly_access,
@@ -348,7 +355,7 @@ impl SubnetConfig {
             chain_key_config: self.chain_key_config,
             canister_cycles_cost_schedule: i32::from(self.canister_cycles_cost_schedule),
             subnet_admins: vec![],
-            resource_limits: Default::default(),
+            resource_limits: self.resource_limits.map(ResourceLimitsPb::from),
             recalled_replica_version_ids: vec![],
         };
 

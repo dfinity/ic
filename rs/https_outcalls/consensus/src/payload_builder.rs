@@ -5,9 +5,10 @@ use crate::{
     payload_builder::{
         parse::bytes_to_payload,
         utils::{
-            estimate_response_with_consensus_size, find_flexible_responses,
+            FlexibleFindResult, estimate_response_with_consensus_size, find_flexible_result,
             find_fully_replicated_response, find_non_replicated_response,
             group_shares_by_callback_id, grouped_shares_meet_divergence_criteria,
+            validate_flexible_response_with_proof, validate_response_share,
         },
     },
 };
@@ -38,7 +39,8 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
     batch::{
-        CanisterHttpPayload, ConsensusResponse, FlexibleCanisterHttpResponses,
+        CanisterHttpPayload, ConsensusResponse, FlexibleCanisterHttpError,
+        FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
         MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
     },
     canister_http::{
@@ -47,7 +49,7 @@ use ic_types::{
         CanisterHttpResponseMetadata, CanisterHttpResponseWithConsensus, Replication,
     },
     consensus::Committee,
-    crypto::{Signed, crypto_hash},
+    crypto::Signed,
     messages::{CallbackId, Payload, RejectContext},
     registry::RegistryClientError,
     signature::BasicSignature,
@@ -217,6 +219,7 @@ impl CanisterHttpPayloadBuilderImpl {
         let mut timeouts = vec![];
         let mut divergence_responses = vec![];
         let mut flexible_responses = vec![];
+        let mut flexible_errors = vec![];
 
         // Metrics counters
         let mut total_share_count = 0;
@@ -234,14 +237,8 @@ impl CanisterHttpPayloadBuilderImpl {
                 .inspect(|_| {
                     total_share_count += 1;
                 })
-                // Filter out shares that are timed out or have the wrong registry versions
-                .filter(|&response| {
-                    utils::check_share_against_context(
-                        consensus_registry_version,
-                        response,
-                        validation_context,
-                    )
-                })
+                // Filter out shares with the wrong registry version
+                .filter(|&share| share.content.registry_version == consensus_registry_version)
                 .inspect(|_| {
                     active_shares += 1;
                 })
@@ -263,14 +260,26 @@ impl CanisterHttpPayloadBuilderImpl {
                     continue;
                 }
                 if request.time + CANISTER_HTTP_TIMEOUT_INTERVAL < validation_context.time {
-                    let candidate_size = callback_id.count_bytes();
-                    let size = NumBytes::new((accumulated_size + candidate_size) as u64);
-                    if size < max_payload_size {
-                        timeouts.push(*callback_id);
-                        accumulated_size += candidate_size;
-                        // Because timeouts are very cheap to verify, they are
-                        // not counted as responses (so that they are irrelevant
-                        // for the CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK limit.
+                    // Because timeouts are very cheap to verify, they are
+                    // not counted as responses (so that they are irrelevant
+                    // for the CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK limit.
+                    if matches!(request.replication, Replication::Flexible { .. }) {
+                        let error = FlexibleCanisterHttpError::Timeout {
+                            callback_id: *callback_id,
+                        };
+                        let candidate_size = error.count_bytes();
+                        let size = NumBytes::new((accumulated_size + candidate_size) as u64);
+                        if size < max_payload_size {
+                            flexible_errors.push(error);
+                            accumulated_size += candidate_size;
+                        }
+                    } else {
+                        let candidate_size = callback_id.count_bytes();
+                        let size = NumBytes::new((accumulated_size + candidate_size) as u64);
+                        if size < max_payload_size {
+                            timeouts.push(*callback_id);
+                            accumulated_size += candidate_size;
+                        }
                     }
                     continue;
                 }
@@ -335,22 +344,33 @@ impl CanisterHttpPayloadBuilderImpl {
                         committee,
                         min_responses,
                         max_responses,
-                    } => {
-                        if let Some((group, group_size)) = find_flexible_responses(
-                            *callback_id,
-                            grouped_shares,
-                            committee,
-                            *min_responses,
-                            *max_responses,
-                            accumulated_size,
-                            max_payload_size,
-                            &*pool_access,
-                        ) {
+                    } => match find_flexible_result(
+                        *callback_id,
+                        grouped_shares,
+                        committee,
+                        *min_responses,
+                        *max_responses,
+                        accumulated_size,
+                        max_payload_size,
+                        &*pool_access,
+                    ) {
+                        FlexibleFindResult::OkResponses(group, group_size) => {
+                            // Note: budget tracking w.r.t. `max_payload_size`
+                            // is done directly in `find_flexible_result`.
                             flexible_responses.push(group);
                             responses_included += 1;
                             accumulated_size += group_size;
                         }
-                    }
+                        FlexibleFindResult::Error(error, error_size) => {
+                            let size = NumBytes::new((accumulated_size + error_size) as u64);
+                            if size < max_payload_size {
+                                flexible_errors.push(error);
+                                responses_included += 1;
+                                accumulated_size += error_size;
+                            }
+                        }
+                        FlexibleFindResult::Pending => {}
+                    },
                 }
             }
         }
@@ -365,6 +385,7 @@ impl CanisterHttpPayloadBuilderImpl {
             timeouts,
             divergence_responses,
             flexible_responses,
+            flexible_errors,
         }
     }
 
@@ -447,13 +468,15 @@ impl CanisterHttpPayloadBuilderImpl {
             utils::check_response_consistency(response)
                 .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
-            // Validate response against `ValidationContext`
-            utils::check_response_against_context(
-                consensus_registry_version,
-                response,
-                validation_context,
-            )
-            .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+            // Validate response against consensus registry version
+            if response.proof.content.registry_version != consensus_registry_version {
+                return invalid_artifact(
+                    InvalidCanisterHttpPayloadReason::RegistryVersionMismatch {
+                        expected: consensus_registry_version,
+                        received: response.proof.content.registry_version,
+                    },
+                );
+            }
 
             // Check that the response is not submitted twice
             if !delivered_ids.insert(response.content.id) {
@@ -645,105 +668,150 @@ impl CanisterHttpPayloadBuilderImpl {
 
             let mut seen_signers = HashSet::new();
 
-            for entry in &group.responses {
-                // Callback id consistency
-                if entry.response.id != callback_id {
-                    return invalid_artifact(
-                        InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch {
-                            callback_id,
-                            mismatched_id: entry.response.id,
-                        },
-                    );
-                }
-                if entry.proof.content.id != callback_id {
-                    return invalid_artifact(
-                        InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch {
-                            callback_id,
-                            mismatched_id: entry.proof.content.id,
-                        },
-                    );
-                }
+            for response_with_proof in &group.responses {
+                validate_flexible_response_with_proof(
+                    response_with_proof,
+                    callback_id,
+                    flex_committee,
+                    &mut seen_signers,
+                    consensus_registry_version,
+                    &*self.crypto,
+                )
+                .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
-                // Rejects are not allowed in flexible ok-responses
-                if matches!(
-                    entry.response.content,
-                    CanisterHttpResponseContent::Reject(_)
-                ) {
+                if response_with_proof.response.content.is_reject() {
                     return invalid_artifact(
                         InvalidCanisterHttpPayloadReason::FlexibleRejectNotAllowedInOkResponses {
                             callback_id,
                         },
                     );
                 }
+            }
+        }
 
-                // No duplicate signers
-                let signer = entry.proof.signature.signer;
-                if !seen_signers.insert(signer) {
-                    return invalid_artifact(
-                        InvalidCanisterHttpPayloadReason::FlexibleDuplicateSigner {
+        // Validate flexible errors
+        for error in &payload.flexible_errors {
+            let callback_id = error.callback_id();
+
+            if !delivered_ids.insert(callback_id) {
+                return invalid_artifact(InvalidCanisterHttpPayloadReason::DuplicateResponse(
+                    callback_id,
+                ));
+            }
+
+            // Look up the request context and verify it's a Flexible replication
+            let context = http_contexts.get(&callback_id).ok_or(
+                CanisterHttpPayloadValidationError::InvalidArtifact(
+                    InvalidCanisterHttpPayloadReason::UnknownCallbackId(callback_id),
+                ),
+            )?;
+            let Replication::Flexible {
+                committee: flex_committee,
+                min_responses,
+                ..
+            } = &context.replication
+            else {
+                return invalid_artifact(InvalidCanisterHttpPayloadReason::InvalidPayloadSection(
+                    callback_id,
+                ));
+            };
+            let min_responses = *min_responses as usize;
+
+            match error {
+                FlexibleCanisterHttpError::Timeout { .. } => {
+                    if context.time + CANISTER_HTTP_TIMEOUT_INTERVAL >= validation_context.time {
+                        return invalid_artifact(InvalidCanisterHttpPayloadReason::NotTimedOut(
                             callback_id,
-                            signer,
-                        },
-                    );
+                        ));
+                    }
                 }
+                FlexibleCanisterHttpError::TooManyRequestErrors {
+                    reject_responses, ..
+                } => {
+                    let mut seen_signers = HashSet::new();
 
-                // Signer must be in the flexible committee
-                if !flex_committee.contains(&signer) {
-                    return invalid_artifact(
-                        InvalidCanisterHttpPayloadReason::FlexibleSignerNotInCommittee {
+                    for response_with_proof in reject_responses {
+                        validate_flexible_response_with_proof(
+                            response_with_proof,
                             callback_id,
-                            signer,
-                        },
-                    );
-                }
-
-                // Content hash must match
-                let calculated_hash = crypto_hash(&entry.response);
-                if calculated_hash != entry.proof.content.content_hash {
-                    return invalid_artifact(
-                        InvalidCanisterHttpPayloadReason::ContentHashMismatch {
-                            metadata_hash: entry.proof.content.content_hash.clone(),
-                            calculated_hash,
-                        },
-                    );
-                }
-
-                // Metadata consistency (timeout)
-                if entry.proof.content.timeout != entry.response.timeout {
-                    return invalid_artifact(InvalidCanisterHttpPayloadReason::InvalidMetadata {
-                        metadata_id: entry.proof.content.id,
-                        content_id: entry.response.id,
-                        metadata_timeout: entry.proof.content.timeout,
-                        content_timeout: entry.response.timeout,
-                    });
-                }
-
-                // Response must not be timed out
-                if entry.response.timeout < validation_context.time {
-                    return invalid_artifact(InvalidCanisterHttpPayloadReason::Timeout {
-                        timed_out_at: entry.response.timeout,
-                        validation_time: validation_context.time,
-                    });
-                }
-
-                // Registry version must match
-                if entry.proof.content.registry_version != consensus_registry_version {
-                    return invalid_artifact(
-                        InvalidCanisterHttpPayloadReason::RegistryVersionMismatch {
-                            expected: consensus_registry_version,
-                            received: entry.proof.content.registry_version,
-                        },
-                    );
-                }
-
-                // Verify the individual share signature
-                self.crypto
-                    .verify(&entry.proof, consensus_registry_version)
-                    .map_err(|err| {
-                        CanisterHttpPayloadValidationError::InvalidArtifact(
-                            InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)),
+                            flex_committee,
+                            &mut seen_signers,
+                            consensus_registry_version,
+                            &*self.crypto,
                         )
-                    })?;
+                        .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+
+                        if !response_with_proof.response.content.is_reject() {
+                            return invalid_artifact(
+                                InvalidCanisterHttpPayloadReason::FlexibleRejectExpectedInErrorResponse(
+                                    callback_id,
+                                ),
+                            );
+                        }
+                    }
+
+                    let max_allowed_rejects = flex_committee.len().saturating_sub(min_responses);
+                    if reject_responses.len() <= max_allowed_rejects {
+                        return invalid_artifact(
+                            InvalidCanisterHttpPayloadReason::FlexibleInsufficientRejectCount {
+                                callback_id,
+                                reject_count: reject_responses.len(),
+                                min_needed: max_allowed_rejects + 1,
+                            },
+                        );
+                    }
+                }
+                FlexibleCanisterHttpError::ResponsesTooLarge {
+                    all_seen_shares, ..
+                } => {
+                    let mut seen_signers = HashSet::new();
+
+                    for share in all_seen_shares {
+                        validate_response_share(
+                            share,
+                            callback_id,
+                            flex_committee,
+                            &mut seen_signers,
+                            consensus_registry_version,
+                            &*self.crypto,
+                        )
+                        .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+                    }
+
+                    let num_unseen = flex_committee.len().saturating_sub(all_seen_shares.len());
+                    let min_known_ok_needed = min_responses.saturating_sub(num_unseen);
+
+                    let mut ok_entry_sizes: Vec<usize> = all_seen_shares
+                        .iter()
+                        .filter(|share| !share.content.is_reject)
+                        .map(|share| {
+                            FlexibleCanisterHttpResponseWithProof::count_bytes_from_parts(
+                                &context.request.sender,
+                                share.content.content_size as usize,
+                                share,
+                            )
+                        })
+                        .collect();
+                    if ok_entry_sizes.len() < min_known_ok_needed {
+                        return invalid_artifact(
+                            InvalidCanisterHttpPayloadReason::FlexibleResponsesTooLargeInsufficientEvidence {
+                                callback_id,
+                                ok_count: ok_entry_sizes.len(),
+                                min_known_ok_needed,
+                            },
+                        );
+                    }
+
+                    ok_entry_sizes.sort_unstable();
+                    let smallest_sum: usize = ok_entry_sizes.iter().take(min_known_ok_needed).sum();
+                    if smallest_sum <= MAX_CANISTER_HTTP_PAYLOAD_SIZE {
+                        return invalid_artifact(
+                            InvalidCanisterHttpPayloadReason::FlexibleResponsesNotTooLarge(
+                                callback_id,
+                            ),
+                        );
+                    }
+                }
             }
         }
 
@@ -935,16 +1003,11 @@ fn flexible_ok_responses_into_consensus_response(
 /// The first issue could point to some issue rate limiting (e.g. some replicas receive 429s) while the later would point to an
 /// issue with the transform function (e.g. some non-deterministic component such as timestamp has not been removed).
 ///
-/// The function includes request id and timeout, which are also part of the hashed value.
+/// The function includes request id, which is also part of the hashed value.
 fn divergence_response_into_reject(
     response: CanisterHttpResponseDivergence,
 ) -> Option<ConsensusResponse> {
-    // Get the id and timeout, which need to be reported in the error message as well
-    let Some((id, timeout)) = response
-        .shares
-        .first()
-        .map(|share| (share.content.id, share.content.timeout))
-    else {
+    let Some(id) = response.shares.first().map(|share| share.content.id) else {
         // NOTE: We skip delivering the divergence response, if it has no shares
         // Such a divergence response should never validate, therefore this should never happen
         // However, if it where ever to happen, we can ignore it here.
@@ -952,7 +1015,7 @@ fn divergence_response_into_reject(
         return None;
     };
 
-    // Count the different content hashes, that we have encountered in the divergence resonse
+    // Count the different content hashes, that we have encountered in the divergence response
     let mut hash_counts = BTreeMap::new();
     response
         .shares
@@ -982,9 +1045,8 @@ fn divergence_response_into_reject(
         Payload::Reject(RejectContext::new(
             RejectCode::SysTransient,
             format!(
-                "No consensus could be reached. Replicas had different responses. Details: request_id: {}, timeout: {}, hashes: {}",
+                "No consensus could be reached. Replicas had different responses. Details: request_id: {}, hashes: {}",
                 id,
-                timeout.as_nanos_since_unix_epoch(),
                 hash_counts.join(", ")
             ),
         )),

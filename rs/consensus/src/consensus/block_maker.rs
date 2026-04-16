@@ -630,7 +630,7 @@ mod tests {
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities_consensus::{IDkgStatsNoOp, fake::FromParent};
+    use ic_test_utilities_consensus::fake::FromParent;
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
@@ -642,7 +642,7 @@ mod tests {
         *,
     };
     use rstest::rstest;
-    use std::sync::{Arc, RwLock};
+    use std::sync::Arc;
 
     #[test]
     fn test_block_maker() {
@@ -982,6 +982,8 @@ mod tests {
                 time_source,
                 replica_config,
                 state_manager,
+                dkg_pool,
+                idkg_pool,
                 ..
             } = dependencies_with_subnet_params(
                 pool_config.clone(),
@@ -1003,18 +1005,6 @@ mod tests {
                     ),
                 ],
             );
-            let dkg_pool = Arc::new(RwLock::new(ic_artifact_pool::dkg_pool::DkgPoolImpl::new(
-                MetricsRegistry::new(),
-                no_op_logger(),
-            )));
-
-            let idkg_pool = Arc::new(RwLock::new(ic_artifact_pool::idkg_pool::IDkgPoolImpl::new(
-                replica_config.node_id,
-                pool_config,
-                no_op_logger(),
-                MetricsRegistry::new(),
-                Box::new(IDkgStatsNoOp {}),
-            )));
 
             state_manager
                 .get_mut()

@@ -48,7 +48,7 @@ pub use dkg_key_manager::DkgKeyManager;
 pub use payload_builder::{create_payload, get_dkg_summary_from_cup_contents};
 
 /// The maximal number of DKGs for other subnets we want to run in one interval.
-const MAX_REMOTE_DKGS_PER_INTERVAL: usize = 10;
+const MAX_REMOTE_DKGS_PER_INTERVAL: usize = 1;
 
 /// The maximum number of early remote DKG transcripts we want to include in a data payload.
 /// Note that responses for `SetupInitialDKG` requests contain two transcripts.
@@ -473,7 +473,7 @@ mod tests {
     use ic_crypto_test_utils_ni_dkg::{dummy_dealing, dummy_transcript_for_tests_with_params};
     use ic_interfaces::{
         consensus_pool::ConsensusPool,
-        p2p::consensus::{MutablePool, UnvalidatedArtifact},
+        p2p::consensus::{BouncerFactory, BouncerValue, MutablePool, UnvalidatedArtifact},
     };
     use ic_interfaces_mocks::crypto::MockCrypto;
     use ic_interfaces_registry::RegistryClient;
@@ -497,7 +497,7 @@ mod tests {
             get_faults_tolerated,
         },
         crypto::{
-            AlgorithmId,
+            AlgorithmId, CryptoHash,
             error::MalformedPublicKeyError,
             threshold_sig::ni_dkg::{
                 NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
@@ -510,6 +510,32 @@ mod tests {
     use std::{collections::BTreeSet, convert::TryFrom};
     use test_utils::{extract_dealings_from_highest_block, extract_remote_dkgs_from_highest_block};
     use utils::{tags_iter, vetkd_key_ids_for_subnet};
+
+    #[test]
+    fn test_dkg_bouncer() {
+        with_test_replica_logger(|logger| {
+            let mut dkg_pool = DkgPoolImpl::new(MetricsRegistry::new(), logger, Height::from(500));
+            let bouncer_factory = DkgBouncer::new(&MetricsRegistry::new());
+            let bouncer = bouncer_factory.new_bouncer(&dkg_pool);
+
+            let height_500_id = DkgMessageId {
+                hash: CryptoHash(vec![0]).into(),
+                height: Height::from(500),
+            };
+            let height_1000_id = DkgMessageId {
+                hash: CryptoHash(vec![1]).into(),
+                height: Height::from(1000),
+            };
+            assert_eq!(bouncer(&height_500_id), BouncerValue::Wants);
+            assert_eq!(bouncer(&height_1000_id), BouncerValue::MaybeWantsLater);
+
+            dkg_pool.apply(vec![ChangeAction::Purge(Height::from(1000))]);
+            let bouncer = bouncer_factory.new_bouncer(&dkg_pool);
+
+            assert_eq!(bouncer(&height_1000_id), BouncerValue::Wants);
+            assert_eq!(bouncer(&height_500_id), BouncerValue::Unwanted);
+        });
+    }
 
     #[test]
     // In this test we test the creation of dealing payloads.
@@ -632,7 +658,8 @@ mod tests {
                     MetricsRegistry::new(),
                     logger.clone(),
                 );
-                let dkg_pool_2 = DkgPoolImpl::new(MetricsRegistry::new(), logger);
+                let start_height = dkg_pool.read().unwrap().get_current_start_height();
+                let dkg_pool_2 = DkgPoolImpl::new(MetricsRegistry::new(), logger, start_height);
                 sync_dkg_key_manager(&dkg_key_manager_2, &pool);
                 let change_set = dkg_2.on_state_change(&dkg_pool_2);
                 assert_eq!(change_set.len(), 3);
@@ -703,7 +730,8 @@ mod tests {
                         Height::new(0),
                         Arc::new(get_initial_state(0, 0)),
                     )));
-                let mut dkg_pool = DkgPoolImpl::new(MetricsRegistry::new(), logger.clone());
+                let mut dkg_pool =
+                    DkgPoolImpl::new(MetricsRegistry::new(), logger.clone(), Height::from(0));
                 // Let's check that replica 3, who's not a dealer, does not produce dealings.
                 let dkg_key_manager =
                     new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
@@ -1046,8 +1074,10 @@ mod tests {
                 }
 
                 with_test_replica_logger(|logger| {
-                    let dkg_pool_1 = DkgPoolImpl::new(MetricsRegistry::new(), logger.clone());
-                    let dkg_pool_2 = DkgPoolImpl::new(MetricsRegistry::new(), logger.clone());
+                    let dkg_pool_1 =
+                        DkgPoolImpl::new(MetricsRegistry::new(), logger.clone(), Height::from(0));
+                    let dkg_pool_2 =
+                        DkgPoolImpl::new(MetricsRegistry::new(), logger.clone(), Height::from(0));
 
                     // We instantiate the DKG component for node Id = 1 and Id = 2.
                     let dkg_key_manager_1 = new_dkg_key_manager(
@@ -1591,18 +1621,11 @@ mod tests {
                         MetricsRegistry::new(),
                         logger.clone(),
                     );
-                    let mut dkg_pool_1 = DkgPoolImpl::new(MetricsRegistry::new(), logger.clone());
-                    let mut dkg_pool_2 = DkgPoolImpl::new(MetricsRegistry::new(), logger);
-
-                    // First we expect a new purge.
-                    let change_set = dkg_1.on_state_change(&dkg_pool_1);
-                    match &change_set.as_slice() {
-                        &[ChangeAction::Purge(purge_height)]
-                            if *purge_height == Height::from(2 * (dkg_interval_length + 1)) => {}
-                        val => panic!("Unexpected change set: {:?}", val),
-                    };
-                    dkg_pool_1.apply(change_set);
-                    sync_dkg_key_manager(&dgk_key_manager_1, &pool_1);
+                    let start_height = pool_1.get_cache().summary_block().height;
+                    let dkg_pool_1 =
+                        DkgPoolImpl::new(MetricsRegistry::new(), logger.clone(), start_height);
+                    let mut dkg_pool_2 =
+                        DkgPoolImpl::new(MetricsRegistry::new(), logger, start_height);
 
                     // The last summary contains two local and two remote configs.
                     // dkg.on_state_change should create 4 dealings for those
@@ -1645,17 +1668,6 @@ mod tests {
                             });
                         }
                     }
-
-                    assert_eq!(dkg_pool_2.get_unvalidated().count(), 4);
-
-                    // First we expect a new purge from dkg_2 as well.
-                    let change_set = dkg_2.on_state_change(&dkg_pool_2);
-                    match &change_set.as_slice() {
-                        &[ChangeAction::Purge(purge_height)]
-                            if *purge_height == Height::from(2 * (dkg_interval_length + 1)) => {}
-                        val => panic!("Unexpected change set: {:?}", val),
-                    };
-                    dkg_pool_2.apply(change_set);
 
                     assert_eq!(dkg_pool_2.get_unvalidated().count(), 4);
 
@@ -2410,7 +2422,7 @@ mod tests {
             (false, "ReshareChainKey first"),
         ] {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-                let node_ids = (1..5).map(node_test_id).collect::<Vec<_>>();
+                let node_ids = (0..4).map(node_test_id).collect::<Vec<_>>();
                 let key_id = VetKdKeyId {
                     curve: VetKdCurve::Bls12_381_G2,
                     name: String::from("some_vetkey"),
@@ -2536,7 +2548,7 @@ mod tests {
                 let resharing_transcript = dummy_transcript_for_tests_with_params(
                     node_ids.clone(),
                     NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(key_id.clone())),
-                    2,
+                    3, // 2f + 1
                     10,
                 );
 
@@ -2601,9 +2613,10 @@ mod tests {
                     deps.dkg_pool.write().unwrap().apply(dealings);
                 }
                 deps.pool.advance_round_normal_operation();
+
                 assert_eq!(
                     extract_dealings_from_highest_block(&deps.pool).len(),
-                    9,
+                    9, // 3 * (f + 1) setup, plus 2f + 1 reshare, where f = 1
                     "[{desc}] 9 dealings should be in the block"
                 );
                 assert_eq!(

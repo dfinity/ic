@@ -10,8 +10,11 @@ use crate::invariants::common::{
 
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
-use ic_protobuf::registry::subnet::v1::{CanisterCyclesCostSchedule, SubnetRecord, SubnetType};
-use ic_registry_keys::{SUBNET_RECORD_KEY_PREFIX, make_node_record_key, make_subnet_record_key};
+use ic_protobuf::registry::{
+    node::v1::{NodeRecord, NodeRewardType},
+    subnet::v1::{CanisterCyclesCostSchedule, SubnetRecord, SubnetType},
+};
+use ic_registry_keys::{SUBNET_RECORD_KEY_PREFIX, make_subnet_record_key};
 use prost::Message;
 
 /// Subnet invariants hold iff:
@@ -21,9 +24,13 @@ use prost::Message;
 ///    * Each subnet contains at least one node
 ///    * There is at least one system subnet
 ///    * Each subnet in the registry occurs in the subnet list and vice versa
-///    * Only application subnets can be rented and therefore have a "free" cycles cost schedule
+///    * Only application subnets (when rented) and cloud engines can have a "free" cycles cost schedule
+///    * Cloud engines must:
+///         * have a "free" cycles cost schedule
+///         * consist of nodes with reward type 4
+///    * Conversely, only cloud engines can have nodes with reward type 4
 ///    * SEV-enabled subnets consist of SEV-enabled nodes only (i.e. nodes with a chip ID in the node record)
-/// * Only rented subnets can have subnet admins set to a non-empty list
+///    * Only rented subnets can have subnet admins set to a non-empty list
 pub(crate) fn check_subnet_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
@@ -63,12 +70,17 @@ pub(crate) fn check_subnet_invariants(
             .collect();
 
         // Subnet membership must contain registered nodes only
-        for &node_id in &subnet_members {
-            let node_key = make_node_record_key(node_id);
-            if !snapshot.contains_key(node_key.as_bytes()) {
-                panic!("Node {node_id} does not exist in Subnet {subnet_id}");
-            }
-        }
+        let node_records = subnet_members
+            .iter()
+            .map(|&node_id| {
+                get_node_record_from_snapshot(node_id, snapshot).and_then(|opt| {
+                    opt.ok_or_else(|| InvariantCheckError {
+                        msg: format!("Node {node_id} does not exist in the registry"),
+                        source: None,
+                    })
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
         // Each node appears at most once in a subnet membership
         let num_nodes = subnet_record.membership.len();
@@ -127,6 +139,8 @@ pub(crate) fn check_subnet_invariants(
                 source: None,
             });
         }
+
+        check_node_type4_iff_cloud_engine(subnet_id, &subnet_record, &node_records)?;
 
         // SEV-enabled subnets invariants
         if let Some(features) = subnet_record.features.as_ref()
@@ -241,6 +255,32 @@ fn check_sev_subnet_invariants(
                 "Subnet {subnet_id} is SEV-enabled, but the following nodes are missing a chip ID: {:?}",
                 nodes_missing_chip_id
             ),
+            source: None,
+        });
+    }
+
+    Ok(())
+}
+
+fn check_node_type4_iff_cloud_engine(
+    subnet_id: SubnetId, // only used for error messages, so we can report which subnet is non-compliant
+    subnet_record: &SubnetRecord,
+    node_records: &[NodeRecord],
+) -> Result<(), InvariantCheckError> {
+    let is_cloud_engine = subnet_record.subnet_type == i32::from(SubnetType::CloudEngine);
+    let is_node_type4 =
+        |node: &NodeRecord| node.node_reward_type == Some(i32::from(NodeRewardType::Type4));
+    let is_node_ok = |node: &NodeRecord| is_cloud_engine == is_node_type4(node);
+
+    let ok = node_records.iter().all(is_node_ok);
+    if !ok {
+        let msg = if is_cloud_engine {
+            "is a cloud engine subnet but some nodes do not have reward type 4"
+        } else {
+            "is not a cloud engine subnet but some nodes have reward type 4"
+        };
+        return Err(InvariantCheckError {
+            msg: format!("Subnet {subnet_id:} {msg}"),
             source: None,
         });
     }
