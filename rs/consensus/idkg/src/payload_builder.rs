@@ -10,7 +10,7 @@ use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto::retrieve_mega_public_key_from_registry;
 use ic_interfaces::idkg::IDkgPool;
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateManager;
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::ChainKeyConfig;
@@ -483,7 +483,7 @@ pub fn create_data_payload(
     registry_client: &dyn RegistryClient,
     pool_reader: &PoolReader<'_>,
     idkg_pool: Arc<RwLock<dyn IDkgPool>>,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
     context: &ValidationContext,
     parent_block: &Block,
     idkg_payload_metrics: &IDkgPayloadMetrics,
@@ -535,7 +535,7 @@ pub fn create_data_payload(
         &summary_block,
         &block_reader,
         &transcript_builder,
-        state_manager,
+        state_reader,
         registry_client,
         Some(idkg_payload_metrics),
         log,
@@ -575,7 +575,7 @@ pub(crate) fn create_data_payload_helper(
     summary_block: &Block,
     block_reader: &dyn IDkgBlockReader,
     transcript_builder: &dyn IDkgTranscriptBuilder,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
     registry_client: &dyn RegistryClient,
     idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
     log: &ReplicaLogger,
@@ -601,7 +601,7 @@ pub(crate) fn create_data_payload_helper(
     };
 
     let receivers = get_subnet_nodes(registry_client, next_interval_registry_version, subnet_id)?;
-    let state = state_manager.get_state_at(context.certified_height)?;
+    let state = state_reader.get_state_at(context.certified_height)?;
 
     let reshare_contexts = state.get_ref().reshare_chain_key_contexts();
     let idkg_dealings_contexts = filter_idkg_reshare_chain_key_contexts(reshare_contexts);
