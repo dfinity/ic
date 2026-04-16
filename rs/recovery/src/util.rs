@@ -67,11 +67,9 @@ impl<'a> MaybeRemote<'a> {
     pub fn path_exists(&self, path: &Path) -> RecoveryResult<bool> {
         match self {
             Self::Local => {
-                // Local implementation
                 path_exists(path)
             }
             Self::Remote(ssh_helper) => {
-                // Remote implementation
                 let command = format!("test -e {} && echo y || echo n", path.display());
                 Ok(ssh_helper
                     .ssh(command.clone())?
@@ -94,7 +92,6 @@ impl<'a> MaybeRemote<'a> {
     ) -> RecoveryResult<Option<(String, Height)>> {
         match self {
             Self::Local => {
-                // Local implementation
                 let checkpoints = Recovery::get_checkpoint_names(checkpoints_path)?
                     .into_iter()
                     .map(|name| parse_hex_str(&name).map(|height| (name, Height::from(height))))
@@ -105,7 +102,6 @@ impl<'a> MaybeRemote<'a> {
                     .max_by_key(|(_name, height)| *height))
             }
             Self::Remote(ssh_helper) => {
-                // Remote implementation
                 let maybe_output = ssh_helper.ssh(format!(
                     "ls -1 {} | sort | tail -n 1",
                     checkpoints_path.display()
