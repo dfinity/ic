@@ -604,11 +604,6 @@ pub struct MessageRoutingImpl {
 #[cfg_attr(test, automock)]
 trait BatchProcessor: Send {
     fn process_batch(&self, batch: Batch);
-
-    /// Inducts messages from the loopback stream into input queues without
-    /// executing a round. Used by test infrastructure to move messages from
-    /// the loopback stream into queues before controlled execution.
-    fn induct_loopback_stream(&self) {}
 }
 
 /// Implementation of [`BatchProcessor`].
@@ -1392,13 +1387,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
 }
 
 impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<RegistryClient_> {
-    fn induct_loopback_stream(&self) {
-        let (_, state) = self.state_manager.take_tip();
-        let state = self.state_machine.induct_loopback_stream(state);
-        self.state_manager
-            .commit_and_certify(state, CertificationScope::Metadata, None);
-    }
-
     #[instrument(skip_all)]
     fn process_batch(&self, batch: Batch) {
         let since = Instant::now();
@@ -1894,19 +1882,5 @@ impl SyncMessageRouting {
 
     pub fn expected_batch_height(&self) -> Height {
         self.state_manager.latest_state_height().increment()
-    }
-
-    /// Inducts messages from the loopback stream into input queues without
-    /// executing a round, exactly as the replica does at the start of each
-    /// round.
-    ///
-    /// WARNING: This is intended for test infrastructure only (e.g.,
-    /// `StateMachine` flexible message ordering). Do not call in production.
-    #[doc(hidden)]
-    pub fn induct_loopback_stream(&self) {
-        self.batch_processor
-            .lock()
-            .unwrap()
-            .induct_loopback_stream();
     }
 }

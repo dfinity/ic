@@ -18,12 +18,6 @@ pub(crate) trait Demux: Send {
     /// and (attempts) to induct the messages contained in the payload as
     /// appropriate.
     fn process_payload(&self, state: ReplicatedState, messages: BatchMessages) -> ReplicatedState;
-
-    /// Inducts messages from the loopback stream into the appropriate input
-    /// queues, exactly as the replica does at the start of each round.
-    fn induct_loopback_stream(&self, state: ReplicatedState) -> ReplicatedState {
-        state
-    }
 }
 
 pub(crate) struct DemuxImpl<'a> {
@@ -53,11 +47,6 @@ impl<'a> DemuxImpl<'a> {
 }
 
 impl Demux for DemuxImpl<'_> {
-    fn induct_loopback_stream(&self, state: ReplicatedState) -> ReplicatedState {
-        self.stream_handler
-            .process_stream_slices(state, BTreeMap::new())
-    }
-
     fn process_payload(
         &self,
         state: ReplicatedState,

@@ -9,7 +9,7 @@ use ic_base_types::{CanisterId, NumBytes, PrincipalId, SubnetId};
 use ic_config::{
     embedders::Config as HypervisorConfig,
     flag_status::FlagStatus,
-    subnet_config::{SUBNET_MESSAGES_LIMIT_FRACTION, SchedulerConfig, SubnetConfig},
+    subnet_config::{SchedulerConfig, SubnetConfig},
 };
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
@@ -74,7 +74,7 @@ use std::{collections::BTreeSet, time::Duration};
 
 use crate::{ExecutionServicesForTesting, RoundLimits, as_round_instructions};
 
-use super::SchedulerImpl;
+use super::{SUBNET_MESSAGES_LIMIT_FRACTION, SchedulerImpl};
 use crate::metrics::MeasurementScope;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_types::time::UNIX_EPOCH;
@@ -1070,7 +1070,7 @@ impl SchedulerTestBuilder {
         );
 
         let scheduler = SchedulerImpl::new(
-            self.scheduler_config.clone(),
+            self.scheduler_config,
             self.hypervisor_config.clone(),
             self.own_subnet_id,
             execution_services.ingress_history_writer,

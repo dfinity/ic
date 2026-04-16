@@ -643,20 +643,16 @@ impl RoundSchedule {
             }
         }
         // Assert there is at least `1%` of free capacity to distribute across canisters.
-        // It's guaranteed by `validate_compute_allocation()`.
-        // Skip the assertion when compute_capacity is zero (scheduler_cores == 1),
-        // which can happen in testing configurations like flexible message ordering.
-        if compute_capacity > ZERO {
-            debug_assert_or_critical_error!(
-                total_compute_allocation + ONE_PERCENT <= compute_capacity,
-                metrics.scheduler_compute_allocation_invariant_broken,
-                logger,
-                "{}: Total compute allocation {}% must be less than compute capacity {}%",
-                SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN,
-                total_compute_allocation,
-                compute_capacity
-            );
-        }
+        // It's guaranteed by `validate_compute_allocation()`
+        debug_assert_or_critical_error!(
+            total_compute_allocation + ONE_PERCENT <= compute_capacity,
+            metrics.scheduler_compute_allocation_invariant_broken,
+            logger,
+            "{}: Total compute allocation {}% must be less than compute capacity {}%",
+            SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN,
+            total_compute_allocation,
+            compute_capacity
+        );
         // Observe accumulated priority metrics
         metrics
             .scheduler_accumulated_priority_invariant
@@ -689,17 +685,14 @@ impl RoundSchedule {
             - AccumulatedPriority::new(1))
             / ONE_HUNDRED_PERCENT) as usize;
         // If there are long executions, the `long_execution_cores` must be non-zero.
-        // Skip assertion when compute_capacity is zero (scheduler_cores == 1).
-        if compute_capacity > ZERO {
-            debug_assert_or_critical_error!(
-                number_of_long_executions == 0 || long_execution_cores > 0,
-                metrics.scheduler_cores_invariant_broken,
-                logger,
-                "{}: Number of long execution cores {} must be more than 0",
-                SCHEDULER_CORES_INVARIANT_BROKEN,
-                long_execution_cores,
-            );
-        }
+        debug_assert_or_critical_error!(
+            number_of_long_executions == 0 || long_execution_cores > 0,
+            metrics.scheduler_cores_invariant_broken,
+            logger,
+            "{}: Number of long execution cores {} must be more than 0",
+            SCHEDULER_CORES_INVARIANT_BROKEN,
+            long_execution_cores,
+        );
         // As one scheduler core is reserved, the `long_execution_cores` is always
         // less than `scheduler_cores`
         debug_assert_or_critical_error!(
