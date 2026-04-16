@@ -312,7 +312,7 @@ impl ThresholdSignerImpl {
         };
 
         // Although we already checked the cache for duplicate shares above, it could happen that a
-        // different thread validated a share for the same request_id  in the meantime, after we
+        // different thread validated a share for the same request_id in the meantime, after we
         // released the read lock. Therefore, we acquire the write lock here to check again with
         // exclusive access.
         let mut valid_sig_share_signers = self.validated_sig_share_signers.write().unwrap();
@@ -1111,7 +1111,7 @@ mod tests {
                     signer.send_signature_shares(&idkg_pool, &transcript_loader, &state);
 
                 if key_id.is_idkg_key() {
-                    // IDKG key siganture shares should be created when transcripts succeed to load
+                    // IDKG key signature shares should be created when transcripts succeed to load
                     assert_eq!(change_set.len(), 3);
                     assert_eq!(
                         signer.validated_sig_share_signers(),
