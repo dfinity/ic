@@ -186,8 +186,9 @@ impl ThresholdSignerImpl {
 
         let mut valid_sig_share_signers = self.validated_sig_share_signers.write().unwrap();
         for action in &ret {
-            if let &IDkgChangeAction::AddToValidated(ref action) = action
-                && let Some((request_id, signer)) = action.sig_share_request_id_and_signer()
+            #[allow(clippy::needless_borrowed_reference)] // This borrowed reference *is* needed
+            if let &IDkgChangeAction::AddToValidated(ref share) = action
+                && let Some((request_id, signer)) = share.sig_share_request_id_and_signer()
             {
                 // Record our share in the map of validated signature share signers
                 valid_sig_share_signers
