@@ -121,6 +121,11 @@ The `NetworkEconomics` type provides default and mainnet economic parameters.
 - **THEN** the parameter is automatically reduced to 2 weeks (1,209,600 seconds)
 - **AND** this is a one-time migration applied during post_upgrade
 
+#### Scenario: Dissolve delay to vote must not exceed delay to propose
+- **WHEN** `neuron_minimum_dissolve_delay_to_vote_seconds` is validated
+- **THEN** it must not exceed the minimum dissolve delay required to submit proposals
+- **AND** this ensures that any neuron eligible to propose is also eligible to vote
+
 ### Requirement: Neurons Fund Economics Defaults
 
 #### Scenario: Default neurons fund economics
