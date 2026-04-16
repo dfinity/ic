@@ -2275,7 +2275,7 @@ fn test_canister_log_resize_rejected_insufficient_cycles() {
                 .build(),
         )
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInLogResize);
+    assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
     assert!(
         err.description()
             .contains("Cannot resize canister log memory due to insufficient cycles"),
