@@ -571,6 +571,12 @@ fn register_non_local_subnet(
         INITIAL_REGISTRY_VERSION,
     );
 
+    // Assume Application as the type for this synthetic catch-all subnet:
+    // the only subnet type that gets filtered out is CloudEngine, and the
+    // real subnets whose canisters end up here should mainly be application
+    // subnets. Even if there are requests from canisters on System subnets,
+    // it shouldn't make a difference (at least, for the current callers of
+    // this function).
     let record = SubnetRecordBuilder::from(&[])
         .with_subnet_type(SubnetType::Application)
         .build();
