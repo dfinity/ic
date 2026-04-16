@@ -846,10 +846,10 @@ impl CyclesAccountManager {
     pub fn xnet_call_total_fee(
         &self,
         payload_size: NumBytes,
+        subnet_size: usize,
         execution_mode: WasmExecutionMode,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Cycles {
-        let subnet_size = self.config.reference_subnet_size;
         let prepayment_for_response_transmission =
             self.prepayment_for_response_transmission(subnet_size, cost_schedule);
         // response execution might be free depending on cost_schedule
@@ -1180,6 +1180,25 @@ impl CyclesAccountManager {
         self.scale_cost(
             self.config.update_message_execution_fee
                 + self.convert_instructions_to_cycles(num_instructions, execution_mode),
+            subnet_size,
+            cost_schedule,
+        )
+    }
+
+    /// Returns the variable part of the execution cost (no fixed per-message fee)
+    /// for the given number of instructions. This matches exactly what
+    /// `refund_unused_execution_cycles` refunds, so callers can compute the net
+    /// charge as `prepaid - variable_execution_cost(instructions_to_refund)`.
+    #[doc(hidden)]
+    pub fn variable_execution_cost(
+        &self,
+        num_instructions: NumInstructions,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+        execution_mode: WasmExecutionMode,
+    ) -> CompoundCycles<Instructions> {
+        self.scale_cost(
+            self.convert_instructions_to_cycles(num_instructions, execution_mode),
             subnet_size,
             cost_schedule,
         )

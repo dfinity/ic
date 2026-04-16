@@ -1,3 +1,8 @@
+//! SEV-SNP host-side certificate management for IC-OS. Fetches the VCEK
+//! (Versioned Chip Endorsement Key) from AMD's key distribution service,
+//! caches it locally, and assembles the full certificate chain (VCEK + ASK + ARK)
+//! needed for guest attestation verification.
+
 use anyhow::{Context, Result, anyhow};
 use der::pem::LineEnding;
 use der::{Decode, Document};

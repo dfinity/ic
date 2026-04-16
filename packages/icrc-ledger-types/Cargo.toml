@@ -15,7 +15,7 @@ base32 = "0.4.0"
 candid = { workspace = true }
 crc32fast = "1.2.0"
 hex = { workspace = true }
-ic-stable-structures = { workspace = true }
+ic-stable-structures = { workspace = true, optional = true }
 icrc-cbor = { path = "../icrc-cbor", version = "0.1.0" }
 minicbor = { workspace = true }
 num-bigint = { workspace = true }
@@ -31,3 +31,7 @@ time = { workspace = true }
 assert_matches = { workspace = true }
 hex = { workspace = true }
 proptest = { workspace = true }
+
+[features]
+default = []
+storable = ["dep:ic-stable-structures"]

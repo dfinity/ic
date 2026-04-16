@@ -284,13 +284,14 @@ async fn stop_chatting_canisters(
         env.logger(),
         "Stopping all the chatting canisters on the {subnet_type} subnet",
     );
-    let runtime = runtime_from_subnet(subnet);
-    for canister_id in canister_ids {
+    futures::future::join_all(canister_ids.iter().map(|canister_id| async move {
+        let runtime = runtime_from_subnet(subnet);
         info!(env.logger(), "Stopping canister {canister_id}");
         let canister = Canister::new(&runtime, *canister_id);
         // If the canister fails to stop, it's an indicator that something could have gone wrong.
         canister.stop().await.expect("The canister failed to stop");
-    }
+    }))
+    .await;
 }
 
 async fn check_chatting_canisters_metrics(
@@ -304,9 +305,10 @@ async fn check_chatting_canisters_metrics(
         "Checking if any of the chatting canister metrics on the {subnet_type} subnet \
         returned an error"
     );
-    let runtime = runtime_from_subnet(subnet);
     let mut aggregated_metrics = Metrics::default();
-    for canister_id in canister_ids {
+
+    futures::future::join_all(canister_ids.iter().map(|canister_id| async move {
+        let runtime = runtime_from_subnet(subnet);
         info!(
             env.logger(),
             "Instructing canister {canister_id} to stop chatting and collecting metrics"
@@ -333,8 +335,11 @@ async fn check_chatting_canisters_metrics(
             "The canister should be still sending requests to other canisters"
         );
 
-        aggregated_metrics.merge(&metrics_after);
-    }
+        metrics_after
+    }))
+    .await
+    .into_iter()
+    .for_each(|metrics_after| aggregated_metrics.merge(&metrics_after));
 
     assert_eq!(aggregated_metrics.call_errors, 0);
     assert_eq!(aggregated_metrics.reject_responses, 0);
@@ -390,15 +395,18 @@ async fn install_chatting_canisters(env: &TestEnv) -> (Vec<CanisterId>, Vec<Cani
         response_payload_size_bytes: 1,
     };
 
-    for canister in source_subnet_canisters
-        .iter()
-        .chain(&third_subnet_canisters)
-    {
-        let _: String = canister
-            .update_("start", candid, (canister_start_arguments.clone(),))
-            .await
-            .expect("Failed to start the chatting canister");
-    }
+    futures::future::join_all(
+        source_subnet_canisters
+            .iter()
+            .chain(&third_subnet_canisters)
+            .map(|canister| async {
+                let _: String = canister
+                    .update_("start", candid, (canister_start_arguments.clone(),))
+                    .await
+                    .expect("Failed to start the chatting canister");
+            }),
+    )
+    .await;
 
     info!(
         env.logger(),
@@ -473,49 +481,47 @@ async fn check_chatting_canisters(env: &TestEnv, test_params: &TestParams) {
     let destination_subnet = get_destination_subnet(env);
     let third_subnet = get_third_subnet(env);
 
-    check_chatting_canisters_metrics(
-        env,
-        &third_subnet,
-        &test_params.third_subnet_chatting_canister_ids,
-        "third",
-    )
-    .await;
-    check_chatting_canisters_metrics(
-        env,
-        &source_subnet,
-        &test_params.source_subnet_chatting_canister_ids,
-        "source",
-    )
-    .await;
-    check_chatting_canisters_metrics(
-        env,
-        &destination_subnet,
-        &test_params.destination_subnet_chatting_canister_ids,
-        "destination",
-    )
-    .await;
+    tokio::join!(
+        check_chatting_canisters_metrics(
+            env,
+            &third_subnet,
+            &test_params.third_subnet_chatting_canister_ids,
+            "third",
+        ),
+        check_chatting_canisters_metrics(
+            env,
+            &source_subnet,
+            &test_params.source_subnet_chatting_canister_ids,
+            "source",
+        ),
+        check_chatting_canisters_metrics(
+            env,
+            &destination_subnet,
+            &test_params.destination_subnet_chatting_canister_ids,
+            "destination",
+        )
+    );
 
-    stop_chatting_canisters(
-        env,
-        &third_subnet,
-        &test_params.third_subnet_chatting_canister_ids,
-        "third",
-    )
-    .await;
-    stop_chatting_canisters(
-        env,
-        &source_subnet,
-        &test_params.source_subnet_chatting_canister_ids,
-        "source",
-    )
-    .await;
-    stop_chatting_canisters(
-        env,
-        &destination_subnet,
-        &test_params.destination_subnet_chatting_canister_ids,
-        "destination",
-    )
-    .await;
+    tokio::join!(
+        stop_chatting_canisters(
+            env,
+            &third_subnet,
+            &test_params.third_subnet_chatting_canister_ids,
+            "third",
+        ),
+        stop_chatting_canisters(
+            env,
+            &source_subnet,
+            &test_params.source_subnet_chatting_canister_ids,
+            "source",
+        ),
+        stop_chatting_canisters(
+            env,
+            &destination_subnet,
+            &test_params.destination_subnet_chatting_canister_ids,
+            "destination",
+        )
+    );
 }
 
 async fn check_counter_canisters(
