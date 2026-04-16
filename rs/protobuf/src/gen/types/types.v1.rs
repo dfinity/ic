@@ -634,7 +634,7 @@ pub struct FlexibleCanisterHttpTimeout {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FlexibleCanisterHttpResponsesTooLarge {
     #[prost(message, repeated, tag = "1")]
-    pub metadata_shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
+    pub all_seen_shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FlexibleCanisterHttpTooManyRequestErrors {
