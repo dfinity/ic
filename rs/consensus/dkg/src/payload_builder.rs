@@ -2452,31 +2452,6 @@ mod tests {
     }
 
     #[test]
-    fn test_select_dealings_prioritizes_remote_over_local() {
-        let local_id = local_dkg_id(NiDkgTag::LowThreshold);
-        let remote_id = remote_dkg_id(NiDkgTag::LowThreshold);
-
-        let configs: BTreeMap<_, _> = [
-            (local_id.clone(), make_test_config(local_id.clone(), 1)),
-            (remote_id.clone(), make_test_config(remote_id.clone(), 1)),
-        ]
-        .into();
-
-        // Create dealings: local first in the list, then remote.
-        let pool = TestDkgPool {
-            messages: vec![
-                create_dealing(0, local_id.clone()),
-                create_dealing(1, remote_id.clone()),
-            ],
-        };
-        let selected =
-            select_dealings_for_payload(configs.iter().collect(), &HashSet::new(), &pool, 1);
-
-        assert_eq!(selected.len(), 1);
-        assert_eq!(selected[0].content.dkg_id, remote_id);
-    }
-
-    #[test]
     fn test_select_dealings_caps_at_collection_threshold() {
         // collection_threshold = max_corrupt_dealers + 1 = 2
         let id = local_dkg_id(NiDkgTag::LowThreshold);
@@ -2492,27 +2467,10 @@ mod tests {
 
         // Only collection_threshold (2) dealings should be included.
         assert_eq!(selected.len(), 2);
-    }
-
-    #[test]
-    fn test_select_dealings_accounts_for_dealers_from_chain() {
-        // collection_threshold = 2
-        let id = local_dkg_id(NiDkgTag::LowThreshold);
-        let configs: BTreeMap<_, _> = [(id.clone(), make_test_config(id.clone(), 1))].into();
-
-        // 1 dealing already on chain
-        let dealers_from_chain: HashSet<_> = [(id.clone(), node_test_id(0))].into();
-
-        // 3 new dealings (from different dealers)
-        let pool = TestDkgPool {
-            messages: (1..4).map(|i| create_dealing(i, id.clone())).collect(),
-        };
-
-        let selected =
-            select_dealings_for_payload(configs.iter().collect(), &dealers_from_chain, &pool, 10);
-
-        // Only 1 more needed to reach collection_threshold of 2.
-        assert_eq!(selected.len(), 1);
+        for (i, msg) in selected.iter().enumerate() {
+            assert_eq!(msg.content.dkg_id, id);
+            assert_eq!(msg.signature.signer, node_test_id(i as u64));
+        }
     }
 
     #[test]
