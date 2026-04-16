@@ -87,9 +87,6 @@ const MAX_SLICE_SIZE_BYTES: u64 = 2_000_000;
 /// allocated ring buffer. The cost is proportional to the bytes currently
 /// stored (not the allocated capacity).
 ///
-/// TODO(DSM-11): This value is a preliminary estimate. It must be calibrated
-/// with benchmarks on representative replica hardware and adjusted accordingly.
-///
 /// TODO(DSM-11): Consider moving this constant into `CyclesAccountManagerConfig`
 /// alongside other per-byte fee parameters.
 const LOG_RESIZE_COST_PER_BYTE: u64 = 32;
