@@ -66,9 +66,7 @@ pub enum MaybeRemote<'a> {
 impl<'a> MaybeRemote<'a> {
     pub fn path_exists(&self, path: &Path) -> RecoveryResult<bool> {
         match self {
-            Self::Local => {
-                path_exists(path)
-            }
+            Self::Local => path_exists(path),
             Self::Remote(ssh_helper) => {
                 let command = format!("test -e {} && echo y || echo n", path.display());
                 Ok(ssh_helper
