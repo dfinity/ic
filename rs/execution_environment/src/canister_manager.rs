@@ -1911,6 +1911,9 @@ impl CanisterManager {
         old_memory_usage: NumBytes,
         resource_saturation: &ResourceSaturation,
     ) -> Result<(), CanisterManagerError> {
+        // Update subnet available memory:
+        // - return deallocated bytes back to subnet available memory;
+        // - deduct allocated bytes from subnet available memory.
         let old_memory_allocated_bytes = canister
             .memory_allocation()
             .allocated_bytes(old_memory_usage);
@@ -1921,6 +1924,25 @@ impl CanisterManager {
             new_memory_allocated_bytes.saturating_sub(&old_memory_allocated_bytes);
         let deallocated_bytes =
             old_memory_allocated_bytes.saturating_sub(&new_memory_allocated_bytes);
+        round_limits.subnet_available_memory.increment(
+            deallocated_bytes,
+            NumBytes::from(0),
+            NumBytes::from(0),
+        );
+        round_limits
+            .subnet_available_memory
+            .try_decrement(allocated_bytes, NumBytes::from(0), NumBytes::from(0))
+            .map_err(
+                |_| CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
+                    requested: allocated_bytes,
+                    available: NumBytes::from(
+                        round_limits
+                            .subnet_available_memory
+                            .get_execution_memory()
+                            .max(0) as u64,
+                    ),
+                },
+            )?;
 
         // Check that the canister is not frozen due to its new memory usage.
         let reveal_top_up = canister.controllers().contains(&sender);
@@ -1943,29 +1965,6 @@ impl CanisterManager {
                 required: err.threshold,
             });
         }
-
-        // Update subnet available memory:
-        // - return deallocated bytes back to subnet available memory;
-        // - deduct allocated bytes from subnet available memory.
-        round_limits.subnet_available_memory.increment(
-            deallocated_bytes,
-            NumBytes::from(0),
-            NumBytes::from(0),
-        );
-        round_limits
-            .subnet_available_memory
-            .try_decrement(allocated_bytes, NumBytes::from(0), NumBytes::from(0))
-            .map_err(
-                |_| CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-                    requested: allocated_bytes,
-                    available: NumBytes::from(
-                        round_limits
-                            .subnet_available_memory
-                            .get_execution_memory()
-                            .max(0) as u64,
-                    ),
-                },
-            )?;
 
         // Consume cycles for instructions.
         let cycles_for_instructions = self
