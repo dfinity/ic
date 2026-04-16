@@ -311,8 +311,9 @@ fn test_duration_until_next_midnight_utc() {
 
 #[tokio::test]
 async fn test_execute_stores_rate_and_computes_modulation() {
-    let day = 20_500_u64;
+    let current_day = 20_500_u64;
     let xdr_permyriad = 50_000_u64;
+    let oldest_needed = current_day - MAX_RATES_BUFFER_SIZE as u64 + 1;
 
     thread_local! {
         static GOV: RefCell<Governance> = RefCell::new(new_governance(20_500 * ONE_DAY_SECONDS + 3600));
@@ -321,12 +322,7 @@ async fn test_execute_stores_rate_and_computes_modulation() {
     let mut mock_client = MockXrcClient::new();
     mock_client
         .expect_get_icp_to_xdr_exchange_rate()
-        .return_once(move |_| {
-            Ok(make_valid_exchange_rate(
-                day * ONE_DAY_SECONDS,
-                xdr_permyriad,
-            ))
-        });
+        .return_once(move |ts| Ok(make_valid_exchange_rate(ts.unwrap(), xdr_permyriad)));
 
     let task = UpdateIcpXdrRateRelatedData::new_with_client(&GOV, Arc::new(mock_client));
     let (delay, _task) = task.execute().await;
@@ -336,7 +332,7 @@ async fn test_execute_stores_rate_and_computes_modulation() {
             *gov.heap_data.icp_price_history.as_ref().unwrap(),
             IcpPriceHistory {
                 icp_xdr_rates: vec![SampledPrice {
-                    timestamp_seconds: day * ONE_DAY_SECONDS,
+                    timestamp_seconds: oldest_needed * ONE_DAY_SECONDS,
                     xdr_permyriad_per_icp: xdr_permyriad,
                 }],
             }
@@ -536,11 +532,13 @@ async fn test_execute_repeated_calls_accumulate_rates() {
         static GOV: RefCell<Governance> = RefCell::new(new_governance(20_500 * ONE_DAY_SECONDS));
     }
 
-    // First call: XRC returns rate for day base_day.
+    let oldest_needed = base_day - MAX_RATES_BUFFER_SIZE as u64 + 1;
+
+    // First call: backfill fetches the oldest missing day.
     let mut mock_client = MockXrcClient::new();
     mock_client
         .expect_get_icp_to_xdr_exchange_rate()
-        .return_once(move |_| Ok(make_valid_exchange_rate(base_day * ONE_DAY_SECONDS, 50_000)));
+        .return_once(move |ts| Ok(make_valid_exchange_rate(ts.unwrap(), 50_000)));
     let task = UpdateIcpXdrRateRelatedData::new_with_client(&GOV, Arc::new(mock_client));
     task.execute().await;
 
@@ -549,23 +547,18 @@ async fn test_execute_repeated_calls_accumulate_rates() {
             *gov.heap_data.icp_price_history.as_ref().unwrap(),
             IcpPriceHistory {
                 icp_xdr_rates: vec![SampledPrice {
-                    timestamp_seconds: base_day * ONE_DAY_SECONDS,
+                    timestamp_seconds: oldest_needed * ONE_DAY_SECONDS,
                     xdr_permyriad_per_icp: 50_000,
                 }],
             }
         );
     });
 
-    // Second call: XRC returns rate for the previous day at a different price.
+    // Second call: backfill fetches the next oldest missing day at a different price.
     let mut mock_client = MockXrcClient::new();
     mock_client
         .expect_get_icp_to_xdr_exchange_rate()
-        .return_once(move |_| {
-            Ok(make_valid_exchange_rate(
-                (base_day - 1) * ONE_DAY_SECONDS,
-                60_000,
-            ))
-        });
+        .return_once(move |ts| Ok(make_valid_exchange_rate(ts.unwrap(), 60_000)));
     let task = UpdateIcpXdrRateRelatedData::new_with_client(&GOV, Arc::new(mock_client));
     task.execute().await;
 
@@ -576,12 +569,12 @@ async fn test_execute_repeated_calls_accumulate_rates() {
             IcpPriceHistory {
                 icp_xdr_rates: vec![
                     SampledPrice {
-                        timestamp_seconds: (base_day - 1) * ONE_DAY_SECONDS,
-                        xdr_permyriad_per_icp: 60_000,
+                        timestamp_seconds: oldest_needed * ONE_DAY_SECONDS,
+                        xdr_permyriad_per_icp: 50_000,
                     },
                     SampledPrice {
-                        timestamp_seconds: base_day * ONE_DAY_SECONDS,
-                        xdr_permyriad_per_icp: 50_000,
+                        timestamp_seconds: (oldest_needed + 1) * ONE_DAY_SECONDS,
+                        xdr_permyriad_per_icp: 60_000,
                     },
                 ],
             }
