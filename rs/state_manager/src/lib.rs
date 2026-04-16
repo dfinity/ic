@@ -3258,17 +3258,17 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["commit_and_certify"])
             .start_timer();
 
-        let height = {
-            let states = self.states.read();
-            states.tip_height.increment()
+        let states = self.states.read();
+        let (prev_height, height) = {
+            let prev_height = states.tip_height;
+            let height = prev_height.increment();
+            (prev_height, height)
         };
 
         self.populate_extra_metadata(&mut state);
 
         // Get the previous state hash either from consensus via certifications (if we are catching up)
         // or wait for the hashing thread to finish computing it.
-        let prev_height = height.decrement();
-        let states = self.states.read();
         let maybe_hash = states
             .certifications
             .get(&prev_height)
