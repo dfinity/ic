@@ -96,7 +96,7 @@ pub struct NodeMetrics {
     pub manifest_height: Height,
 }
 
-struct MaybeRemote<'a> {
+pub struct MaybeRemote<'a> {
     ssh_helper: Option<&'a SshHelper>,
 }
 
@@ -377,8 +377,8 @@ impl Recovery {
 
     /// Return the list of paths to include when downloading a node's "production" state (i.e. at
     /// /var/lib/ic/data) with rsync.
-    /// One of them is the latest checkpoint, which is looked up remotely via ssh if an `ssh_helper`
-    /// is given, or locally on disk otherwise.
+    /// One of them is the latest checkpoint, which is looked up remotely via ssh or locally on
+    /// disk, based on the value of `maybe_remote`.
     ///
     /// If `download_height` is given, the checkpoint at that height is downloaded. If it does not
     /// exist, an error is returned.
@@ -388,11 +388,10 @@ impl Recovery {
     /// an error, as the subnet could have stalled in its first DKG interval before producing any
     /// checkpoint.
     pub fn get_ic_state_includes(
-        ssh_helper: Option<&SshHelper>,
+        maybe_remote: MaybeRemote<'_>,
         download_height: Option<u64>,
     ) -> RecoveryResult<Vec<PathBuf>> {
         let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
-        let maybe_remote = MaybeRemote { ssh_helper };
 
         let checkpoint_name = if let Some(height) = download_height {
             let name = format!("{:016x}", height);
@@ -453,7 +452,8 @@ impl Recovery {
             key_file,
         );
 
-        let includes = Self::get_ic_state_includes(Some(&ssh_helper), download_height)?;
+        let includes =
+            Self::get_ic_state_includes(MaybeRemote::remote(&ssh_helper), download_height)?;
 
         self.get_download_data_step(
             ssh_helper,
@@ -501,7 +501,7 @@ impl Recovery {
         &self,
         download_height: Option<u64>,
     ) -> RecoveryResult<impl Step + use<>> {
-        let data_includes = Self::get_ic_state_includes(None, download_height)?;
+        let data_includes = Self::get_ic_state_includes(MaybeRemote::local(), download_height)?;
 
         Ok(CopyLocalIcStateStep {
             logger: self.logger.clone(),
@@ -1102,11 +1102,11 @@ impl Recovery {
 /// the filesystem of the node. Local implementations use the standard library, while remote
 /// implementations use ssh to execute commands on the remote node.
 impl<'a> MaybeRemote<'a> {
-    fn local() -> Self {
+    pub fn local() -> Self {
         Self { ssh_helper: None }
     }
 
-    fn remote(ssh_helper: &'a SshHelper) -> Self {
+    pub fn remote(ssh_helper: &'a SshHelper) -> Self {
         Self {
             ssh_helper: Some(ssh_helper),
         }
@@ -1350,8 +1350,8 @@ mod tests {
         );
 
         // Test: without any checkpoints, should not be an error, should return nothing
-        let includes =
-            Recovery::get_ic_state_includes(None, None).expect("Failed getting ic state includes");
+        let includes = Recovery::get_ic_state_includes(MaybeRemote::local(), None)
+            .expect("Failed getting ic state includes");
         assert!(includes.is_empty());
 
         // Create some checkpoints
@@ -1364,8 +1364,8 @@ mod tests {
         );
 
         // Test: without download height, should include the latest checkpoint
-        let includes =
-            Recovery::get_ic_state_includes(None, None).expect("Failed getting ic state includes");
+        let includes = Recovery::get_ic_state_includes(MaybeRemote::local(), None)
+            .expect("Failed getting ic state includes");
         assert_eq!(
             includes,
             vec![
@@ -1377,7 +1377,7 @@ mod tests {
         );
 
         // Test: with download height, should include the checkpoint at the download height
-        let includes = Recovery::get_ic_state_includes(None, Some(64800))
+        let includes = Recovery::get_ic_state_includes(MaybeRemote::local(), Some(64800))
             .expect("Failed getting ic state includes");
         assert_eq!(
             includes,
@@ -1390,7 +1390,7 @@ mod tests {
         );
 
         // Test: with download height but no checkpoint at that height, should return an error
-        let result = Recovery::get_ic_state_includes(None, Some(64700));
+        let result = Recovery::get_ic_state_includes(MaybeRemote::local(), Some(64700));
         assert_matches!(result, Err(RecoveryError::OutputError(e)) if e.contains("does not exist"));
 
         remove_dir(&ic_checkpoints_path).unwrap();

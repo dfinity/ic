@@ -17,7 +17,7 @@ use clap::Parser;
 use ic_base_types::SubnetId;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_recovery::{
-    CUPS_DIR, IC_STATE_DIR, NeuronArgs, Recovery, RecoveryArgs,
+    CUPS_DIR, IC_STATE_DIR, MaybeRemote, NeuronArgs, Recovery, RecoveryArgs,
     cli::{consent_given, read_optional, wait_for_confirmation},
     error::{RecoveryError, RecoveryResult},
     get_available_nodes_heights_from_metrics,
@@ -584,7 +584,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                     self.recovery.ssh_confirmation,
                     key_file,
                 );
-                let mut includes = Recovery::get_ic_state_includes(Some(&ssh_helper), None)?;
+                let mut includes =
+                    Recovery::get_ic_state_includes(MaybeRemote::remote(&ssh_helper), None)?;
                 includes.push(PathBuf::from(CUPS_DIR));
 
                 self.recovery
