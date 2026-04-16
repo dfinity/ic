@@ -112,10 +112,18 @@ fn test_neuron_minimum_dissolve_delay_to_vote_seconds_bounds() {
         ),
         (
             Some(UPPER_BOUND_SECONDS + 1),
-            Err(vec![format!(
-                "neuron_minimum_dissolve_delay_to_vote_seconds (Some({})) must be between two weeks and six months.",
-                UPPER_BOUND_SECONDS + 1
-            )]),
+            Err(vec![
+                format!(
+                    "neuron_minimum_dissolve_delay_to_vote_seconds (Some({})) must be between two weeks and six months.",
+                    UPPER_BOUND_SECONDS + 1
+                ),
+                format!(
+                    "neuron_minimum_dissolve_delay_to_vote_seconds (Some({})) must not exceed \
+                     the minimum dissolve delay required to submit proposals ({}).",
+                    UPPER_BOUND_SECONDS + 1,
+                    crate::governance::NEURON_MINIMUM_DISSOLVE_DELAY_TO_PROPOSE_SECONDS,
+                ),
+            ]),
         ),
         (Some(DEFAULT_SECONDS), Ok(())),
         (Some(LOWER_BOUND_SECONDS), Ok(())),
