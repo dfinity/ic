@@ -9438,11 +9438,10 @@ fn commit_and_certify_reuses_certification() {
         sm.commit_and_certify_at_height(state, no_opt_height, CertificationScope::Metadata, None);
         sm.flush_hash_channel();
         assert_eq!(no_state_clone_count(metrics), 0);
-
         // `commit_and_certify` reused certification from `states.certifications`
         assert!(
-            sm.certifications_metadata_heights()
-                .contains(&no_opt_height)
+            sm.certifications_metadata_certification(no_opt_height)
+                .is_some()
         );
 
         // `list_state_hashes_to_certify` does not include `no_opt_height` because certification was reused

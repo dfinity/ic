@@ -3277,12 +3277,6 @@ impl StateManager for StateManagerImpl {
         let prev_state_hash = if let Some(hash) = maybe_hash {
             hash
         } else {
-            // Wait for the hashing thread.
-            let (sender, recv) = bounded(1);
-            self.hash_channel
-                .send(HashRequest::Wait { sender })
-                .expect("Failed to send `Wait` to hash channel");
-            recv.recv().expect("Failed to wait for hash channel");
             // At prev_height 0, we don't have a hash yet, so we have to compute it.
             if prev_height.get() == 0 {
                 let states = self.states.read();
@@ -3301,6 +3295,12 @@ impl StateManager for StateManagerImpl {
                 .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
                 certification.certified_state_hash.clone()
             } else {
+                // Wait for the hashing thread.
+                let (sender, recv) = bounded(1);
+                self.hash_channel
+                    .send(HashRequest::Wait { sender })
+                    .expect("Failed to send `Wait` to hash channel");
+                recv.recv().expect("Failed to wait for hash channel");
                 // After awaiting the hashing thread, snapshot and certification_metadata
                 // must have an entry at height-1, so we can unwrap.
                 let states = self.states.read();
