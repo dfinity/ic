@@ -87,7 +87,7 @@ const NNS_NODES_LARGE: usize = 40;
 const APP_NODES_LARGE: usize = 37;
 /// 40 dealings * 4 transcripts being reshared (high/local, low/local, high/remote, low/remote)
 /// plus 14 as a safety margin
-const DKG_INTERVAL_LARGE: u64 = 499;
+const DKG_INTERVAL_LARGE: u64 = 4 * NNS_NODES_LARGE as u64 + 14;
 
 /// A very large DKG interval to test recovery when the subnet stalls during its first DKG
 /// interval.
@@ -419,21 +419,12 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     ));
 
     // The first application subnet encountered during iteration is the source subnet because it was inserted first.
-    let source_subnet = env
+    let source_subnet_id = env
         .topology_snapshot()
         .subnets()
         .find(|subnet| subnet.subnet_type() == SubnetType::Application)
-        .expect("there is no source subnet");
-
-    let source_subnet_id = source_subnet.subnet_id;
-    // await_node_certified_height(
-    //     &source_subnet
-    //         .nodes()
-    //         .next()
-    //         .expect("there is no node in the source subnet"),
-    //     Height::from(1000),
-    //     logger.clone(),
-    // );
+        .expect("there is no source subnet")
+        .subnet_id;
 
     let create_new_subnet = !topology_snapshot
         .subnets()

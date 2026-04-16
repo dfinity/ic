@@ -2225,10 +2225,10 @@ mod tests {
             let tag = NiDkgTag::HighThresholdForKey(ni_dkg_key_id);
 
             let registry_version = registry.get_latest_version();
-            let completed_init_dkg_target = NiDkgTargetId::new([1u8; 32]);
-            let pending_init_dkg_target = NiDkgTargetId::new([2u8; 32]);
-            let completed_reshare_target = NiDkgTargetId::new([3u8; 32]);
-            let pending_reshare_target = NiDkgTargetId::new([4u8; 32]);
+            let completed_init_dkg_target = NiDkgTargetId::new([1_u8; 32]);
+            let pending_init_dkg_target = NiDkgTargetId::new([2_u8; 32]);
+            let completed_reshare_target = NiDkgTargetId::new([3_u8; 32]);
+            let pending_reshare_target = NiDkgTargetId::new([4_u8; 32]);
 
             let mut state = ic_test_utilities_state::get_initial_state(0, 0);
             let target_nodes: BTreeSet<_> =
@@ -2360,7 +2360,7 @@ mod tests {
             start_block_height: Height::from(0),
             dealer_subnet: subnet_test_id(0),
             dkg_tag: tag,
-            target_subnet: NiDkgTargetSubnet::Remote(NiDkgTargetId::new([0u8; 32])),
+            target_subnet: NiDkgTargetSubnet::Remote(NiDkgTargetId::new([0_u8; 32])),
         }
     }
 

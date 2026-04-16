@@ -1814,7 +1814,7 @@ mod tests {
             )],
         );
 
-        let target_id = NiDkgTargetId::new([0u8; 32]);
+        let target_id = NiDkgTargetId::new([0_u8; 32]);
         complement_state_manager_with_setup_initial_dkg_request(
             deps.state_manager.clone(),
             deps.registry.get_latest_version(),
@@ -2048,7 +2048,7 @@ mod tests {
                 original_summary.next_transcripts().clone(),
                 vec![(
                     removed_dkg_id,
-                    ic_types::messages::CallbackId::from(0u64),
+                    ic_types::messages::CallbackId::from(0_u64),
                     Ok(dummy_transcript),
                 )],
                 original_summary.registry_version,
@@ -2158,7 +2158,7 @@ mod tests {
 
             // If a config exists in the summary but there is no corresponding
             // context in the state, no early transcript should be created.
-            let unrelated_target_id = NiDkgTargetId::new([1u8; 32]);
+            let unrelated_target_id = NiDkgTargetId::new([1_u8; 32]);
             let no_match_state_manager =
                 Arc::new(ic_test_utilities::state_manager::RefMockStateManager::default());
             complement_state_manager_with_setup_initial_dkg_request(
@@ -2317,7 +2317,7 @@ mod tests {
                 curve: VetKdCurve::Bls12_381_G2,
                 name: String::from("some_vetkey"),
             };
-            let target_id = NiDkgTargetId::new([0u8; 32]);
+            let target_id = NiDkgTargetId::new([0_u8; 32]);
 
             let mut deps = dependencies_with_subnet_records_with_raw_state_manager(
                 pool_config,
@@ -2417,9 +2417,9 @@ mod tests {
                 };
                 // This context always comes first but will be
                 // skipped because one of its two configs lacks dealings.
-                let skipped_target_id = NiDkgTargetId::new([0u8; 32]);
-                let setup_target_id = NiDkgTargetId::new([1u8; 32]);
-                let reshare_target_id = NiDkgTargetId::new([2u8; 32]);
+                let skipped_target_id = NiDkgTargetId::new([0_u8; 32]);
+                let setup_target_id = NiDkgTargetId::new([1_u8; 32]);
+                let reshare_target_id = NiDkgTargetId::new([2_u8; 32]);
 
                 let mut deps = dependencies_with_subnet_records_with_raw_state_manager(
                     pool_config,
