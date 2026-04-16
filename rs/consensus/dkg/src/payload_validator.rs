@@ -203,7 +203,7 @@ fn validate_dealings_payload(
         last_summary,
         log,
     )?;
-    let configs = merge_configs(&last_summary.configs, &remote_config_results, log);
+    let configs = merge_configs(&last_summary.configs, &remote_config_results);
 
     // Check that all messages have a valid DKG config from the summary and the
     // dealer is valid, then verify each dealing.

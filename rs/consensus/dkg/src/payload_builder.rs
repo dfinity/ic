@@ -126,7 +126,7 @@ fn create_data_payload(
         last_dkg_summary,
         &logger,
     )?;
-    let configs = merge_configs(&last_dkg_summary.configs, &remote_config_results, &logger);
+    let configs = merge_configs(&last_dkg_summary.configs, &remote_config_results);
 
     // Select new dealings for the payload.
     let new_validated_dealings = select_dealings_for_payload(

@@ -311,24 +311,13 @@ fn get_handle_invalid_change_action<T: AsRef<str>>(message: &Message, reason: T)
 pub(crate) fn merge_configs<'a>(
     summary_configs: &'a BTreeMap<NiDkgId, NiDkgConfig>,
     config_results: &'a BTreeMap<CallbackId, ConfigResult>,
-    logger: &ReplicaLogger,
 ) -> BTreeMap<&'a NiDkgId, &'a NiDkgConfig> {
     let mut merged_configs: BTreeMap<&NiDkgId, &NiDkgConfig> = summary_configs.iter().collect();
     for config_result in config_results.values() {
-        let configs = match config_result {
-            Ok(configs) => configs,
-            Err(errs) => {
-                for (dkg_id, err) in errs {
-                    error!(
-                        logger,
-                        "Failed to create DKG config for dkg id {:?}: {}", dkg_id, err
-                    );
-                }
-                continue;
+        if let Ok(configs) = config_result {
+            for config in configs {
+                merged_configs.insert(config.dkg_id(), config);
             }
-        };
-        for config in configs {
-            merged_configs.insert(config.dkg_id(), config);
         }
     }
     merged_configs
@@ -364,7 +353,7 @@ impl<T: DkgPool> PoolMutationsProducer<T> for DkgImpl {
                 .ok()
             })
             .unwrap_or_default();
-        let configs = merge_configs(&dkg_summary.configs, &remote_config_results, &self.logger);
+        let configs = merge_configs(&dkg_summary.configs, &remote_config_results);
 
         let change_set: Mutations = configs
             .par_iter()
