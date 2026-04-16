@@ -16286,7 +16286,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-agent"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "candid",
  "ciborium",
@@ -16300,7 +16300,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-client"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -16309,7 +16309,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-client-cdk"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -16319,7 +16319,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-types"
-version = "0.1.13"
+version = "0.2.0"
 dependencies = [
  "assert_matches",
  "base32",
