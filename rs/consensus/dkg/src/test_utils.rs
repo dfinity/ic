@@ -15,9 +15,7 @@ use ic_types::{
         BlockPayload,
         dkg::{DealingContent, DealingMessages, Message},
     },
-    crypto::threshold_sig::ni_dkg::{
-        NiDkgId, NiDkgTargetId, NiDkgTranscript, config::NiDkgConfig,
-    },
+    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetId, NiDkgTranscript, config::NiDkgConfig},
     messages::CallbackId,
 };
 use std::{
