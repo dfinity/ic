@@ -446,10 +446,9 @@ mod tests {
     use super::*;
     use crate::test_utils::{
         complement_state_manager_with_dkg_contexts, complement_state_manager_with_dkg_contexts_mut,
-        complement_state_manager_with_reshare_chain_key_request,
         complement_state_manager_with_setup_initial_dkg_request, create_dealing,
-        extract_dkg_configs_from_highest_block, extract_remote_dkg_ids_from_highest_block,
-        make_reshare_chain_key_context, make_setup_initial_dkg_context,
+        extract_dkg_configs_from_highest_block, make_reshare_chain_key_context,
+        make_setup_initial_dkg_context,
     };
     use core::panic;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
@@ -459,14 +458,14 @@ mod tests {
     };
     use ic_consensus_utils::pool_reader::PoolReader;
     use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
-    use ic_crypto_test_utils_ni_dkg::{dummy_dealing, dummy_transcript_for_tests_with_params};
+    use ic_crypto_test_utils_ni_dkg::dummy_dealing;
     use ic_interfaces::{
         consensus_pool::ConsensusPool,
         p2p::consensus::{BouncerFactory, BouncerValue, MutablePool, UnvalidatedArtifact},
     };
     use ic_interfaces_mocks::crypto::MockCrypto;
     use ic_interfaces_registry::RegistryClient;
-    use ic_interfaces_state_manager::Labeled;
+    use ic_interfaces_state_manager::{Labeled, StateReader};
     use ic_logger::no_op_logger;
     use ic_management_canister_types_private::{MasterPublicKeyId, VetKdCurve, VetKdKeyId};
     use ic_metrics::MetricsRegistry;
@@ -478,19 +477,18 @@ mod tests {
     use ic_test_utilities_state::get_initial_state;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        NumberOfNodes, RegistryVersion, ReplicaVersion,
+        RegistryVersion, ReplicaVersion,
         batch::ValidationContext,
         consensus::{
-            Block, BlockPayload, BlockProposal, DataPayload, HasHeight, Payload, SummaryPayload,
-            dkg::{DkgDataPayload, DkgSummary},
-            get_faults_tolerated,
+            Block, BlockPayload, BlockProposal, DataPayload, HasHeight, Payload,
+            dkg::DkgDataPayload,
         },
         crypto::{
             AlgorithmId, CryptoHash,
             error::MalformedPublicKeyError,
             threshold_sig::ni_dkg::{
                 NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
-                config::NiDkgConfigData, errors::create_transcript_error::DkgCreateTranscriptError,
+                errors::create_transcript_error::DkgCreateTranscriptError,
             },
         },
         time::UNIX_EPOCH,
@@ -1523,14 +1521,6 @@ mod tests {
                             complement_state_manager_with_setup_initial_dkg_request(
                                 dependencies.state_manager.clone(),
                                 dependencies.registry.get_latest_version(),
-                                vec![],
-                                Some(dkg_interval_length as usize + 1),
-                                None,
-                            );
-
-                            complement_state_manager_with_setup_initial_dkg_request(
-                                dependencies.state_manager.clone(),
-                                dependencies.registry.get_latest_version(),
                                 vec![10, 11, 12],
                                 None,
                                 Some(target_id),
@@ -1565,15 +1555,15 @@ mod tests {
                         );
                     }
 
-                    // Advance _past_ the next summary to make sure the configs for remote
+                    // Advance _past_ the next summary to make sure no configs for remote
                     // transcripts are added into the summary. Verify that the second summary
-                    // block contains only two local and two remote configs.
+                    // block contains only two local configs.
                     pool_1.advance_round_normal_operation_n(dkg_interval_length + 1);
                     pool_2.advance_round_normal_operation_n(dkg_interval_length + 1);
                     let block: Block =
                         PoolReader::new(&pool_1).get_highest_finalized_summary_block();
                     if let BlockPayload::Summary(summary) = block.payload.as_ref() {
-                        assert_eq!(summary.dkg.configs.len(), 4);
+                        assert_eq!(summary.dkg.configs.len(), 2);
                     } else {
                         panic!(
                             "block at height {} is not a summary block",
@@ -1616,9 +1606,8 @@ mod tests {
                     let mut dkg_pool_2 =
                         DkgPoolImpl::new(MetricsRegistry::new(), logger, start_height);
 
-                    // The last summary contains two local and two remote configs.
-                    // dkg.on_state_change should create 4 dealings for those
-                    // configs.
+                    // The last summary contains two local configs, but the state contains an initial DKG context.
+                    // dkg.on_state_change should create 4 dealings for those for all 4 resulting configs.
                     let change_set = dkg_1.on_state_change(&dkg_pool_1);
                     match &change_set.as_slice() {
                         &[
@@ -1695,105 +1684,6 @@ mod tests {
         });
     }
 
-    #[test]
-    fn test_dkg_payload_has_transcripts_for_initial_dkg_requests() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let node_ids = vec![node_test_id(0), node_test_id(1)];
-            let dkg_interval_length = 99;
-            let subnet_id = subnet_test_id(0);
-            let Dependencies {
-                mut pool,
-                registry,
-                state_manager,
-                ..
-            } = dependencies_with_subnet_records_with_raw_state_manager(
-                pool_config,
-                subnet_id,
-                vec![(
-                    10,
-                    SubnetRecordBuilder::from(&node_ids)
-                        .with_dkg_interval_length(dkg_interval_length)
-                        .build(),
-                )],
-            );
-
-            let target_id = NiDkgTargetId::new([0_u8; 32]);
-            complement_state_manager_with_setup_initial_dkg_request(
-                state_manager,
-                registry.get_latest_version(),
-                vec![10, 11, 12],
-                None,
-                Some(target_id),
-            );
-
-            // Verify that the next summary block contains the configs and no transcripts.
-            pool.advance_round_normal_operation_n(dkg_interval_length + 1);
-            let block: Block = pool
-                .validated()
-                .block_proposal()
-                .get_highest()
-                .unwrap()
-                .content
-                .into_inner();
-            if block.payload.as_ref().is_summary() {
-                let dkg_summary = &block.payload.as_ref().as_summary().dkg;
-                assert_eq!(dkg_summary.configs.len(), 4);
-                assert_eq!(
-                    dkg_summary
-                        .configs
-                        .keys()
-                        .filter(|id| id.target_subnet == NiDkgTargetSubnet::Remote(target_id))
-                        .count(),
-                    2
-                );
-                assert!(dkg_summary.transcripts_for_remote_subnets.is_empty());
-            } else {
-                panic!(
-                    "block at height {} is not a summary block",
-                    block.height.get()
-                );
-            }
-
-            // Verify that the next summary block contains the transcripts and not the
-            // configs.
-            pool.advance_round_normal_operation_n(dkg_interval_length + 1);
-            let block: Block = pool
-                .validated()
-                .block_proposal()
-                .get_highest()
-                .unwrap()
-                .content
-                .into_inner();
-            if block.payload.as_ref().is_summary() {
-                let dkg_summary = &block.payload.as_ref().as_summary().dkg;
-                assert_eq!(dkg_summary.configs.len(), 2);
-                assert_eq!(
-                    dkg_summary
-                        .configs
-                        .keys()
-                        .filter(|id| id.target_subnet == NiDkgTargetSubnet::Remote(target_id))
-                        .count(),
-                    0
-                );
-                assert_eq!(
-                    dkg_summary
-                        .transcripts_for_remote_subnets
-                        .iter()
-                        .filter(
-                            |(id, _, _)| id.target_subnet == NiDkgTargetSubnet::Remote(target_id)
-                        )
-                        .count(),
-                    2
-                );
-            } else {
-                panic!(
-                    "block at height {} is not a summary block",
-                    block.height.get()
-                );
-            }
-        });
-    }
-
     const EARLY_DKG_INTERVAL: u64 = 99;
 
     /// Common setup for early transcript tests using `setup_initial_dkg`.
@@ -1827,11 +1717,32 @@ mod tests {
         deps.pool
             .advance_round_normal_operation_n(EARLY_DKG_INTERVAL + 1);
 
-        // Verify that the initial summary block contains the two remote configs.
-        assert_eq!(extract_dkg_configs_from_highest_block(&deps.pool).len(), 4);
+        // Verify that the highest block has no remote DKG configs yet and
+        // does not contain early remote transcripts.
+        let summary_configs = extract_dkg_configs_from_highest_block(&deps.pool);
+        assert_eq!(summary_configs.len(), 2);
+        assert_eq!(
+            summary_configs
+                .keys()
+                .filter(|id| id.target_subnet == NiDkgTargetSubnet::Remote(target_id))
+                .count(),
+            0
+        );
         assert_eq!(extract_remote_dkgs_from_highest_block(&deps.pool).len(), 0);
-        let remote_dkg_ids = extract_remote_dkg_ids_from_highest_block(&deps.pool, target_id);
-        assert_eq!(remote_dkg_ids.len(), 2);
+        let remote_dkg_ids = vec![
+            NiDkgId {
+                start_block_height: Height::from(EARLY_DKG_INTERVAL + 1),
+                dealer_subnet: deps.replica_config.subnet_id,
+                dkg_tag: NiDkgTag::LowThreshold,
+                target_subnet: NiDkgTargetSubnet::Remote(target_id),
+            },
+            NiDkgId {
+                start_block_height: Height::from(EARLY_DKG_INTERVAL + 1),
+                dealer_subnet: deps.replica_config.subnet_id,
+                dkg_tag: NiDkgTag::HighThreshold,
+                target_subnet: NiDkgTargetSubnet::Remote(target_id),
+            },
+        ];
 
         (deps, target_id, remote_dkg_ids)
     }
@@ -1894,6 +1805,39 @@ mod tests {
             pool.advance_round_normal_operation();
             assert_eq!(extract_dealings_from_highest_block(pool).len(), 0);
             assert_eq!(extract_remote_dkgs_from_highest_block(pool).len(), 0);
+        }
+    }
+
+    fn make_setup_initial_dkg_ids_with_height(
+        target_id: NiDkgTargetId,
+        start_block_height: Height,
+    ) -> Vec<NiDkgId> {
+        vec![
+            NiDkgId {
+                start_block_height,
+                dealer_subnet: subnet_test_id(0),
+                dkg_tag: NiDkgTag::LowThreshold,
+                target_subnet: NiDkgTargetSubnet::Remote(target_id),
+            },
+            NiDkgId {
+                start_block_height,
+                dealer_subnet: subnet_test_id(0),
+                dkg_tag: NiDkgTag::HighThreshold,
+                target_subnet: NiDkgTargetSubnet::Remote(target_id),
+            },
+        ]
+    }
+
+    fn make_setup_initial_dkg_ids(target_id: NiDkgTargetId) -> Vec<NiDkgId> {
+        make_setup_initial_dkg_ids_with_height(target_id, Height::from(0))
+    }
+
+    fn make_reshare_chain_key_id(target_id: NiDkgTargetId) -> NiDkgId {
+        NiDkgId {
+            start_block_height: Height::from(0),
+            dealer_subnet: subnet_test_id(0),
+            dkg_tag: NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(test_vet_key())),
+            target_subnet: NiDkgTargetSubnet::Remote(target_id),
         }
     }
 
@@ -2003,200 +1947,6 @@ mod tests {
         });
     }
 
-    /// Tests that  early remote transcripts are created when a
-    /// setup_initial_dkg target has only one of its expected two configs
-    /// in the summary (because one transcript was already created in a
-    /// previous summary block). We will still retry both of the configs
-    /// as part of early remote transcript creation.
-    #[test]
-    fn test_early_transcripts_are_createdfor_single_setup_initial_dkg_config() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let (mut deps, target_id, remote_dkg_ids) = setup_initial_dkg_test(pool_config);
-
-            let original_summary = {
-                let block: Block = deps
-                    .pool
-                    .validated()
-                    .block_proposal()
-                    .get_highest()
-                    .unwrap()
-                    .content
-                    .into_inner();
-                block.payload.as_ref().as_summary().dkg.clone()
-            };
-
-            add_dealings_for_configs(&mut deps, &remote_dkg_ids);
-
-            // Construct a modified summary with only 1 remote config.
-            // This simulates the scenario where one transcript was already
-            // created in a previous summary block, and only the remaining
-            // config needs to be computed.
-            let removed_dkg_id = remote_dkg_ids[0].clone();
-            let kept_tag = remote_dkg_ids[1].dkg_tag.clone();
-            let mut dummy_transcript = ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests();
-            dummy_transcript.dkg_id = removed_dkg_id.clone();
-            let modified_summary = DkgSummary::new(
-                original_summary
-                    .configs
-                    .values()
-                    .filter(|c| {
-                        c.dkg_id().target_subnet == NiDkgTargetSubnet::Local
-                            || c.dkg_id().dkg_tag == kept_tag
-                    })
-                    .cloned()
-                    .collect(),
-                original_summary.current_transcripts().clone(),
-                original_summary.next_transcripts().clone(),
-                vec![(
-                    removed_dkg_id,
-                    ic_types::messages::CallbackId::from(0_u64),
-                    Ok(dummy_transcript),
-                )],
-                original_summary.registry_version,
-                original_summary.interval_length,
-                original_summary.next_interval_length,
-                original_summary.height,
-                BTreeMap::new(),
-            );
-
-            assert_eq!(
-                modified_summary
-                    .configs
-                    .values()
-                    .filter(|c| matches!(c.dkg_id().target_subnet, NiDkgTargetSubnet::Remote(_)))
-                    .count(),
-                1,
-            );
-
-            let parent = deps.pool.get_cache().finalized_block();
-            let pool_reader = PoolReader::new(&deps.pool);
-            let validation_context = ValidationContext {
-                registry_version: deps.registry.get_latest_version(),
-                certified_height: Height::from(0),
-                time: UNIX_EPOCH,
-            };
-            let state = deps
-                .state_manager
-                .get_state_at(validation_context.certified_height)
-                .unwrap();
-            let modified_callback_id_map = payload_builder::build_callback_id_config_map(
-                subnet_test_id(0),
-                deps.registry.as_ref(),
-                state.get_ref(),
-                validation_context.registry_version,
-                &modified_summary,
-                &no_op_logger(),
-            )
-            .unwrap();
-
-            // Even though sufficient dealings exist on chain for both configs,
-            // no early transcript should be created because the summary only
-            // has 1 of the expected 2 configs for a setup_initial_dkg target.
-            let early_transcripts = payload_builder::create_early_remote_transcripts(
-                &pool_reader,
-                deps.crypto.as_ref(),
-                &parent,
-                modified_callback_id_map,
-                &no_op_logger(),
-            )
-            .unwrap();
-            assert_eq!(early_transcripts.len(), 2,);
-            for (dkg_id, _callback_id, result) in &early_transcripts {
-                assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Remote(target_id));
-                assert!(result.is_ok());
-            }
-
-            // The next summary should contain both transcripts: the one already
-            // in the modified summary's transcripts_for_remote_subnets and the
-            // one created from the remaining config's dealings.
-            let next_summary = payload_builder::create_summary_payload(
-                subnet_test_id(0),
-                deps.registry.as_ref(),
-                deps.crypto.as_ref(),
-                &pool_reader,
-                &modified_summary,
-                &parent,
-                deps.registry.get_latest_version(),
-                deps.state_manager.as_ref(),
-                &validation_context,
-                no_op_logger(),
-            )
-            .unwrap();
-            assert_eq!(
-                next_summary.transcripts_for_remote_subnets.len(),
-                2,
-                "The next summary should contain both remote transcripts",
-            );
-            for (dkg_id, _callback_id, result) in &next_summary.transcripts_for_remote_subnets {
-                assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Remote(target_id));
-                assert!(result.is_ok());
-            }
-
-            // Control: using the original summary with both configs DOES
-            // produce early transcripts.
-            let original_callback_id_map = payload_builder::build_callback_id_config_map(
-                subnet_test_id(0),
-                deps.registry.as_ref(),
-                state.get_ref(),
-                validation_context.registry_version,
-                &original_summary,
-                &no_op_logger(),
-            )
-            .unwrap();
-            let early_transcripts = payload_builder::create_early_remote_transcripts(
-                &pool_reader,
-                deps.crypto.as_ref(),
-                &parent,
-                original_callback_id_map,
-                &no_op_logger(),
-            )
-            .unwrap();
-            assert_eq!(early_transcripts.len(), 2);
-            for (dkg_id, _callback_id, result) in &early_transcripts {
-                assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Remote(target_id));
-                assert!(result.is_ok());
-            }
-
-            // If a config exists in the summary but there is no corresponding
-            // context in the state, no early transcript should be created.
-            let unrelated_target_id = NiDkgTargetId::new([1_u8; 32]);
-            let no_match_state_manager =
-                Arc::new(ic_test_utilities::state_manager::RefMockStateManager::default());
-            complement_state_manager_with_setup_initial_dkg_request(
-                no_match_state_manager.clone(),
-                deps.registry.get_latest_version(),
-                vec![10, 11, 12, 13],
-                None,
-                Some(unrelated_target_id),
-            );
-            let no_match_state = no_match_state_manager
-                .get_state_at(validation_context.certified_height)
-                .unwrap();
-            let no_match_callback_id_map = payload_builder::build_callback_id_config_map(
-                subnet_test_id(0),
-                deps.registry.as_ref(),
-                no_match_state.get_ref(),
-                validation_context.registry_version,
-                &original_summary,
-                &no_op_logger(),
-            )
-            .unwrap();
-            let early_transcripts = payload_builder::create_early_remote_transcripts(
-                &pool_reader,
-                deps.crypto.as_ref(),
-                &parent,
-                no_match_callback_id_map,
-                &no_op_logger(),
-            )
-            .unwrap();
-            assert!(
-                early_transcripts.is_empty(),
-                "No early transcripts should be created when config's target_id \
-                 has no corresponding context, but got {early_transcripts:?}",
-            );
-        });
-    }
-
     #[test]
     fn test_early_remote_transcripts_with_reproducible_crypto_error() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -2244,7 +1994,7 @@ mod tests {
                     &no_op_logger(),
                 )
                 .unwrap();
-
+                println!("callback_id_map: {:?}", callback_id_map);
                 let early_transcripts = payload_builder::create_early_remote_transcripts(
                     &pool_reader,
                     &mock_crypto,
@@ -2412,10 +2162,7 @@ mod tests {
         ] {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
                 let node_ids = (0..4).map(node_test_id).collect::<Vec<_>>();
-                let key_id = VetKdKeyId {
-                    curve: VetKdCurve::Bls12_381_G2,
-                    name: String::from("some_vetkey"),
-                };
+                let key_id = test_vet_key();
                 // This context always comes first but will be
                 // skipped because one of its two configs lacks dealings.
                 let skipped_target_id = NiDkgTargetId::new([0_u8; 32]);
@@ -2470,123 +2217,21 @@ mod tests {
                     contexts,
                     None,
                 );
+                let skipped_remote_dkg_ids = make_setup_initial_dkg_ids(skipped_target_id);
+                let setup_remote_dkg_ids = make_setup_initial_dkg_ids(setup_target_id);
+                let reshare_dkg_id = make_reshare_chain_key_id(reshare_target_id);
 
-                // Advance to one block before the summary.
-                deps.pool
-                    .advance_round_normal_operation_n(EARLY_DKG_INTERVAL);
-
-                // The original summary only includes configs for the first target
-                // (skipped_target_id) due to MAX_REMOTE_DKGS_PER_INTERVAL=1.
-                let summary_proposal = deps.pool.make_next_block();
-                let mut summary_block: Block = summary_proposal.content.into_inner();
-                let original_summary = summary_block.payload.as_ref().as_summary().dkg.clone();
-
-                let skipped_remote_dkg_ids: Vec<NiDkgId> = original_summary
+                // get the latest finalized summary block
+                let summary_block =
+                    PoolReader::new(&deps.pool).get_highest_finalized_summary_block();
+                // it should not have any remote configs
+                let summary = &summary_block.payload.as_ref().as_summary().dkg;
+                let remote_dkg_ids_count = summary
                     .configs
                     .keys()
-                    .filter(|id| id.target_subnet == NiDkgTargetSubnet::Remote(skipped_target_id))
-                    .cloned()
-                    .collect();
-                assert_eq!(
-                    skipped_remote_dkg_ids.len(),
-                    2,
-                    "[{desc}] Expected 2 skipped SetupInitialDKG remote configs"
-                );
-
-                // Create setup configs for setup_target_id by cloning from the
-                // skipped target's configs (same structure, different target).
-                let setup_configs: Vec<NiDkgConfig> = original_summary
-                    .configs
-                    .values()
-                    .filter(|c| {
-                        c.dkg_id().target_subnet == NiDkgTargetSubnet::Remote(skipped_target_id)
-                    })
-                    .map(|c| {
-                        NiDkgConfig::new(NiDkgConfigData {
-                            dkg_id: NiDkgId {
-                                target_subnet: NiDkgTargetSubnet::Remote(setup_target_id),
-                                ..c.dkg_id().clone()
-                            },
-                            max_corrupt_dealers: c.max_corrupt_dealers(),
-                            dealers: c.dealers().get().clone(),
-                            max_corrupt_receivers: c.max_corrupt_receivers(),
-                            receivers: c.receivers().get().clone(),
-                            threshold: c.threshold().get(),
-                            registry_version: c.registry_version(),
-                            resharing_transcript: c.resharing_transcript().clone(),
-                        })
-                        .unwrap()
-                    })
-                    .collect();
-                let setup_remote_dkg_ids: Vec<NiDkgId> =
-                    setup_configs.iter().map(|c| c.dkg_id().clone()).collect();
-
-                // Manually create a ReshareChainKey config.
-                let reshare_dkg_id = NiDkgId {
-                    start_block_height: original_summary.height,
-                    dealer_subnet: subnet_test_id(0),
-                    dkg_tag: NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(
-                        key_id.clone(),
-                    )),
-                    target_subnet: NiDkgTargetSubnet::Remote(reshare_target_id),
-                };
-
-                let dealers: BTreeSet<_> = node_ids.iter().cloned().collect();
-                let receivers: BTreeSet<_> = (10..14).map(node_test_id).collect();
-
-                let resharing_transcript = dummy_transcript_for_tests_with_params(
-                    node_ids.clone(),
-                    NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(key_id.clone())),
-                    3, // 2f + 1
-                    10,
-                );
-
-                let reshare_config = NiDkgConfig::new(NiDkgConfigData {
-                    threshold: NumberOfNodes::from(
-                        reshare_dkg_id
-                            .dkg_tag
-                            .threshold_for_subnet_of_size(receivers.len())
-                            as u32,
-                    ),
-                    dkg_id: reshare_dkg_id.clone(),
-                    max_corrupt_dealers: NumberOfNodes::from(
-                        get_faults_tolerated(dealers.len()) as u32
-                    ),
-                    max_corrupt_receivers: NumberOfNodes::from(
-                        get_faults_tolerated(receivers.len()) as u32,
-                    ),
-                    dealers,
-                    receivers,
-                    registry_version,
-                    resharing_transcript: Some(resharing_transcript),
-                })
-                .expect("Failed to create reshare config");
-
-                // Build a modified summary with configs for all three targets.
-                let mut all_configs: Vec<NiDkgConfig> =
-                    original_summary.configs.values().cloned().collect();
-                all_configs.extend(setup_configs);
-                all_configs.push(reshare_config);
-                let modified_summary = DkgSummary::new(
-                    all_configs,
-                    original_summary.current_transcripts().clone(),
-                    original_summary.next_transcripts().clone(),
-                    vec![],
-                    original_summary.registry_version,
-                    original_summary.interval_length,
-                    original_summary.next_interval_length,
-                    original_summary.height,
-                    BTreeMap::new(),
-                );
-                summary_block.payload = Payload::new(
-                    ic_types::crypto::crypto_hash,
-                    BlockPayload::Summary(SummaryPayload {
-                        dkg: modified_summary,
-                        idkg: None,
-                    }),
-                );
-                let proposal = BlockProposal::fake(summary_block, node_test_id(0));
-                deps.pool.advance_round_with_block(&proposal);
+                    .filter(|id| id.target_subnet != NiDkgTargetSubnet::Local)
+                    .count();
+                assert_eq!(remote_dkg_ids_count, 0);
 
                 // Add dealings for only ONE of the skipped target's two configs
                 // (insufficient), all setup target configs, and the reshare config.
@@ -2654,138 +2299,6 @@ mod tests {
                 }
             });
         }
-    }
-
-    #[test]
-    fn test_dkg_payload_has_transcript_for_reshare_chain_key_request() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let node_ids = vec![node_test_id(0), node_test_id(1)];
-            let dkg_interval_length = 99;
-            let subnet_id = subnet_test_id(0);
-            let key_id = VetKdKeyId {
-                curve: VetKdCurve::Bls12_381_G2,
-                name: String::from("some_vetkey"),
-            };
-            let target_id = NiDkgTargetId::new([0_u8; 32]);
-
-            let Dependencies {
-                mut pool,
-                registry,
-                state_manager,
-                ..
-            } = dependencies_with_subnet_params(
-                pool_config,
-                subnet_id,
-                vec![(
-                    10,
-                    SubnetRecordBuilder::from(&node_ids)
-                        .with_dkg_interval_length(dkg_interval_length)
-                        .with_chain_key_config(ChainKeyConfig {
-                            key_configs: vec![KeyConfig {
-                                key_id: MasterPublicKeyId::VetKd(key_id.clone()),
-                                pre_signatures_to_create_in_advance: None,
-                                max_queue_size: 20,
-                            }],
-                            signature_request_timeout_ns: None,
-                            idkg_key_rotation_period_ms: None,
-                            max_parallel_pre_signature_transcripts_in_creation: None,
-                        })
-                        .build(),
-                )],
-            );
-
-            // Wait for creation of local VetKD transcripts
-            pool.advance_round_normal_operation_n(dkg_interval_length + 1);
-            let block: Block = pool
-                .validated()
-                .block_proposal()
-                .get_highest()
-                .unwrap()
-                .content
-                .into_inner();
-
-            let dkg_summary = &block.payload.as_ref().as_summary().dkg;
-            assert_eq!(dkg_summary.configs.len(), 3);
-            assert_eq!(
-                dkg_summary
-                    .configs
-                    .keys()
-                    .filter(|id| id.target_subnet == NiDkgTargetSubnet::Remote(target_id))
-                    .count(),
-                0
-            );
-            assert_eq!(dkg_summary.current_transcripts().len(), 3);
-            assert_eq!(dkg_summary.next_transcripts().len(), 3);
-            assert!(dkg_summary.transcripts_for_remote_subnets.is_empty());
-
-            // Put a reshare_chain_key request into the state
-            // NOTE: The checkpoint evaluates and resets the mockall expectations rules,
-            // such that we can modify the state.
-            state_manager.get_mut().checkpoint();
-            complement_state_manager_with_reshare_chain_key_request(
-                state_manager,
-                registry.get_latest_version(),
-                key_id,
-                vec![10, 11, 12],
-                None,
-                Some(target_id),
-            );
-
-            // Wait for creation of VetKD config
-            pool.advance_round_normal_operation_n(dkg_interval_length + 1);
-            let block: Block = pool
-                .validated()
-                .block_proposal()
-                .get_highest()
-                .unwrap()
-                .content
-                .into_inner();
-
-            let dkg_summary = &block.payload.as_ref().as_summary().dkg;
-            assert_eq!(dkg_summary.configs.len(), 4);
-            assert_eq!(
-                dkg_summary
-                    .configs
-                    .keys()
-                    .filter(|id| id.target_subnet == NiDkgTargetSubnet::Remote(target_id))
-                    .count(),
-                1
-            );
-            assert_eq!(dkg_summary.current_transcripts().len(), 3);
-            assert_eq!(dkg_summary.next_transcripts().len(), 3);
-            assert!(dkg_summary.transcripts_for_remote_subnets.is_empty());
-
-            // Wait for creation of VetKD transcript
-            pool.advance_round_normal_operation_n(dkg_interval_length + 1);
-            let block: Block = pool
-                .validated()
-                .block_proposal()
-                .get_highest()
-                .unwrap()
-                .content
-                .into_inner();
-
-            let dkg_summary = &block.payload.as_ref().as_summary().dkg;
-            assert_eq!(dkg_summary.configs.len(), 3);
-            assert_eq!(
-                dkg_summary
-                    .configs
-                    .keys()
-                    .filter(|id| id.target_subnet == NiDkgTargetSubnet::Remote(target_id))
-                    .count(),
-                0
-            );
-            assert_eq!(dkg_summary.current_transcripts().len(), 3);
-            assert_eq!(dkg_summary.next_transcripts().len(), 3);
-            assert_eq!(
-                dkg_summary
-                    .transcripts_for_remote_subnets
-                    .iter()
-                    .filter(|(id, _, _)| id.target_subnet == NiDkgTargetSubnet::Remote(target_id))
-                    .count(),
-                1
-            );
-        })
     }
 
     /*
