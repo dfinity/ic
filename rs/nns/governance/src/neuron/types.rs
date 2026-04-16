@@ -3,7 +3,7 @@ use crate::{
     governance::{LOG_PREFIX, MAX_NUM_HOT_KEYS_PER_NEURON, max_dissolve_delay_seconds},
     neuron::{
         age_bonus_multiplier, combine_aged_stakes, dissolve_delay_bonus_multiplier,
-        dissolve_state_and_age::DissolveStateAndAge, eight_year_gang_bonus, neuron_stake_e8s,
+        dissolve_state_and_age::DissolveStateAndAge, neuron_stake_e8s,
     },
     neuron_store::NeuronStoreError,
     pb::v1::{
@@ -333,12 +333,8 @@ impl Neuron {
             .1
     }
 
-    /// Voting power is fundamentally based on the amount staked plus the
-    /// 8 Year Gang bonus (10% of the bonus base, capped to the current stake).
-    /// The bonus base is set for neurons that had the maximum dissolve delay
-    /// before Mission 70 reduced it from 8 years to 2 years.
-    ///
-    /// From that effective stake, voting power is boosted by two factors:
+    /// Voting power is fundamentally based on the amount staked. From that
+    /// base, it is boosted by two factors:
     ///
     /// * Its current dissolve delay (i.e. how much time must pass before, the
     ///   ICP can be taken out of the neuron). The maximum dissolve delay bonus
@@ -351,6 +347,11 @@ impl Neuron {
     ///
     /// These bonuses are multiplied together, not added. So the maximum total
     /// bonus multiplier is 3.75x.
+    ///
+    /// In addition, there is the "8 Year Gang bonus", which starts with 10% of
+    /// the staked amount (as of when Mission 70 began taking effect), applies
+    /// the two bonuses mentioned above (for dissolve delay and age), and adds
+    /// to the final (potential) voting power.
     ///
     /// In production, it is usually (always?) the case that you also want
     /// deciding voting power. If you need both, use
@@ -372,13 +373,15 @@ impl Neuron {
         now_seconds: u64,
     ) -> (u64, u64) {
         let stake_e8s = self.stake_e8s();
-        // Cap the bonus base to the current stake because rejection fees can cause the
-        // bonus base to exceed stake_e8s.
-        let eight_year_gang_bonus_base_e8s = self.eight_year_gang_bonus_base_e8s.min(stake_e8s);
-        let potential_voting_power = (Decimal::from(stake_e8s)
-            + eight_year_gang_bonus(eight_year_gang_bonus_base_e8s))
-            * dissolve_delay_bonus_multiplier(self.dissolve_delay_seconds(now_seconds))
+        let boost = dissolve_delay_bonus_multiplier(self.dissolve_delay_seconds(now_seconds))
             * age_bonus_multiplier(self.age_seconds(now_seconds));
+        let mut potential_voting_power = Decimal::from(stake_e8s) * boost;
+
+        // 8 Year Gang bonus. Cap the bonus base to the current stake because
+        // rejection fees can cause the bonus base to exceed stake_e8s.
+        let eight_year_gang_bonus_base_e8s = self.eight_year_gang_bonus_base_e8s.min(stake_e8s);
+        potential_voting_power +=
+            Decimal::from(eight_year_gang_bonus_base_e8s) / Decimal::from(10) * boost;
 
         // For DECIDING voting power.
         let adjustment_factor: Decimal = {
