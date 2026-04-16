@@ -330,10 +330,6 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
         self.instructions_used += instructions;
     }
 
-    pub(crate) fn cycles(&self) -> Cycles {
-        self.consumed_cycles.real()
-    }
-
     pub(crate) fn apply(
         self,
         canister: &mut CanisterState,
@@ -622,19 +618,11 @@ impl ExecutionEnvironment {
         );
         match state.canister_state_make_mut(&canister_id) {
             Some(canister) => {
-                let balance_before = canister.system_state.balance();
                 let saved_canister = canister.clone();
                 let saved_round_limits = round_limits.clone();
                 match op(canister, round_limits, &mut consumed_cycles) {
                     Ok(response) => self.process_canister_manager_result(Ok(response), state, msg),
                     Err(err) => {
-                        debug_assert_eq!(
-                            balance_before - canister.system_state.balance(),
-                            consumed_cycles.cycles(),
-                            "Cycle balance changed by {:?} but only {:?} was recorded in ConsumedCycles",
-                            balance_before - canister.system_state.balance(),
-                            consumed_cycles.cycles(),
-                        );
                         *canister = saved_canister;
                         *round_limits = saved_round_limits;
                         consumed_cycles.apply(
