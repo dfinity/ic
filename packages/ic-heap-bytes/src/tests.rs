@@ -4,13 +4,13 @@ use super::{DeterministicHeapBytes, HeapBytes, deterministic_total_bytes, total_
 
 #[test]
 fn empty_deterministic_total_bytes() {
-    #[derive(Default, DeterministicHeapBytes)]
+    #[derive(DeterministicHeapBytes, Default)]
     struct S {}
     assert_eq!(deterministic_total_bytes(&S::default()), 0);
-    #[derive(Default, DeterministicHeapBytes)]
+    #[derive(DeterministicHeapBytes, Default)]
     struct T();
     assert_eq!(deterministic_total_bytes(&T::default()), 0);
-    #[derive(Default, DeterministicHeapBytes)]
+    #[derive(DeterministicHeapBytes, Default)]
     enum E {
         #[default]
         One,
@@ -34,13 +34,13 @@ fn empty_deterministic_total_bytes() {
 
 #[test]
 fn empty_total_bytes() {
-    #[derive(Default, HeapBytes)]
+    #[derive(HeapBytes, Default)]
     struct S {}
     assert_eq!(total_bytes(&S::default()), 0);
-    #[derive(Default, HeapBytes)]
+    #[derive(HeapBytes, Default)]
     struct T();
     assert_eq!(total_bytes(&T::default()), 0);
-    #[derive(Default, HeapBytes)]
+    #[derive(HeapBytes, Default)]
     enum E {
         #[default]
         One,
@@ -61,7 +61,7 @@ fn empty_total_bytes() {
 
 macro_rules! assert_struct_basic_field_total_bytes_eq {
     ($field_type:ty, $expected_size:expr_2021) => {{
-        #[derive(Default, DeterministicHeapBytes)]
+        #[derive(DeterministicHeapBytes, Default)]
         struct S {
             v: $field_type,
         }
@@ -91,7 +91,7 @@ fn struct_basic_field_total_bytes() {
 
 #[test]
 fn struct_basic_fields_total_bytes() {
-    #[derive(Default, DeterministicHeapBytes)]
+    #[derive(DeterministicHeapBytes, Default)]
     struct S {
         v1: u8,
         v2: u128,
@@ -101,7 +101,7 @@ fn struct_basic_fields_total_bytes() {
 
 macro_rules! assert_tuple_struct_basic_field_total_bytes_eq {
     ($field_type:ty, $expected_size:expr_2021) => {{
-        #[derive(Default, DeterministicHeapBytes)]
+        #[derive(DeterministicHeapBytes, Default)]
         struct S($field_type);
         assert_eq!(deterministic_total_bytes(&S::default()), $expected_size);
     }};
@@ -129,38 +129,38 @@ fn tuple_struct_basic_field_total_bytes() {
 
 #[test]
 fn tuple_struct_basic_fields_total_bytes() {
-    #[derive(Default, DeterministicHeapBytes)]
+    #[derive(DeterministicHeapBytes, Default)]
     struct T1(u8);
     assert_eq!(deterministic_total_bytes(&T1::default()), size_of::<T1>());
-    #[derive(Default, DeterministicHeapBytes)]
+    #[derive(DeterministicHeapBytes, Default)]
     struct T2(u8, bool);
     assert!(size_of::<T2>() > size_of::<T1>());
     assert_eq!(deterministic_total_bytes(&T2::default()), size_of::<T2>());
-    #[derive(Default, DeterministicHeapBytes)]
+    #[derive(DeterministicHeapBytes, Default)]
     struct T3(u8, bool, u16);
     assert!(size_of::<T3>() > size_of::<T2>());
     assert_eq!(deterministic_total_bytes(&T3::default()), size_of::<T3>());
-    #[derive(Default, DeterministicHeapBytes)]
+    #[derive(DeterministicHeapBytes, Default)]
     struct T4(u8, bool, u16, u32);
     assert!(size_of::<T4>() > size_of::<T3>());
     assert_eq!(deterministic_total_bytes(&T4::default()), size_of::<T4>());
-    #[derive(Default, DeterministicHeapBytes)]
+    #[derive(DeterministicHeapBytes, Default)]
     struct T5(u8, bool, u16, u32, f32);
     assert!(size_of::<T5>() > size_of::<T4>());
     assert_eq!(deterministic_total_bytes(&T5::default()), size_of::<T5>());
-    #[derive(Default, DeterministicHeapBytes)]
+    #[derive(DeterministicHeapBytes, Default)]
     struct T6(u8, bool, u16, u32, f32, char);
     assert!(size_of::<T6>() > size_of::<T5>());
     assert_eq!(deterministic_total_bytes(&T6::default()), size_of::<T6>());
-    #[derive(Default, DeterministicHeapBytes)]
+    #[derive(DeterministicHeapBytes, Default)]
     struct T7(u8, bool, u16, u32, f32, char, u64);
     assert!(size_of::<T7>() > size_of::<T6>());
     assert_eq!(deterministic_total_bytes(&T7::default()), size_of::<T7>());
-    #[derive(Default, DeterministicHeapBytes)]
+    #[derive(DeterministicHeapBytes, Default)]
     struct T8(u8, bool, u16, u32, f32, char, u64, f64);
     assert!(size_of::<T8>() > size_of::<T7>());
     assert_eq!(deterministic_total_bytes(&T8::default()), size_of::<T8>());
-    #[derive(Default, DeterministicHeapBytes)]
+    #[derive(DeterministicHeapBytes, Default)]
     struct T9(u8, bool, u16, u32, f32, char, u64, f64, u128);
     assert!(size_of::<T9>() > size_of::<T8>());
     assert_eq!(deterministic_total_bytes(&T9::default()), size_of::<T9>());
@@ -213,7 +213,7 @@ fn enum_tuple_total_bytes() {
 
 #[test]
 fn enum_repr_total_bytes() {
-    #[derive(Default, DeterministicHeapBytes)]
+    #[derive(DeterministicHeapBytes, Default)]
     #[repr(u8)]
     enum U8 {
         #[default]
@@ -221,7 +221,7 @@ fn enum_repr_total_bytes() {
     }
     assert_eq!(deterministic_total_bytes(&U8::default()), size_of::<u8>());
 
-    #[derive(Default, DeterministicHeapBytes)]
+    #[derive(DeterministicHeapBytes, Default)]
     #[repr(u64)]
     enum U64 {
         #[default]
@@ -232,7 +232,7 @@ fn enum_repr_total_bytes() {
 
 #[test]
 fn enum_discriminant_total_bytes() {
-    #[derive(Default, DeterministicHeapBytes)]
+    #[derive(DeterministicHeapBytes, Default)]
     #[allow(dead_code)]
     enum E {
         #[default]
@@ -569,7 +569,7 @@ fn result_basic_total_bytes() {
 
 #[test]
 fn mixed_struct() {
-    #[derive(Default, DeterministicHeapBytes)]
+    #[derive(DeterministicHeapBytes, Default)]
     struct S {
         b: usize,
         s: String,
@@ -594,7 +594,7 @@ fn mixed_struct() {
 #[test]
 fn mixed_enum() {
     #[allow(dead_code)]
-    #[derive(Default, DeterministicHeapBytes)]
+    #[derive(DeterministicHeapBytes, Default)]
     #[repr(usize)]
     enum E {
         #[default]
@@ -836,7 +836,7 @@ fn with_external_types() {
         Two(u32),
     }
 
-    #[derive(Default, DeterministicHeapBytes)]
+    #[derive(DeterministicHeapBytes, Default)]
     struct S {
         #[deterministic_heap_bytes(with = |v: &Vec<_>| v.len() + 7)]
         v: Vec<ExternalStruct>,

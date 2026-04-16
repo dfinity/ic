@@ -81,7 +81,7 @@ fn http_request(request: HttpGatewayRequest) -> HttpGatewayResponse {
 
 // Schnorr interface
 
-#[derive(Copy, Clone, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Debug, Copy, Clone)]
 pub enum SchnorrAlgorithm {
     #[serde(rename = "bip340secp256k1")]
     Bip340Secp256k1,
@@ -89,26 +89,26 @@ pub enum SchnorrAlgorithm {
     Ed25519,
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 struct SchnorrKeyId {
     pub algorithm: SchnorrAlgorithm,
     pub name: String,
 }
 
-#[derive(Debug, CandidType, Serialize)]
+#[derive(CandidType, Serialize, Debug)]
 struct SchnorrPublicKeyArgument {
     pub canister_id: Option<Principal>,
     pub derivation_path: Vec<Vec<u8>>,
     pub key_id: SchnorrKeyId,
 }
 
-#[derive(Debug, CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Debug)]
 struct SchnorrPublicKeyResponse {
     pub public_key: Vec<u8>,
     pub chain_code: Vec<u8>,
 }
 
-#[derive(Debug, CandidType, Serialize)]
+#[derive(CandidType, Serialize, Debug)]
 struct SignWithSchnorrArgument {
     pub message: Vec<u8>,
     pub derivation_path: Vec<Vec<u8>>,
@@ -116,18 +116,18 @@ struct SignWithSchnorrArgument {
     pub aux: Option<SignWithSchnorrAux>,
 }
 
-#[derive(Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Debug)]
 pub enum SignWithSchnorrAux {
     #[serde(rename = "bip341")]
     Bip341(SignWithBip341Aux),
 }
 
-#[derive(Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Debug)]
 pub struct SignWithBip341Aux {
     pub merkle_root_hash: ByteBuf,
 }
 
-#[derive(Debug, CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Debug)]
 struct SignWithSchnorrResponse {
     pub signature: Vec<u8>,
 }
@@ -240,32 +240,32 @@ async fn sign_with_ecdsa(
 
 // vetKd interface
 
-#[derive(Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Debug)]
 pub enum VetKdCurve {
     #[serde(rename = "bls12_381_g2")]
     #[allow(non_camel_case_types)]
     Bls12_381_G2,
 }
 
-#[derive(Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Debug)]
 pub struct VetKdKeyId {
     pub curve: VetKdCurve,
     pub name: String,
 }
 
-#[derive(Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Debug)]
 pub struct VetKdPublicKeyArgument {
     pub canister_id: Option<Principal>,
     pub context: Vec<u8>,
     pub key_id: VetKdKeyId,
 }
 
-#[derive(Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Debug)]
 pub struct VetKdPublicKeyResponse {
     pub public_key: Vec<u8>,
 }
 
-#[derive(Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Debug)]
 pub struct VetKdDeriveKeyArgument {
     pub context: Vec<u8>,
     pub input: Vec<u8>,
@@ -273,7 +273,7 @@ pub struct VetKdDeriveKeyArgument {
     pub transport_public_key: Vec<u8>,
 }
 
-#[derive(Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Debug)]
 pub struct VetKdDeriveKeyResponse {
     pub encrypted_key: Vec<u8>,
 }

@@ -593,7 +593,7 @@ fn test_cycles_ledger() {
         amount: Nat,
     }
 
-    #[derive(Debug, CandidType, Deserialize)]
+    #[derive(CandidType, Deserialize, Debug)]
     enum WithdrawError {
         InsufficientFunds { balance: Nat },
     }
