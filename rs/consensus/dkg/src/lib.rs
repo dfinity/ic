@@ -313,11 +313,9 @@ pub(crate) fn merge_configs<'a>(
     config_results: &'a BTreeMap<CallbackId, ConfigResult>,
 ) -> BTreeMap<&'a NiDkgId, &'a NiDkgConfig> {
     let mut merged_configs: BTreeMap<&NiDkgId, &NiDkgConfig> = summary_configs.iter().collect();
-    for config_result in config_results.values() {
-        if let Ok(configs) = config_result {
-            for config in configs {
-                merged_configs.insert(config.dkg_id(), config);
-            }
+    for configs in config_results.values().flatten() {
+        for config in configs {
+            merged_configs.insert(config.dkg_id(), config);
         }
     }
     merged_configs
