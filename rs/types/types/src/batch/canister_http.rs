@@ -45,7 +45,7 @@ pub enum FlexibleCanisterHttpError {
     },
     ResponsesTooLarge {
         callback_id: CallbackId,
-        metadata_shares: Vec<CanisterHttpResponseShare>,
+        all_seen_shares: Vec<CanisterHttpResponseShare>,
     },
     TooManyRequestErrors {
         callback_id: CallbackId,
@@ -115,10 +115,10 @@ impl CountBytes for FlexibleCanisterHttpError {
             Self::Timeout { callback_id } => callback_id.count_bytes(),
             Self::ResponsesTooLarge {
                 callback_id,
-                metadata_shares,
+                all_seen_shares,
             } => {
                 callback_id.count_bytes()
-                    + metadata_shares
+                    + all_seen_shares
                         .iter()
                         .map(|s| s.count_bytes())
                         .sum::<usize>()
@@ -437,9 +437,9 @@ impl From<FlexibleCanisterHttpError> for pb::FlexibleCanisterHttpError {
                 ErrorDetails::Timeout(pb::FlexibleCanisterHttpTimeout {})
             }
             FlexibleCanisterHttpError::ResponsesTooLarge {
-                metadata_shares, ..
+                all_seen_shares, ..
             } => ErrorDetails::ResponsesTooLarge(pb::FlexibleCanisterHttpResponsesTooLarge {
-                metadata_shares: metadata_shares
+                all_seen_shares: all_seen_shares
                     .into_iter()
                     .map(pb::CanisterHttpShare::from)
                     .collect(),
@@ -471,14 +471,14 @@ impl TryFrom<pb::FlexibleCanisterHttpError> for FlexibleCanisterHttpError {
                 Ok(FlexibleCanisterHttpError::Timeout { callback_id })
             }
             Some(ErrorDetails::ResponsesTooLarge(details)) => {
-                let metadata_shares = details
-                    .metadata_shares
+                let all_seen_shares = details
+                    .all_seen_shares
                     .into_iter()
                     .map(CanisterHttpResponseShare::try_from)
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(FlexibleCanisterHttpError::ResponsesTooLarge {
                     callback_id,
-                    metadata_shares,
+                    all_seen_shares,
                 })
             }
             Some(ErrorDetails::TooManyRequestErrors(details)) => {

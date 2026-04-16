@@ -715,6 +715,7 @@ impl CanisterHttpPayloadBuilderImpl {
                     callback_id,
                 ));
             };
+            let min_responses = *min_responses as usize;
 
             match error {
                 FlexibleCanisterHttpError::Timeout { .. } => {
@@ -749,8 +750,7 @@ impl CanisterHttpPayloadBuilderImpl {
                         }
                     }
 
-                    let max_allowed_rejects =
-                        flex_committee.len().saturating_sub(*min_responses as usize);
+                    let max_allowed_rejects = flex_committee.len().saturating_sub(min_responses);
                     if reject_responses.len() <= max_allowed_rejects {
                         return invalid_artifact(
                             InvalidCanisterHttpPayloadReason::FlexibleInsufficientRejectCount {
@@ -762,11 +762,11 @@ impl CanisterHttpPayloadBuilderImpl {
                     }
                 }
                 FlexibleCanisterHttpError::ResponsesTooLarge {
-                    metadata_shares, ..
+                    all_seen_shares, ..
                 } => {
                     let mut seen_signers = HashSet::new();
 
-                    for share in metadata_shares {
+                    for share in all_seen_shares {
                         validate_response_share(
                             share,
                             callback_id,
@@ -778,30 +778,32 @@ impl CanisterHttpPayloadBuilderImpl {
                         .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
                     }
 
-                    if metadata_shares.len() < *min_responses as usize {
-                        return invalid_artifact(
-                            InvalidCanisterHttpPayloadReason::FlexibleInsufficientMetadataShareCount {
-                                callback_id,
-                                share_count: metadata_shares.len(),
-                                min_needed: *min_responses as usize,
-                            },
-                        );
-                    }
-                    // Verify the smallest `min_responses` response-with-proof sizes
-                    // actually exceed MAX_CANISTER_HTTP_PAYLOAD_SIZE.
-                    let canister_id = &context.request.sender;
-                    let mut entry_sizes: Vec<usize> = metadata_shares
+                    let num_unseen = flex_committee.len().saturating_sub(all_seen_shares.len());
+                    let min_known_ok_needed = min_responses.saturating_sub(num_unseen);
+
+                    let mut ok_entry_sizes: Vec<usize> = all_seen_shares
                         .iter()
+                        .filter(|share| !share.content.is_reject)
                         .map(|share| {
                             FlexibleCanisterHttpResponseWithProof::count_bytes_from_parts(
-                                canister_id,
+                                &context.request.sender,
                                 share.content.content_size as usize,
                                 share,
                             )
                         })
                         .collect();
-                    entry_sizes.sort_unstable();
-                    let smallest_sum: usize = entry_sizes[..*min_responses as usize].iter().sum();
+                    if ok_entry_sizes.len() < min_known_ok_needed {
+                        return invalid_artifact(
+                            InvalidCanisterHttpPayloadReason::FlexibleResponsesTooLargeInsufficientEvidence {
+                                callback_id,
+                                ok_count: ok_entry_sizes.len(),
+                                min_known_ok_needed,
+                            },
+                        );
+                    }
+
+                    ok_entry_sizes.sort_unstable();
+                    let smallest_sum: usize = ok_entry_sizes.iter().take(min_known_ok_needed).sum();
                     if smallest_sum <= MAX_CANISTER_HTTP_PAYLOAD_SIZE {
                         return invalid_artifact(
                             InvalidCanisterHttpPayloadReason::FlexibleResponsesNotTooLarge(

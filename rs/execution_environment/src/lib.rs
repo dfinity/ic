@@ -379,7 +379,6 @@ fn setup_execution_helper(
         canister_manager_config,
         Arc::clone(&cycles_account_manager),
         Arc::clone(&fd_factory),
-        config.environment_variables,
     ));
 
     let exec_env = Arc::new(ExecutionEnvironment::new(

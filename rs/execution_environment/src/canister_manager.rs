@@ -115,7 +115,6 @@ pub(crate) struct CanisterManager {
     config: CanisterMgrConfig,
     cycles_account_manager: Arc<CyclesAccountManager>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-    environment_variables_flag: FlagStatus,
 }
 
 impl CanisterManager {
@@ -125,7 +124,6 @@ impl CanisterManager {
         config: CanisterMgrConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-        environment_variables_flag: FlagStatus,
     ) -> Self {
         CanisterManager {
             hypervisor,
@@ -133,7 +131,6 @@ impl CanisterManager {
             config,
             cycles_account_manager,
             fd_factory,
-            environment_variables_flag,
         }
     }
 
@@ -658,9 +655,7 @@ impl CanisterManager {
         if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
             canister.system_state.wasm_memory_limit = Some(wasm_memory_limit);
         }
-        if let Some(environment_variables) = settings.environment_variables()
-            && self.environment_variables_flag == FlagStatus::Enabled
-        {
+        if let Some(environment_variables) = settings.environment_variables() {
             canister.system_state.environment_variables = environment_variables.clone();
         }
     }
@@ -1603,26 +1598,14 @@ impl CanisterManager {
             .copied()
             .collect();
 
-        let available_execution_memory_change = match self.environment_variables_flag {
-            FlagStatus::Enabled => {
-                let environment_variables_hash = settings
-                    .environment_variables()
-                    .map(|env_vars| env_vars.hash());
-                new_canister.add_canister_change(
-                    state.time(),
-                    origin,
-                    CanisterChangeDetails::canister_creation(
-                        controllers,
-                        environment_variables_hash,
-                    ),
-                )
-            }
-            FlagStatus::Disabled => new_canister.add_canister_change(
-                state.time(),
-                origin,
-                CanisterChangeDetails::canister_creation(controllers, None),
-            ),
-        };
+        let environment_variables_hash = settings
+            .environment_variables()
+            .map(|env_vars| env_vars.hash());
+        let available_execution_memory_change = new_canister.add_canister_change(
+            state.time(),
+            origin,
+            CanisterChangeDetails::canister_creation(controllers, environment_variables_hash),
+        );
         round_limits
             .subnet_available_memory
             .update_execution_memory_unchecked(available_execution_memory_change);
