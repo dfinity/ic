@@ -442,6 +442,9 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         download_pool_node: Some(download_pool_node.get_ip_addr()),
         admin_access_location: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
         keep_downloaded_state: Some(false),
+        // If the state height to download was computed to be 0 (i.e. the subnet stalled in its
+        // first DKG interval), there is no checkpoint yet and we should actually not provide a
+        // height to the recovery tool
         download_state_height: (highest_cup != 0).then_some(highest_cup),
         wait_for_cup_node: (!cfg.fix_dfinity_owned_node_like_np)
             .then_some(dfinity_owned_node.get_ip_addr()),

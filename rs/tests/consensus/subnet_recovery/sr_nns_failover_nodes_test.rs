@@ -202,6 +202,9 @@ pub fn test(env: TestEnv) {
         registry_url: None,
         validate_nns_url: nns_node.get_public_url(),
         download_node: Some(download_node.get_ip_addr()),
+        // If the state height to download was computed to be 0 (i.e. the subnet stalled in its
+        // first DKG interval), there is no checkpoint yet and we should actually not provide a
+        // height to the recovery tool
         download_state_height: (highest_cup != 0).then_some(highest_cup),
         upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
         parent_nns_host_ip: Some(parent_nns_node.get_ip_addr()),
