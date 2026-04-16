@@ -181,9 +181,13 @@ enum Opt {
         #[clap(long = "checkpoint")]
         path: PathBuf,
 
-        /// Output path.
+        /// Caniser load output path.
         #[clap(long)]
-        output: PathBuf,
+        canister_load_output: PathBuf,
+
+        /// Caniser connections output path.
+        #[clap(long)]
+        canister_connections_output: PathBuf,
     },
 }
 
@@ -298,7 +302,15 @@ pub(crate) fn main_inner(args: Vec<String>) {
             &mut std::io::stdout(),
         ),
         Opt::ParseOverlay { path } => commands::parse_overlay::do_parse_overlay(path),
-        Opt::CanisterMetrics { path, output } => commands::canister_metrics::get(path, &output),
+        Opt::CanisterMetrics {
+            path,
+            canister_load_output,
+            canister_connections_output,
+        } => commands::canister_metrics::get(
+            path,
+            &canister_load_output,
+            &canister_connections_output,
+        ),
     };
 
     if let Err(e) = result {

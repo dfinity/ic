@@ -103,15 +103,14 @@ impl LRUConnectionMetrics {
     }
 
     fn evict(&mut self) {
-        if self.metrics_per_canister.len() > MAX_CAPACITY {
-            if let Some(canister_id) = self
+        if self.metrics_per_canister.len() > MAX_CAPACITY
+            && let Some(canister_id) = self
                 .metrics_per_canister
                 .iter()
                 .min_by_key(|(_canister_id, counter)| counter.last_access_timestamp)
                 .map(|(canister_id, _)| *canister_id)
-            {
-                let _ = self.metrics_per_canister.remove(&canister_id);
-            }
+        {
+            let _ = self.metrics_per_canister.remove(&canister_id);
         }
     }
 
