@@ -760,7 +760,10 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
             Operation::FeeCollector { .. } => {
                 panic!("FeeCollector107 not implemented")
             }
-            Operation::Mint { .. } | Operation::Burn { .. } => None,
+            Operation::Mint { .. }
+            | Operation::Burn { .. }
+            | Operation::AuthorizedMint { .. }
+            | Operation::AuthorizedBurn { .. } => None,
         };
         let (fee_collector, fee_collector_block_index) = match fee_collector {
             Some(FeeCollector {
