@@ -218,7 +218,12 @@ impl ReplicaResponse {
 
     fn expect_update_ok(&self) {
         // Use v3 API: expect 200 with a certificate
-        assert_eq!(self.status(), 200, "Expected 200 for v3 update, got {}", self.status());
+        assert_eq!(
+            self.status(),
+            200,
+            "Expected 200 for v3 update, got {}",
+            self.status()
+        );
         match &self.body {
             ResponseBody::Cbor(serde_cbor::Value::Map(m)) => {
                 assert!(
@@ -503,7 +508,10 @@ pub fn update_reads_sender_info_data_and_signer(env: TestEnv) {
 
             // Update: store caller_info_data at stable[0..] and
             //         caller_info_signer at stable[100..]
-            debug!(logger, "Sending update to store sender_info in stable memory");
+            debug!(
+                logger,
+                "Sending update to store sender_info in stable memory"
+            );
             let payload = wasm()
                 .stable_grow(1)
                 .push_int(0)
@@ -515,8 +523,7 @@ pub fn update_reads_sender_info_data_and_signer(env: TestEnv) {
                 .reply()
                 .build();
 
-            let response =
-                send_update_with_sender_info(&test_info, &ctx, payload).await;
+            let response = send_update_with_sender_info(&test_info, &ctx, payload).await;
             response.expect_update_ok();
 
             // Read back caller_info_data from stable memory
@@ -579,7 +586,10 @@ pub fn no_sender_info_returns_empty(env: TestEnv) {
             );
 
             // Query: msg_caller_info_signer should be empty
-            debug!(logger, "Querying msg_caller_info_signer without sender_info");
+            debug!(
+                logger,
+                "Querying msg_caller_info_signer without sender_info"
+            );
             let result = canister
                 .query(wasm().msg_caller_info_signer().append_and_reply().build())
                 .await
@@ -635,8 +645,7 @@ pub fn inter_canister_call_does_not_propagate_sender_info(env: TestEnv) {
                 )
                 .build();
 
-            let response =
-                send_update_with_sender_info(&test_info, &ctx, payload).await;
+            let response = send_update_with_sender_info(&test_info, &ctx, payload).await;
             response.expect_update_ok();
 
             // Read UC B's stable memory. If sender_info propagated, we'd see
@@ -693,25 +702,22 @@ pub fn reply_callback_can_access_sender_info(env: TestEnv) {
             let payload = wasm()
                 .inter_update(
                     canister_b.canister_id(),
-                    call_args()
-                        .other_side(wasm().reply().build())
-                        .on_reply(
-                            wasm()
-                                .stable_grow(1)
-                                .push_int(0)
-                                .msg_caller_info_data()
-                                .stable_write_offset_blob()
-                                .push_int(100)
-                                .msg_caller_info_signer()
-                                .stable_write_offset_blob()
-                                .reply()
-                                .build(),
-                        ),
+                    call_args().other_side(wasm().reply().build()).on_reply(
+                        wasm()
+                            .stable_grow(1)
+                            .push_int(0)
+                            .msg_caller_info_data()
+                            .stable_write_offset_blob()
+                            .push_int(100)
+                            .msg_caller_info_signer()
+                            .stable_write_offset_blob()
+                            .reply()
+                            .build(),
+                    ),
                 )
                 .build();
 
-            let response =
-                send_update_with_sender_info(&test_info, &ctx, payload).await;
+            let response = send_update_with_sender_info(&test_info, &ctx, payload).await;
             response.expect_update_ok();
 
             // Read back from UC A's stable memory
