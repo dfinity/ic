@@ -58,7 +58,6 @@ flate2 = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../rs/types/base_types" }
 ic-cdk = { workspace = true }
-icrc-ledger-types = { path = "../icrc-ledger-types" }
 ic-error-types = { path = "../ic-error-types" }
 ic-management-canister-types-private = { path = "../../rs/types/management_canister_types" }
 ic-migration-canister = { path = "../../rs/migration_canister" }
@@ -66,6 +65,7 @@ ic-nns-governance-api = { path = "../../rs/nns/governance/api" }
 ic-sns-wasm = { path = "../../rs/nns/sns-wasm" }
 ic-utils = { workspace = true }
 ic-vetkeys = { workspace = true }
+icrc-ledger-types = { path = "../icrc-ledger-types" }
 k256 = { workspace = true }
 registry-canister = { path = "../../rs/registry/canister" }
 wat = { workspace = true }

@@ -25,8 +25,8 @@ ic-test-utilities = { path = "../../../test_utilities" }
 ic-test-utilities-execution-environment = { path = "../../../test_utilities/execution_environment" }
 ic-test-utilities-state = { path = "../../../test_utilities/state" }
 ic-test-utilities-types = { path = "../../../test_utilities/types" }
-ic-types-cycles = { path = "../../../types/cycles" }
 ic-types = { path = "../../../types/types" }
+ic-types-cycles = { path = "../../../types/cycles" }
 ic-wasm-types = { path = "../../../types/wasm_types" }
 lazy_static = { workspace = true }
 tempfile = { workspace = true }
