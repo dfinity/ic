@@ -37,10 +37,7 @@ use crate::utils::{
 use canister_test::Canister;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
-    node::{
-        assert_node_is_assigned_with_ssh_session, assert_node_is_unassigned_with_ssh_session,
-        await_node_certified_height,
-    },
+    node::{assert_node_is_assigned_with_ssh_session, assert_node_is_unassigned_with_ssh_session},
     rw_message::{install_nns_and_check_progress, store_message_with_retries},
     ssh_access::{disable_ssh_access_to_node, wait_until_authentication_is_granted},
     subnet::{
@@ -87,7 +84,7 @@ const NNS_NODES_LARGE: usize = 40;
 const APP_NODES_LARGE: usize = 37;
 /// 40 dealings * 4 transcripts being reshared (high/local, low/local, high/remote, low/remote)
 /// plus 14 as a safety margin
-const DKG_INTERVAL_LARGE: u64 = 499;
+const DKG_INTERVAL_LARGE: u64 = 4 * NNS_NODES_LARGE as u64 + 14;
 
 /// A very large DKG interval to test recovery when the subnet stalls during its first DKG
 /// interval.
@@ -419,21 +416,12 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     ));
 
     // The first application subnet encountered during iteration is the source subnet because it was inserted first.
-    let source_subnet = env
+    let source_subnet_id = env
         .topology_snapshot()
         .subnets()
         .find(|subnet| subnet.subnet_type() == SubnetType::Application)
-        .expect("there is no source subnet");
-
-    let source_subnet_id = source_subnet.subnet_id;
-    // await_node_certified_height(
-    //     &source_subnet
-    //         .nodes()
-    //         .next()
-    //         .expect("there is no node in the source subnet"),
-    //     Height::from(1000),
-    //     logger.clone(),
-    // );
+        .expect("there is no source subnet")
+        .subnet_id;
 
     let create_new_subnet = !topology_snapshot
         .subnets()
@@ -572,13 +560,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         let f = (cfg.subnet_size - 1) / 3;
         break_nodes(&app_nodes.take(f + 1).collect::<Vec<_>>(), &logger);
     } else {
-        halt_subnet(
-            &admin_helper,
-            &download_state_node,
-            app_subnet_id,
-            &[],
-            &logger,
-        )
+        halt_subnet(&admin_helper, &download_state_node, app_subnet_id, &logger);
     }
     assert_subnet_is_broken(
         &download_state_node.get_public_url(),
@@ -961,6 +943,15 @@ fn corrupt_latest_cup(
     };
     let bytes = corrupted_proto_cup.encode_to_vec();
 
+    // Stop all replicas first to prevent restarted nodes from fetching valid CUPs
+    // from peers that haven't been corrupted yet.
+    for node in subnet.nodes() {
+        info!(logger, "Stopping replica on node {:?}", node.get_ip_addr());
+        node.block_on_bash_script("sudo systemctl stop ic-replica")
+            .expect("stop replica");
+    }
+
+    // Upload corrupted CUPs to all nodes.
     for node in subnet.nodes() {
         info!(
             logger,
@@ -969,24 +960,39 @@ fn corrupt_latest_cup(
             node.get_ip_addr()
         );
         let session = node.block_on_ssh_session().unwrap();
-        app_node
-            .block_on_bash_script_from_session(
-                &session,
-                &format!("sudo touch {NEW_CUP_PATH}; sudo chmod a+rw {NEW_CUP_PATH}"),
-            )
-            .expect("touch");
+        node.block_on_bash_script_from_session(
+            &session,
+            &format!("sudo touch {NEW_CUP_PATH}; sudo chmod a+rw {NEW_CUP_PATH}"),
+        )
+        .expect("touch");
+
         let mut channel = session
             .scp_send(Path::new(NEW_CUP_PATH), 0o666, bytes.len() as u64, None)
             .unwrap();
         channel.write_all(&bytes).unwrap();
+        // Ensure the SCP upload has fully completed before moving the CUP file.
+        channel.flush().unwrap();
+        channel.send_eof().unwrap();
+        channel.wait_eof().unwrap();
+        channel.close().unwrap();
+        channel.wait_close().unwrap();
 
-        info!(logger, "Restarting node {:?}", node.get_ip_addr());
-        app_node
-            .block_on_bash_script_from_session(
-                &session,
-                &format!("sudo mv {NEW_CUP_PATH} {CUP_PATH}; sudo systemctl restart ic-replica"),
-            )
-            .expect("restart");
+        node.block_on_bash_script_from_session(
+            &session,
+            &format!("sudo mv {NEW_CUP_PATH} {CUP_PATH}"),
+        )
+        .expect("replace CUP");
+    }
+
+    // Restart ic-replica on all nodes with the corrupted CUPs.
+    for node in subnet.nodes() {
+        info!(
+            logger,
+            "Starting ic-replica on node {:?}",
+            node.get_ip_addr()
+        );
+        node.block_on_bash_script("sudo systemctl start ic-replica")
+            .expect("start replica");
     }
 
     assert!(
@@ -998,7 +1004,7 @@ fn corrupt_latest_cup(
         "Did not find log entry that CUP is corrupted"
     );
 
-    unhalt_subnet(admin_helper, subnet.subnet_id, &[], logger);
+    unhalt_subnet(admin_helper, subnet.subnet_id, logger);
 }
 
 /// Print ID and IP of the source subnet, the first app subnet found that is not the source, and all

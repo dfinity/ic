@@ -608,6 +608,7 @@ pub(crate) fn create_data_payload_helper(
         &mut idkg_payload,
         height,
         &chain_key_config,
+        context.registry_version,
         next_interval_registry_version,
         &receivers,
         &idkg_dealings_contexts,
@@ -624,6 +625,7 @@ pub(crate) fn create_data_payload_helper_2(
     idkg_payload: &mut IDkgPayload,
     height: Height,
     chain_key_config: &ChainKeyConfig,
+    validation_context_registry_version: RegistryVersion,
     next_interval_registry_version: RegistryVersion,
     receivers: &[NodeId],
     idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingContext<'_>>,
@@ -695,7 +697,10 @@ pub(crate) fn create_data_payload_helper_2(
     );
     resharing::initiate_reshare_requests(
         idkg_payload,
-        resharing::get_reshare_requests(idkg_dealings_contexts),
+        resharing::get_reshare_requests(
+            idkg_dealings_contexts,
+            validation_context_registry_version,
+        ),
     );
     Ok(())
 }
@@ -865,6 +870,7 @@ mod tests {
             &mut idkg_payload,
             Height::from(5),
             &chain_key_config,
+            RegistryVersion::from(9),
             RegistryVersion::from(9),
             &[node_test_id(0)],
             &BTreeMap::default(),
@@ -1875,6 +1881,7 @@ mod tests {
                 Height::from(3),
                 &chain_key_config,
                 next_key_transcript.registry_version(),
+                next_key_transcript.registry_version(),
                 &node_ids,
                 &BTreeMap::default(),
                 BTreeMap::default(),
@@ -1897,6 +1904,7 @@ mod tests {
                 &mut payload_6,
                 Height::from(4),
                 &chain_key_config,
+                next_key_transcript.registry_version(),
                 next_key_transcript.registry_version(),
                 &node_ids,
                 &BTreeMap::default(),
@@ -1980,6 +1988,7 @@ mod tests {
                 Height::from(2),
                 &chain_key_config,
                 registry_version,
+                registry_version,
                 &node_ids,
                 &BTreeMap::default(),
                 BTreeMap::default(),
@@ -2051,6 +2060,63 @@ mod tests {
                 idkg::KeyTranscriptCreation::RandomTranscriptParams(_)
             );
         })
+    }
+
+    #[test]
+    fn test_create_data_payload_only_initiates_reached_reshare_contexts() {
+        let key_id = fake_ecdsa_idkg_master_public_key_id();
+        let (mut idkg_payload, _env) = set_up_idkg_payload_with_keys(vec![key_id.clone()]);
+        let block_reader = TestIDkgBlockReader::new();
+        let transcript_builder = TestIDkgTranscriptBuilder::new();
+        let chain_key_config = ChainKeyConfig {
+            key_configs: vec![KeyConfig {
+                key_id: key_id.clone().into(),
+                pre_signatures_to_create_in_advance: Some(1),
+                max_queue_size: 1,
+            }],
+            ..ChainKeyConfig::default()
+        };
+        let validation_context_registry_version = RegistryVersion::from(10);
+        let reached_request = create_reshare_request(key_id.clone(), 1, 10);
+        let future_request = create_reshare_request(key_id.clone(), 2, 11);
+        let contexts = BTreeMap::from([
+            (
+                ic_types::messages::CallbackId::from(1),
+                dealings_context_from_reshare_request(reached_request.clone()),
+            ),
+            (
+                ic_types::messages::CallbackId::from(2),
+                dealings_context_from_reshare_request(future_request.clone()),
+            ),
+        ]);
+        let contexts = filter_idkg_reshare_chain_key_contexts(&contexts);
+
+        create_data_payload_helper_2(
+            &mut idkg_payload,
+            Height::from(5),
+            &chain_key_config,
+            validation_context_registry_version,
+            validation_context_registry_version,
+            &[node_test_id(0)],
+            &contexts,
+            BTreeMap::default(),
+            &block_reader,
+            &transcript_builder,
+            &no_op_logger(),
+        )
+        .unwrap();
+
+        assert!(
+            idkg_payload
+                .ongoing_xnet_reshares
+                .contains_key(&reached_request)
+        );
+        assert!(
+            !idkg_payload
+                .ongoing_xnet_reshares
+                .contains_key(&future_request)
+        );
+        assert_eq!(idkg_payload.ongoing_xnet_reshares.len(), 1);
     }
 
     #[test]
@@ -2147,6 +2213,7 @@ mod tests {
                 Height::from(2),
                 &chain_key_config,
                 registry_version,
+                registry_version,
                 &node_ids,
                 &BTreeMap::default(),
                 BTreeMap::default(),
@@ -2171,6 +2238,7 @@ mod tests {
                 Height::from(3),
                 &chain_key_config,
                 registry_version,
+                registry_version,
                 &node_ids,
                 &BTreeMap::default(),
                 BTreeMap::default(),
@@ -2192,6 +2260,7 @@ mod tests {
                 &mut payload_4,
                 Height::from(3),
                 &chain_key_config,
+                registry_version,
                 registry_version,
                 &node_ids,
                 &BTreeMap::default(),

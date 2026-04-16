@@ -14,7 +14,6 @@ ic-limits = { path = "../../limits" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-types = { path = "../../types/types" }
-ic-types-cycles = { path = "../../types/cycles" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
 ic-testnet-mainnet-nns = { path = "./mainnet_nns" }
@@ -92,6 +91,10 @@ path = "single_app_large_node_with_nns.rs"
 [[bin]]
 name = "small_with_query_stats"
 path = "small_with_query_stats.rs"
+
+[[bin]]
+name = "baremetal_app_subnet"
+path = "baremetal_app_subnet.rs"
 
 [[bin]]
 name = "nns_recovery"

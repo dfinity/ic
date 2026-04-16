@@ -46,10 +46,11 @@ use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{CanisterId, PrincipalId, ReplicaVersion, SubnetId};
+pub use registry_canister::mutations::do_create_subnet::CanisterCyclesCostSchedule;
 use registry_canister::mutations::{
     do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
-    do_create_subnet::{CanisterCyclesCostSchedule, CreateSubnetPayload},
+    do_create_subnet::CreateSubnetPayload,
     do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
@@ -709,6 +710,9 @@ pub async fn submit_deploy_guestos_to_all_subnet_nodes_proposal(
 ///   the new subnet
 /// * `replica_version` - Replica software version to install to the new subnet
 ///   nodes (see `get_software_version`)
+/// * `max_number_of_canisters` - Cap on canisters for the new subnet. `None` is
+///   treated as no limit (`0`, same as `Some(0)` and ic-prep; see `SubnetRecord` /
+///   canister_manager). A positive value caps canisters on the subnet.
 ///
 /// Eventually returns the identifier of the newly submitted proposal.
 pub async fn submit_create_application_subnet_proposal(
@@ -716,9 +720,11 @@ pub async fn submit_create_application_subnet_proposal(
     node_ids: Vec<NodeId>,
     replica_version: ReplicaVersion,
     cost_schedule: Option<CanisterCyclesCostSchedule>,
+    max_number_of_canisters: Option<u64>,
 ) -> ProposalId {
     let config =
         subnet_configuration::get_default_config_params(SubnetType::Application, node_ids.len());
+    let max_number_of_canisters = max_number_of_canisters.unwrap_or(0);
     let payload = CreateSubnetPayload {
         node_ids,
         subnet_id_override: None,
@@ -735,7 +741,7 @@ pub async fn submit_create_application_subnet_proposal(
         subnet_type: SubnetType::Application,
         is_halted: false,
         features: Default::default(),
-        max_number_of_canisters: 4,
+        max_number_of_canisters,
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
         chain_key_config: None,

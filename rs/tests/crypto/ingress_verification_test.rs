@@ -16,10 +16,11 @@ use ic_system_test_driver::util::{
     UniversalCanister, agent_with_identity, block_on, expiry_time, sign_query, sign_read_state,
     sign_update,
 };
+use ic_types::crypto::Signable;
 use ic_types::messages::{
     Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
     HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery, MessageId, RawSignedSenderInfo,
-    SignedDelegation,
+    SenderInfoContent, SignedDelegation,
 };
 use ic_types::{CanisterId, PrincipalId, Time};
 use ic_universal_canister::wasm;
@@ -41,6 +42,7 @@ fn main() -> Result<()> {
                 .add_test(systest!(requests_with_delegation_loop))
                 .add_test(systest!(requests_to_mgmt_canister_with_delegations))
                 .add_test(systest!(requests_with_sender_info))
+                .add_test(systest!(requests_with_valid_sender_info))
                 .add_test(systest!(requests_with_invalid_expiry))
                 .add_test(systest!(requests_with_canister_signature)),
         )
@@ -1078,7 +1080,7 @@ pub fn requests_with_sender_info(env: TestEnv) {
             let mut rng = reproducible_rng();
             let id_type = GenericIdentityType::random(&mut rng);
             let id = GenericIdentity::new(id_type, &mut rng);
-            let sender_info_error_text = "Sender info is not supported yet.";
+            let sender_info_error_text = "Invalid sender info:";
 
             for &api_ver in ALL_UPDATE_API_VERSIONS {
                 let content = HttpCallContent::Call {
@@ -1096,7 +1098,11 @@ pub fn requests_with_sender_info(env: TestEnv) {
                         }),
                     },
                 };
-                let signature = id.sign_update(&content);
+                // Compute message ID from ic-types (includes sender_info in
+                // the hash) so the envelope signature is correct and the
+                // server reaches sender_info validation.
+                let message_id = MessageId::from(content.representation_independent_hash());
+                let signature = id.sign_bytes(&message_id.as_signed_bytes());
                 let response = send_request(
                     api_ver,
                     &test_info,
@@ -1128,7 +1134,8 @@ pub fn requests_with_sender_info(env: TestEnv) {
                         }),
                     },
                 };
-                let signature = id.sign_query(&content);
+                let message_id = MessageId::from(content.representation_independent_hash());
+                let signature = id.sign_bytes(&message_id.as_signed_bytes());
                 let response = send_request(
                     api_ver,
                     &test_info,
@@ -1140,6 +1147,174 @@ pub fn requests_with_sender_info(env: TestEnv) {
                 )
                 .await;
 
+                assert_eq!(response.status(), 400);
+                response.expect_text_error(sender_info_error_text);
+            }
+        }
+    });
+}
+
+/// Tests that requests with valid canister-signed sender_info are accepted,
+/// and that various forms of invalid sender_info are rejected.
+pub fn requests_with_valid_sender_info(env: TestEnv) {
+    let logger = env.logger();
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
+        async move {
+            let node_url = node.get_public_url();
+            debug!(logger, "Selected replica"; "url" => format!("{}", node_url));
+
+            let canister =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
+            let test_info = TestInformation {
+                url: node_url,
+                canister_id: canister_id_from_principal(&canister.canister_id()),
+            };
+
+            let seed = b"sender_info_test_seed".to_vec();
+            let signer = CanisterSigner::new(&canister, seed);
+            let id = GenericIdentity::new_canister(signer.clone());
+
+            // The info blob that the signing canister attests to.
+            let info_bytes = b"some user attributes".to_vec();
+            let sender_info_content = SenderInfoContent(info_bytes.clone());
+            let sender_info_signed_bytes = sender_info_content.as_signed_bytes();
+            let sender_info_sig = signer.sign(&sender_info_signed_bytes).await;
+
+            let valid_sender_info = || RawSignedSenderInfo {
+                info: Blob(info_bytes.clone()),
+                signer: Blob(signer.canister_id().get().as_slice().to_vec()),
+                sig: Blob(sender_info_sig.clone()),
+            };
+
+            // Helper: build an update call with the given sender_info, compute
+            // the message ID from ic-types (which includes sender_info, unlike
+            // ic_agent::EnvelopeContent), sign it, and send.
+            let send_update = |api_ver, sender_info| {
+                let content = HttpCallContent::Call {
+                    update: HttpCanisterUpdate {
+                        canister_id: Blob(test_info.canister_id.get().as_slice().to_vec()),
+                        method_name: "update".to_string(),
+                        arg: Blob(wasm().reply_data(b"update_reply").build()),
+                        sender: Blob(id.principal().as_slice().to_vec()),
+                        ingress_expiry: expiry_time().as_nanos() as u64,
+                        nonce: None,
+                        sender_info: Some(sender_info),
+                    },
+                };
+                let message_id = MessageId::from(content.representation_independent_hash());
+                let signature = id.sign_bytes(&message_id.as_signed_bytes());
+                send_request(
+                    api_ver,
+                    &test_info,
+                    "call",
+                    content,
+                    id.public_key_der(),
+                    None,
+                    signature,
+                )
+            };
+
+            ///////////////////////////////////////////////////////////////////
+            // Valid sender_info should be accepted for update calls
+            for &api_ver in ALL_UPDATE_API_VERSIONS {
+                send_update(api_ver, valid_sender_info())
+                    .await
+                    .expect_update_ok(api_ver);
+            }
+
+            ///////////////////////////////////////////////////////////////////
+            // Valid sender_info should be accepted for query calls,
+            // and the canister should be able to read the info via
+            // the msg_caller_info system API.
+            for &api_ver in ALL_QUERY_API_VERSIONS {
+                let content = HttpQueryContent::Query {
+                    query: HttpUserQuery {
+                        canister_id: Blob(test_info.canister_id.get().as_slice().to_vec()),
+                        method_name: "query".to_string(),
+                        arg: Blob(wasm().msg_caller_info_data().append_and_reply().build()),
+                        sender: Blob(id.principal().as_slice().to_vec()),
+                        ingress_expiry: expiry_time().as_nanos() as u64,
+                        nonce: None,
+                        sender_info: Some(valid_sender_info()),
+                    },
+                };
+                let message_id = MessageId::from(content.representation_independent_hash());
+                let signature = id.sign_bytes(&message_id.as_signed_bytes());
+                let response = send_request(
+                    api_ver,
+                    &test_info,
+                    "query",
+                    content,
+                    id.public_key_der(),
+                    None,
+                    signature,
+                )
+                .await;
+                response.expect_query_ok(api_ver);
+                response.expect_query_reply_arg(api_ver, &info_bytes);
+            }
+
+            // Helper: build a query call with the given sender_info.
+            let send_query = |api_ver, sender_info| {
+                let content = HttpQueryContent::Query {
+                    query: HttpUserQuery {
+                        canister_id: Blob(test_info.canister_id.get().as_slice().to_vec()),
+                        method_name: "query".to_string(),
+                        arg: Blob(wasm().reply_data(b"query_reply").build()),
+                        sender: Blob(id.principal().as_slice().to_vec()),
+                        ingress_expiry: expiry_time().as_nanos() as u64,
+                        nonce: None,
+                        sender_info: Some(sender_info),
+                    },
+                };
+                let message_id = MessageId::from(content.representation_independent_hash());
+                let signature = id.sign_bytes(&message_id.as_signed_bytes());
+                send_request(
+                    api_ver,
+                    &test_info,
+                    "query",
+                    content,
+                    id.public_key_der(),
+                    None,
+                    signature,
+                )
+            };
+
+            let sender_info_error_text = "Invalid sender info:";
+
+            ///////////////////////////////////////////////////////////////////
+            // sender_info with wrong signer canister ID should be rejected
+            for &api_ver in ALL_UPDATE_API_VERSIONS {
+                let mut si = valid_sender_info();
+                si.signer = Blob(CanisterId::ic_00().get().as_slice().to_vec());
+                let response = send_update(api_ver, si).await;
+                assert_eq!(response.status(), 400);
+                response.expect_text_error(sender_info_error_text);
+            }
+            for &api_ver in ALL_QUERY_API_VERSIONS {
+                let mut si = valid_sender_info();
+                si.signer = Blob(CanisterId::ic_00().get().as_slice().to_vec());
+                let response = send_query(api_ver, si).await;
+                assert_eq!(response.status(), 400);
+                response.expect_text_error(sender_info_error_text);
+            }
+
+            ///////////////////////////////////////////////////////////////////
+            // sender_info with tampered info bytes should be rejected
+            for &api_ver in ALL_UPDATE_API_VERSIONS {
+                let mut si = valid_sender_info();
+                si.info = Blob(b"tampered info".to_vec());
+                let response = send_update(api_ver, si).await;
+                assert_eq!(response.status(), 400);
+                response.expect_text_error(sender_info_error_text);
+            }
+            for &api_ver in ALL_QUERY_API_VERSIONS {
+                let mut si = valid_sender_info();
+                si.info = Blob(b"tampered info".to_vec());
+                let response = send_query(api_ver, si).await;
                 assert_eq!(response.status(), 400);
                 response.expect_text_error(sender_info_error_text);
             }
@@ -1492,6 +1667,29 @@ impl ReplicaResponse {
                 }
             },
             ResponseBody::Text(t) => panic!("Expected CBOR response but got text instead: {:?}", t),
+        }
+    }
+
+    fn expect_query_reply_arg(&self, _api_ver: usize, expected_arg: &[u8]) {
+        match &self.body {
+            ResponseBody::Cbor(serde_cbor::Value::Map(m)) => {
+                let reply = m
+                    .get(&serde_cbor::Value::Text("reply".to_owned()))
+                    .expect("Missing 'reply' field in CBOR response");
+                if let serde_cbor::Value::Map(reply_map) = reply {
+                    let arg = reply_map
+                        .get(&serde_cbor::Value::Text("arg".to_owned()))
+                        .expect("Missing 'arg' field in reply");
+                    if let serde_cbor::Value::Bytes(bytes) = arg {
+                        assert_eq!(bytes, expected_arg, "Query reply arg mismatch");
+                    } else {
+                        panic!("Expected bytes for 'arg', got {:?}", arg);
+                    }
+                } else {
+                    panic!("Expected map for 'reply', got {:?}", reply);
+                }
+            }
+            other => panic!("Expected CBOR map response, got {:?}", other),
         }
     }
 

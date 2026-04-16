@@ -67,7 +67,7 @@ use ic_types::batch::ChainKeyData;
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
 };
-use ic_types::messages::SignedIngressContent;
+use ic_types::messages::{Blob, RawSignedSenderInfo, SignedIngressContent, SignedSenderInfo};
 use ic_types::{
     CanisterId, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
     batch::QueryStats,
@@ -76,13 +76,15 @@ use ic_types::{
     messages::{
         CallbackId, CanisterCall, CanisterMessage, CanisterTask, CertificateDelegationMetadata,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MessageId, Payload as ResponsePayload, Query,
-        QuerySource, RequestOrResponse, Response, SubnetMessage, extract_effective_canister_id,
+        QuerySource, RequestOrResponse, Response, SenderInfo, SubnetMessage,
+        extract_effective_canister_id,
     },
     time::UNIX_EPOCH,
 };
 use ic_types::{ExecutionRound, RegistryVersion, ReplicaVersion};
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, NominalCycles,
+    CanisterCreation, CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase,
+    HTTPOutcalls, Instructions, NominalCycles, RequestAndResponseTransmission,
 };
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_SERIALIZED_MODULE, UNIVERSAL_CANISTER_WASM};
@@ -287,7 +289,7 @@ pub struct ExecutionTest {
     // The number of instructions executed so far per canister.
     executed_instructions: HashMap<CanisterId, NumInstructions>,
     // The total cost of execution so far per canister.
-    execution_cost: HashMap<CanisterId, Cycles>,
+    execution_cost: HashMap<CanisterId, CompoundCycles<Instructions>>,
     // Tracks paused subnet message executions per canister.
     // The value is reset when the execution finishes.
     paused_subnet_messages: HashMap<CanisterId, PausedSubnetMessage>,
@@ -300,6 +302,7 @@ pub struct ExecutionTest {
     // Mutable parameters of execution.
     time: Time,
     user_id: UserId,
+    sender_info: Option<SenderInfo>,
     current_round: ExecutionRound,
 
     // Read-only fields.
@@ -350,6 +353,14 @@ impl ExecutionTest {
 
     pub fn set_user_id(&mut self, user_id: UserId) {
         self.user_id = user_id
+    }
+
+    pub fn set_sender_info(&mut self, sender_info: SenderInfo) {
+        self.sender_info = Some(sender_info);
+    }
+
+    pub fn clear_sender_info(&mut self) {
+        self.sender_info = None;
     }
 
     pub fn state(&self) -> &ReplicatedState {
@@ -436,10 +447,6 @@ impl ExecutionTest {
             .unwrap_or(&NumInstructions::new(0))
     }
 
-    pub fn execution_cost(&self) -> Cycles {
-        Cycles::new(self.execution_cost.values().map(|x| x.get()).sum())
-    }
-
     pub fn canister_snapshot_cost(&self, canister_id: CanisterId) -> Cycles {
         let canister = self.canister_state(canister_id);
         let new_snapshot_size = canister.snapshot_size_bytes();
@@ -451,11 +458,11 @@ impl ExecutionTest {
             .real()
     }
 
-    pub fn canister_execution_cost(&self, canister_id: CanisterId) -> Cycles {
+    pub fn canister_execution_cost(&self, canister_id: CanisterId) -> CompoundCycles<Instructions> {
         *self
             .execution_cost
             .get(&canister_id)
-            .unwrap_or(&Cycles::new(0))
+            .unwrap_or(&CompoundCycles::new(Cycles::new(0), self.cost_schedule()))
     }
 
     pub fn idle_cycles_burned_per_day(&self, canister_id: CanisterId) -> Cycles {
@@ -503,68 +510,64 @@ impl ExecutionTest {
         )
     }
 
-    pub fn call_fee<S: ToString>(&self, method_name: S, payload: &[u8]) -> Cycles {
-        let fee = self
-            .cycles_account_manager
+    pub fn call_fee<S: ToString>(
+        &self,
+        method_name: S,
+        payload: &[u8],
+    ) -> CompoundCycles<RequestAndResponseTransmission> {
+        self.cycles_account_manager
             .xnet_call_performed_fee(self.subnet_size(), self.cost_schedule())
             + self.cycles_account_manager.xnet_call_bytes_transmitted_fee(
                 NumBytes::from((payload.len() + method_name.to_string().len()) as u64),
                 self.subnet_size(),
                 self.cost_schedule(),
-            );
-        fee.real()
-    }
-
-    pub fn max_response_fee(&self) -> Cycles {
-        self.cycles_account_manager
-            .xnet_call_bytes_transmitted_fee(
-                MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
-                self.subnet_size(),
-                self.cost_schedule(),
             )
-            .real()
     }
 
-    pub fn reply_fee(&self, payload: &[u8]) -> Cycles {
-        self.cycles_account_manager
-            .xnet_call_bytes_transmitted_fee(
-                NumBytes::from(payload.len() as u64),
-                self.subnet_size(),
-                self.cost_schedule(),
-            )
-            .real()
+    pub fn max_response_fee(&self) -> CompoundCycles<RequestAndResponseTransmission> {
+        self.cycles_account_manager.xnet_call_bytes_transmitted_fee(
+            MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+            self.subnet_size(),
+            self.cost_schedule(),
+        )
     }
 
-    pub fn reject_fee<S: ToString>(&self, reject_message: S) -> Cycles {
+    pub fn reply_fee(&self, payload: &[u8]) -> CompoundCycles<RequestAndResponseTransmission> {
+        self.cycles_account_manager.xnet_call_bytes_transmitted_fee(
+            NumBytes::from(payload.len() as u64),
+            self.subnet_size(),
+            self.cost_schedule(),
+        )
+    }
+
+    pub fn reject_fee<S: ToString>(
+        &self,
+        reject_message: S,
+    ) -> CompoundCycles<RequestAndResponseTransmission> {
         let bytes = reject_message.to_string().len() + std::mem::size_of::<RejectCode>();
-        self.cycles_account_manager
-            .xnet_call_bytes_transmitted_fee(
-                NumBytes::from(bytes as u64),
-                self.subnet_size(),
-                self.cost_schedule(),
-            )
-            .real()
+        self.cycles_account_manager.xnet_call_bytes_transmitted_fee(
+            NumBytes::from(bytes as u64),
+            self.subnet_size(),
+            self.cost_schedule(),
+        )
     }
 
-    pub fn canister_creation_fee(&self) -> Cycles {
+    pub fn canister_creation_fee(&self) -> CompoundCycles<CanisterCreation> {
         self.cycles_account_manager
             .canister_creation_fee(self.subnet_size(), self.cost_schedule())
-            .real()
     }
 
     pub fn http_request_fee(
         &self,
         request_size: NumBytes,
         response_size_limit: Option<NumBytes>,
-    ) -> Cycles {
-        self.cycles_account_manager
-            .http_request_fee(
-                request_size,
-                response_size_limit,
-                self.subnet_size(),
-                self.cost_schedule(),
-            )
-            .real()
+    ) -> CompoundCycles<HTTPOutcalls> {
+        self.cycles_account_manager.http_request_fee(
+            request_size,
+            response_size_limit,
+            self.subnet_size(),
+            self.cost_schedule(),
+        )
     }
 
     pub fn reduced_wasm_compilation_fee(&self, wasm: &[u8]) -> Cycles {
@@ -1201,13 +1204,16 @@ impl ExecutionTest {
     ) -> (MessageId, IngressStatus) {
         let mut state = self.state.take().unwrap();
         let ingress_id = self.next_message_id();
-        let ingress = IngressBuilder::new()
+        let mut ingress_builder = IngressBuilder::new()
             .message_id(ingress_id.clone())
             .source(self.user_id)
             .receiver(canister_id)
             .method_name(method_name)
-            .method_payload(method_payload)
-            .build();
+            .method_payload(method_payload);
+        if let Some(sender_info) = self.sender_info.clone() {
+            ingress_builder = ingress_builder.sender_info(sender_info);
+        }
+        let ingress = ingress_builder.build();
         state
             .canister_state_make_mut(&canister_id)
             .unwrap()
@@ -1354,7 +1360,11 @@ impl ExecutionTest {
                 user_id: self.user_id,
                 ingress_expiry: 0,
                 nonce: None,
-                sender_info: None,
+                sender_info: self.sender_info.as_ref().map(|si| SignedSenderInfo {
+                    info: si.info.clone(),
+                    signer: si.signer,
+                    sig: vec![],
+                }),
             },
             receiver: canister_id,
             method_name: method_name.to_string(),
@@ -1393,7 +1403,6 @@ impl ExecutionTest {
                 RequestOrResponse::Response(response_arc.clone()),
                 &mut subnet_available_guaranteed_response_memory,
                 state.metadata.own_subnet_type,
-                cost_schedule,
                 InputQueueType::LocalSubnet,
             )
             .unwrap();
@@ -1845,9 +1854,9 @@ impl ExecutionTest {
     pub fn execute_message(&mut self, canister_id: CanisterId) {
         self.execute_slice(canister_id);
         self.state.as_mut().unwrap().metadata.batch_time += std::time::Duration::from_secs(1);
-        while self.canister_state(canister_id).next_execution() == NextExecution::ContinueLong
-            || self.canister_state(canister_id).next_execution()
-                == NextExecution::ContinueInstallCode
+        while self
+            .canister_state(canister_id)
+            .has_long_execution_or_install_code()
         {
             self.execute_slice(canister_id);
             self.state.as_mut().unwrap().metadata.batch_time += std::time::Duration::from_secs(1);
@@ -2014,14 +2023,13 @@ impl ExecutionTest {
         *self
             .execution_cost
             .entry(canister_id)
-            .or_insert(Cycles::new(0)) += instruction_cost.real();
+            .or_insert(CompoundCycles::new(Cycles::new(0), cost_schedule)) += instruction_cost;
     }
 
     /// Inducts messages between canisters and pushes all cross-net messages to
     /// `self.xnet_messages`.
     pub fn induct_messages(&mut self) {
         let mut state = self.state.take().unwrap();
-        let cost_schedule = state.get_own_cost_schedule();
         let mut subnet_available_guaranteed_response_memory = self
             .subnet_available_memory
             .get_guaranteed_response_message_memory();
@@ -2034,7 +2042,6 @@ impl ExecutionTest {
                         message.clone(),
                         &mut subnet_available_guaranteed_response_memory,
                         state.metadata.own_subnet_type,
-                        cost_schedule,
                         InputQueueType::LocalSubnet,
                     );
                     if result.is_err() {
@@ -2092,12 +2099,19 @@ impl ExecutionTest {
         method_name: S,
         method_payload: Vec<u8>,
     ) -> Result<(), UserError> {
-        let ingress = SignedIngressBuilder::new()
+        let mut builder = SignedIngressBuilder::new()
             .sender(self.user_id())
             .canister_id(canister_id)
             .method_name(method_name)
-            .method_payload(method_payload)
-            .build();
+            .method_payload(method_payload);
+        if let Some(si) = &self.sender_info {
+            builder = builder.sender_info(RawSignedSenderInfo {
+                info: Blob(si.info.clone()),
+                signer: Blob(si.signer.get().into_vec()),
+                sig: Blob(vec![]),
+            });
+        }
+        let ingress = builder.build();
         self.exec_env.should_accept_ingress_message(
             Arc::new(self.state().clone()),
             &ProvisionalWhitelist::new_empty(),
@@ -2342,6 +2356,9 @@ impl Default for ExecutionTestBuilder {
                 rate_limiting_of_instructions: FlagStatus::Disabled,
                 canister_sandboxing_flag: FlagStatus::Enabled,
                 composite_queries: FlagStatus::Enabled,
+                // Use a large time limit for composite queries in tests to
+                // avoid flakiness due to slow CI machines.
+                max_query_call_walltime: Duration::from_secs(60),
                 ..Config::default()
             },
             subnet_config,
@@ -2790,14 +2807,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_environment_variables_flag(
-        mut self,
-        environment_variables_flag: FlagStatus,
-    ) -> Self {
-        self.execution_config.environment_variables = environment_variables_flag;
-        self
-    }
-
     pub fn with_deterministic_memory_tracker_enabled(mut self, enabled: bool) -> Self {
         self.execution_config
             .embedders_config
@@ -3091,6 +3100,7 @@ impl ExecutionTestBuilder {
             initial_canister_cycles: self.initial_canister_cycles,
             registry_settings: self.registry_settings,
             user_id: user_test_id(1),
+            sender_info: None,
             caller_canister_id: self.caller_canister_id,
             exec_env: execution_services.execution_environment,
             query_handler: execution_services.query_execution_service,
