@@ -307,9 +307,17 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
         if let IngressStatus::Known { state, .. } = &status
             && state.is_terminal()
         {
-            let _ = self
-                .completed_execution_messages_tx
-                .try_send((message_id.clone(), state_height));
+            // We want to send the height of the replicated state where
+            // ingress message went into a terminal state.
+            //
+            // `state_height` is the height of the current state, `H`.
+            // The ingress message will have completed execution AND be updated to a terminal state from the next state, `H+1`.
+            let completed_execution_and_updated_to_terminal_state: Height =
+                state_height + Height::from(1);
+            let _ = self.completed_execution_messages_tx.try_send((
+                message_id.clone(),
+                completed_execution_and_updated_to_terminal_state,
+            ));
         };
         let observe_time_in_terminal_state = |time: u64| {
             self.metrics
