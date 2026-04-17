@@ -460,6 +460,43 @@ fn test_one_subnet_message_per_round() {
     );
 }
 
+/// DTS install_code: canister_init sliced across multiple rounds.
+#[test]
+fn test_dts_install_code() {
+    let sm = setup();
+    let canister = sm.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
+
+    let install_args = InstallCodeArgs::new(
+        CanisterInstallMode::Install,
+        canister,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        // 3B instructions in canister_init exceeds the 2B-instruction slice limit,
+        // forcing DTS across multiple rounds.
+        wasm().instruction_counter_is_at_least(3_000_000_000).build(),
+    );
+    let install_ingress = sm
+        .ingress_message_with_flexible_ordering(
+            PrincipalId::new_anonymous(),
+            IC_00,
+            "install_code",
+            install_args.encode(),
+        )
+        .unwrap();
+
+    sm.execute_with_ordering(MessageOrdering::new(vec![OrderedMessage::Ingress(
+        IC_00,
+        install_ingress.clone(),
+    )]));
+
+    match sm.ingress_status(&install_ingress) {
+        IngressStatus::Known {
+            state: IngressState::Completed(_),
+            ..
+        } => {}
+        other => panic!("Expected DTS install_code to complete, got: {:?}", other),
+    }
+}
+
 /// DTS: message sliced across multiple rounds.
 #[test]
 fn test_dts_execution_completes() {
