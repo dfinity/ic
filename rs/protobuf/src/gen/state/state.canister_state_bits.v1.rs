@@ -110,6 +110,9 @@ pub struct Callback {
     #[prost(message, optional, tag = "12")]
     pub prepayment_for_response_transmission_compound:
         ::core::option::Option<super::super::queues::v1::CompoundCycles>,
+    #[prost(message, optional, tag = "13")]
+    pub prepayment_for_call_transmission:
+        ::core::option::Option<super::super::queues::v1::CompoundCycles>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CallbackEntry {
@@ -728,6 +731,9 @@ pub struct CanisterStateBits {
     /// Canister version.
     #[prost(uint64, tag = "34")]
     pub canister_version: u64,
+    /// Consumed cycles by use case presented as gauges. When prepayments happen
+    /// the respective amount is added to the consumed amount while when a refund
+    /// happens the refund amount is subtracted from consumed amount.
     #[prost(message, repeated, tag = "36")]
     pub consumed_cycles_by_use_cases: ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
     #[prost(message, optional, tag = "37")]

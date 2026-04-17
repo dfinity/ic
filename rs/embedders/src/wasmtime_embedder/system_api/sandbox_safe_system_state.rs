@@ -21,10 +21,10 @@ use ic_management_canister_types_private::{
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::canister_state::system_state::is_low_wasm_memory_hook_condition_satisfied;
 use ic_replicated_state::{
-    CallOrigin, ExecutionTask, NetworkTopology, SystemState,
-    canister_state::DEFAULT_QUEUE_CAPACITY, canister_state::execution_state::WasmExecutionMode,
+    CallOrigin, ExecutionTask, NetworkTopology, SystemState, canister_state::DEFAULT_QUEUE_CAPACITY,
 };
 use ic_types::{
     CanisterLog, CanisterTimer, ComputeAllocation, MemoryAllocation, NumInstructions, Time,
@@ -61,6 +61,7 @@ impl CanisterStatusView {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CallbackUpdate {
     Register(CallbackId, Callback),
@@ -1164,6 +1165,17 @@ impl SandboxSafeSystemState {
             .prepayment_for_response_transmission(self.subnet_size, self.cost_schedule)
     }
 
+    pub fn xnet_total_transmission_fee(
+        &self,
+        payload_size: NumBytes,
+    ) -> CompoundCycles<RequestAndResponseTransmission> {
+        self.cycles_account_manager.xnet_total_transmission_fee(
+            payload_size,
+            self.subnet_size,
+            self.cost_schedule,
+        )
+    }
+
     pub(super) fn withdraw_cycles_for_transfer(
         &mut self,
         canister_current_memory_usage: NumBytes,
@@ -1200,7 +1212,7 @@ impl SandboxSafeSystemState {
         canister_current_message_memory_usage: MessageMemoryUsage,
         msg: Request,
         prepayment_for_response_execution: CompoundCycles<Instructions>,
-        prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
+        prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
     ) -> Result<(), Request> {
         if self.available_callbacks == 0 {
             return Err(msg);
@@ -1208,8 +1220,9 @@ impl SandboxSafeSystemState {
         self.available_callbacks -= 1;
 
         let mut new_balance = self.cycles_balance();
-        let (instructions_consumed_cycles, request_and_response_trasmission_consumed_cycles) =
-            match self.cycles_account_manager.withdraw_request_cycles(
+        if self
+            .cycles_account_manager
+            .withdraw_request_cycles(
                 self.canister_id,
                 &mut new_balance,
                 self.freeze_threshold,
@@ -1217,9 +1230,8 @@ impl SandboxSafeSystemState {
                 canister_current_memory_usage,
                 canister_current_message_memory_usage,
                 self.compute_allocation,
-                &msg,
                 prepayment_for_response_execution,
-                prepayment_for_response_transmission,
+                prepayment_for_call_transmission,
                 self.subnet_size,
                 self.cost_schedule,
                 self.reserved_balance(),
@@ -1227,10 +1239,11 @@ impl SandboxSafeSystemState {
                 // to learn the top up balance instead of getting it from an error
                 // message to a canister method making downstream call
                 false,
-            ) {
-                Ok(consumed_cycles) => consumed_cycles,
-                Err(_) => return Err(msg),
-            };
+            )
+            .is_err()
+        {
+            return Err(msg);
+        };
 
         // If the request is targeted to any of the known aliases of IC_00,
         // count it towards the available slots for IC_00 requests.
@@ -1256,10 +1269,8 @@ impl SandboxSafeSystemState {
         self.system_state_modifications.requests.push(msg);
         *used_slots += 1;
         let consumed_cycles = ConsumedCyclesDuringExecution {
-            instructions: Some(instructions_consumed_cycles),
-            request_and_response_transmission: Some(
-                request_and_response_trasmission_consumed_cycles,
-            ),
+            instructions: Some(prepayment_for_response_execution),
+            request_and_response_transmission: Some(prepayment_for_call_transmission),
             ..Default::default()
         };
         self.update_balance_change_consuming(new_balance, consumed_cycles);
