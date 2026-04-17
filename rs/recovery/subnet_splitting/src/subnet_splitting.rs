@@ -585,6 +585,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                     key_file,
                 );
                 let mut includes = Recovery::get_ic_state_includes(
+                    &self.recovery.logger,
                     ExecutionMode::Remote(&ssh_helper),
                     CheckpointHeight::Latest,
                 )?;
