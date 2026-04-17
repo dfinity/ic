@@ -25,24 +25,13 @@ def load_subnet_data(load_path: Path, load_baseline_path: Path, load_type: str, 
     """
     canister_data = pd.read_csv(load_path).set_index("canister_id")
     canister_baseline_data = pd.read_csv(load_baseline_path).set_index("canister_id")
-    canister_data = (canister_data.subtract(canister_baseline_data, fill_value=0)).loc[canister_data.index]
-
-    canister_data = canister_data.reset_index()[["canister_id", load_type]]
+    canister_data = (canister_data.subtract(canister_baseline_data, fill_value=0)).loc[canister_data.index].reset_index()
 
     communication_data = pd.read_csv(communication_data_path)
 
-    communicating_canister_ids = set(communication_data["sender_canister_id"]).union(
-        set(communication_data["receiver_canister_id"])
-    )
-    communicating_canisters = canister_data
-    #communicating_canisters = canister_data[canister_data["canister_id"].isin(communicating_canister_ids)].reset_index(
-    #    drop=True
-    #)
-
-    communicating_canisters["index"] = range(len(communicating_canisters))
-
-    canister_id_to_index = dict(zip(communicating_canisters["canister_id"], communicating_canisters["index"]))
-    index_to_canister_id = dict(zip(communicating_canisters["index"], communicating_canisters["canister_id"]))
+    canister_data["index"] = range(len(canister_data))
+    canister_id_to_index = dict(zip(canister_data["canister_id"], canister_data["index"]))
+    index_to_canister_id = dict(zip(canister_data["index"], canister_data["canister_id"]))
 
     edges: Dict[Tuple[int, int], int] = {}
     for _, row in communication_data.iterrows():
@@ -53,7 +42,7 @@ def load_subnet_data(load_path: Path, load_baseline_path: Path, load_type: str, 
         receiver_index = canister_id_to_index[receiver_id]
         edges[(sender_index, receiver_index)] = count
 
-    load = communicating_canisters[load_type].tolist()
+    load = canister_data[load_type].tolist()
 
     return {
         "edges": edges,

@@ -181,11 +181,11 @@ enum Opt {
         #[clap(long = "checkpoint")]
         path: PathBuf,
 
-        /// Caniser load output path.
+        /// Canister load output path.
         #[clap(long)]
         canister_load_output: PathBuf,
 
-        /// Caniser connections output path.
+        /// Canister connections output path.
         #[clap(long)]
         canister_connections_output: PathBuf,
     },

@@ -253,18 +253,22 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                          timestamp_nanos,
                          count,
                      }| {
-                        (
-                            other_canister_id.expect("FIXME").try_into().expect("FIXME"),
+                        let other_canister_id = try_from_option_field(
+                            other_canister_id,
+                            "CanisterStateBits::CanisterToCanisterMetrics::other_canister_id",
+                        )?;
+                        Ok((
+                            other_canister_id,
                             ConnectionMetrics {
                                 last_access_timestamp: Time::from_nanos_since_unix_epoch(
                                     timestamp_nanos,
                                 ),
                                 count,
                             },
-                        )
+                        ))
                     },
                 )
-                .collect(),
+                .collect::<Result<BTreeMap<_, _>, Self::Error>>()?,
         })
     }
 }

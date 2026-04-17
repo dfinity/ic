@@ -15,7 +15,7 @@ use ic_types::Height;
 
 const HEIGHT_IS_IRRELEVANT_BECAUSE_ITS_UNUSED: Height = Height::new(0);
 
-/// Loads the replicated state at the checkpoint and creates a csv file with all [`CanisterMetrics`]
+/// Loads the replicated state at the checkpoint and creates csv files with some [`CanisterMetrics`]
 /// for each canister in the state.
 pub fn get(
     checkpoint_dir: PathBuf,
