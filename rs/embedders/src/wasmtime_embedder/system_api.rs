@@ -903,13 +903,13 @@ impl std::fmt::Display for ApiType {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 enum ExecutionMemoryType {
     WasmMemory,
     StableMemory,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Copy, Clone, Debug)]
 /// Some cost API endpoints can fail in various ways. A return value of this
 /// type must be used by the caller to determine success or failure.
 pub enum CostReturnCode {
@@ -1882,7 +1882,7 @@ impl SystemApiImpl {
         &mut self,
         req: Request,
         prepayment_for_response_execution: CompoundCycles<Instructions>,
-        prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
+        prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
     ) -> HypervisorResult<i32> {
         let abort = |request: Request, sandbox_safe_system_state: &mut SandboxSafeSystemState| {
             sandbox_safe_system_state.refund_cycles(request.payment);
@@ -1912,7 +1912,7 @@ impl SystemApiImpl {
             self.memory_usage.current_message_usage,
             req,
             prepayment_for_response_execution,
-            prepayment_for_response_transmission,
+            prepayment_for_call_transmission,
         ) {
             Ok(()) => Ok(0),
             Err(request) => {
@@ -3310,7 +3310,7 @@ impl SystemApi for SystemApiImpl {
                 self.push_output_request(
                     req.request,
                     req.prepayment_for_response_execution,
-                    req.prepayment_for_response_transmission,
+                    req.prepayment_for_call_transmission,
                 )
             }
         };
