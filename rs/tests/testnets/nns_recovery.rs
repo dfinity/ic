@@ -31,7 +31,7 @@
 
 use anyhow::Result;
 use ic_consensus_system_test_subnet_recovery::utils::{
-    BACKUP_USERNAME, NodeHeights, SshKeys, break_nodes, get_ssh_keys_for_user,
+    BACKUP_USERNAME, SshKeys, break_nodes, get_ssh_keys_for_user,
     node_with_highest_cup_and_cert_share_heights,
 };
 use ic_limits::DKG_INTERVAL_HEIGHT;
