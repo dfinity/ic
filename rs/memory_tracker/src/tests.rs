@@ -1,5 +1,6 @@
 use std::io::Write;
 
+use crate::signal_mutex::SignalMutex;
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::{
     PageIndex, PageMap,
@@ -12,8 +13,7 @@ use nix::sys::mman::{MapFlags, ProtFlags, mmap};
 use rstest::rstest;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use crate::{
     AccessKind, DirtyPageTracking, MemoryLimits, MemoryTracker, MissingPageHandlerKind,
@@ -86,7 +86,7 @@ fn setup(
                         max_memory_size: NumBytes::new((memory_pages * PAGE_SIZE) as u64),
                         max_dirty_pages: NumOsPages::new(memory_pages as u64),
                     },
-                    Arc::new(Mutex::new(|_| {})),
+                    Arc::new(SignalMutex::new(|_| {})),
                 )
                 .unwrap(),
             );
@@ -104,7 +104,7 @@ fn setup(
                         max_memory_size: NumBytes::new((memory_pages * PAGE_SIZE) as u64),
                         max_dirty_pages: NumOsPages::new(memory_pages as u64),
                     },
-                    Arc::new(Mutex::new(|_| {})),
+                    Arc::new(SignalMutex::new(|_| {})),
                 )
                 .unwrap(),
             );

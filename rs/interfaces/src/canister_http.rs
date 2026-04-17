@@ -111,6 +111,13 @@ pub enum InvalidCanisterHttpPayloadReason {
     },
     /// A TooManyRequestErrors entry contains a non-Reject response.
     FlexibleRejectExpectedInErrorResponse(CallbackId),
+    /// A ResponsesTooLarge error has incorrect total_requests or min_responses.
+    FlexibleResponsesTooLargeParamMismatch {
+        callback_id: CallbackId,
+        field: &'static str,
+        expected: u32,
+        actual: u32,
+    },
     /// A ResponsesTooLarge error does not include enough OK shares to prove impossibility.
     FlexibleResponsesTooLargeInsufficientEvidence {
         callback_id: CallbackId,

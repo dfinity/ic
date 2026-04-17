@@ -16,8 +16,8 @@ ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-test-utilities-types = { path = "../types" }
-ic-types-cycles = { path = "../../types/cycles" }
 ic-types = { path = "../../types/types" }
+ic-types-cycles = { path = "../../types/cycles" }
 ic-wasm-types = { path = "../../types/wasm_types" }
 mockall = { workspace = true }
 proptest = { workspace = true }

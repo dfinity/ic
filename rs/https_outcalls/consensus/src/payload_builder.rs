@@ -762,8 +762,32 @@ impl CanisterHttpPayloadBuilderImpl {
                     }
                 }
                 FlexibleCanisterHttpError::ResponsesTooLarge {
-                    all_seen_shares, ..
+                    all_seen_shares,
+                    total_requests,
+                    min_responses: claimed_min_responses,
+                    ..
                 } => {
+                    if *total_requests != flex_committee.len() as u32 {
+                        return invalid_artifact(
+                            InvalidCanisterHttpPayloadReason::FlexibleResponsesTooLargeParamMismatch {
+                                callback_id,
+                                field: "total_requests",
+                                expected: flex_committee.len() as u32,
+                                actual: *total_requests,
+                            },
+                        );
+                    }
+                    if *claimed_min_responses != min_responses as u32 {
+                        return invalid_artifact(
+                            InvalidCanisterHttpPayloadReason::FlexibleResponsesTooLargeParamMismatch {
+                                callback_id,
+                                field: "min_responses",
+                                expected: min_responses as u32,
+                                actual: *claimed_min_responses,
+                            },
+                        );
+                    }
+
                     let mut seen_signers = HashSet::new();
 
                     for share in all_seen_shares {

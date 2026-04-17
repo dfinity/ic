@@ -1072,7 +1072,7 @@ pub(crate) fn new_response_reference(generator: u64, class: Class) -> InboundRef
     Reference::new(class, Kind::Response, generator)
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Eq, PartialEq)]
 enum QueueOp {
     Push,
     Pop,
