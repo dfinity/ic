@@ -144,14 +144,11 @@ fn log_instructions(env: TestEnv) {
     };
 
     loop {
-        let NodeHeights {
-            node: _,
-            cup: _,
-            cert_share: highest_cert_share,
-        } = node_with_highest_cup_and_cert_share_heights(
+        let highest_cert_share = node_with_highest_cup_and_cert_share_heights(
             &env.topology_snapshot().root_subnet(),
             &logger,
-        );
+        )
+        .cert_share;
 
         if highest_cert_share >= break_at_height {
             info!(
