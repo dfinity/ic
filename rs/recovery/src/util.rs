@@ -67,7 +67,7 @@ pub enum ExecutionMode<'a> {
 impl<'a> ExecutionMode<'a> {
     fn execute(&self, command: String) -> RecoveryResult<Option<String>> {
         match self {
-            Self::Local => exec_cmd(&mut Command::new("sh").arg("-c").arg(command)),
+            Self::Local => exec_cmd(Command::new("sh").arg("-c").arg(command)),
             Self::Remote(ssh_helper) => ssh_helper.ssh(command),
         }
     }
