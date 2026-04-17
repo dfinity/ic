@@ -468,15 +468,21 @@ fn assert_orchestrator_stopped_gracefully(node: &IcNodeSnapshot, cursor: String)
             session.set_timeout(30 * 1000);
             // `JournalStreamer::contains` pipes through `grep`, which exits with status 1 when
             // there are no matches. `execute_bash_script_from_session` converts any non-zero exit
-            // status into an `Err`, so "no matches yet" is indistinguishable from a real
-            // transport-level failure. Treat both as "keep retrying".
+            // status into an `Err`, so "no matches yet" may be reported as an error. Keep
+            // retrying in both cases, but preserve the underlying error context so the final
+            // timeout is diagnosable when this is a real SSH/journal failure.
             match JournalStreamer::new(session)
                 .from_cursor(cursor.clone())
                 .contains(GRACEFUL_SHUTDOWN_MSG)
             {
                 Ok(true) => Ok(()),
-                Ok(false) | Err(_) => anyhow::bail!(
+                Ok(false) => anyhow::bail!(
                     "Node {} has not logged '{}' yet",
+                    node.node_id,
+                    GRACEFUL_SHUTDOWN_MSG
+                ),
+                Err(e) => anyhow::bail!(
+                    "Failed to check whether node {} logged '{}': {e:#}",
                     node.node_id,
                     GRACEFUL_SHUTDOWN_MSG
                 ),
