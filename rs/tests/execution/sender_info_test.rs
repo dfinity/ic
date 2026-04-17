@@ -61,17 +61,30 @@ impl<'a> CanisterSigner<'a> {
         canister_id_from_principal(&self.canister.canister_id())
     }
 
+    /// Raw canister-signature public key bytes: length-prefixed canister id
+    /// followed by seed.
     pub fn public_key_raw(&self) -> Vec<u8> {
-        use ic_crypto_test_utils::canister_signatures::canister_sig_pub_key_to_bytes;
-        canister_sig_pub_key_to_bytes(self.canister_id(), &self.seed)
+        let canister_id_bytes = self.canister_id().get_ref().as_slice();
+        let mut buf =
+            vec![u8::try_from(canister_id_bytes.len()).expect("canister id too long for u8")];
+        buf.extend_from_slice(canister_id_bytes);
+        buf.extend_from_slice(&self.seed);
+        buf
     }
 
+    /// DER-encoded SubjectPublicKeyInfo with the canister-signature algorithm
+    /// OID 1.3.6.1.4.1.56387.1.2.
     pub fn public_key_der(&self) -> Vec<u8> {
-        use ic_crypto_internal_basic_sig_der_utils::subject_public_key_info_der;
-        use simple_asn1::oid;
-        // OID 1.3.6.1.4.1.56387.1.2 (canister-signature)
+        use simple_asn1::{ASN1Block, oid};
         let oid_canister_signature = oid!(1, 3, 6, 1, 4, 1, 56387, 1, 2);
-        subject_public_key_info_der(oid_canister_signature, &self.public_key_raw()).unwrap()
+        let raw_key = self.public_key_raw();
+        let algorithm = ASN1Block::Sequence(
+            0,
+            vec![ASN1Block::ObjectIdentifier(0, oid_canister_signature)],
+        );
+        let subject_public_key = ASN1Block::BitString(0, raw_key.len() * 8, raw_key);
+        let subject_public_key_info = ASN1Block::Sequence(0, vec![algorithm, subject_public_key]);
+        simple_asn1::to_der(&subject_public_key_info).expect("failed to DER-encode public key")
     }
 
     pub async fn sign(&self, message: &[u8]) -> Vec<u8> {
