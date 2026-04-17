@@ -1246,7 +1246,7 @@ fn create_remote_dkg_config_for_key_id(
         dealers.get(),
         receivers,
         registry_version,
-        Some(resharing_transcript.clone()),
+        Some(resharing_transcript),
     )
     .map_err(|err| Box::new((dkg_id, format!("{err:?}"))))
 }
