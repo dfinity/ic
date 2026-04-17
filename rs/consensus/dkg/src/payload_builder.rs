@@ -1345,10 +1345,9 @@ mod tests {
                         assert_eq!(total_configs, 3, "{callback_map:?}");
                     } else {
                         for result in callback_map.values() {
-                            let errors = result
-                                .as_ref()
-                                .err()
-                                .expect("attempts above max should return repeated-failure errors");
+                            let errors = result.as_ref().expect_err(
+                                "attempts above max should return repeated-failure errors",
+                            );
                             assert!(
                                 errors
                                     .iter()
@@ -1999,8 +1998,8 @@ mod tests {
                 name: String::from("some_vetkey"),
             };
             let ni_dkg_key_id = NiDkgMasterPublicKeyId::VetKd(key_id.clone());
-            let setup_target = NiDkgTargetId::new([5u8; 32]);
-            let reshare_target = NiDkgTargetId::new([6u8; 32]);
+            let setup_target = NiDkgTargetId::new([5_u8; 32]);
+            let reshare_target = NiDkgTargetId::new([6_u8; 32]);
             let registry_version = registry.get_latest_version();
 
             let mut state = ic_test_utilities_state::get_initial_state(0, 0);
@@ -2055,8 +2054,7 @@ mod tests {
             for result in callback_results.values() {
                 let errors = result
                     .as_ref()
-                    .err()
-                    .expect("repeated failures should produce explicit errors");
+                    .expect_err("repeated failures should produce explicit errors");
                 assert!(
                     errors
                         .iter()
@@ -2098,10 +2096,10 @@ mod tests {
 
     #[test]
     fn test_update_initial_dkg_attempts_from_contexts_and_completed() {
-        let persisted_target = NiDkgTargetId::new([1u8; 32]);
-        let removed_target = NiDkgTargetId::new([2u8; 32]);
-        let new_target = NiDkgTargetId::new([3u8; 32]);
-        let completed_target = NiDkgTargetId::new([4u8; 32]);
+        let persisted_target = NiDkgTargetId::new([1_u8; 32]);
+        let removed_target = NiDkgTargetId::new([2_u8; 32]);
+        let new_target = NiDkgTargetId::new([3_u8; 32]);
+        let completed_target = NiDkgTargetId::new([4_u8; 32]);
 
         let previous_attempts = BTreeMap::from([
             (persisted_target, 2),
