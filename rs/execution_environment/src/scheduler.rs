@@ -196,7 +196,7 @@ impl SchedulerImpl {
         long_running_canisters: &[CanisterId],
         measurement_scope: &MeasurementScope,
         subnet_size: usize,
-        state_height: Height,
+        next_state_height: Height,
     ) -> ReplicatedState {
         let mut ongoing_long_install_code = false;
         for canister_id in long_running_canisters.iter() {
@@ -218,7 +218,7 @@ impl SchedulerImpl {
                     instruction_limits,
                     round_limits,
                     subnet_size,
-                    state_height,
+                    next_state_height,
                 );
             state = new_state;
             ongoing_long_install_code |= state
@@ -769,7 +769,7 @@ impl SchedulerImpl {
         &self,
         state: &mut ReplicatedState,
         canister_ingress_latencies: &mut CanisterIngressQueueLatencies,
-        state_height: Height,
+        next_state_height: Height,
     ) {
         let current_time = state.time();
         let not_expired = |ingress: &Ingress| ingress.expiry_time >= current_time;
@@ -801,7 +801,7 @@ impl SchedulerImpl {
                     time: current_time,
                     state: IngressState::Failed(error),
                 },
-                state_height,
+                next_state_height,
             );
             canister_ingress_latencies.on_ingress_status_changed(&old_status);
         }
@@ -814,7 +814,7 @@ impl SchedulerImpl {
         &self,
         state: &mut ReplicatedState,
         subnet_size: usize,
-        state_height: Height,
+        next_state_height: Height,
     ) {
         let cost_schedule = state.get_own_cost_schedule();
         let state_time = state.time();
@@ -886,7 +886,7 @@ impl SchedulerImpl {
                 Arc::clone(&self.ingress_history_writer),
                 self.log.clone(),
                 self.exec_env.canister_not_found_error(),
-                state_height,
+                next_state_height,
             );
         }
     }

@@ -108,7 +108,7 @@ pub(crate) trait ValidSetRule: Send {
         &self,
         state: &mut ReplicatedState,
         msgs: Vec<SignedIngress>,
-        state_height: Height,
+        next_state_height: Height,
     );
 }
 
@@ -148,7 +148,7 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
         state: &mut ReplicatedState,
         msg: SignedIngress,
         subnet_size: usize,
-        state_height: Height,
+        next_state_height: Height,
     ) {
         trace!(self.log, "induct_message");
         let ingress_content = msg.content();
@@ -171,7 +171,7 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
                         time,
                         state: IngressState::Received,
                     },
-                    state_height,
+                    next_state_height,
                 );
                 LABEL_VALUE_SUCCESS
             }
@@ -194,7 +194,7 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
                         time,
                         state: IngressState::Failed(UserError::new(error_code, err.to_string())),
                     },
-                    state_height,
+                    next_state_height,
                 );
                 err.to_label_value()
             }
@@ -348,13 +348,13 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>> Valid
         &self,
         state: &mut ReplicatedState,
         msgs: Vec<SignedIngress>,
-        state_height: Height,
+        next_state_height: Height,
     ) {
         let subnet_size = state.get_own_subnet_size();
         for msg in msgs {
             let message_id = msg.content().id();
             if !self.is_duplicate(state, &msg) {
-                self.induct_message(state, msg, subnet_size, state_height);
+                self.induct_message(state, msg, subnet_size, next_state_height);
             } else {
                 self.observe_inducted_ingress_status(LABEL_VALUE_DUPLICATE);
                 debug!(self.log, "Didn't induct duplicate message {}", message_id);

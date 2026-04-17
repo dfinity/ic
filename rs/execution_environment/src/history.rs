@@ -191,7 +191,7 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
         state: &mut Self::State,
         message_id: MessageId,
         status: IngressStatus,
-        state_height: Height,
+        next_state_height: Height,
     ) -> Arc<IngressStatus> {
         let time = state.time();
         let current_status = state.get_ingress_status(&message_id);
@@ -309,15 +309,10 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
         {
             // We want to send the height of the replicated state where
             // ingress message went into a terminal state.
-            //
-            // `state_height` is the height of the current state, `H`.
-            // The ingress message will have completed execution AND be updated to a terminal state from the next state, `H+1`.
-            let completed_execution_and_updated_to_terminal_state: Height =
-                state_height + Height::from(1);
-            let _ = self.completed_execution_messages_tx.try_send((
-                message_id.clone(),
-                completed_execution_and_updated_to_terminal_state,
-            ));
+            // The ingress message will have completed execution AND be updated to a terminal state from the next state at `next_state_height`.
+            let _ = self
+                .completed_execution_messages_tx
+                .try_send((message_id.clone(), next_state_height));
         };
         let observe_time_in_terminal_state = |time: u64| {
             self.metrics

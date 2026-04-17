@@ -105,9 +105,14 @@ fn test_terminal_states_are_transmitted() {
             completed_execution_messages_tx,
         );
         let message_id = message_test_id(1);
-        let state_height = Height::new(11);
+        let next_state_height = Height::new(11);
 
-        ingress_history_writer.set_status(&mut state, message_id.clone(), received(), state_height);
+        ingress_history_writer.set_status(
+            &mut state,
+            message_id.clone(),
+            received(),
+            next_state_height,
+        );
         assert_eq!(
             completed_execution_messages_rx.try_recv(),
             Err(TryRecvError::Empty),
@@ -118,7 +123,7 @@ fn test_terminal_states_are_transmitted() {
             &mut state,
             message_id.clone(),
             processing(),
-            state_height,
+            next_state_height,
         );
         assert_eq!(
             completed_execution_messages_rx.try_recv(),
@@ -132,11 +137,11 @@ fn test_terminal_states_are_transmitted() {
                 &mut state,
                 message_id.clone(),
                 completed(),
-                state_height,
+                next_state_height,
             );
             assert_eq!(
                 completed_execution_messages_rx.try_recv(),
-                Ok((message_id.clone(), state_height)),
+                Ok((message_id.clone(), next_state_height)),
                 "Terminal state, `Completed`, should trigger the height of state to be sent"
             );
         }
@@ -147,11 +152,11 @@ fn test_terminal_states_are_transmitted() {
                 &mut state,
                 message_id.clone(),
                 failed(),
-                state_height,
+                next_state_height,
             );
             assert_eq!(
                 completed_execution_messages_rx.try_recv(),
-                Ok((message_id.clone(), state_height)),
+                Ok((message_id.clone(), next_state_height)),
                 "Terminal state, `Failed`, should trigger the height of state to be sent"
             );
         }
