@@ -1008,7 +1008,7 @@ impl<'a> RemoteDkgContext<'a> {
                         start_block_height,
                         dealer_subnet,
                         dkg_tag,
-                        target_subnet: NiDkgTargetSubnet::Remote(self.target_id().clone()),
+                        target_subnet: NiDkgTargetSubnet::Remote(*self.target_id()),
                     },
                     REMOTE_DKG_REPEATED_FAILURE_ERROR.to_string(),
                 )
