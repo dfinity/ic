@@ -175,6 +175,24 @@ pub fn canister_logging_benchmark(c: &mut Criterion) {
         group.sample_size(60);
         group.warm_up_time(Duration::from_secs(1));
 
+        // Baseline: update_settings with the same log_memory_limit (no-op resize).
+        // Measures pure update_settings overhead without log migration work.
+        group.bench_function("baseline:2MiB/same_limit", |b| {
+            b.iter_batched(
+                || setup_canister_with_full_log(2 * MIB, 0),
+                |(env, canister_id)| {
+                    let result = env.update_settings(
+                        &canister_id,
+                        CanisterSettingsArgsBuilder::new()
+                            .with_log_memory_limit(2 * MIB)
+                            .build(),
+                    );
+                    assert!(result.is_ok());
+                },
+                BatchSize::LargeInput,
+            );
+        });
+
         // Varying sizes to verify linear scaling of resize cost.
         run_bench_resize_canister_log(
             &mut group,

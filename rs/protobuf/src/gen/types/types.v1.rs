@@ -635,6 +635,10 @@ pub struct FlexibleCanisterHttpTimeout {}
 pub struct FlexibleCanisterHttpResponsesTooLarge {
     #[prost(message, repeated, tag = "1")]
     pub all_seen_shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
+    #[prost(uint32, tag = "2")]
+    pub total_requests: u32,
+    #[prost(uint32, tag = "3")]
+    pub min_responses: u32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FlexibleCanisterHttpTooManyRequestErrors {
