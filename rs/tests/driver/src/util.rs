@@ -1697,22 +1697,30 @@ impl JournalStreamer {
         self
     }
 
-    /// Anchors subsequent searches to start after the current latest journal entry. This is useful
-    /// for ignoring pre-existing log lines and only matching entries that appear after this call.
-    ///
-    /// Returns an error on transport errors or if the journal is empty and there is no cursor to
-    /// anchor to.
-    pub fn from_now(mut self) -> anyhow::Result<Self> {
-        let cursor = Self::new(self.session.clone())
+    /// Fetches the cursor of the latest journal entry. This can be used to anchor subsequent searches.
+    pub fn get_cursor(&self) -> anyhow::Result<String> {
+        Ok(Self::new(self.session.clone())
             .max_lines(1)
             .search_and_return_cursors("__CURSOR")?
             .into_iter()
             .next()
             .ok_or_else(|| anyhow::anyhow!("No journal entries found"))?
-            .cursor;
+            .cursor)
+    }
 
+    pub fn from_cursor(mut self, cursor: String) -> Self {
         self.from_cursor = Some(cursor);
-        Ok(self)
+        self
+    }
+
+    /// Anchors subsequent searches to start after the current latest journal entry. This is useful
+    /// for ignoring pre-existing log lines and only matching entries that appear after this call.
+    ///
+    /// Returns an error on transport errors or if the journal is empty and there is no cursor to
+    /// anchor to.
+    pub fn from_now(self) -> anyhow::Result<Self> {
+        let cursor = self.get_cursor()?;
+        Ok(self.from_cursor(cursor))
     }
 
     /// Executes the configured `journalctl` query and returns whether there are any entries

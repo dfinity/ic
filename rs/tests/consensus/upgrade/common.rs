@@ -291,6 +291,26 @@ async fn upgrade_to(
         logger,
         "Upgrading subnet {} to {}", subnet_id, target_version
     );
+
+    // Snapshot the journal cursor of each healthy node *before* scheduling the upgrade. After the
+    // upgrade is deployed below, we poll each node's journal for the "shut down gracefully" line
+    // starting from this cursor, which is more efficient and guarantees we only observe the shutdown
+    // triggered by this upgrade (not a pre-existing line from some earlier boot).
+    let cursors_per_node: BTreeMap<NodeId, String> = healthy_nodes
+        .iter()
+        .map(|node| {
+            let cursor = JournalStreamer::new(node.block_on_ssh_session().unwrap())
+                .get_cursor()
+                .unwrap_or_else(|e| {
+                    panic!(
+                        "Failed to fetch journal cursor for node {}: {e:#}",
+                        node.node_id
+                    )
+                });
+            (node.node_id, cursor)
+        })
+        .collect();
+
     deploy_guestos_to_all_subnet_nodes(nns_node, target_version, subnet_id).await;
 
     info!(
@@ -302,7 +322,11 @@ async fn upgrade_to(
     // Concurrently assert that all orchestrators shut down gracefully
     #[allow(clippy::redundant_iter_cloned)] // Need to clone to move the nodes into async tasks
     try_join_all(healthy_nodes.iter().cloned().map(|node| {
-        tokio::task::spawn_blocking(move || assert_orchestrator_stopped_gracefully(&node))
+        let cursor = cursors_per_node
+            .get(&node.node_id)
+            .expect("cursor must exist for every healthy node")
+            .clone();
+        tokio::task::spawn_blocking(move || assert_orchestrator_stopped_gracefully(&node, cursor))
     }))
     .await
     .unwrap();
@@ -429,7 +453,7 @@ fn find_latest_computed_root_hashes_from_logs(
 ///
 /// If no upgrade is scheduled, this keeps retrying until the overall timeout elapses and then
 /// panics.
-fn assert_orchestrator_stopped_gracefully(node: &IcNodeSnapshot) {
+fn assert_orchestrator_stopped_gracefully(node: &IcNodeSnapshot, cursor: String) {
     const GRACEFUL_SHUTDOWN_MSG: &str = "Orchestrator shut down gracefully";
     const OVERALL_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
@@ -446,7 +470,10 @@ fn assert_orchestrator_stopped_gracefully(node: &IcNodeSnapshot) {
             // there are no matches. `execute_bash_script_from_session` converts any non-zero exit
             // status into an `Err`, so "no matches yet" is indistinguishable from a real
             // transport-level failure. Treat both as "keep retrying".
-            match JournalStreamer::new(session).contains(GRACEFUL_SHUTDOWN_MSG) {
+            match JournalStreamer::new(session)
+                .from_cursor(cursor.clone())
+                .contains(GRACEFUL_SHUTDOWN_MSG)
+            {
                 Ok(true) => Ok(()),
                 Ok(false) | Err(_) => anyhow::bail!(
                     "Node {} has not logged '{}' yet",
