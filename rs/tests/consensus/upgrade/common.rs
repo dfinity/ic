@@ -296,20 +296,27 @@ async fn upgrade_to(
     // upgrade is deployed below, we poll each node's journal for the "shut down gracefully" line
     // starting from this cursor, which is more efficient and guarantees we only observe the shutdown
     // triggered by this upgrade (not a pre-existing line from some earlier boot).
-    let cursors_per_node: BTreeMap<NodeId, String> = healthy_nodes
-        .iter()
-        .map(|node| {
-            let cursor = JournalStreamer::new(node.block_on_ssh_session().unwrap())
-                .get_cursor()
-                .unwrap_or_else(|e| {
-                    panic!(
-                        "Failed to fetch journal cursor for node {}: {e:#}",
-                        node.node_id
-                    )
-                });
-            (node.node_id, cursor)
-        })
-        .collect();
+    let mut cursors_per_node: BTreeMap<NodeId, String> = BTreeMap::new();
+    for node in &healthy_nodes {
+        let ssh_session = node
+            .block_on_ssh_session_async()
+            .await
+            .unwrap_or_else(|e| {
+                panic!(
+                    "Failed to establish SSH session for node {}: {e:#}",
+                    node.node_id
+                )
+            });
+        let cursor = JournalStreamer::new(ssh_session)
+            .get_cursor()
+            .unwrap_or_else(|e| {
+                panic!(
+                    "Failed to fetch journal cursor for node {}: {e:#}",
+                    node.node_id
+                )
+            });
+        cursors_per_node.insert(node.node_id, cursor);
+    }
 
     deploy_guestos_to_all_subnet_nodes(nns_node, target_version, subnet_id).await;
 
