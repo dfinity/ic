@@ -242,7 +242,7 @@ async fn call_sync_subnet(
     let effective_subnet_id = SubnetId::from(effective_subnet_id.get());
     call_sync_impl(
         EffectiveDestination::Subnet(effective_subnet_id),
-        CanisterRangesFilter::Flat,
+        CanisterRangesFilter::None,
         state,
         request,
     )
