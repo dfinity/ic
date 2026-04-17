@@ -205,10 +205,7 @@ use std::{
     ops::Deref,
     path::{Path, PathBuf},
     string::ToString,
-    sync::{
-        Arc, Mutex, RwLock,
-        atomic::{AtomicBool, AtomicU64},
-    },
+    sync::{Arc, Mutex, RwLock, atomic::AtomicU64},
     time::{Duration, Instant, SystemTime},
 };
 use tempfile::TempDir;
@@ -274,26 +271,13 @@ impl MessageOrdering {
     }
 }
 
-/// Describes a queue rotation to apply at the start of `execute_round`, after
-/// the induction phase has moved loopback-stream messages into input queues.
-enum NextSender {
-    /// Rotate the local input queue of `target` to put `source` first.
-    CanisterQueue {
-        source: CanisterId,
-        target: CanisterId,
-    },
-    /// Rotate the subnet (IC_00) input queue to put `source` first.
-    SubnetQueue { source: CanisterId },
-}
-
 struct FlexibleSchedulerImpl {
     inner: Box<dyn Scheduler<State = ReplicatedState>>,
     exec_env: Arc<ExecutionEnvironment>,
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     config: SchedulerConfig,
-    target: Arc<RwLock<Option<CanisterId>>>,
-    single_subnet_msg: Arc<AtomicBool>,
-    next_sender: Arc<RwLock<Option<NextSender>>>,
+    subnet_id: SubnetId,
+    next_message: Arc<RwLock<Option<OrderedMessage>>>,
 }
 
 impl FlexibleSchedulerImpl {
@@ -453,45 +437,9 @@ impl Scheduler for FlexibleSchedulerImpl {
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
     ) -> ReplicatedState {
-        let target = self.target.write().unwrap().take();
-        let single_subnet_msg = self.single_subnet_msg.swap(false, Ordering::Relaxed);
-        let next_sender = self.next_sender.write().unwrap().take();
-
-        // Apply the queue rotation after the induction phase has already moved
-        // loopback-stream messages into input queues.
-        if let Some(sender) = next_sender {
-            match sender {
-                NextSender::CanisterQueue {
-                    source,
-                    target: target_id,
-                } => {
-                    let canister = state.canister_state_make_mut(&target_id).unwrap();
-                    canister
-                        .system_state
-                        .queues_mut()
-                        .rotate_local_sender_to_front(source);
-                }
-                NextSender::SubnetQueue { source } => {
-                    state
-                        .subnet_queues_mut()
-                        .rotate_local_sender_to_front(source);
-                }
-            }
-        }
-
-        if let Some(canister_id) = target {
-            self.execute_single_canister(state, canister_id, registry_settings)
-        } else if single_subnet_msg {
-            self.execute_single_subnet_message(
-                state,
-                randomness,
-                &chain_key_data,
-                replica_version,
-                current_round,
-                registry_settings,
-            )
-        } else {
-            self.inner.execute_round(
+        let next_message = self.next_message.write().unwrap().take();
+        match next_message {
+            None => self.inner.execute_round(
                 state,
                 randomness,
                 chain_key_data,
@@ -500,7 +448,55 @@ impl Scheduler for FlexibleSchedulerImpl {
                 round_summary,
                 current_round_type,
                 registry_settings,
-            )
+            ),
+            Some(OrderedMessage::Ingress(target, _)) if target == IC_00 => self
+                .execute_single_subnet_message(
+                    state,
+                    randomness,
+                    &chain_key_data,
+                    replica_version,
+                    current_round,
+                    registry_settings,
+                ),
+            Some(OrderedMessage::Ingress(canister_id, _))
+            | Some(OrderedMessage::Heartbeat(canister_id))
+            | Some(OrderedMessage::Timer(canister_id)) => {
+                self.execute_single_canister(state, canister_id, registry_settings)
+            }
+            // Apply the queue rotation after the induction phase has moved loopback messages.
+            Some(OrderedMessage::Request { source, target }) if target == IC_00 => {
+                state
+                    .subnet_queues_mut()
+                    .rotate_local_sender_to_front(source);
+                self.execute_single_subnet_message(
+                    state,
+                    randomness,
+                    &chain_key_data,
+                    replica_version,
+                    current_round,
+                    registry_settings,
+                )
+            }
+            Some(OrderedMessage::Response { source, target }) if source == IC_00 => {
+                let subnet_canister_id = CanisterId::unchecked_from_principal(self.subnet_id.get());
+                let canister = state.canister_state_make_mut(&target).unwrap();
+                canister
+                    .system_state
+                    .queues_mut()
+                    .rotate_local_sender_to_front(subnet_canister_id);
+                self.execute_single_canister(state, target, registry_settings)
+            }
+            Some(
+                OrderedMessage::Request { source, target }
+                | OrderedMessage::Response { source, target },
+            ) => {
+                let canister = state.canister_state_make_mut(&target).unwrap();
+                canister
+                    .system_state
+                    .queues_mut()
+                    .rotate_local_sender_to_front(source);
+                self.execute_single_canister(state, target, registry_settings)
+            }
         }
     }
 
@@ -510,23 +506,13 @@ impl Scheduler for FlexibleSchedulerImpl {
 }
 
 struct FlexibleMessageOrdering {
-    ordering_target: Arc<RwLock<Option<CanisterId>>>,
-    single_subnet_msg: Arc<AtomicBool>,
     ingress_buffer: RwLock<BTreeMap<MessageId, SignedIngress>>,
-    next_sender: Arc<RwLock<Option<NextSender>>>,
+    next_message: Arc<RwLock<Option<OrderedMessage>>>,
 }
 
 impl FlexibleMessageOrdering {
-    fn set_ordering_target(&self, target: Option<CanisterId>) {
-        *self.ordering_target.write().unwrap() = target;
-    }
-
-    fn set_subnet_execution_mode(&self, subnet: bool) {
-        self.single_subnet_msg.store(subnet, Ordering::Relaxed);
-    }
-
-    fn set_next_sender(&self, sender: NextSender) {
-        *self.next_sender.write().unwrap() = Some(sender);
+    fn set_next_message(&self, msg: OrderedMessage) {
+        *self.next_message.write().unwrap() = Some(msg);
     }
 
     fn take_buffered_ingress(&self, message_id: &MessageId) -> SignedIngress {
@@ -2456,14 +2442,10 @@ impl StateMachine {
             execution_services.scheduler;
 
         if flexible_ordering {
-            let ordering_target: Arc<RwLock<Option<CanisterId>>> = Arc::new(RwLock::new(None));
-            let single_subnet_msg = Arc::new(AtomicBool::new(false));
-            let next_sender: Arc<RwLock<Option<NextSender>>> = Arc::new(RwLock::new(None));
+            let next_message: Arc<RwLock<Option<OrderedMessage>>> = Arc::new(RwLock::new(None));
             flexible_message_ordering = Some(FlexibleMessageOrdering {
-                ordering_target: Arc::clone(&ordering_target),
-                single_subnet_msg: Arc::clone(&single_subnet_msg),
                 ingress_buffer: RwLock::new(BTreeMap::new()),
-                next_sender: Arc::clone(&next_sender),
+                next_message: Arc::clone(&next_message),
             });
             scheduler = Box::new(FlexibleSchedulerImpl {
                 inner: scheduler,
@@ -2471,9 +2453,8 @@ impl StateMachine {
                 ingress_history_writer: Arc::clone(&execution_services.ingress_history_writer)
                     as Arc<_>,
                 config: subnet_config.scheduler_config.clone(),
-                target: ordering_target,
-                single_subnet_msg,
-                next_sender,
+                subnet_id,
+                next_message,
             });
         }
 
@@ -3015,10 +2996,6 @@ impl StateMachine {
             .expect("build the StateMachine with with_flexible_ordering()")
     }
 
-    fn set_ordering_target(&self, target: Option<CanisterId>) {
-        self.flexible_message_ordering().set_ordering_target(target);
-    }
-
     pub fn ingress_message_with_flexible_ordering(
         &self,
         sender: PrincipalId,
@@ -3050,7 +3027,7 @@ impl StateMachine {
         for msg in ordering.messages {
             match msg {
                 OrderedMessage::Ingress(target, ref ingress_id) if target == IC_00 => {
-                    flexible_message_ordering.set_subnet_execution_mode(true);
+                    flexible_message_ordering.set_next_message(msg.clone());
                     let signed = flexible_message_ordering.take_buffered_ingress(ingress_id);
                     let payload = PayloadBuilder::new()
                         .with_max_expiry_time_from_now(self.get_time().into())
@@ -3077,7 +3054,7 @@ impl StateMachine {
 
                 OrderedMessage::Ingress(target, ref ingress_id) => {
                     self.set_next_scheduled_method(target, NextScheduledMethod::Message);
-                    flexible_message_ordering.set_ordering_target(Some(target));
+                    flexible_message_ordering.set_next_message(msg.clone());
                     let signed = flexible_message_ordering.take_buffered_ingress(ingress_id);
                     let payload = PayloadBuilder::new()
                         .with_max_expiry_time_from_now(self.get_time().into())
@@ -3093,40 +3070,31 @@ impl StateMachine {
                         _ => unreachable!(),
                     };
                     self.set_next_scheduled_method(canister, method);
-                    flexible_message_ordering.set_ordering_target(Some(canister));
+                    flexible_message_ordering.set_next_message(msg.clone());
                     self.tick();
                     self.complete_dts(canister, MAX_TICKS);
                 }
 
                 OrderedMessage::Request { source, target } if target == IC_00 => {
                     // The rotation is applied inside execute_round after loopback induction.
-                    flexible_message_ordering.set_next_sender(NextSender::SubnetQueue { source });
-                    flexible_message_ordering.set_subnet_execution_mode(true);
+                    flexible_message_ordering.set_next_message(msg.clone());
                     self.tick();
                     self.complete_dts(source, MAX_TICKS);
                 }
 
                 OrderedMessage::Response { source, target } if source == IC_00 => {
-                    let subnet_canister_id =
-                        CanisterId::unchecked_from_principal(self.get_subnet_id().get());
-                    flexible_message_ordering.set_next_sender(NextSender::CanisterQueue {
-                        source: subnet_canister_id,
-                        target,
-                    });
                     self.set_next_scheduled_method(target, NextScheduledMethod::Message);
                     self.set_next_input_source(target, InputSource::LocalSubnet);
-                    flexible_message_ordering.set_ordering_target(Some(target));
+                    flexible_message_ordering.set_next_message(msg.clone());
                     self.tick();
                     self.complete_dts(target, MAX_TICKS);
                 }
 
-                OrderedMessage::Request { source, target }
-                | OrderedMessage::Response { source, target } => {
-                    flexible_message_ordering
-                        .set_next_sender(NextSender::CanisterQueue { source, target });
+                OrderedMessage::Request { source: _, target }
+                | OrderedMessage::Response { source: _, target } => {
                     self.set_next_scheduled_method(target, NextScheduledMethod::Message);
                     self.set_next_input_source(target, InputSource::LocalSubnet);
-                    flexible_message_ordering.set_ordering_target(Some(target));
+                    flexible_message_ordering.set_next_message(msg.clone());
                     self.tick();
                     self.complete_dts(target, MAX_TICKS);
                 }
@@ -3169,7 +3137,8 @@ impl StateMachine {
                 .map(|c| c.next_execution())
             {
                 Some(NextExecution::ContinueLong | NextExecution::ContinueInstallCode) => {
-                    self.set_ordering_target(Some(canister_id));
+                    self.flexible_message_ordering()
+                        .set_next_message(OrderedMessage::Heartbeat(canister_id));
                     self.tick();
                 }
                 _ => return,
