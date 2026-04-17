@@ -13,7 +13,6 @@ ic-base-types = { path = "../../../types/base_types" }
 ic-canister-client = { path = "../../../canister_client" }
 ic-canister-client-sender = { path = "../../../canister_client/sender" }
 ic-crypto-utils-threshold-sig-der = { path = "../../../crypto/utils/threshold_sig_der" }
-ic-limits = { path = "../../../limits" }
 ic-nervous-system-common = { path = "../../../nervous_system/common" }
 ic-nns-common = { path = "../../../nns/common" }
 ic-nns-constants = { path = "../../../nns/constants" }
@@ -32,4 +31,5 @@ registry-canister = { path = "../../../registry/canister" }
 serde = { workspace = true }
 slog = { workspace = true }
 ssh2 = { workspace = true }
+tokio = { workspace = true }
 url = { workspace = true }
