@@ -10,7 +10,7 @@ use crate::{
     file_sync_helper::remove_dir,
     registry_helper::RegistryHelper,
     ssh_helper::SshHelper,
-    util::{MaybeRemote, SshUser},
+    util::{CheckpointHeight, MaybeRemote, SshUser},
 };
 use admin_helper::{AdminHelper, IcAdmin, RegistryParams};
 use command_helper::exec_cmd;
@@ -376,41 +376,45 @@ impl Recovery {
     /// One of them is the latest checkpoint, which is looked up remotely via ssh or locally on
     /// disk, based on the value of `maybe_remote`.
     ///
-    /// If `download_height` is given, the checkpoint at that height is downloaded. If it does not
-    /// exist, an error is returned.
-    /// If it is not given, the latest checkpoint on the remote node is downloaded.
+    /// If `download_height` is `CheckpointHeight::Specified`, the checkpoint at the specified
+    /// height is downloaded. If it does not exist, an error is returned.
+    /// If it is `CheckpointHeight::Latest`, the latest checkpoint on the remote node is
+    /// downloaded.
     ///
     /// If there are no checkpoints, this function returns an empty list and does not consider it
     /// an error, as the subnet could have stalled in its first DKG interval before producing any
     /// checkpoint.
     pub fn get_ic_state_includes(
         maybe_remote: MaybeRemote<'_>,
-        download_height: Option<u64>,
+        download_height: CheckpointHeight,
     ) -> RecoveryResult<Vec<PathBuf>> {
         let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
 
-        let checkpoint_name = if let Some(height) = download_height {
-            let name = format!("{:016x}", height);
-            if !maybe_remote.path_exists(&ic_checkpoints_path.join(&name))? {
-                return Err(RecoveryError::invalid_output_error(format!(
-                    "Checkpoint {} at height {} does not exist at {}",
-                    name,
-                    height,
-                    ic_checkpoints_path.display()
-                )));
+        let checkpoint_name = match download_height {
+            CheckpointHeight::Specified(height) => {
+                let name = format!("{:016x}", height);
+                if !maybe_remote.path_exists(&ic_checkpoints_path.join(&name))? {
+                    return Err(RecoveryError::invalid_output_error(format!(
+                        "Checkpoint {} at height {} does not exist at {}",
+                        name,
+                        height,
+                        ic_checkpoints_path.display()
+                    )));
+                }
+
+                name
             }
+            CheckpointHeight::Latest => {
+                let Some((name, _height)) = maybe_remote
+                    .get_maybe_latest_checkpoint_name_and_height(&ic_checkpoints_path)?
+                else {
+                    // No checkpoints, return an empty list of includes. This is not an error, as the
+                    // subnet could have stalled in its first DKG interval.
+                    return Ok(vec![]);
+                };
 
-            name
-        } else {
-            let Some((name, _height)) =
-                maybe_remote.get_maybe_latest_checkpoint_name_and_height(&ic_checkpoints_path)?
-            else {
-                // No checkpoints, return an empty list of includes. This is not an error, as the
-                // subnet could have stalled in its first DKG interval.
-                return Ok(vec![]);
-            };
-
-            name
+                name
+            }
         };
 
         Ok(
@@ -448,8 +452,10 @@ impl Recovery {
             key_file,
         );
 
-        let includes =
-            Self::get_ic_state_includes(MaybeRemote::Remote(&ssh_helper), download_height)?;
+        let includes = Self::get_ic_state_includes(
+            MaybeRemote::Remote(&ssh_helper),
+            CheckpointHeight::from(download_height),
+        )?;
 
         self.get_download_data_step(
             ssh_helper,
@@ -497,7 +503,10 @@ impl Recovery {
         &self,
         download_height: Option<u64>,
     ) -> RecoveryResult<impl Step + use<>> {
-        let data_includes = Self::get_ic_state_includes(MaybeRemote::Local, download_height)?;
+        let data_includes = Self::get_ic_state_includes(
+            MaybeRemote::Local,
+            CheckpointHeight::from(download_height),
+        )?;
 
         Ok(CopyLocalIcStateStep {
             logger: self.logger.clone(),
@@ -1272,8 +1281,9 @@ mod tests {
         );
 
         // Test: without any checkpoints, should not be an error, should return nothing
-        let includes = Recovery::get_ic_state_includes(MaybeRemote::Local, None)
-            .expect("Failed getting ic state includes");
+        let includes =
+            Recovery::get_ic_state_includes(MaybeRemote::Local, CheckpointHeight::Latest)
+                .expect("Failed getting ic state includes");
         assert!(includes.is_empty());
 
         // Create some checkpoints
@@ -1285,9 +1295,10 @@ mod tests {
             ],
         );
 
-        // Test: without download height, should include the latest checkpoint
-        let includes = Recovery::get_ic_state_includes(MaybeRemote::Local, None)
-            .expect("Failed getting ic state includes");
+        // Test: without specified download height, should include the latest checkpoint
+        let includes =
+            Recovery::get_ic_state_includes(MaybeRemote::Local, CheckpointHeight::Latest)
+                .expect("Failed getting ic state includes");
         assert_eq!(
             includes,
             vec![
@@ -1298,9 +1309,10 @@ mod tests {
             ]
         );
 
-        // Test: with download height, should include the checkpoint at the download height
-        let includes = Recovery::get_ic_state_includes(MaybeRemote::Local, Some(64800))
-            .expect("Failed getting ic state includes");
+        // Test: with specified download height, should include the checkpoint at the download height
+        let includes =
+            Recovery::get_ic_state_includes(MaybeRemote::Local, CheckpointHeight::Specified(64800))
+                .expect("Failed getting ic state includes");
         assert_eq!(
             includes,
             vec![
@@ -1311,8 +1323,9 @@ mod tests {
             ]
         );
 
-        // Test: with download height but no checkpoint at that height, should return an error
-        let result = Recovery::get_ic_state_includes(MaybeRemote::Local, Some(64700));
+        // Test: with specified download height but no checkpoint at that height, should return an error
+        let result =
+            Recovery::get_ic_state_includes(MaybeRemote::Local, CheckpointHeight::Specified(64700));
         assert_matches!(result, Err(RecoveryError::OutputError(e)) if e.contains("does not exist"));
 
         remove_dir(&ic_checkpoints_path).unwrap();

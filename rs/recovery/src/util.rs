@@ -118,6 +118,20 @@ impl<'a> MaybeRemote<'a> {
     }
 }
 
+pub enum CheckpointHeight {
+    Latest,
+    Specified(u64),
+}
+
+impl From<Option<u64>> for CheckpointHeight {
+    fn from(value: Option<u64>) -> Self {
+        match value {
+            Some(height) => CheckpointHeight::Specified(height),
+            None => CheckpointHeight::Latest,
+        }
+    }
+}
+
 pub fn block_on<F: Future>(f: F) -> F::Output {
     let rt = Runtime::new().unwrap_or_else(|err| panic!("Could not create tokio runtime: {err}"));
     rt.block_on(f)
