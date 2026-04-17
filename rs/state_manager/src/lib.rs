@@ -950,9 +950,6 @@ pub struct StateManagerImpl {
     // requested quite often and this causes high contention on the lock.
     latest_state_height: Arc<AtomicU64>,
     latest_certified_height: AtomicU64,
-    // Cached tip height. We cache it separately because it's requested quite
-    // often and this causes high contention on the lock.
-    tip_height: AtomicU64,
     fast_forward_height: AtomicU64,
     persist_metadata_guard: Arc<Mutex<()>>,
     tip_channel: Sender<TipRequest>,
@@ -1516,7 +1513,6 @@ impl StateManagerImpl {
 
         let latest_state_height = AtomicU64::new(0);
         let latest_certified_height = AtomicU64::new(0);
-        let tip_height = AtomicU64::new(0);
         let fast_forward_height = AtomicU64::new(0);
 
         let initial_snapshot = Snapshot {
@@ -1582,7 +1578,6 @@ impl StateManagerImpl {
             tip_height: tip_height_and_state.0,
             tip: Some(tip_height_and_state.1),
         }));
-        tip_height.store(tip_height_and_state.0.get(), Ordering::Relaxed);
 
         let persist_metadata_guard = Arc::new(Mutex::new(()));
 
@@ -1635,7 +1630,6 @@ impl StateManagerImpl {
             deallocator_thread,
             latest_state_height: Arc::new(latest_state_height),
             latest_certified_height,
-            tip_height,
             fast_forward_height,
             persist_metadata_guard,
             tip_channel,
@@ -2736,7 +2730,7 @@ impl StateManager for StateManagerImpl {
     }
 
     fn tip_height(&self) -> Height {
-        Height::new(self.tip_height.load(Ordering::Relaxed))
+        self.states.read().tip_height
     }
 
     fn take_tip(&self) -> (Height, ReplicatedState) {
@@ -2832,8 +2826,6 @@ impl StateManager for StateManagerImpl {
             .clone();
 
         states.tip_height = target_snapshot.height;
-        self.tip_height
-            .store(target_snapshot.height.get(), Ordering::Relaxed);
         std::mem::drop(states);
 
         let mut new_tip = initialize_tip(
@@ -2865,13 +2857,11 @@ impl StateManager for StateManagerImpl {
 
         if height < tip_height {
             states.tip_height = tip_height;
-            self.tip_height.store(tip_height.get(), Ordering::Relaxed);
             states.tip = Some(state);
             return Err(StateManagerError::StateRemoved(height));
         }
         if tip_height < height {
             states.tip_height = tip_height;
-            self.tip_height.store(tip_height.get(), Ordering::Relaxed);
             states.tip = Some(state);
             return Err(StateManagerError::StateNotCommittedYet(height));
         }
@@ -3396,7 +3386,6 @@ impl StateManager for StateManagerImpl {
             self.metrics.no_state_clone_count.inc();
 
             states.tip_height = height;
-            self.tip_height.store(height.get(), Ordering::Relaxed);
             states.tip = Some(state);
             return;
         }
@@ -3544,7 +3533,6 @@ impl StateManager for StateManagerImpl {
         // The next call to take_tip() will take care of updating the
         // tip if needed.
         states.tip_height = next_tip.0;
-        self.tip_height.store(next_tip.0.get(), Ordering::Relaxed);
         states.tip = Some(next_tip.1);
 
         if scope == CertificationScope::Full {
