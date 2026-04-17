@@ -66,7 +66,6 @@ fn default_canister_state_bits() -> CanisterStateBits {
         next_canister_log_record_idx: 0,
         wasm_memory_limit: None,
         next_snapshot_id: 0,
-        snapshots_memory_usage: NumBytes::from(0),
         environment_variables: BTreeMap::new(),
         instructions_executed: NumInstructions::new(0),
         ingress_messages_executed: 0,
@@ -323,6 +322,10 @@ fn test_encode_decode_task_queue() {
         ),
         prepayment_for_response_transmission: CompoundCycles::new(
             Cycles::new(2197),
+            CanisterCyclesCostSchedule::Normal,
+        ),
+        prepayment_for_call_transmission: CompoundCycles::new(
+            Cycles::new(3213),
             CanisterCyclesCostSchedule::Normal,
         ),
         on_reply: WasmClosure::new(13, 14),
@@ -1255,6 +1258,10 @@ mod mainnet_compatibility_tests {
                     CanisterCyclesCostSchedule::Normal,
                 ),
                 prepayment_for_response_transmission: CompoundCycles::new(
+                    Cycles::zero(),
+                    CanisterCyclesCostSchedule::Normal,
+                ),
+                prepayment_for_call_transmission: CompoundCycles::new(
                     Cycles::zero(),
                     CanisterCyclesCostSchedule::Normal,
                 ),

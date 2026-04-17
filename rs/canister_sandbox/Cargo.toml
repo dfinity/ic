@@ -46,7 +46,6 @@ which = "4.2.2"
 
 [dev-dependencies]
 ic-error-types = { path = "../../packages/ic-error-types" }
-ic-types-cycles = { path = "../types/cycles" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-execution-environment = { path = "../test_utilities/execution_environment" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
@@ -55,6 +54,7 @@ ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 # allows the binary to reuse most of the build artifacts
 # produced by `cargo test`.
 ic-test-utilities-types = { path = "../test_utilities/types" }
+ic-types-cycles = { path = "../types/cycles" }
 mockall = { workspace = true }
 rand = { workspace = true }
 rstest = { workspace = true }

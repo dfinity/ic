@@ -16,10 +16,7 @@ use ic_crypto_tree_hash::{
 };
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_ledger_core::{block::BlockType, tokens::CheckedSub};
-use ic_management_canister_types_private::{
-    BoundedVec, CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder,
-    CreateCanisterArgs, IC_00, Method,
-};
+use ic_management_canister_types::{CanisterIdRecord, CanisterSettings, CreateCanisterArgs};
 use ic_nervous_system_common::{
     NNS_DAPP_BACKEND_CANISTER_ID, ONE_HOUR_SECONDS, ONE_MONTH_SECONDS, serve_metrics,
 };
@@ -54,6 +51,12 @@ mod environment;
 mod exchange_rate_canister;
 mod limiter;
 mod stable_utils;
+
+// Management canister method names. The public ic-management-canister-types crate does not export
+// a Method enum, so we define these as constants to avoid raw string literals at call sites.
+const METHOD_CREATE_CANISTER: &str = "create_canister";
+const METHOD_DEPOSIT_CYCLES: &str = "deposit_cycles";
+const METHOD_RAW_RAND: &str = "raw_rand";
 
 /// The past 30 days are used for the average ICP/XDR rate.
 const NUM_DAYS_FOR_ICP_XDR_AVERAGE: usize = 30;
@@ -1925,7 +1928,7 @@ async fn process_create_canister(
     from: AccountIdentifier,
     amount: Tokens,
     subnet_selection: Option<SubnetSelection>,
-    settings: Option<CanisterSettingsArgs>,
+    settings: Option<CanisterSettings>,
 ) -> Result<CanisterId, NotifyError> {
     let cycles = tokens_to_cycles(amount)?;
 
@@ -2116,9 +2119,11 @@ async fn deposit_cycles(
     }
 
     let res: CallResult<()> = ic_cdk::api::call::call_with_payment128(
-        IC_00.get().0,
-        &Method::DepositCycles.to_string(),
-        (CanisterIdRecord::from(canister_id),),
+        candid::Principal::management_canister(),
+        METHOD_DEPOSIT_CYCLES,
+        (CanisterIdRecord {
+            canister_id: canister_id.get().0,
+        },),
         u128::from(cycles),
     )
     .await;
@@ -2171,7 +2176,7 @@ async fn do_create_canister(
     controller_id: PrincipalId,
     cycles: Cycles,
     subnet_selection: Option<SubnetSelection>,
-    settings: Option<CanisterSettingsArgs>,
+    settings: Option<CanisterSettings>,
 ) -> Result<CanisterId, String> {
     // Retrieve randomness from the system to use later to get a random
     // permutation of subnets. Performing the asynchronous call before
@@ -2247,20 +2252,19 @@ async fn do_create_canister(
     let canister_settings = settings
         .map(|mut settings| {
             if settings.controllers.is_none() {
-                settings.controllers = Some(BoundedVec::new(vec![controller_id]));
+                settings.controllers = Some(vec![controller_id.0]);
             }
             settings
         })
-        .unwrap_or_else(|| {
-            CanisterSettingsArgsBuilder::new()
-                .with_controllers(vec![controller_id])
-                .build()
+        .unwrap_or_else(|| CanisterSettings {
+            controllers: Some(vec![controller_id.0]),
+            ..Default::default()
         });
 
     for subnet_id in subnets {
         let result: CallResult<(CanisterIdRecord,)> = ic_cdk::api::call::call_with_payment128(
             subnet_id.get().0,
-            &Method::CreateCanister.to_string(),
+            METHOD_CREATE_CANISTER,
             (CreateCanisterArgs {
                 settings: Some(canister_settings.clone()),
                 sender_canister_version: Some(ic_cdk::api::canister_version()),
@@ -2270,7 +2274,12 @@ async fn do_create_canister(
         .await;
 
         let canister_id = match result {
-            Ok(canister_id) => canister_id.0.get_canister_id(),
+            Ok((canister_id_record,)) => {
+                // Safe: canister_id returned by the management canister is always a valid canister principal.
+                CanisterId::unchecked_from_principal(PrincipalId::from(
+                    canister_id_record.canister_id,
+                ))
+            }
             Err((code, msg)) => {
                 let err = format!(
                     "Creating canister in subnet {} failed with code {}: {}",
@@ -2334,8 +2343,12 @@ fn get_subnets_for(controller_id: &PrincipalId) -> Vec<SubnetId> {
 }
 
 async fn get_rng() -> Result<StdRng, String> {
-    let res: CallResult<(Vec<u8>,)> =
-        ic_cdk::call(IC_00.get().0, &Method::RawRand.to_string(), ()).await;
+    let res: CallResult<(Vec<u8>,)> = ic_cdk::call(
+        candid::Principal::management_canister(),
+        METHOD_RAW_RAND,
+        (),
+    )
+    .await;
 
     let bytes = res
         .map_err(|(code, msg)| {

@@ -35,7 +35,7 @@ use ic_types::{
     time::CoarseTime,
 };
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, CyclesUseCaseKind, DroppedMessages, NonConsumed,
+    CanisterCyclesCostSchedule, CompoundCycles, CyclesUseCaseKind, DroppedMessages,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -1002,7 +1002,6 @@ impl ReplicatedState {
                 msg,
                 subnet_available_guaranteed_response_memory,
                 own_subnet_type,
-                own_cost_schedule,
                 input_queue_type,
             ),
             None => {
@@ -1068,18 +1067,9 @@ impl ReplicatedState {
     ///
     /// Returns `true` if the recipient canister exists and was credited, `false`
     /// otherwise.
-    pub fn credit_refund(
-        &mut self,
-        refund: &Refund,
-        cost_schedule: CanisterCyclesCostSchedule,
-    ) -> bool {
+    pub fn credit_refund(&mut self, refund: &Refund) -> bool {
         if let Some(canister) = self.canister_state_make_mut(&refund.recipient()) {
-            canister
-                .system_state
-                .add_cycles(CompoundCycles::<NonConsumed>::new(
-                    refund.amount(),
-                    cost_schedule,
-                ));
+            canister.system_state.add_cycles(refund.amount());
             true
         } else {
             false

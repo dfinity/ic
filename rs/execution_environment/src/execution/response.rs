@@ -22,12 +22,12 @@ use ic_sys::PAGE_SIZE;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterMessage, CanisterMessageOrTask, Payload, RequestMetadata,
-    Response,
+    Response, SenderInfo,
 };
 use ic_types::methods::{Callback, FuncRef, WasmClosure};
 use ic_types::{NumBytes, NumInstructions, Time};
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, Instructions, NonConsumed,
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, Instructions,
     RequestAndResponseTransmission,
 };
 use ic_utils_thread::deallocator_thread::DeallocationSender;
@@ -111,6 +111,8 @@ const RESERVED_CLEANUP_INSTRUCTIONS_IN_PERCENT: u64 = 5;
 #[derive(Debug)]
 struct PausedResponseHelper {
     refund_for_sent_cycles: Cycles,
+    prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
+    prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
     refund_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
     initial_cycles_balance: Cycles,
     response_sender: CanisterId,
@@ -121,6 +123,8 @@ struct PausedResponseHelper {
 struct ResponseHelper {
     canister: CanisterState,
     refund_for_sent_cycles: Cycles,
+    prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
+    prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
     refund_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
     initial_cycles_balance: Cycles,
     response_sender: CanisterId,
@@ -185,6 +189,10 @@ impl ResponseHelper {
         let mut helper = Self {
             canister,
             refund_for_sent_cycles,
+            prepayment_for_response_transmission: original
+                .callback
+                .prepayment_for_response_transmission,
+            prepayment_for_call_transmission: original.callback.prepayment_for_call_transmission,
             refund_for_response_transmission,
             initial_cycles_balance,
             response_sender,
@@ -200,17 +208,28 @@ impl ResponseHelper {
     ///
     /// These are the only state changes to the initial canister state before
     /// executing Wasm code.
-    fn apply_initial_refunds(&mut self, cost_schedule: CanisterCyclesCostSchedule) {
+    fn apply_initial_refunds(&mut self) {
         self.canister
             .system_state
-            .add_cycles(CompoundCycles::<NonConsumed>::new(
-                self.refund_for_sent_cycles,
-                cost_schedule,
-            ));
+            .add_cycles(self.refund_for_sent_cycles);
 
-        self.canister
-            .system_state
-            .add_cycles(self.refund_for_response_transmission);
+        // `self.prepayment_for_call_transmission` might be zero for any responses
+        // to requests that were produced before this field was stored in callbacks.
+        // In that scenario, use `self.prepayment_for_response_transmission` for some
+        // partial update to consumed metrics (the ones that behave like counters)
+        // during refund phase. This does not affect the refund to balance or the
+        // metrics that behave like gauges as these are updated based on the refund amount.
+        // This code can be dropped when all callbacks have the `prepayment_for_call_transmission`
+        // field set.
+        let prepayment_for_call_transmission = if self.prepayment_for_call_transmission.is_zero() {
+            self.prepayment_for_response_transmission
+        } else {
+            self.prepayment_for_call_transmission
+        };
+        self.canister.system_state.refund_cycles(
+            prepayment_for_call_transmission,
+            self.refund_for_response_transmission,
+        );
     }
 
     /// Checks that the canister has not been uninstalled:
@@ -284,6 +303,8 @@ impl ResponseHelper {
         self.deallocation_sender.send(Box::new(self.canister));
         PausedResponseHelper {
             refund_for_sent_cycles: self.refund_for_sent_cycles,
+            prepayment_for_response_transmission: self.prepayment_for_response_transmission,
+            prepayment_for_call_transmission: self.prepayment_for_call_transmission,
             refund_for_response_transmission: self.refund_for_response_transmission,
             initial_cycles_balance: self.initial_cycles_balance,
             response_sender: self.response_sender,
@@ -323,6 +344,8 @@ impl ResponseHelper {
         let mut helper = Self {
             canister: clean_canister.clone(),
             refund_for_sent_cycles: paused.refund_for_sent_cycles,
+            prepayment_for_response_transmission: paused.prepayment_for_response_transmission,
+            prepayment_for_call_transmission: paused.prepayment_for_call_transmission,
             refund_for_response_transmission: paused.refund_for_response_transmission,
             initial_cycles_balance: clean_canister.system_state.balance(),
             response_sender: paused.response_sender,
@@ -332,7 +355,7 @@ impl ResponseHelper {
 
         helper.apply_subnet_memory_reservation(round_limits);
 
-        helper.apply_initial_refunds(round.cost_schedule);
+        helper.apply_initial_refunds();
 
         // This validation succeeded in `execute_response()` and we expect it to
         // succeed here too.
@@ -681,6 +704,9 @@ struct OriginalContext {
     instructions_executed: NumInstructions,
     log_dirty_pages: FlagStatus,
     cost_schedule: CanisterCyclesCostSchedule,
+    /// Sender info from the ingress message that created the call context.
+    /// `None` for call contexts created by inter-canister calls.
+    sender_info: Option<SenderInfo>,
 }
 
 fn is_composite_query(origin: &CallOrigin) -> bool {
@@ -970,6 +996,7 @@ pub fn execute_response(
         instructions_executed: call_context.instructions_executed(),
         log_dirty_pages,
         cost_schedule: round.cost_schedule,
+        sender_info: call_context.sender_info().cloned(),
     };
 
     let mut helper = ResponseHelper::new(
@@ -980,7 +1007,7 @@ pub fn execute_response(
         round_limits,
         deallocation_sender,
     );
-    helper.apply_initial_refunds(round.cost_schedule);
+    helper.apply_initial_refunds();
     let helper = match helper.validate(&call_context, &original, &round, round_limits) {
         Ok(helper) => helper,
         Err(result) => {
@@ -1009,6 +1036,7 @@ pub fn execute_response(
             call_context_id,
             call_context.has_responded(),
             call_context.instructions_executed(),
+            call_context.sender_info().cloned(),
         ),
         Payload::Reject(context) => ApiType::reject_callback(
             time,
@@ -1018,6 +1046,7 @@ pub fn execute_response(
             call_context_id,
             call_context.has_responded(),
             call_context.instructions_executed(),
+            call_context.sender_info().cloned(),
         ),
     };
 
@@ -1102,6 +1131,7 @@ fn execute_response_cleanup(
             time: original.time,
             reject_code,
             call_context_instructions_executed: original.instructions_executed,
+            sender_info: original.sender_info.clone(),
         },
         helper.canister().execution_state.as_ref().unwrap(),
         &helper.canister().system_state,

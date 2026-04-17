@@ -10,6 +10,8 @@ use rand::prelude::thread_rng;
 use sev_guest::attestation_package::generate_attestation_package;
 use sev_guest::firmware::SevGuestFirmware;
 use std::path::Path;
+#[cfg(any(feature = "dev", test))]
+use tracing::info;
 
 pub const CONFIG_DEVICE_LABEL: &str = "CONFIG";
 pub const RECOVERY_PROPOSAL_FILE_NAME: &str = "alternative_guestos_proposal.cbor";
@@ -97,7 +99,7 @@ pub fn extract_and_verify_recovery_rootfs_hash(
 
 #[cfg(any(feature = "dev", test))]
 fn get_nns_public_key_override(config_media_path: &Path) -> Result<Option<Vec<u8>>> {
-    println!("Dev mode: reading NNS public key override from {config_media_path:?}");
+    info!("Dev mode: reading NNS public key override from {config_media_path:?}");
 
     let guestos_config: GuestOSConfig =
         config_tool::deserialize_config(config_media_path.join("config.json"))?;
@@ -107,7 +109,7 @@ fn get_nns_public_key_override(config_media_path: &Path) -> Result<Option<Vec<u8
         .guestos_dev_settings
         .nns_pub_key_override
     else {
-        println!("No NNS public key override found in GuestOS config");
+        info!("No NNS public key override found in GuestOS config");
         return Ok(None);
     };
 

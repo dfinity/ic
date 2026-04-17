@@ -25,7 +25,7 @@ use ic_types::{
 };
 use ic_types_cycles::{
     CanisterCyclesCostSchedule, CompoundCycles, Cycles, Instructions, Memory, NominalCycles,
-    NominalCyclesTesting, NonConsumed, Uninstall,
+    NominalCyclesTesting, Uninstall,
 };
 use prometheus::IntCounter;
 use std::{convert::TryFrom, time::Duration};
@@ -42,6 +42,7 @@ fn xnet_call_total_fee_free() {
         Cycles::new(0),
         cam.xnet_call_total_fee(
             NumBytes::new(9999),
+            SMALL_APP_SUBNET_MAX_SIZE,
             WasmExecutionMode::Wasm32,
             cost_schedule
         ),
@@ -97,12 +98,7 @@ fn test_can_charge_application_subnets() {
                             .memory_cost(memory, duration, subnet_size, cost_schedule)
                             .real();
                     let initial_cycles = expected_fee;
-                    canister
-                        .system_state
-                        .add_cycles(CompoundCycles::<NonConsumed>::new(
-                            initial_cycles,
-                            cost_schedule,
-                        ));
+                    canister.system_state.add_cycles(initial_cycles);
                     assert_eq!(canister.system_state.balance(), initial_cycles);
                     cycles_account_manager
                         .charge_canister_for_resource_allocation_and_usage(
@@ -1145,10 +1141,7 @@ fn consume_cycles_for_memory_drains_reserved_balance() {
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(Cycles::zero())
         .build();
-    system_state.add_cycles(CompoundCycles::<NonConsumed>::new(
-        Cycles::new(4_000_000),
-        cost_schedule,
-    ));
+    system_state.add_cycles(Cycles::new(4_000_000));
     system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
     cam.consume_with_threshold(
         &mut system_state,
@@ -1170,10 +1163,7 @@ fn consume_cycles_for_compute_drains_reserved_balance() {
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(Cycles::zero())
         .build();
-    system_state.add_cycles(CompoundCycles::<NonConsumed>::new(
-        Cycles::new(4_000_000),
-        cost_schedule,
-    ));
+    system_state.add_cycles(Cycles::new(4_000_000));
     system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
     cam.consume_with_threshold(
         &mut system_state,
@@ -1198,10 +1188,7 @@ fn consume_cycles_for_uninstall_drains_reserved_balance() {
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(Cycles::zero())
         .build();
-    system_state.add_cycles(CompoundCycles::<NonConsumed>::new(
-        Cycles::new(4_000_000),
-        cost_schedule,
-    ));
+    system_state.add_cycles(Cycles::new(4_000_000));
     system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
     cam.consume_with_threshold(
         &mut system_state,
@@ -1223,10 +1210,7 @@ fn consume_cycles_for_execution_does_not_drain_reserved_balance() {
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(Cycles::zero())
         .build();
-    system_state.add_cycles(CompoundCycles::<NonConsumed>::new(
-        Cycles::new(4_000_000),
-        cost_schedule,
-    ));
+    system_state.add_cycles(Cycles::new(4_000_000));
     system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
     cam.consume_with_threshold(
         &mut system_state,
@@ -1546,5 +1530,55 @@ fn test_storage_reservation_cycles_free() {
             cost_schedule,
         )
         .real()
+    );
+}
+
+#[test]
+fn variable_execution_cost_matches_refund() {
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    let subnet_size = SMALL_APP_SUBNET_MAX_SIZE;
+    let cam = CyclesAccountManagerBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let n_max = NumInstructions::from(1_000_000);
+    let n_refund = NumInstructions::from(600_000);
+
+    let mut system_state = SystemStateBuilder::new().build();
+    let prepaid = cam
+        .prepay_execution_cycles(
+            &mut system_state,
+            NumBytes::from(0),
+            MessageMemoryUsage::ZERO,
+            ComputeAllocation::default(),
+            n_max,
+            subnet_size,
+            cost_schedule,
+            false,
+            WASM_EXECUTION_MODE,
+        )
+        .unwrap();
+
+    let balance_after_prepay = system_state.balance();
+
+    let no_op_counter = IntCounter::new("no_op", "no_op").unwrap();
+    cam.refund_unused_execution_cycles(
+        &mut system_state,
+        n_refund,
+        n_max,
+        prepaid,
+        &no_op_counter,
+        subnet_size,
+        cost_schedule,
+        WASM_EXECUTION_MODE,
+        &no_op_logger(),
+    );
+
+    let expected_refund = cam
+        .variable_execution_cost(n_refund, subnet_size, cost_schedule, WASM_EXECUTION_MODE)
+        .real();
+    assert_eq!(
+        system_state.balance(),
+        balance_after_prepay + expected_refund
     );
 }

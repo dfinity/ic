@@ -110,7 +110,7 @@ pub fn run_fuzzer(module: ICWasmModule) {
                 }
                 canister_state_changes
                     .system_state_modifications
-                    .apply_balance_changes(&mut system_state, CanisterCyclesCostSchedule::Normal);
+                    .apply_balance_changes(&mut system_state);
             }
             WasmExecutionResult::Paused(_, _) => (), // Only possible via execute_dts
         }
@@ -132,6 +132,7 @@ fn setup_wasm_execution_input(
         Cycles::new(1_000_000_000),
         UNIX_EPOCH,
         RequestMetadata::default(),
+        None,
     );
 
     WasmExecutionInput {

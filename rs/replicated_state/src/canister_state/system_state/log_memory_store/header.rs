@@ -5,11 +5,11 @@ use crate::canister_state::system_state::log_memory_store::{
 use more_asserts::{debug_assert_gt, debug_assert_lt};
 
 /// Magic prefix that marks a properly initialized canister log buffer.
-pub(crate) const MAGIC: &[u8; 3] = b"CLB";
+pub(super) const MAGIC: &[u8; 3] = b"CLB";
 
 /// Header structure for the log memory store (version 1).
 /// This is the in-memory representation of the header.
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub(super) struct Header {
     // Validation and compatibility.
     pub magic: [u8; 3],

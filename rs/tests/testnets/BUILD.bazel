@@ -298,10 +298,13 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "sev_baremetal_app_subnet",
+    name = "baremetal_app_subnet",
     enable_metrics = True,
-    env = MAINNET_ENV | {"TRUSTED_EXECUTION_ENVIRONMENT": "true"},
-    env_inherit = ["BARE_METAL_HOST_SECRETS"],
+    env = MAINNET_ENV,
+    env_inherit = [
+        "BARE_METAL_HOST_SECRETS",
+        "TRUSTED_EXECUTION_ENVIRONMENT",
+    ],
     guestos = True,
     hostos = True,
     tags = [

@@ -199,14 +199,11 @@ impl SchedulerImpl {
     ) -> ReplicatedState {
         let mut ongoing_long_install_code = false;
         for canister_id in long_running_canisters.iter() {
-            match state.canister_state(canister_id) {
-                None => continue,
-                Some(canister) => match canister.next_execution() {
-                    NextExecution::None | NextExecution::StartNew | NextExecution::ContinueLong => {
-                        continue;
-                    }
-                    NextExecution::ContinueInstallCode => {}
-                },
+            let Some(canister) = state.canister_state(canister_id) else {
+                continue;
+            };
+            if !canister.has_long_install_code() {
+                continue;
             }
             let instruction_limits = InstructionLimits::new(
                 self.config.max_instructions_per_install_code,
@@ -257,15 +254,10 @@ impl SchedulerImpl {
         replica_version: &ReplicaVersion,
         chain_key_data: &ChainKeyData,
     ) -> ReplicatedState {
-        let mut ongoing_long_install_code =
-            state
-                .canisters_iter()
-                .any(|canister| match canister.next_execution() {
-                    NextExecution::None | NextExecution::StartNew | NextExecution::ContinueLong => {
-                        false
-                    }
-                    NextExecution::ContinueInstallCode => true,
-                });
+        let mut ongoing_long_install_code = state
+            .canisters_iter()
+            .any(|canister| canister.has_long_install_code());
+
         loop {
             let mut available_subnet_messages = false;
             let mut loop_detector = state.subnet_queues_loop_detector();
@@ -380,38 +372,35 @@ impl SchedulerImpl {
             let has_heartbeat = has_heartbeat(canister);
             let has_active_timer = has_active_timer(canister, now);
             if !has_heartbeat && !has_active_timer {
-                // Canister has no heartbeat and no active global timer.
+                // No heartbeat and no active global timer.
                 continue;
             }
 
-            match canister.next_execution() {
-                NextExecution::ContinueLong | NextExecution::ContinueInstallCode => {
-                    // Do not add a heartbeat task if a long execution is pending.
-                }
-                NextExecution::None | NextExecution::StartNew => {
-                    // Skip canisters that don't have enough cycles to execute a heartbeat/timer.
-                    if self
-                        .cycles_account_manager
-                        .can_prepay_execution_cycles(
-                            canister,
-                            self.config.max_instructions_per_message,
-                            subnet_size,
-                            cost_schedule,
-                        )
-                        .is_err()
-                    {
-                        continue;
-                    }
-
-                    let canister = Arc::make_mut(canister);
-                    maybe_add_heartbeat_or_global_timer_tasks(
-                        canister,
-                        has_heartbeat,
-                        has_active_timer,
-                        &mut heartbeat_and_timer_canisters,
-                    );
-                }
+            // Skip canisters with pending long execution or install code.
+            if canister.has_long_execution_or_install_code() {
+                continue;
             }
+            // Skip canisters that don't have enough cycles to execute a heartbeat/timer.
+            if self
+                .cycles_account_manager
+                .can_prepay_execution_cycles(
+                    canister,
+                    self.config.max_instructions_per_message,
+                    subnet_size,
+                    cost_schedule,
+                )
+                .is_err()
+            {
+                continue;
+            }
+
+            let canister = Arc::make_mut(canister);
+            maybe_add_heartbeat_or_global_timer_tasks(
+                canister,
+                has_heartbeat,
+                has_active_timer,
+                &mut heartbeat_and_timer_canisters,
+            );
         }
         heartbeat_and_timer_canisters
     }
@@ -837,7 +826,7 @@ impl SchedulerImpl {
 
             // Postpone charging for resources when a canister has a paused execution
             // to avoid modifying the balance of a canister during an unfinished operation.
-            if canister.has_paused_execution() || canister.has_paused_install_code() {
+            if canister.has_paused_execution_or_install_code() {
                 continue;
             }
 
@@ -956,14 +945,12 @@ impl SchedulerImpl {
                 .system_state
                 .output_queues_for_each(|canister_id, msg| {
                     let own_subnet_type = state.metadata.own_subnet_type;
-                    let own_cost_schedule = state.get_own_cost_schedule();
                     match state.canister_state_make_mut(canister_id) {
                         Some(dest_canister) => dest_canister
                             .push_input(
                                 (*msg).clone(),
                                 &mut subnet_available_guaranteed_response_memory,
                                 own_subnet_type,
-                                own_cost_schedule,
                                 InputQueueType::LocalSubnet,
                             )
                             .map(|_| ())
@@ -1197,10 +1184,11 @@ impl Scheduler for SchedulerImpl {
             long_running_canisters = state
                 .canister_states()
                 .iter()
-                .filter_map(|(&canister_id, canister)| match canister.next_execution() {
-                    NextExecution::None | NextExecution::StartNew => None,
-                    NextExecution::ContinueLong | NextExecution::ContinueInstallCode => {
-                        Some(canister_id)
+                .filter_map(|(canister_id, canister)| {
+                    if canister.has_long_execution_or_install_code() {
+                        Some(*canister_id)
+                    } else {
+                        None
                     }
                 })
                 .collect();
@@ -1211,9 +1199,7 @@ impl Scheduler for SchedulerImpl {
             let has_any_paused_execution = long_running_canisters.iter().any(|canister_id| {
                 state
                     .canister_state(canister_id)
-                    .map(|canister| {
-                        canister.has_paused_execution() || canister.has_paused_install_code()
-                    })
+                    .map(|canister| canister.has_paused_execution_or_install_code())
                     .unwrap_or(false)
             });
             if !has_any_paused_execution {
@@ -1980,7 +1966,6 @@ fn get_instruction_limits_for_subnet_message(
             | StoredChunks
             | ClearChunkStore
             | TakeCanisterSnapshot
-            | LoadCanisterSnapshot
             | ListCanisterSnapshots
             | DeleteCanisterSnapshot
             | ReadCanisterSnapshotMetadata
@@ -1988,6 +1973,13 @@ fn get_instruction_limits_for_subnet_message(
             | UploadCanisterSnapshotMetadata
             | UploadCanisterSnapshotData
             | RenameCanister => default_limits,
+            // `LoadCanisterSnapshot` compiles a Wasm module and charges for it
+            // similar to `InstallCode`. It does not support DTS, so the slice
+            // limit equals the message limit.
+            LoadCanisterSnapshot => InstructionLimits::new(
+                config.max_instructions_per_install_code,
+                config.max_instructions_per_install_code,
+            ),
             InstallCode | InstallChunkedCode => InstructionLimits::new(
                 config.max_instructions_per_install_code,
                 config.max_instructions_per_install_code_slice,

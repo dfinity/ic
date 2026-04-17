@@ -5,8 +5,10 @@ use memory_tracker::{
 };
 
 use libc::{self, c_void};
+use memory_tracker::signal_mutex::SignalMutex;
 use nix::sys::mman::{MapFlags, ProtFlags, mmap};
 use std::ptr;
+use std::sync::Arc;
 use std::time::Duration;
 
 use lazy_static::lazy_static;
@@ -57,6 +59,7 @@ fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
                         DirtyPageTracking::Track,
                         page_map.clone(),
                         MemoryLimits::default(),
+                        Arc::new(SignalMutex::new(|_| {})),
                     )
                     .unwrap(),
                     page_map,
@@ -106,6 +109,7 @@ fn criterion_fault_handler_sim_write(criterion: &mut Criterion) {
                         DirtyPageTracking::Track,
                         page_map.clone(),
                         MemoryLimits::default(),
+                        Arc::new(SignalMutex::new(|_| {})),
                     )
                     .unwrap(),
                     page_map,
