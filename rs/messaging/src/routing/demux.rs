@@ -5,7 +5,7 @@ use crate::{
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_logger::{ReplicaLogger, debug, trace};
 use ic_replicated_state::ReplicatedState;
-use ic_types::batch::BatchMessages;
+use ic_types::{Height, batch::BatchMessages};
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -17,7 +17,12 @@ pub(crate) trait Demux: Send {
     /// Process the provided payload. Splices off XNetMessages as appropriate
     /// and (attempts) to induct the messages contained in the payload as
     /// appropriate.
-    fn process_payload(&self, state: ReplicatedState, messages: BatchMessages) -> ReplicatedState;
+    fn process_payload(
+        &self,
+        state: ReplicatedState,
+        messages: BatchMessages,
+        height: Height,
+    ) -> ReplicatedState;
 }
 
 pub(crate) struct DemuxImpl<'a> {
@@ -51,6 +56,7 @@ impl Demux for DemuxImpl<'_> {
         &self,
         state: ReplicatedState,
         batch_messages: BatchMessages,
+        height: Height,
     ) -> ReplicatedState {
         trace!(self.log, "Processing Payload");
 
@@ -72,7 +78,7 @@ impl Demux for DemuxImpl<'_> {
             .process_stream_slices(state, decoded_slices);
 
         self.valid_set_rule
-            .induct_messages(&mut state, batch_messages.signed_ingress_msgs);
+            .induct_messages(&mut state, batch_messages.signed_ingress_msgs, height);
 
         for response in batch_messages.bitcoin_adapter_responses.into_iter() {
             state.push_response_bitcoin(response).unwrap_or_else(|err| {

@@ -43,8 +43,8 @@ use ic_types::batch::ChainKeyData;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{Ingress, MessageId, NO_DEADLINE, Response, SubnetMessage};
 use ic_types::{
-    CanisterId, ComputeAllocation, ExecutionRound, MemoryAllocation, NumBytes, NumInstructions,
-    NumMessages, NumSlices, Randomness, ReplicaVersion, SubnetId, Time,
+    CanisterId, ComputeAllocation, ExecutionRound, Height, MemoryAllocation, NumBytes,
+    NumInstructions, NumMessages, NumSlices, Randomness, ReplicaVersion, SubnetId, Time,
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
@@ -196,6 +196,7 @@ impl SchedulerImpl {
         long_running_canisters: &[CanisterId],
         measurement_scope: &MeasurementScope,
         subnet_size: usize,
+        height: Height,
     ) -> ReplicatedState {
         let mut ongoing_long_install_code = false;
         for canister_id in long_running_canisters.iter() {
@@ -217,6 +218,7 @@ impl SchedulerImpl {
                     instruction_limits,
                     round_limits,
                     subnet_size,
+                    height,
                 );
             state = new_state;
             ongoing_long_install_code |= state
@@ -606,9 +608,12 @@ impl SchedulerImpl {
         }
 
         for (message_id, status) in ingress_execution_results {
-            let old_status = self
-                .ingress_history_writer
-                .set_status(&mut state, message_id, status);
+            let old_status = self.ingress_history_writer.set_status(
+                &mut state,
+                message_id,
+                status,
+                Height::from(current_round.get()),
+            );
             canister_ingress_latencies.on_ingress_status_changed(&old_status);
         }
 
@@ -764,6 +769,7 @@ impl SchedulerImpl {
         &self,
         state: &mut ReplicatedState,
         canister_ingress_latencies: &mut CanisterIngressQueueLatencies,
+        height: Height,
     ) {
         let current_time = state.time();
         let not_expired = |ingress: &Ingress| ingress.expiry_time >= current_time;
@@ -795,6 +801,7 @@ impl SchedulerImpl {
                     time: current_time,
                     state: IngressState::Failed(error),
                 },
+                height,
             );
             canister_ingress_latencies.on_ingress_status_changed(&old_status);
         }
@@ -807,6 +814,7 @@ impl SchedulerImpl {
         &self,
         state: &mut ReplicatedState,
         subnet_size: usize,
+        height: Height,
     ) {
         let cost_schedule = state.get_own_cost_schedule();
         let state_time = state.time();
@@ -878,6 +886,7 @@ impl SchedulerImpl {
                 Arc::clone(&self.ingress_history_writer),
                 self.log.clone(),
                 self.exec_env.canister_not_found_error(),
+                height,
             );
         }
     }
@@ -1213,7 +1222,11 @@ impl Scheduler for SchedulerImpl {
 
             {
                 let _timer = self.metrics.round_preparation_ingress.start_timer();
-                self.purge_expired_ingress_messages(&mut state, &mut canister_ingress_latencies);
+                self.purge_expired_ingress_messages(
+                    &mut state,
+                    &mut canister_ingress_latencies,
+                    Height::from(current_round.get()),
+                );
             }
 
             // In the future, subnet messages might be executed in threads. In
@@ -1404,6 +1417,7 @@ impl Scheduler for SchedulerImpl {
                 &long_running_canisters,
                 &measurement_scope,
                 registry_settings.subnet_size,
+                Height::from(current_round.get()),
             );
 
             scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
@@ -1533,7 +1547,9 @@ impl Scheduler for SchedulerImpl {
             // beginning of the round), then canister deletion logic should be revised.
             {
                 let _timer = self.metrics.round_finalization_stop_canisters.start_timer();
-                final_state = self.exec_env.process_stopping_canisters(state);
+                final_state = self
+                    .exec_env
+                    .process_stopping_canisters(state, Height::from(current_round.get()));
             }
             {
                 let _timer = self.metrics.round_finalization_ingress.start_timer();
@@ -1544,6 +1560,7 @@ impl Scheduler for SchedulerImpl {
                 self.charge_canisters_for_resource_allocation_and_usage(
                     &mut final_state,
                     registry_settings.subnet_size,
+                    Height::from(current_round.get()),
                 );
             }
 

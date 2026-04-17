@@ -656,6 +656,7 @@ pub trait IngressHistoryWriter: Send + Sync {
         state: &mut Self::State,
         message_id: MessageId,
         status: IngressStatus,
+        height: Height,
     ) -> Arc<IngressStatus>;
 }
 

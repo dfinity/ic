@@ -1620,7 +1620,7 @@ impl BatchProcessor for FakeBatchProcessorImpl {
 
         for (msg_id, status) in all_ingress_execution_results {
             self.ingress_history_writer
-                .set_status(&mut state, msg_id, status);
+                .set_status(&mut state, msg_id, status, batch.batch_number);
         }
 
         state.prune_ingress_history();

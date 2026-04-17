@@ -17,6 +17,7 @@ mock! {
             state: &mut ReplicatedState,
             message_id: MessageId,
             status: IngressStatus,
+            height: Height,
         ) -> Arc<IngressStatus>;
     }
 

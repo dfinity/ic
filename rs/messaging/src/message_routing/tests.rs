@@ -2289,6 +2289,7 @@ fn test_demux_delivers_certified_stream_slices() {
             &self,
             _: &mut ReplicatedState,
             _: Vec<ic_types::messages::SignedIngress>,
+            _: ic_types::Height,
         ) {
             // do nothing
         }
