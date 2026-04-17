@@ -1160,15 +1160,13 @@ fn should_reject_missing_subnet_type_delegation_via_canister_sig_path() {
         },
         rng,
     )
-    .with_delegation(
-        CertificateBuilder::new_with_rng(
-            SubnetData {
-                subnet_id,
-                canister_id_ranges: vec![(canister_id(0), canister_id(10))],
-            },
-            rng,
-        )
-    )
+    .with_delegation(CertificateBuilder::new_with_rng(
+        SubnetData {
+            subnet_id,
+            canister_id_ranges: vec![(canister_id(0), canister_id(10))],
+        },
+        rng,
+    ))
     .build();
 
     assert_matches!(
