@@ -2005,7 +2005,7 @@ impl CanisterManager {
                 cost_schedule,
                 reveal_top_up,
             )
-            .map_err(CanisterManagerError::CanisterSnapshotNotEnoughCycles)?;
+            .map_err(CanisterManagerError::NotEnoughCycles)?;
 
         // Check that storage reservation cycles can be reserved.
         let new_storage_reservation_cycles =
@@ -2394,7 +2394,7 @@ impl CanisterManager {
         ) {
             Ok(cycles) => cycles,
             Err(err) => {
-                return Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err));
+                return Err(CanisterManagerError::NotEnoughCycles(err));
             }
         };
 
@@ -2787,7 +2787,7 @@ impl CanisterManager {
                 subnet_size,
                 cost_schedule,
             )
-            .map_err(CanisterManagerError::CanisterSnapshotNotEnoughCycles)?;
+            .map_err(CanisterManagerError::NotEnoughCycles)?;
         let cost = self.cycles_account_manager.management_canister_cost(
             num_instructions,
             subnet_size,
@@ -3024,7 +3024,7 @@ impl CanisterManager {
                 subnet_size,
                 cost_schedule,
             )
-            .map_err(CanisterManagerError::CanisterSnapshotNotEnoughCycles)?;
+            .map_err(CanisterManagerError::NotEnoughCycles)?;
         let cost = self.cycles_account_manager.management_canister_cost(
             instructions,
             subnet_size,
