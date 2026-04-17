@@ -35,9 +35,15 @@ def compute_max_allowed_load_per_subnet(canister_loads):
 
 
 def find_split(
-    path: Path, baseline_path: Path, communication_data_path: Path, load_type: str, epsilon_load: float, max_cuts: int
+    path: Path,
+    baseline_path: Path,
+    communication_data_path: Path,
+    communication_baseline_data_path: Path,
+    load_type: str,
+    epsilon_load: float,
+    max_cuts: int,
 ):
-    data = load_subnet_data(path, baseline_path, load_type, communication_data_path)
+    data = load_subnet_data(path, baseline_path, load_type, communication_data_path, communication_baseline_data_path)
     edges = data["edges"]
     load = data["load"]
     index_to_canister_id = data["index_to_canister_id"]
@@ -93,6 +99,12 @@ def parse_args():
         "--communication-data-path", type=Path, help="Path to canister-to-canister communication data", required=True
     )
     parser.add_argument(
+        "--communication-baseline-data-path",
+        type=Path,
+        help="Path to canister-to-canister communication data",
+        required=True,
+    )
+    parser.add_argument(
         "--output-path",
         type=Path,
         help="Path to output data which will contain the list of canister ranges. "
@@ -124,6 +136,7 @@ def main():
         path=args.load_path,
         baseline_path=args.load_baseline_path,
         communication_data_path=args.communication_data_path,
+        communication_baseline_data_path=args.communication_baseline_data_path,
         load_type=args.load_type,
         epsilon_load=args.epsilon_load,
         max_cuts=args.max_cuts,

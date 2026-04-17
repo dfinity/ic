@@ -121,6 +121,10 @@ fn load_metrics_e2e_test() {
                 "--communication-data-path",
                 &communication_samples_path.display().to_string(),
             ])
+            .args([
+                "--communication-baseline-data-path",
+                &connectivity_samples_baseline_path.display().to_string(),
+            ])
             .args(["--output-path", &split_output_path.display().to_string()])
             .args(["--load-type", "instructions_executed"])
             .args(["--epsilon-load", &EPSILON.to_string()])

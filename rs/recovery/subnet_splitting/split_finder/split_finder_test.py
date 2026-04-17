@@ -8,6 +8,7 @@ TEST_DATA_DIR = Path(__file__).resolve().parents[1] / "test_data"
 FAKE_LOAD_SAMPLE_CSV_PATH = str(TEST_DATA_DIR / "fake_load_sample.csv")
 FAKE_LOAD_BASELINE_SAMPLE_CSV_PATH = str(TEST_DATA_DIR / "fake_load_baseline_sample.csv")
 FAKE_COMMUNICATION_SAMPLE_CSV_PATH = str(TEST_DATA_DIR / "fake_communication_sample.csv")
+FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH = str(TEST_DATA_DIR / "fake_communication_baseline_sample.csv")
 
 
 class TestCsvLoading(unittest.TestCase):
@@ -17,6 +18,7 @@ class TestCsvLoading(unittest.TestCase):
             FAKE_LOAD_BASELINE_SAMPLE_CSV_PATH,
             "ingress_messages_executed",
             FAKE_COMMUNICATION_SAMPLE_CSV_PATH,
+            FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH,
         )
         # this corresponds to the "ingress_messages_executed" column in "fake_load_sample.csv"
         self.assertEqual(
@@ -33,6 +35,7 @@ class TestCsvLoading(unittest.TestCase):
             FAKE_LOAD_SAMPLE_CSV_PATH,
             FAKE_LOAD_BASELINE_SAMPLE_CSV_PATH,
             FAKE_COMMUNICATION_SAMPLE_CSV_PATH,
+            FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH,
             "instructions_executed",
             0.0001,
             100,

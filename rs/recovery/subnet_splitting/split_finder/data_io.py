@@ -4,7 +4,13 @@ from typing import Dict, Tuple
 import pandas as pd
 
 
-def load_subnet_data(load_path: Path, load_baseline_path: Path, load_type: str, communication_data_path: Path) -> Dict:
+def load_subnet_data(
+    load_path: Path,
+    load_baseline_path: Path,
+    load_type: str,
+    communication_data_path: Path,
+    communication_baseline_data_path: Path,
+) -> Dict:
     """
     Load canister metadata and communication edges for a subnet.
     Returns a mapping between canister edges and their weights: (i, j) => weight, load vector,
@@ -29,7 +35,15 @@ def load_subnet_data(load_path: Path, load_baseline_path: Path, load_type: str, 
         (canister_data.subtract(canister_baseline_data, fill_value=0)).loc[canister_data.index].reset_index()
     )
 
-    communication_data = pd.read_csv(communication_data_path)
+    communication_data = pd.read_csv(communication_data_path).set_index(["sender_canister_id", "receiver_canister_id"])
+    communication_baseline_data = pd.read_csv(communication_baseline_data_path).set_index(
+        ["sender_canister_id", "receiver_canister_id"]
+    )
+    communication_data = (
+        (communication_data.subtract(communication_baseline_data, fill_value=0))
+        .loc[communication_data.index]
+        .reset_index()
+    )
 
     canister_data["index"] = range(len(canister_data))
     canister_id_to_index = dict(zip(canister_data["canister_id"], canister_data["index"]))
