@@ -64,7 +64,8 @@ impl<'a> CanisterSigner<'a> {
     /// Raw canister-signature public key bytes: length-prefixed canister id
     /// followed by seed.
     pub fn public_key_raw(&self) -> Vec<u8> {
-        let canister_id_bytes = self.canister_id().get_ref().as_slice();
+        let canister_id = self.canister_id();
+        let canister_id_bytes = canister_id.get_ref().as_slice();
         let mut buf =
             vec![u8::try_from(canister_id_bytes.len()).expect("canister id too long for u8")];
         buf.extend_from_slice(canister_id_bytes);
