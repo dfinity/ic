@@ -729,7 +729,7 @@ impl CanisterHttpPayloadBuilderImpl {
                         ));
                     }
                 }
-                FlexibleCanisterHttpError::TooManyRequestErrors {
+                FlexibleCanisterHttpError::TooManyRejects {
                     reject_responses, ..
                 } => {
                     let mut seen_signers = HashSet::new();
@@ -1048,11 +1048,11 @@ fn flexible_error_into_consensus_response(
             vec![],
             "Flexible HTTP request timed out".to_string(),
         ),
-        FlexibleCanisterHttpError::TooManyRequestErrors {
+        FlexibleCanisterHttpError::TooManyRejects {
             reject_responses, ..
         } => {
             let message = format!(
-                "Too many request errors: {} responses are rejects",
+                "Too many rejects: {} responses are rejects",
                 reject_responses.len(),
             );
             let node_details: Vec<_> = reject_responses
@@ -1080,7 +1080,7 @@ fn flexible_error_into_consensus_response(
                 })
                 .collect();
             (
-                FlexibleHttpGlobalError::TooManyRequestErrors(candid::Reserved),
+                FlexibleHttpGlobalError::TooManyRejects(candid::Reserved),
                 node_details,
                 message,
             )

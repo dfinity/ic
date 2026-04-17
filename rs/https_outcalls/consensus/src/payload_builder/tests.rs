@@ -2830,7 +2830,7 @@ fn flexible_error_into_messages_timeout() {
 }
 
 #[test]
-fn flexible_error_into_messages_too_many_request_errors() {
+fn flexible_error_into_messages_too_many_rejects() {
     let callback_id = CallbackId::from(42);
 
     let reject_entries: Vec<_> = (0..2_u64)
@@ -2838,7 +2838,7 @@ fn flexible_error_into_messages_too_many_request_errors() {
         .collect();
 
     let payload = CanisterHttpPayload {
-        flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+        flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
             callback_id,
             reject_responses: reject_entries,
         }],
@@ -2862,9 +2862,7 @@ fn flexible_error_into_messages_too_many_request_errors() {
     };
     assert_eq!(
         err.global_error,
-        Some(FlexibleHttpGlobalError::TooManyRequestErrors(
-            candid::Reserved
-        ))
+        Some(FlexibleHttpGlobalError::TooManyRejects(candid::Reserved))
     );
     assert_eq!(err.node_details.len(), 2);
     for (i, detail) in err.node_details.iter().enumerate() {
@@ -2877,7 +2875,7 @@ fn flexible_error_into_messages_too_many_request_errors() {
         assert_eq!(error.code, format!("{:?}", RejectCode::SysTransient));
         assert_eq!(error.message, "could not connect");
     }
-    assert!(err.message.contains("Too many request errors"));
+    assert!(err.message.contains("Too many rejects"));
     assert!(err.message.contains("2 responses are rejects"));
 }
 
@@ -3209,12 +3207,12 @@ fn flexible_build_responses_too_large_fewer_ok_than_min_responses() {
 }
 
 #[test]
-fn flexible_build_too_many_request_errors() {
+fn flexible_build_too_many_rejects() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    // min_responses=3, so at most 1 reject is tolerable. 2 rejects should trigger TooManyRequestErrors.
+    // min_responses=3, so at most 1 reject is tolerable. 2 rejects should trigger TooManyRejects.
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, pool| {
         {
             let mut pool_access = pool.write().unwrap();
@@ -3247,7 +3245,7 @@ fn flexible_build_too_many_request_errors() {
         assert_eq!(parsed.flexible_errors.len(), 1);
         assert_matches!(
             &parsed.flexible_errors[0],
-            FlexibleCanisterHttpError::TooManyRequestErrors {
+            FlexibleCanisterHttpError::TooManyRejects {
                 callback_id: cb,
                 reject_responses,
             } => {
@@ -4053,20 +4051,20 @@ fn flexible_error_responses_too_large_invalid_signature() {
 }
 
 #[test]
-fn flexible_error_too_many_request_errors_valid() {
+fn flexible_error_too_many_rejects_valid() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
     // min_responses=3, committee=4. max_allowed_rejects = 4-3 = 1.
-    // 2 rejects should be valid for TooManyRequestErrors.
+    // 2 rejects should be valid for TooManyRejects.
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
         let reject_entries: Vec<_> = (0..2_u64)
             .map(|node_idx| flexible_reject_response(callback_id.get(), node_idx))
             .collect();
 
         let payload = CanisterHttpPayload {
-            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
                 callback_id,
                 reject_responses: reject_entries,
             }],
@@ -4083,20 +4081,20 @@ fn flexible_error_too_many_request_errors_valid() {
 }
 
 #[test]
-fn flexible_error_too_many_request_errors_insufficient_rejects() {
+fn flexible_error_too_many_rejects_insufficient_rejects() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
     // min_responses=3, committee=4. max_allowed_rejects = 1.
-    // Only 1 reject → not enough for TooManyRequestErrors.
+    // Only 1 reject → not enough for TooManyRejects.
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
         let reject_entries: Vec<_> = (0..1_u64)
             .map(|node_idx| flexible_reject_response(callback_id.get(), node_idx))
             .collect();
 
         let payload = CanisterHttpPayload {
-            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
                 callback_id,
                 reject_responses: reject_entries,
             }],
@@ -4124,7 +4122,7 @@ fn flexible_error_too_many_request_errors_insufficient_rejects() {
 }
 
 #[test]
-fn flexible_error_too_many_request_errors_non_reject_content() {
+fn flexible_error_too_many_rejects_non_reject_content() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
@@ -4134,7 +4132,7 @@ fn flexible_error_too_many_request_errors_non_reject_content() {
         let reject_entry = flexible_reject_response(callback_id.get(), 1);
 
         let payload = CanisterHttpPayload {
-            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
                 callback_id,
                 reject_responses: vec![ok_entry, reject_entry],
             }],
@@ -4158,7 +4156,7 @@ fn flexible_error_too_many_request_errors_non_reject_content() {
 }
 
 #[test]
-fn flexible_error_too_many_request_errors_duplicate_signer() {
+fn flexible_error_too_many_rejects_duplicate_signer() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
@@ -4168,7 +4166,7 @@ fn flexible_error_too_many_request_errors_duplicate_signer() {
         let entry_b = flexible_reject_response(callback_id.get(), 0);
 
         let payload = CanisterHttpPayload {
-            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
                 callback_id,
                 reject_responses: vec![entry_a, entry_b],
             }],
@@ -4192,7 +4190,7 @@ fn flexible_error_too_many_request_errors_duplicate_signer() {
 }
 
 #[test]
-fn flexible_error_too_many_request_errors_signer_not_in_committee() {
+fn flexible_error_too_many_rejects_signer_not_in_committee() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
@@ -4203,7 +4201,7 @@ fn flexible_error_too_many_request_errors_signer_not_in_committee() {
         let entry_b = flexible_reject_response(callback_id.get(), 99);
 
         let payload = CanisterHttpPayload {
-            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
                 callback_id,
                 reject_responses: vec![entry_a, entry_b],
             }],
@@ -4227,7 +4225,7 @@ fn flexible_error_too_many_request_errors_signer_not_in_committee() {
 }
 
 #[test]
-fn flexible_error_too_many_request_errors_callback_id_mismatch_in_response() {
+fn flexible_error_too_many_rejects_callback_id_mismatch_in_response() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
@@ -4238,7 +4236,7 @@ fn flexible_error_too_many_request_errors_callback_id_mismatch_in_response() {
         let entry_wrong = flexible_reject_response(999, 1);
 
         let payload = CanisterHttpPayload {
-            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
                 callback_id,
                 reject_responses: vec![entry_ok, entry_wrong],
             }],
@@ -4262,7 +4260,7 @@ fn flexible_error_too_many_request_errors_callback_id_mismatch_in_response() {
 }
 
 #[test]
-fn flexible_error_too_many_request_errors_registry_version_mismatch() {
+fn flexible_error_too_many_rejects_registry_version_mismatch() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
@@ -4273,7 +4271,7 @@ fn flexible_error_too_many_request_errors_registry_version_mismatch() {
         entry_bad.proof.content.registry_version = RegistryVersion::new(999);
 
         let payload = CanisterHttpPayload {
-            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
                 callback_id,
                 reject_responses: vec![entry_ok, entry_bad],
             }],
@@ -4297,7 +4295,7 @@ fn flexible_error_too_many_request_errors_registry_version_mismatch() {
 }
 
 #[test]
-fn flexible_error_too_many_request_errors_content_hash_mismatch() {
+fn flexible_error_too_many_rejects_content_hash_mismatch() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
@@ -4308,7 +4306,7 @@ fn flexible_error_too_many_request_errors_content_hash_mismatch() {
         entry_bad.proof.content.content_hash = CryptoHashOf::new(CryptoHash(vec![0xFF; 32]));
 
         let payload = CanisterHttpPayload {
-            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
                 callback_id,
                 reject_responses: vec![entry_ok, entry_bad],
             }],
@@ -4332,7 +4330,7 @@ fn flexible_error_too_many_request_errors_content_hash_mismatch() {
 }
 
 #[test]
-fn flexible_error_too_many_request_errors_content_size_mismatch() {
+fn flexible_error_too_many_rejects_content_size_mismatch() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
@@ -4343,7 +4341,7 @@ fn flexible_error_too_many_request_errors_content_size_mismatch() {
         entry_bad.proof.content.content_size = 999_999;
 
         let payload = CanisterHttpPayload {
-            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
                 callback_id,
                 reject_responses: vec![entry_ok, entry_bad],
             }],
@@ -4367,7 +4365,7 @@ fn flexible_error_too_many_request_errors_content_size_mismatch() {
 }
 
 #[test]
-fn flexible_error_too_many_request_errors_is_reject_mismatch() {
+fn flexible_error_too_many_rejects_is_reject_mismatch() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
@@ -4378,7 +4376,7 @@ fn flexible_error_too_many_request_errors_is_reject_mismatch() {
         entry_bad.proof.content.is_reject = !entry_bad.proof.content.is_reject;
 
         let payload = CanisterHttpPayload {
-            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
                 callback_id,
                 reject_responses: vec![entry_ok, entry_bad],
             }],
@@ -4402,7 +4400,7 @@ fn flexible_error_too_many_request_errors_is_reject_mismatch() {
 }
 
 #[test]
-fn flexible_error_too_many_request_errors_proof_id_mismatch() {
+fn flexible_error_too_many_rejects_proof_id_mismatch() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
@@ -4414,7 +4412,7 @@ fn flexible_error_too_many_request_errors_proof_id_mismatch() {
         entry_bad.proof.content.id = CallbackId::new(999);
 
         let payload = CanisterHttpPayload {
-            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
                 callback_id,
                 reject_responses: vec![entry_ok, entry_bad],
             }],
@@ -4442,7 +4440,7 @@ fn flexible_error_too_many_request_errors_proof_id_mismatch() {
 }
 
 #[test]
-fn flexible_error_too_many_request_errors_invalid_signature() {
+fn flexible_error_too_many_rejects_invalid_signature() {
     let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
@@ -4454,7 +4452,7 @@ fn flexible_error_too_many_request_errors_invalid_signature() {
             .collect();
 
         let payload = CanisterHttpPayload {
-            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
                 callback_id,
                 reject_responses: reject_entries,
             }],
