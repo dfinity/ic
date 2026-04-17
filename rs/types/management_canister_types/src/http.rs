@@ -435,6 +435,8 @@ pub enum FlexibleHttpGlobalError {
     OutOfCycles(candid::Reserved),
     #[serde(rename = "responses_too_large")]
     ResponsesTooLarge(candid::Reserved),
+    #[serde(rename = "too_many_request_errors")]
+    TooManyRequestErrors(candid::Reserved),
 }
 
 /// Per-node detail in a flexible HTTP outcall error.
@@ -464,7 +466,7 @@ pub struct FlexibleHttpNodeDetail {
 ///   cycles: opt variant { used: nat; exceeded: reserved };
 /// };
 /// ```
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct HttpRequestResourceReport {
     pub raw_response_bytes: Option<ResourceUsage<u64>>,
     pub http_roundtrip_time_ms: Option<ResourceUsage<u64>>,
