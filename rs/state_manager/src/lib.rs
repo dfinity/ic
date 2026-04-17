@@ -1528,7 +1528,6 @@ impl StateManagerImpl {
             Some((snapshot, checkpoint_layout)) => {
                 // Set latest state height in metadata to be last checkpoint height
                 latest_state_height.store(snapshot.height.get(), Ordering::Relaxed);
-                tip_height.store(snapshot.height.get(), Ordering::Relaxed);
                 let starting_time = Instant::now();
 
                 let tip = initialize_tip(&log, &tip_channel, snapshot, checkpoint_layout.clone());
@@ -1583,6 +1582,7 @@ impl StateManagerImpl {
             tip_height: tip_height_and_state.0,
             tip: Some(tip_height_and_state.1),
         }));
+        tip_height.store(tip_height_and_state.0.get(), Ordering::Relaxed);
 
         let persist_metadata_guard = Arc::new(Mutex::new(()));
 
@@ -2865,11 +2865,13 @@ impl StateManager for StateManagerImpl {
 
         if height < tip_height {
             states.tip_height = tip_height;
+            self.tip_height.store(tip_height.get(), Ordering::Relaxed);
             states.tip = Some(state);
             return Err(StateManagerError::StateRemoved(height));
         }
         if tip_height < height {
             states.tip_height = tip_height;
+            self.tip_height.store(tip_height.get(), Ordering::Relaxed);
             states.tip = Some(state);
             return Err(StateManagerError::StateNotCommittedYet(height));
         }
