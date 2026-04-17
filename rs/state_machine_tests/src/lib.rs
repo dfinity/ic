@@ -398,10 +398,7 @@ impl FlexibleSchedulerImpl {
         registry_settings: &RegistryExecutionSettings,
     ) -> ReplicatedState {
         if let Some(msg) = state.pop_subnet_input() {
-            let instruction_limits = get_instruction_limits_for_subnet_message(
-                self.subnet_config.scheduler_config,
-                &msg,
-            );
+            let instruction_limits = get_instruction_limits_for_subnet_message(&self.config, &msg);
             let mut rng = StdRng::from_seed(randomness.get());
             let mut round_limits = RoundLimits {
                 instructions: as_round_instructions(self.config.max_instructions_per_install_code),
@@ -3066,6 +3063,7 @@ impl StateMachine {
                 }
 
                 OrderedMessage::Ingress(target, ref ingress_id) => {
+                    self.set_next_scheduled_method(target, NextScheduledMethod::Message);
                     flexible_message_ordering.set_ordering_target(Some(target));
                     let signed = flexible_message_ordering.take_buffered_ingress(ingress_id);
                     let payload = PayloadBuilder::new()
@@ -3151,7 +3149,6 @@ impl StateMachine {
     }
 
     fn complete_dts(&self, canister_id: CanisterId, max_ticks: usize) {
-        self.set_ordering_target(Some(canister_id));
         for tick in 0..max_ticks {
             match self
                 .get_latest_state()
@@ -3159,6 +3156,7 @@ impl StateMachine {
                 .map(|c| c.next_execution())
             {
                 Some(NextExecution::ContinueLong | NextExecution::ContinueInstallCode) => {
+                    self.set_ordering_target(Some(canister_id));
                     self.tick();
                 }
                 _ => return,
