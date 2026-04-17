@@ -42,9 +42,12 @@ def load_subnet_data(
     communication_data = (
         (communication_data.subtract(communication_baseline_data, fill_value=0))
         .loc[communication_data.index]
+        # To avoid negative values (which could happen if the baseline has higher values for some
+        # pair (sender, receiver) of canisters than the respective fresh values) bound the values
+        # by 0.
+        .clip(lower=0)
         .reset_index()
     )
-
     canister_data["index"] = range(len(canister_data))
     canister_id_to_index = dict(zip(canister_data["canister_id"], canister_data["index"]))
     index_to_canister_id = dict(zip(canister_data["index"], canister_data["canister_id"]))
