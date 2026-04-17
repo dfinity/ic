@@ -472,7 +472,9 @@ fn test_dts_install_code() {
         UNIVERSAL_CANISTER_WASM.to_vec(),
         // 3B instructions in canister_init exceeds the 2B-instruction slice limit,
         // forcing DTS across multiple rounds.
-        wasm().instruction_counter_is_at_least(3_000_000_000).build(),
+        wasm()
+            .instruction_counter_is_at_least(3_000_000_000)
+            .build(),
     );
     let install_ingress = sm
         .ingress_message_with_flexible_ordering(
@@ -500,35 +502,18 @@ fn test_dts_install_code() {
 /// DTS: message sliced across multiple rounds.
 #[test]
 fn test_dts_execution_completes() {
-    fn slow_wasm() -> Vec<u8> {
-        wat::parse_str(
-            r#"(module
-                (import "ic0" "msg_reply" (func $msg_reply))
-                (func $run
-                    (local $i i64)
-                    (loop $loop
-                        (local.set $i (i64.add (local.get $i) (i64.const 1)))
-                        (br_if $loop (i64.lt_s (local.get $i) (i64.const 3000000000)))
-                    )
-                    (call $msg_reply))
-                (memory $memory 1)
-                (export "canister_update run" (func $run))
-            )"#,
-        )
-        .unwrap()
-    }
-
     let sm = setup();
-    let canister = sm.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
-    sm.install_wasm_in_mode(canister, CanisterInstallMode::Install, slow_wasm(), vec![])
-        .unwrap();
+    let canister = install_uc(&sm);
 
     let ingress_id = sm
         .ingress_message_with_flexible_ordering(
             PrincipalId::new_anonymous(),
             canister,
-            "run",
-            vec![],
+            "update",
+            wasm()
+                .instruction_counter_is_at_least(3_000_000_000)
+                .reply()
+                .build(),
         )
         .unwrap();
 

@@ -179,7 +179,7 @@ use ic_types::{
         EXPECTED_MESSAGE_ID_LENGTH, HttpCallContent, HttpCanisterUpdate, HttpRequestContent,
         HttpRequestEnvelope, MessageId, Payload as MsgPayload, Query, QuerySource,
         RawSignedSenderInfo, RejectContext, RequestOrResponse, Response, SignedIngress,
-        SignedSenderInfo, extract_effective_canister_id,
+        SignedIngressContent, SignedSenderInfo, SubnetMessage, extract_effective_canister_id,
     },
     signature::ThresholdSignature,
     state_manager::StateManagerResult,
@@ -278,9 +278,25 @@ struct FlexibleSchedulerImpl {
     config: SchedulerConfig,
     subnet_id: SubnetId,
     next_message: Arc<RwLock<Option<OrderedMessage>>>,
+    /// Set by `execute_round` when a DTS slice pauses mid-execution,
+    /// so the next `execute_round` can resume it without consuming `next_message`.
+    dts_canister: RwLock<Option<CanisterId>>,
 }
 
 impl FlexibleSchedulerImpl {
+    fn set_dts_canister(&self, state: &ReplicatedState, canister_id: CanisterId) {
+        if matches!(
+            state
+                .canister_state(&canister_id)
+                .map(|c| c.next_execution()),
+            Some(NextExecution::ContinueLong | NextExecution::ContinueInstallCode)
+        ) {
+            *self.dts_canister.write().unwrap() = Some(canister_id);
+        } else {
+            *self.dts_canister.write().unwrap() = None;
+        }
+    }
+
     fn execute_single_canister(
         &self,
         mut state: ReplicatedState,
@@ -389,6 +405,8 @@ impl FlexibleSchedulerImpl {
             }
         }
 
+        self.set_dts_canister(&state, canister_id);
+
         state.prune_ingress_history();
         state
     }
@@ -425,6 +443,7 @@ impl FlexibleSchedulerImpl {
                 msg.effective_canister_id(),
             );
             let instruction_limits = get_instruction_limits_for_subnet_message(&self.config, &msg);
+            let effective_canister_id = get_effective_canister_id(&msg);
             let (new_state, _) = self.exec_env.execute_subnet_message(
                 msg,
                 state,
@@ -437,10 +456,33 @@ impl FlexibleSchedulerImpl {
                 &mut round_limits,
             );
             state = new_state;
+
+            if let Some(canister_id) = effective_canister_id {
+                self.set_dts_canister(&state, canister_id);
+            }
         }
         state = self.exec_env.process_stopping_canisters(state);
         state.prune_ingress_history();
         state
+    }
+}
+
+fn get_effective_canister_id(message: &SubnetMessage) -> Option<CanisterId> {
+    match message {
+        SubnetMessage::Response(_) => None,
+        SubnetMessage::Request(request) => request.extract_effective_canister_id(),
+        SubnetMessage::Ingress(ingress) => {
+            let signed_ingress_content = SignedIngressContent::new_for_testing(
+                ingress.source,
+                ingress.receiver,
+                ingress.method_name.clone(),
+                ingress.method_payload.clone(),
+                0,
+                None,
+                None,
+            );
+            extract_effective_canister_id(&signed_ingress_content).ok()?
+        }
     }
 }
 
@@ -458,6 +500,9 @@ impl Scheduler for FlexibleSchedulerImpl {
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
     ) -> ReplicatedState {
+        if let Some(canister_id) = self.dts_canister.write().unwrap().take() {
+            return self.execute_single_canister(state, canister_id, registry_settings);
+        }
         let next_message = self.next_message.write().unwrap().take();
         match next_message {
             None => self.inner.execute_round(
@@ -2476,6 +2521,7 @@ impl StateMachine {
                 config: subnet_config.scheduler_config.clone(),
                 subnet_id,
                 next_message,
+                dts_canister: RwLock::new(None),
             });
         }
 
@@ -3158,8 +3204,6 @@ impl StateMachine {
                 .map(|c| c.next_execution())
             {
                 Some(NextExecution::ContinueLong | NextExecution::ContinueInstallCode) => {
-                    self.flexible_message_ordering()
-                        .set_next_message(OrderedMessage::Heartbeat(canister_id));
                     self.tick();
                 }
                 _ => return,
