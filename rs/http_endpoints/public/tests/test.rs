@@ -523,7 +523,7 @@ fn test_request_too_slow() {
 }
 
 #[rstest]
-#[case(Call::V2, CBOR::Map(BTreeMap::from([
+#[case(UpdateEndpoint::Canister(Call::V2), CBOR::Map(BTreeMap::from([
             (
                 CBOR::Text("error_code".to_string()),
                 CBOR::Text("IC0204".to_string()),
@@ -537,7 +537,7 @@ fn test_request_too_slow() {
                 CBOR::Integer(RejectCode::SysTransient as i128),
             ),
         ])))]
-#[case(Call::V3, CBOR::Map(BTreeMap::from([
+#[case(UpdateEndpoint::Canister(Call::V3), CBOR::Map(BTreeMap::from([
             (
                 CBOR::Text("status".to_string()),
                 CBOR::Text("non_replicated_rejection".to_string()),
@@ -555,7 +555,25 @@ fn test_request_too_slow() {
                 CBOR::Integer(RejectCode::SysTransient as i128),
             ),
         ])))]
-#[case(Call::V4, CBOR::Map(BTreeMap::from([
+#[case(UpdateEndpoint::Canister(Call::V4), CBOR::Map(BTreeMap::from([
+    (
+        CBOR::Text("status".to_string()),
+        CBOR::Text("non_replicated_rejection".to_string()),
+    ),
+    (
+        CBOR::Text("error_code".to_string()),
+        CBOR::Text("IC0204".to_string()),
+    ),
+    (
+        CBOR::Text("reject_message".to_string()),
+        CBOR::Text("Test reject message".to_string()),
+    ),
+    (
+        CBOR::Text("reject_code".to_string()),
+        CBOR::Integer(RejectCode::SysTransient as i128),
+    ),
+])))]
+#[case(UpdateEndpoint::Subnet(CallSubnet::V4(subnet_test_id(1).get())), CBOR::Map(BTreeMap::from([
     (
         CBOR::Text("status".to_string()),
         CBOR::Text("non_replicated_rejection".to_string()),
@@ -574,7 +592,7 @@ fn test_request_too_slow() {
     ),
 ])))]
 fn test_status_code_when_ingress_filter_fails(
-    #[case] endpoint: Call,
+    #[case] endpoint: UpdateEndpoint,
     #[case] expected_response: CBOR,
 ) {
     let rt = Runtime::new().unwrap();
@@ -1303,7 +1321,14 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
 /// Test that the sync call endpoints handle multiple requests with the same ingress message,
 /// by returning `202` for subsequent concurrent requests.
 #[rstest]
-fn test_duplicate_concurrent_requests_return_early(#[values(Call::V3, Call::V4)] endpoint: Call) {
+fn test_duplicate_concurrent_requests_return_early(
+    #[values(
+        UpdateEndpoint::Canister(Call::V3),
+        UpdateEndpoint::Canister(Call::V4),
+        UpdateEndpoint::Subnet(CallSubnet::V4(subnet_test_id(1).get())),
+    )]
+    endpoint: UpdateEndpoint,
+) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
@@ -1531,7 +1556,14 @@ fn test_sync_call_endpoint_responds_with_certificate(
 /// ingress messages that complete execution, but its height never
 /// gets certified.
 #[rstest]
-fn test_synchronous_call_endpoint_no_certification(#[values(Call::V3, Call::V4)] endpoint: Call) {
+fn test_synchronous_call_endpoint_no_certification(
+    #[values(
+        UpdateEndpoint::Canister(Call::V3),
+        UpdateEndpoint::Canister(Call::V4),
+        UpdateEndpoint::Subnet(CallSubnet::V4(subnet_test_id(1).get())),
+    )]
+    endpoint: UpdateEndpoint,
+) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
@@ -1609,7 +1641,12 @@ impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
 #[case::certified_state_snapshot_unavailable(None)]
 #[case::reading_certified_state_fails(Some(Box::new(FakeCertifiedStateSnapshot) as _))]
 fn test_call_v3_response_when_state_reader_fails(
-    #[values(Call::V3, Call::V4)] endpoint: Call,
+    #[values(
+        UpdateEndpoint::Canister(Call::V3),
+        UpdateEndpoint::Canister(Call::V4),
+        UpdateEndpoint::Subnet(CallSubnet::V4(subnet_test_id(1).get())),
+    )]
+    endpoint: UpdateEndpoint,
     #[case] certified_state_snapshot: Option<
         Box<dyn CertifiedStateSnapshot<State = ReplicatedState>>,
     >,
@@ -1699,7 +1736,13 @@ fn test_call_v3_response_when_state_reader_fails(
 /// P2P.
 #[rstest]
 fn test_call_response_when_p2p_not_running(
-    #[values(Call::V2, Call::V3, Call::V4)] call_agent: Call,
+    #[values(
+        UpdateEndpoint::Canister(Call::V2),
+        UpdateEndpoint::Canister(Call::V3),
+        UpdateEndpoint::Canister(Call::V4),
+        UpdateEndpoint::Subnet(CallSubnet::V4(subnet_test_id(1).get())),
+    )]
+    call_agent: UpdateEndpoint,
 ) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
