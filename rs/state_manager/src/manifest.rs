@@ -849,7 +849,7 @@ fn files_with_same_inodes(
     .collect()
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Eq, PartialEq)]
 pub enum RehashManifest {
     Yes,
     No,

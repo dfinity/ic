@@ -280,10 +280,14 @@ pub struct Callback {
     ///
     /// `Cycles::zero()` if the `Callback` was created before February 2022.
     pub prepayment_for_response_execution: CompoundCycles<Instructions>,
-    /// Cycles prepaid by the caller for response transimission.
+    /// Cycles prepaid by the caller for response transmission.
     ///
-    /// `Cycles::zero()` if the `Callback` was created before February 2022.
+    /// `CompoundCycles::zero()` if the `Callback` was created before February 2022.
     pub prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
+    /// Cycles prepaid by the caller for call transmission (includes both request and response transmission).
+    ///
+    /// `CompoundCycles::zero()` if the `Callback` was created before April 2026.
+    pub prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
     /// A closure to be executed if the call succeeded.
     pub on_reply: WasmClosure,
     /// A closure to be executed if the call was rejected.
@@ -302,6 +306,7 @@ impl Callback {
         cycles_sent: Cycles,
         prepayment_for_response_execution: CompoundCycles<Instructions>,
         prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
+        prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
         on_reply: WasmClosure,
         on_reject: WasmClosure,
         on_cleanup: Option<WasmClosure>,
@@ -313,6 +318,7 @@ impl Callback {
             cycles_sent,
             prepayment_for_response_execution,
             prepayment_for_response_transmission,
+            prepayment_for_call_transmission,
             on_reply,
             on_reject,
             on_cleanup,
@@ -339,6 +345,7 @@ impl From<&Callback> for pb::Callback {
             prepayment_for_response_transmission_compound: Some(
                 item.prepayment_for_response_transmission.into(),
             ),
+            prepayment_for_call_transmission: Some(item.prepayment_for_call_transmission.into()),
             on_reply: Some(pb::WasmClosure {
                 func_idx: item.on_reply.func_idx,
                 env: item.on_reply.env,
@@ -397,6 +404,14 @@ impl TryFrom<pb::Callback> for Callback {
                     cost_schedule,
                 ),
             };
+        let prepayment_for_call_transmission = match value.prepayment_for_call_transmission {
+            Some(value) => CompoundCycles::try_from(value)?,
+            // Temporary code until the change is deployed and the field starts
+            // being populated in checkpoints. If no "old" callbacks exist,
+            // this can be changed to fail on `None` instead and always
+            // expect to find some value.
+            None => CompoundCycles::new(Cycles::zero(), cost_schedule),
+        };
 
         Ok(Self {
             call_context_id: CallContextId::from(value.call_context_id),
@@ -404,6 +419,7 @@ impl TryFrom<pb::Callback> for Callback {
             cycles_sent: Cycles::from(cycles_sent),
             prepayment_for_response_execution,
             prepayment_for_response_transmission,
+            prepayment_for_call_transmission,
             on_reply: WasmClosure {
                 func_idx: on_reply.func_idx,
                 env: on_reply.env,

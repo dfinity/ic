@@ -117,7 +117,7 @@ pub mod testing {
     use std::cell::RefCell;
     use std::collections::BTreeMap;
 
-    #[derive(Default, Debug)]
+    #[derive(Debug, Default)]
     pub struct FakeDropMessageMetrics {
         pub timed_out_messages:
             RefCell<BTreeMap<(&'static str, &'static str, &'static str), usize>>,

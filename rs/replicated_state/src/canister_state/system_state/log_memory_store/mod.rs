@@ -207,6 +207,26 @@ impl LogMemoryStore {
             .unwrap_or(0)
     }
 
+    /// Returns `true` if calling `resize(limit)` would actually do work
+    /// (migrate records, reallocate, or deallocate), `false` if it would
+    /// be a no-op.
+    ///
+    /// Also used as the early-return guard inside `resize_impl`, so the
+    /// two cannot diverge.
+    pub fn would_resize(&self, limit: usize) -> bool {
+        if self.feature_flag == FlagStatus::Disabled {
+            // When disabled, resize deallocates — work only if allocated.
+            return self.maybe_page_map.is_some();
+        }
+        if limit == 0 {
+            // Limit zero deallocates — work only if allocated.
+            return self.maybe_page_map.is_some();
+        }
+        let target_limit = limit.max(DATA_CAPACITY_MIN);
+        let current_capacity = self.get_header().map(|h| h.data_capacity.get() as usize);
+        current_capacity != Some(target_limit)
+    }
+
     /// Resizes the ring buffer to the specified limit, preserving existing records.
     ///
     /// This method enforces a minimum safe capacity and performs no operation if the
@@ -223,15 +243,15 @@ impl LogMemoryStore {
     }
 
     fn resize_impl(&mut self, limit: usize, create_page_map: impl FnOnce() -> PageMap) {
+        if !self.would_resize(limit) {
+            return;
+        }
         if self.feature_flag == FlagStatus::Disabled || limit == 0 {
             self.deallocate();
             return;
         }
         let target_limit = limit.max(DATA_CAPACITY_MIN);
         let current_capacity = self.get_header().map(|h| h.data_capacity.get() as usize);
-        if current_capacity == Some(target_limit) {
-            return; // Only resize if the capacity actually changes.
-        }
 
         // Determine the PageMap strategy and create a new ring buffer.
         let page_map = match current_capacity {
