@@ -292,8 +292,6 @@ impl FlexibleSchedulerImpl {
             Some(NextExecution::ContinueLong | NextExecution::ContinueInstallCode)
         ) {
             *self.dts_canister.write().unwrap() = Some(canister_id);
-        } else {
-            *self.dts_canister.write().unwrap() = None;
         }
     }
 
