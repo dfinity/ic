@@ -54,7 +54,7 @@ pub use query_handler::{DataCertificateWithDelegationMetadata, InternalHttpQuery
 use query_handler::{HttpQueryHandler, QueryScheduler};
 use scheduler::SchedulerImpl;
 pub use scheduler::{
-    RoundSchedule, SchedulerMetrics, abort_all_paused_executions,
+    RoundSchedule, SchedulerMetrics, abort_all_paused_executions, can_execute_subnet_msg,
     get_instruction_limits_for_subnet_message,
 };
 use std::{path::Path, sync::Arc};

@@ -28,7 +28,7 @@ use ic_error_types::RejectCode;
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{
     ExecutionEnvironment, ExecutionServices, IngressHistoryReaderImpl, InstructionLimits,
-    RoundLimits, as_round_instructions, execute_canister,
+    RoundLimits, as_round_instructions, can_execute_subnet_msg, execute_canister,
     get_instruction_limits_for_subnet_message,
 };
 use ic_http_endpoints_public::{IngressWatcher, IngressWatcherHandle, metrics::HttpHandlerMetrics};
@@ -398,7 +398,6 @@ impl FlexibleSchedulerImpl {
         registry_settings: &RegistryExecutionSettings,
     ) -> ReplicatedState {
         if let Some(msg) = state.pop_subnet_input() {
-            let instruction_limits = get_instruction_limits_for_subnet_message(&self.config, &msg);
             let mut rng = StdRng::from_seed(randomness.get());
             let mut round_limits = RoundLimits {
                 instructions: as_round_instructions(self.config.max_instructions_per_install_code),
@@ -407,6 +406,20 @@ impl FlexibleSchedulerImpl {
                 compute_allocation_used: state.total_compute_allocation(),
                 subnet_memory_reservation: self.exec_env.scaled_subnet_memory_reservation(),
             };
+            let ongoing_long_install_code = state
+                .canisters_iter()
+                .any(|canister| canister.has_long_install_code());
+            assert!(
+                can_execute_subnet_msg(
+                    &msg,
+                    ongoing_long_install_code,
+                    state.canister_states(),
+                    &mut round_limits,
+                ),
+                "Canister {:?} cannot execute a subnet message",
+                msg.effective_canister_id(),
+            );
+            let instruction_limits = get_instruction_limits_for_subnet_message(&self.config, &msg);
             let (new_state, _) = self.exec_env.execute_subnet_message(
                 msg,
                 state,

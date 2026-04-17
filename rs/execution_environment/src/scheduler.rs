@@ -1850,7 +1850,7 @@ fn execute_canisters_on_thread(
 /// whether the specific call can be executed, based on factors such as whether
 /// the instruction limit has been reached, there's an ongoing long install code
 /// execution, or the canister has an aborted execution.
-fn can_execute_subnet_msg(
+pub fn can_execute_subnet_msg(
     msg: &SubnetMessage,
     ongoing_long_install_code: bool,
     canister_states: &BTreeMap<CanisterId, Arc<CanisterState>>,
