@@ -376,8 +376,8 @@ impl Recovery {
     /// One of them is the latest checkpoint, which is looked up remotely via ssh or locally on
     /// disk, based on the value of `maybe_remote`.
     ///
-    /// If `download_height` is `CheckpointHeight::Specified`, the checkpoint at the specified
-    /// height is downloaded. If it does not exist, an error is returned.
+    /// If `checkpoint_height_to_download` is `CheckpointHeight::Specified`, the checkpoint at the
+    /// specified height is downloaded. If it does not exist, an error is returned.
     /// If it is `CheckpointHeight::Latest`, the latest checkpoint on the remote node is
     /// downloaded.
     ///
@@ -386,11 +386,11 @@ impl Recovery {
     /// checkpoint.
     pub fn get_ic_state_includes(
         maybe_remote: MaybeRemote<'_>,
-        download_height: CheckpointHeight,
+        checkpoint_height_to_download: CheckpointHeight,
     ) -> RecoveryResult<Vec<PathBuf>> {
         let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
 
-        let checkpoint_name = match download_height {
+        let checkpoint_name = match checkpoint_height_to_download {
             CheckpointHeight::Specified(height) => {
                 let name = format!("{height:016x}");
                 if !maybe_remote.path_exists(&ic_checkpoints_path.join(&name))? {
