@@ -158,6 +158,7 @@ where
             time_source: self.time_source,
             metrics: self.metrics,
             logger: self.logger,
+            thread_pool_nidkg: super::new_nidkg_thread_pool(),
         }
     }
 

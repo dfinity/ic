@@ -35,9 +35,30 @@ use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaCreateSigShar
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
+use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;
+
+/// Number of threads in the per-vault rayon pool used for NIDKG work.
+///
+/// The `InReplica` CSP vault is only used in tests. A small fixed size
+/// prevents oversubscription when many `LocalCspVault` instances share a
+/// single test process (e.g., registry integration tests that run several
+/// local ICs in parallel): without this bound, each vault's `par_iter`
+/// calls would fan out to the global rayon pool, which defaults to the
+/// number of logical cores.
+const NIDKG_THREAD_POOL_SIZE: usize = 3;
+
+pub(crate) fn new_nidkg_thread_pool() -> Arc<ThreadPool> {
+    Arc::new(
+        ThreadPoolBuilder::new()
+            .thread_name(|i| format!("ic-crypto-local-vault-nidkg-{i}"))
+            .num_threads(NIDKG_THREAD_POOL_SIZE)
+            .build()
+            .expect("failed to instantiate a thread pool"),
+    )
+}
 
 /// An implementation of `CspVault`-trait that runs in-process
 /// and uses local secret key stores.
@@ -88,6 +109,7 @@ pub struct LocalCspVault<
     time_source: Arc<dyn TimeSource>,
     logger: ReplicaLogger,
     metrics: Arc<CryptoMetrics>,
+    thread_pool_nidkg: Arc<ThreadPool>,
 }
 
 pub type ProdLocalCspVault =
@@ -193,6 +215,19 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     fn generate_seed(&self) -> Seed {
         let intermediate_seed: [u8; 32] = self.csprng.write().r#gen(); // lock is released after this line
         Seed::from_bytes(&intermediate_seed) // use of intermediate seed minimizes locking time
+    }
+
+    /// Runs `job` on this vault's NIDKG rayon thread pool.
+    ///
+    /// Rayon `par_iter` calls inside `job` use this pool instead of the
+    /// global one, which bounds the total number of worker threads when
+    /// multiple `LocalCspVault` instances coexist in a single process.
+    fn run_on_nidkg_thread_pool<F, T>(&self, job: F) -> T
+    where
+        F: FnOnce() -> T + Send,
+        T: Send,
+    {
+        self.thread_pool_nidkg.install(job)
     }
 
     fn combined_commitment_opening_from_sks(
