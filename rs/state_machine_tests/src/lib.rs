@@ -317,16 +317,25 @@ impl FlexibleSchedulerImpl {
             let method = canister.get_next_scheduled_method();
             let push_task = match method {
                 NextScheduledMethod::Heartbeat => {
-                  assert!(canister.exports_heartbeat_method(), "Canister {canister_id} does not export heartbeat");
-                  Some(ExecutionTask::Heartbeat)
-                },
+                    assert!(
+                        canister.exports_heartbeat_method(),
+                        "Canister {canister_id} does not export heartbeat"
+                    );
+                    Some(ExecutionTask::Heartbeat)
+                }
                 NextScheduledMethod::GlobalTimer => {
-                  assert!(canister.exports_global_timer_method(), "Canister {canister_id} does not export global timer");
-                  assert!(canister
-                        .system_state
-                        .global_timer
-                        .has_reached_deadline(time), "Canister {canister_id} has not reached its global timer deadline");
-                  Some(ExecutionTask::GlobalTimer)
+                    assert!(
+                        canister.exports_global_timer_method(),
+                        "Canister {canister_id} does not export global timer"
+                    );
+                    assert!(
+                        canister
+                            .system_state
+                            .global_timer
+                            .has_reached_deadline(time),
+                        "Canister {canister_id} has not reached its global timer deadline"
+                    );
+                    Some(ExecutionTask::GlobalTimer)
                 }
                 NextScheduledMethod::Message => None,
             };
@@ -339,7 +348,9 @@ impl FlexibleSchedulerImpl {
         }
 
         match canister.next_execution() {
-            NextExecution::ContinueInstallCode => panic!("Cannot execute a canister method while install_code is in progress"),
+            NextExecution::ContinueInstallCode => {
+                panic!("Cannot execute a canister method while install_code is in progress")
+            }
             NextExecution::None => panic!("Cannot execute a canister if it has nothing to execute"),
             NextExecution::StartNew | NextExecution::ContinueLong => {
                 let instruction_limits = InstructionLimits::new(
@@ -387,7 +398,10 @@ impl FlexibleSchedulerImpl {
         registry_settings: &RegistryExecutionSettings,
     ) -> ReplicatedState {
         if let Some(msg) = state.pop_subnet_input() {
-            let instruction_limits = get_instruction_limits_for_subnet_message(self.subnet_config.scheduler_config, &msg);
+            let instruction_limits = get_instruction_limits_for_subnet_message(
+                self.subnet_config.scheduler_config,
+                &msg,
+            );
             let mut rng = StdRng::from_seed(randomness.get());
             let mut round_limits = RoundLimits {
                 instructions: as_round_instructions(self.config.max_instructions_per_install_code),
@@ -442,10 +456,10 @@ impl Scheduler for FlexibleSchedulerImpl {
                     target: target_id,
                 } => {
                     let canister = state.canister_state_make_mut(&target_id).unwrap();
-                        canister
-                            .system_state
-                            .queues_mut()
-                            .rotate_local_sender_to_front(source);
+                    canister
+                        .system_state
+                        .queues_mut()
+                        .rotate_local_sender_to_front(source);
                 }
                 NextSender::SubnetQueue { source } => {
                     state
