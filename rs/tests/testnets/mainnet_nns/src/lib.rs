@@ -111,7 +111,9 @@ async fn setup_async(env: TestEnv, dkg_interval: Option<u64>) {
     });
 
     let env_clone = env.clone();
-    setup_ic(env_clone);
+    tokio::task::spawn_blocking(move || setup_ic(env_clone))
+        .await
+        .unwrap();
 
     // Once the IC is setup, we signal the other task that it can now scp the ic.json5 config
     // file
@@ -160,7 +162,7 @@ async fn setup_async(env: TestEnv, dkg_interval: Option<u64>) {
         env.logger(),
         "Patching test environment's registry local store..."
     );
-    patch_env_local_store(&env);
+    patch_env_local_store(&env).await;
     info!(
         env.logger(),
         "Patching test environment's root public key..."
@@ -209,10 +211,10 @@ async fn setup_recovered_nns(
         .await
         .unwrap_or_else(|e| panic!("Failed to fetch the mainnet ic-recovery because {e:?}"));
 
-    recover_nns_subnet(&env, &nns_node, &recovered_nns_node, &aux_node);
+    recover_nns_subnet(&env, &nns_node, &recovered_nns_node, &aux_node).await;
     ProposalWithMainnetState::write_dictator_neuron_id_to_env(&env, neuron_id);
 
-    test_recovered_nns(&env, &recovered_nns_node);
+    test_recovered_nns(&env, &recovered_nns_node).await;
 
     info!(
         env.logger(),
@@ -255,13 +257,14 @@ async fn setup_recovered_nns(
             retransmission_request_ms: None,
             set_gossip_config_to_default: false,
         };
-        block_on(ProposalWithMainnetState::update_subnet_record(
+        ProposalWithMainnetState::update_subnet_record(
             recovered_nns_node.get_public_url(),
             subnet_config,
-        ));
+        )
+        .await;
     }
 
-    let recovered_nns_pub_key = fetch_recovered_nns_public_key_pem(&recovered_nns_node);
+    let recovered_nns_pub_key = fetch_recovered_nns_public_key_pem(&recovered_nns_node).await;
 
     info!(
         env.logger(),
@@ -276,7 +279,7 @@ async fn setup_recovered_nns(
     .unwrap();
 
     let api_bn = env.topology_snapshot().api_boundary_nodes().next().unwrap();
-    patch_api_bn(&env, &recovered_nns_node, &api_bn);
+    patch_api_bn(&env, &recovered_nns_node, &api_bn).await;
 
     neuron_id
 }
@@ -463,7 +466,7 @@ fn ic_replay(env: &TestEnv, mut mutate_cmd: impl FnMut(&mut Command)) -> Output 
     ic_replay_out
 }
 
-fn recover_nns_subnet(
+async fn recover_nns_subnet(
     env: &TestEnv,
     nns_node: &IcNodeSnapshot,
     recovered_nns_node: &IcNodeSnapshot,
@@ -475,7 +478,7 @@ fn recover_nns_subnet(
         logger,
         "Waiting until the {AUX_NODE_NAME} node is reachable over SSH before we run ic-recovery ..."
     );
-    let _session = aux_node.block_on_ssh_session();
+    let _session = aux_node.block_on_ssh_session_async().await;
 
     info!(logger, "Starting ic-recovery ...");
     let nns_url: Url = nns_node.get_public_url();
@@ -540,40 +543,42 @@ fn recover_nns_subnet(
         panic!("{cmd:?} failed!");
     }
     recovered_nns_node
-        .await_status_is_healthy()
+        .await_status_is_healthy_async()
+        .await
         .expect("Recovered NNS node should become healthy.");
 }
 
-fn test_recovered_nns(env: &TestEnv, nns_node: &IcNodeSnapshot) {
+async fn test_recovered_nns(env: &TestEnv, nns_node: &IcNodeSnapshot) {
     let logger = env.logger();
     info!(logger, "Testing recovered NNS ...");
 
-    block_on(ProposalWithMainnetState::bless_replica_version(
+    ProposalWithMainnetState::bless_replica_version(
         nns_node,
         &ReplicaVersion::try_from("1111111111111111111111111111111111111111").unwrap(),
         &logger,
         "2222222222222222222222222222222222222222222222222222222222222222".to_string(),
         None,
         vec![],
-    ));
+    )
+    .await;
 }
 
-fn fetch_recovered_nns_public_key_pem(recovered_nns_node: &IcNodeSnapshot) -> Vec<u8> {
+async fn fetch_recovered_nns_public_key_pem(recovered_nns_node: &IcNodeSnapshot) -> Vec<u8> {
     let recovered_nns_agent = ic_agent::Agent::builder()
         .with_url(recovered_nns_node.get_public_url())
         .build()
         .unwrap();
-    block_on(recovered_nns_agent.fetch_root_key()).unwrap();
+    recovered_nns_agent.fetch_root_key().await.unwrap();
     let der_encoded = recovered_nns_agent.read_root_key();
 
     public_key_der_to_pem(&der_encoded)
 }
 
-fn patch_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcNodeSnapshot) {
+async fn patch_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcNodeSnapshot) {
     let logger = env.logger();
     let recovered_nns_node_ipv6 = recovered_nns_node.get_ip_addr();
 
-    let ssh_session = api_bn.block_on_ssh_session().unwrap();
+    let ssh_session = api_bn.block_on_ssh_session_async().await.unwrap();
 
     // Stop ic-replica
     api_bn
@@ -600,12 +605,13 @@ fn patch_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcN
     )
     .expect("Could not patch NNS public key of API BN");
 
-    block_on(ProposalWithMainnetState::add_api_boundary_nodes(
+    ProposalWithMainnetState::add_api_boundary_nodes(
         recovered_nns_node,
         &env.logger(),
         vec![api_bn.node_id],
         get_mainnet_nns_revision().unwrap().to_string(),
-    ));
+    )
+    .await;
 
     // Regenerate IC config and start ic-replica
     api_bn
@@ -616,11 +622,13 @@ fn patch_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcN
         .expect("Could not restart ic-replica on API BN");
 
     // Replicating mainnet registry can take a bit of time
-    block_on(api_bn.await_status_is_healthy_with_retries_async(
-        Duration::from_mins(15),
-        Duration::from_secs(30),
-    ))
-    .expect("API BN did not become healthy after patching");
+    api_bn
+        .await_status_is_healthy_with_retries_async(
+            Duration::from_mins(15),
+            Duration::from_secs(30),
+        )
+        .await
+        .expect("API BN did not become healthy after patching");
 }
 
 fn delete_local_store(node: &IcNodeSnapshot, session: &Session) -> Result<String> {
@@ -750,7 +758,7 @@ fn write_sh_lib(env: &TestEnv, neuron_id: NeuronId, http_gateway: &Url) {
 // Overwrite the local store of the test environment with the new one, corresponding to the
 // recovered NNS. Any topology snapshot taken after this will reflect the new topology. This means
 // it will contain all mainnet subnets and nodes.
-fn patch_env_local_store(env: &TestEnv) {
+async fn patch_env_local_store(env: &TestEnv) {
     let local_store_path = env
         .get_path(PATH_RECOVERY_WORKING_DIR)
         .join("data")
@@ -781,11 +789,10 @@ fn patch_env_local_store(env: &TestEnv) {
     rm.output()
         .expect("Failed to remove temporary new local store");
 
-    block_on(
-        env.topology_snapshot()
-            .block_for_newest_mainnet_registry_version(),
-    )
-    .unwrap();
+    env.topology_snapshot()
+        .block_for_newest_mainnet_registry_version()
+        .await
+        .unwrap();
 }
 
 // Overwrite the root public key of the test environment with the new one, corresponding to the
