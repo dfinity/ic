@@ -9,13 +9,13 @@ use nix::sys::mman::{ProtFlags, mprotect};
 use std::{
     cell::RefCell,
     ops::Range,
-    sync::{Arc, Mutex, atomic::Ordering},
+    sync::{Arc, atomic::Ordering},
 };
 
 use crate::{
     AccessKind, DirtyPageTracking, MemoryArea, MemoryLimits, MemoryTracker, MemoryTrackerMetrics,
     PageBitmap, apply_memory_instructions, map_unaccessed_pages, print_enomem_help,
-    range_size_in_bytes,
+    range_size_in_bytes, signal_mutex::SignalMutex,
 };
 
 #[cfg(feature = "sigsegv_handler_checksum")]
@@ -60,7 +60,7 @@ impl MemoryTracker for PrefetchingMemoryTracker {
         dirty_page_tracking: DirtyPageTracking,
         page_map: PageMap,
         _memory_limits: MemoryLimits,
-        _subtract_instruction_counter: Arc<Mutex<dyn FnMut(u64) + Send>>,
+        _subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
     ) -> nix::Result<Self>
     where
         Self: Sized,

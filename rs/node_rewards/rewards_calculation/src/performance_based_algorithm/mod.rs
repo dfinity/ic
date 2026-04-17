@@ -407,7 +407,7 @@ trait PerformanceBasedAlgorithm: AlgorithmVersion {
 
                     (base_rewards_monthly, reward_coefficient)
                 })
-                .unwrap_or((dec!(1), dec!(1)))
+                .unwrap_or((dec!(0), dec!(1)))
         }
 
         fn is_type3(node_type: &NodeRewardType) -> bool {

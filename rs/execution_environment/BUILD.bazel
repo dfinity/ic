@@ -470,8 +470,10 @@ rust_ic_bench(
         # Keep sorted.
         "//rs/config",
         "//rs/registry/subnet_type",
+        "//rs/replicated_state",
         "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
+        "//rs/test_utilities/execution_environment",
         "//rs/types/base_types",
         "//rs/types/cycles",
         "//rs/types/management_canister_types",

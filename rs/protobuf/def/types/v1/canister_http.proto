@@ -88,7 +88,9 @@ message FlexibleCanisterHttpResponses {
 message FlexibleCanisterHttpTimeout {}
 
 message FlexibleCanisterHttpResponsesTooLarge {
-  repeated CanisterHttpShare metadata_shares = 1;
+  repeated CanisterHttpShare all_seen_shares = 1;
+  uint32 total_requests = 2;
+  uint32 min_responses = 3;
 }
 
 message FlexibleCanisterHttpTooManyRequestErrors {

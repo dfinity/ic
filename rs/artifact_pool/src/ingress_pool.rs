@@ -3,6 +3,7 @@
 /// But we keep it separated for code readability
 use crate::{
     HasTimestamp,
+    ingress_pool::metrics::IngressPoolMetrics,
     metrics::{POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED, PoolMetrics},
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
@@ -16,16 +17,16 @@ use ic_interfaces::{
         ValidatedPoolReader,
     },
 };
-use ic_logger::{ReplicaLogger, debug};
+use ic_logger::{ReplicaLogger, debug, warn};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     CountBytes, NodeId, Time,
     artifact::IngressMessageId,
     messages::{EXPECTED_MESSAGE_ID_LENGTH, MessageId, SignedIngress},
 };
-use prometheus::IntCounter;
 use std::collections::BTreeMap;
 
+mod metrics;
 mod peer_counter;
 
 use peer_counter::PeerCounters;
@@ -100,9 +101,8 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
         removed
     }
 
-    // Purge below an expiry prefix (non-inclusive), and return the purged artifacts
-    // as an iterator.
-    fn purge_below(&mut self, expiry: Time) -> Box<dyn Iterator<Item = T> + '_> {
+    // Purge below an expiry prefix (non-inclusive), and return the purged artifacts.
+    fn purge_below(&mut self, expiry: Time) -> BTreeMap<IngressMessageId, T> {
         let _timer = self
             .metrics
             .op_duration
@@ -120,7 +120,7 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
         }
         // SAFETY: Checking byte size invariant
         self.assert_section_ok();
-        Box::new(to_remove.into_values())
+        to_remove
     }
 
     /// Counts the exact bytes by iterating over the artifact btreemap, instead
@@ -175,13 +175,12 @@ impl<T: AsRef<IngressPoolObject> + HasTimestamp> PoolSection<T> for IngressPoolS
     }
 }
 
-#[derive(Clone)]
 pub struct IngressPoolImpl {
     validated: IngressPoolSection<ValidatedIngressArtifact>,
     unvalidated: IngressPoolSection<UnvalidatedIngressArtifact>,
+    metrics: IngressPoolMetrics,
     ingress_pool_max_count: usize,
     ingress_pool_max_bytes: usize,
-    ingress_messages_throttled: IntCounter,
     node_id: NodeId,
     log: ReplicaLogger,
 }
@@ -198,10 +197,7 @@ impl IngressPoolImpl {
         IngressPoolImpl {
             ingress_pool_max_count: config.ingress_pool_max_count,
             ingress_pool_max_bytes: config.ingress_pool_max_bytes,
-            ingress_messages_throttled: metrics_registry.int_counter(
-                "ingress_messages_throttled",
-                "Number of throttled ingress messages",
-            ),
+            metrics: IngressPoolMetrics::new(&metrics_registry),
             validated: IngressPoolSection::new(
                 log.clone(),
                 PoolMetrics::new(metrics_registry.clone(), POOL_INGRESS, POOL_TYPE_VALIDATED),
@@ -314,13 +310,33 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                     }
                 }
                 ChangeAction::PurgeBelowExpiry(expiry) => {
+                    let expired_validated = self.validated.purge_below(expiry);
+                    let expired_unvalidated = self.unvalidated.purge_below(expiry);
+
                     transmits.extend(
-                        self.validated
-                            .purge_below(expiry)
+                        expired_validated
+                            .values()
                             .map(|i| (&i.msg.signed_ingress).into())
                             .map(ArtifactTransmit::Abort),
                     );
-                    let _unused = self.unvalidated.purge_below(expiry);
+
+                    let log_if_non_zero = |count, pool_type| {
+                        if count > 0 {
+                            warn!(
+                                every_n_seconds => 30,
+                                self.log,
+                                "Purging {count} expired ingress messages from \
+                                the {pool_type} ingress pool"
+                            );
+                            self.metrics
+                                .ingress_messages_expired
+                                .with_label_values(&[pool_type])
+                                .inc_by(count as u64);
+                        }
+                    };
+
+                    log_if_non_zero(expired_validated.len(), "validated");
+                    log_if_non_zero(expired_unvalidated.len(), "unvalidated");
                 }
             }
         }
@@ -346,7 +362,7 @@ impl ValidatedPoolReader<SignedIngress> for IngressPoolImpl {
 impl IngressPoolThrottler for IngressPoolImpl {
     fn exceeds_threshold(&self) -> bool {
         if self.exceeds_limit(&self.node_id) {
-            self.ingress_messages_throttled.inc();
+            self.metrics.ingress_messages_throttled.inc();
 
             true
         } else {
@@ -650,9 +666,18 @@ mod tests {
                         .iter()
                         .any(|x| matches!(x, ArtifactTransmit::Deliver(_)))
                 );
-                assert_eq!(result.transmits.len(), initial_count - non_expired_count);
+                let expired_count = initial_count - non_expired_count;
+                assert_eq!(result.transmits.len(), expired_count);
                 assert!(!result.poll_immediately);
                 assert_eq!(ingress_pool.validated().size(), non_expired_count);
+                assert_eq!(
+                    ingress_pool
+                        .metrics
+                        .ingress_messages_expired
+                        .with_label_values(&["validated"])
+                        .get(),
+                    expired_count as u64
+                );
             })
         })
     }

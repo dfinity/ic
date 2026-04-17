@@ -12,15 +12,15 @@ http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-config = { path = "../../config" }
 ic-canonical-state = { path = "../../canonical_state" }
-ic-limits = { path = "../../limits" }
+ic-config = { path = "../../config" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-certified-stream-store = { path = "../../interfaces/certified_stream_store" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
+ic-limits = { path = "../../limits" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-protobuf = { path = "../../protobuf" }

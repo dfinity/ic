@@ -218,12 +218,12 @@ thread_local! {
 
     // The planned effects of enabling this flag include
     //   1. Reduce max dissolve delay from 8 years to 2 years. This includes capping existing neurons via data migration.
-    //   2. Reduce voting rewards pool by approximately 36.5% (equivalently, scale by 0.635 times).
-    //   3. Quadratic dissolve delay bonus (instead of linear).
-    //   4. Reduce the minimum dissolve delay needed to vote.
+    //   2. Reduce voting rewards pool by approximately 36.71% (equivalently, scale by 0.6329 times).
+    //   3. Dissolve delay bonus: quadratic instead of linear, with a maximum of 3x instead of 2x.
+    //   4. Reduce the minimum dissolve delay needed to vote to 2 weeks instead of 6 months.
     //   5. 8 year gang 10% bonus.
     static ENABLE_MISSION_70_VOTING_REWARDS: Cell<bool>
-        = const { Cell::new(cfg!(feature = "test")) };
+        = const { Cell::new(true) };
 }
 
 thread_local! {
