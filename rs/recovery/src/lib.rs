@@ -385,6 +385,7 @@ impl Recovery {
     /// an error, as the subnet could have stalled in its first DKG interval before producing any
     /// checkpoint.
     pub fn get_ic_state_includes(
+        logger: &Logger,
         maybe_remote: MaybeRemote<'_>,
         checkpoint_height_to_download: CheckpointHeight,
     ) -> RecoveryResult<Vec<PathBuf>> {
@@ -410,6 +411,13 @@ impl Recovery {
                 else {
                     // No checkpoints, return an empty list of includes. This is not an error, as the
                     // subnet could have stalled in its first DKG interval.
+                    warn!(
+                        logger,
+                        "No checkpoints found at {}. This is expected if the subnet stalled in its first \
+                        DKG interval before producing any checkpoint. If this is not the case, this is an \
+                        error. Please check the state of the node before proceeding.",
+                        ic_checkpoints_path.display()
+                    );
                     return Ok(vec![]);
                 };
 
@@ -453,6 +461,7 @@ impl Recovery {
         );
 
         let includes = Self::get_ic_state_includes(
+            &self.logger,
             MaybeRemote::Remote(&ssh_helper),
             CheckpointHeight::from(download_height),
         )?;
@@ -504,6 +513,7 @@ impl Recovery {
         download_height: Option<u64>,
     ) -> RecoveryResult<impl Step + use<>> {
         let data_includes = Self::get_ic_state_includes(
+            &self.logger,
             MaybeRemote::Local,
             CheckpointHeight::from(download_height),
         )?;
@@ -1272,6 +1282,8 @@ mod tests {
 
     #[test]
     fn get_ic_state_includes_test() {
+        let logger = util::make_logger();
+
         let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
         create_dir(&ic_checkpoints_path).unwrap();
         assert!(
@@ -1282,7 +1294,7 @@ mod tests {
 
         // Test: without any checkpoints, should not be an error, should return nothing
         let includes =
-            Recovery::get_ic_state_includes(MaybeRemote::Local, CheckpointHeight::Latest)
+            Recovery::get_ic_state_includes(&logger, MaybeRemote::Local, CheckpointHeight::Latest)
                 .expect("Failed getting ic state includes");
         assert!(includes.is_empty());
 
@@ -1297,7 +1309,7 @@ mod tests {
 
         // Test: without specified download height, should include the latest checkpoint
         let includes =
-            Recovery::get_ic_state_includes(MaybeRemote::Local, CheckpointHeight::Latest)
+            Recovery::get_ic_state_includes(&logger, MaybeRemote::Local, CheckpointHeight::Latest)
                 .expect("Failed getting ic state includes");
         assert_eq!(
             includes,
@@ -1310,9 +1322,12 @@ mod tests {
         );
 
         // Test: with specified download height, should include the checkpoint at the download height
-        let includes =
-            Recovery::get_ic_state_includes(MaybeRemote::Local, CheckpointHeight::Specified(64800))
-                .expect("Failed getting ic state includes");
+        let includes = Recovery::get_ic_state_includes(
+            &logger,
+            MaybeRemote::Local,
+            CheckpointHeight::Specified(64800),
+        )
+        .expect("Failed getting ic state includes");
         assert_eq!(
             includes,
             vec![
@@ -1324,8 +1339,11 @@ mod tests {
         );
 
         // Test: with specified download height but no checkpoint at that height, should return an error
-        let result =
-            Recovery::get_ic_state_includes(MaybeRemote::Local, CheckpointHeight::Specified(64700));
+        let result = Recovery::get_ic_state_includes(
+            &logger,
+            MaybeRemote::Local,
+            CheckpointHeight::Specified(64700),
+        );
         assert_matches!(result, Err(RecoveryError::OutputError(e)) if e.contains("does not exist"));
 
         remove_dir(&ic_checkpoints_path).unwrap();
