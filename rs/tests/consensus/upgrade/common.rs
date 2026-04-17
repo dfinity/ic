@@ -26,6 +26,7 @@ use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
 use ic_management_canister_types::{CanisterId, TakeCanisterSnapshotArgs};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::retry_with_msg;
 use ic_system_test_driver::util::create_agent;
 use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::*},
@@ -418,24 +419,43 @@ fn find_latest_computed_root_hashes_from_logs(
 }
 
 /// Asserts that the orchestrator has shut down gracefully by searching for a specific log entry.
-/// Panics if the log entry is not found but the log stream ends (which indicates the node
-/// rebooted).
+/// Panics if the log entry is not found within a timeout.
 ///
-/// We use a bash script instead of connecting to the log stream endpoint because as the
-/// orchestrator is shutting down, the endpoint might close right away without letting us the
-/// chance to read the relevant log entry. In constrast, the SSH connection remains open longer.
+/// Polls the node's persisted journal (across all boots) rather than following a live log stream.
+/// This avoids a race where the orchestrator writes the "shut down gracefully" line and the node
+/// reboots into the new version milliseconds later, tearing down the SSH transport before the
+/// grep match can be flushed back over the channel. On reboot the SSH session is simply
+/// re-established and the message is found in the previous boot's journal.
 ///
 /// This function will never return if an upgrade is not scheduled.
 fn assert_orchestrator_stopped_gracefully(node: &IcNodeSnapshot) {
-    let session = node.block_on_ssh_session().unwrap();
-    session.set_timeout(5 * 60 * 1000);
-    assert!(
-        JournalStreamer::new(session)
-            .follow()
-            .max_lines(1)
-            .contains("Orchestrator shut down gracefully")
-            .unwrap_or_default(),
-        "Orchestrator of node {} did not shut down gracefully",
-        node.node_id
-    );
+    const GRACEFUL_SHUTDOWN_MSG: &str = "Orchestrator shut down gracefully";
+    const OVERALL_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+
+    let logger = node.test_env().logger();
+    retry_with_msg!(
+        format!("assert_orchestrator_stopped_gracefully({})", node.node_id),
+        logger,
+        OVERALL_TIMEOUT,
+        RETRY_BACKOFF,
+        || {
+            let session = node.block_on_ssh_session()?;
+            session.set_timeout(30 * 1000);
+            if JournalStreamer::new(session).contains(GRACEFUL_SHUTDOWN_MSG)? {
+                Ok(())
+            } else {
+                anyhow::bail!(
+                    "Node {} has not logged '{}' yet",
+                    node.node_id,
+                    GRACEFUL_SHUTDOWN_MSG
+                )
+            }
+        }
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "Orchestrator of node {} did not shut down gracefully: {e:#}",
+            node.node_id
+        )
+    });
 }
