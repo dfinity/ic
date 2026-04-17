@@ -187,7 +187,7 @@ pub(crate) fn create_early_remote_transcripts(
     }
 
     // Get all dealings for DKGs that have not been completed yet
-    let (all_dealings, _) = utils::get_dkg_dealings(pool_reader, parent);
+    let (all_dealings, completed_dkgs) = utils::get_dkg_dealings(pool_reader, parent);
 
     // Try to create transcripts for all configs of each target_id. Note that we either include
     // all transcript results for a target_id or none of them.
@@ -198,6 +198,9 @@ pub(crate) fn create_early_remote_transcripts(
             Err(errs) => {
                 // Reject contexts for which we failed to create configs.
                 for (dkg_id, err) in errs {
+                    if completed_dkgs.contains(&dkg_id) {
+                        break;
+                    }
                     error!(
                         logger,
                         "Failed to create early remote transcript for dkg id {:?} at height {}: {}",
