@@ -738,6 +738,19 @@ fn trillion_cycles(value: f64) -> Cycles {
     Cycles::new((value * 1e12) as u128)
 }
 
+/// Returns a hand-copy of the fees defined in
+/// `CyclesAccountManagerConfig::{application,system}_subnet()` in
+/// `rs/config/src/subnet_config.rs`.
+///
+/// The duplication is intentional. These tests compute expected costs from the
+/// fee values returned here and compare them against the actual charges made by
+/// the replica. If someone changes a fee in `subnet_config.rs` without updating
+/// this mirror, the tests fail — which forces a conscious update of the copy
+/// and a review of the cycle-economics impact, since fee changes affect every
+/// canister on the IC.
+///
+/// Do not replace this with a direct call to `CyclesAccountManagerConfig::…`
+/// from `subnet_config.rs` — doing so would silently bless any fee change.
 fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountManagerConfig {
     let ten_update_instructions_execution_fee_in_cycles = 10;
     const WASM64_INSTRUCTION_COST_MULTIPLIER: u128 = 2;
