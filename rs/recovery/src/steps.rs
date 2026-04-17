@@ -10,7 +10,7 @@ use crate::{
     registry_helper::RegistryHelper,
     replay_helper,
     ssh_helper::SshHelper,
-    util::{MaybeRemote, SshUser, block_on, parse_hex_str},
+    util::{ExecutionMode, SshUser, block_on, parse_hex_str},
 };
 use core::convert::From;
 use ic_artifact_pool::certification_pool::CertificationPoolImpl;
@@ -627,7 +627,7 @@ impl Step for UploadStateAndRestartStep {
             let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
             // path of latest checkpoint on upload node
             let copy_from = ic_checkpoints_path.join(
-                MaybeRemote::Remote(&ssh_helper)
+                ExecutionMode::Remote(&ssh_helper)
                     .get_maybe_latest_checkpoint_name_and_height(&ic_checkpoints_path)?
                     .unwrap_or_default()
                     .0,

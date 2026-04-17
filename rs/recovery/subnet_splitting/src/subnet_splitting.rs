@@ -26,7 +26,7 @@ use ic_recovery::{
     registry_helper::RegistryPollingStrategy,
     ssh_helper::SshHelper,
     steps::{AdminStep, Step, UploadStateAndRestartStep},
-    util::{CheckpointHeight, DataLocation, MaybeRemote, SshUser},
+    util::{CheckpointHeight, DataLocation, ExecutionMode, SshUser},
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -585,7 +585,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                     key_file,
                 );
                 let mut includes = Recovery::get_ic_state_includes(
-                    MaybeRemote::Remote(&ssh_helper),
+                    ExecutionMode::Remote(&ssh_helper),
                     CheckpointHeight::Latest,
                 )?;
                 includes.push(PathBuf::from(CUPS_DIR));
