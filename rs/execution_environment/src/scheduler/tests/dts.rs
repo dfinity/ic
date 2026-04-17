@@ -759,25 +759,17 @@ fn abort_paused_executions_keeps_highest_priority() {
     test.send_ingress(mid, ingress(100));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
+    // `low` started a round earlier, so it has long execution progress.
     assert!(
         test.state()
             .canister_priority(&low)
             .long_execution_start_round
             .is_some()
     );
-    assert!(
-        test.state()
-            .canister_priority(&high)
-            .long_execution_start_round
-            .is_none()
-    );
-    assert!(
-        test.state()
-            .canister_priority(&mid)
-            .long_execution_start_round
-            .is_none()
-    );
 
+    // `low` has the most executed slices (highest priority among long
+    // executions), `high` has the highest CA (second priority). `mid` is
+    // aborted.
     assert!(test.canister_state(low).has_paused_execution());
     assert!(test.canister_state(high).has_paused_execution());
     assert!(test.canister_state(mid).has_aborted_execution());

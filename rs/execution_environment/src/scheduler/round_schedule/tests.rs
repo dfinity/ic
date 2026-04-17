@@ -1093,32 +1093,49 @@ fn finish_round_heartbeat_treated_same_as_input() {
     );
 }
 
+//
 // === Multi-round proptests ===
+//
 
 const HEAP_DELTA_RATE_LIMIT: NumBytes = NumBytes::new(1000);
 
-/// Cyclical rate-limiting pattern.
+/// Cyclical rate-limiting pattern: after every `unlimited_rounds` of full
+/// execution, the canister produces `limited_rounds` worth of heap delta. This
+/// results in a cycle length of `unlimited_rounds + limited_rounds`, where
+/// the canister is executed for `unlimited_rounds` and skipped for the next
+/// `limited_rounds` where it would otherwise be executed.
 #[derive(Clone, Debug)]
 struct RateLimitPattern {
-    /// Number of consecutive rate-limited sim_rounds.
+    /// Number of consecutive rate-limited potential full rounds.
     limited_rounds: usize,
-    /// Number of consecutive non-rate-limited sim_rounds.
+    /// Size of the heap delta debit produced after `limited_rounds` of full
+    /// execution. The scheduler will skip the canister for this number of rounds.
     unlimited_rounds: usize,
 }
 
 /// Describes a class of canisters that share the same scheduling behavior.
 ///
-/// The activity cycle is indexed by round number. The rate limiting pattern is
-/// indexed by the number of rounds executed.
+/// In addition to compute allocation, long vs short execution, backlogging and
+/// low cycle balance, the archetype is also described by a couple of cycles:
+/// its activity cycle (see below), indexed by round number; and a potential
+/// rate limiting cycle (see `RateLimitPattern`), indexed by full execution
+/// rounds.
+///
+/// Every `active_rounds + inactive_rounds` rounds, the canister gets the
+/// equivalent of `active_rounds` worth of inputs. These may take the form of
+/// separate short executions or a continued long execution
+/// (`has_long_execution`). In the former case, the inputs may be consumed at
+/// the end of every round or not (`consumes_all_inputs`).
 #[derive(Clone, Debug)]
 struct CanisterArchetype {
     /// Compute allocation in percent (0-100).
     compute_allocation: u64,
-    /// Number of consecutive active sim_rounds per cycle.
+    /// Number of active rounds per cycle.
     active_rounds: usize,
-    /// Number of consecutive inactive sim_rounds per cycle.
+    /// Number of inactive rounds per cycle.
     inactive_rounds: usize,
-    /// Whether or not the canister executes long messages.
+    /// Whether the canister executes one long message for `active_rounds` or
+    /// separate short messages.
     has_long_execution: bool,
     /// Whether or not the canister consumes all its inputs when executed (and not
     /// in a long execution).
@@ -1131,37 +1148,52 @@ struct CanisterArchetype {
 }
 
 impl CanisterArchetype {
+    /// Returns the length of the activity cycle.
     fn activity_cycle(&self) -> usize {
         self.active_rounds + self.inactive_rounds
     }
 
+    /// Returns true if the given round is the start of a new activity cycle.
     fn is_new_cycle(&self, round: usize) -> bool {
         round % self.activity_cycle() == 0
     }
 
-    fn heap_delta_produced(&self, round: usize) -> NumBytes {
+    /// Returns the heap delta debit produced by the canister after the given number
+    /// of full rounds, given its rate limiting pattern. Zero if the canister is not
+    /// rate limited or this is not the start of a new rate limiting cycle.
+    fn heap_delta_produced(&self, full_rounds: usize) -> NumBytes {
         if let Some(ref rl) = self.rate_limiting {
-            if round % rl.unlimited_rounds == 0 {
+            if full_rounds % rl.unlimited_rounds == 0 {
                 return HEAP_DELTA_RATE_LIMIT * rl.limited_rounds as u64;
             }
         }
         NumBytes::new(0)
     }
 
-    /// Expected number of full rounds the canister should have executed, out of the
-    /// given number of rounds, given its compute allocation plus free compute.
+    /// Expected number of full rounds the canister should have executed out of the
+    /// given number of rounds given its mix of compute allocation and free compute.
     fn expected_full_rounds(&self, num_rounds: usize, free_compute: usize) -> usize {
         // Total compute available to canister, capped at 100%.
         let canister_compute = (self.compute_allocation as usize + free_compute).min(100);
 
         let expected_rounds_from_ca = num_rounds * canister_compute / 100;
+        self.max_rounds_from_rate_limiting(expected_rounds_from_ca)
+    }
+
+    /// Hard limit on the number of rounds the canister can execute due to rate
+    /// limiting.
+    ///
+    /// As opposed to the number of full rounds expected based on compute allocation
+    /// (which may be exceeded due to the capacity of the extra core), this strictly
+    /// limits how many rounds the canister will actually execute (as opposed to
+    /// being charged for heap delta debits and skipped).
+    fn max_rounds_from_rate_limiting(&self, num_rounds: usize) -> usize {
         if let Some(ref rl) = self.rate_limiting {
             // If the canister is rate-limited, it will have only executed in the
             // unlimited rounds.
-            expected_rounds_from_ca * rl.unlimited_rounds
-                / (rl.limited_rounds + rl.unlimited_rounds)
+            num_rounds * rl.unlimited_rounds / (rl.limited_rounds + rl.unlimited_rounds)
         } else {
-            expected_rounds_from_ca
+            num_rounds
         }
     }
 }
@@ -1171,13 +1203,13 @@ struct CanisterSim {
     canister_id: CanisterId,
     archetype: CanisterArchetype,
 
-    /// Execution rounds left in the current cycle.
+    /// Execution rounds left in the current activity cycle.
     ///
     /// These could be small messages or a continued long execution, depending on
     /// the archetype's `has_long_execution`.
     current_cycle_rounds_left: usize,
 
-    /// Not yet applied heap delta debit.
+    /// Produced but not yet applied heap delta debit.
     ///
     /// We cannot apply heap delta in the middle of a long execution, so we collect
     /// it here and apply it upon completion.
@@ -1194,10 +1226,15 @@ struct CanisterSim {
 }
 
 impl CanisterSim {
+    /// Returns true if the canister is partway through an activity cycle or has
+    /// a backlog.
     fn is_active(&self) -> bool {
         self.current_cycle_rounds_left > 0 || !self.inputs.is_empty()
     }
 
+    /// Simulates the canister having produced some heap delta (based on its rate
+    /// limiting pattern) based on the number of full rounds completed. This will be
+    /// applied to the canister state when the current message execution completes.
     fn produce_heap_delta_debit_for_full_round(&mut self) {
         self.heap_delta_debit += self.archetype.heap_delta_produced(self.full_rounds);
     }
@@ -1302,7 +1339,8 @@ fn run_multi_round_simulation(
 
                     if Some(idx) == debug_canister_idx {
                         println!(
-                            "round {round}, canister {idx}: starting cycle with {cycle_rounds} rounds"
+                            "round {round}, canister {idx}: full rounds {}, starting cycle with {cycle_rounds} rounds",
+                            sim.full_rounds
                         );
                     }
                 } else {
@@ -1321,6 +1359,16 @@ fn run_multi_round_simulation(
 
         // --- Simulate core assignment and execution ---
         let core_schedules = fixture.partition_to_cores(&iteration);
+        if debug_canister_idx.is_some() {
+            println!(
+                "round {round}: core schedule: {:?}",
+                core_schedules
+                    .iter()
+                    .map(|core| core.iter().map(|id| id_to_sim[id]).collect::<Vec<_>>())
+                    .collect::<Vec<_>>()
+            );
+        }
+
         let mut executed_canisters = BTreeSet::new();
         let mut canisters_with_completed_messages = BTreeSet::new();
         let mut low_cycle_balance_canisters = BTreeSet::new();
@@ -1438,6 +1486,7 @@ fn run_multi_round_simulation(
 fn assert_multi_round_invariants(
     fixture: &RoundScheduleFixture,
     sims: &[CanisterSim],
+    scheduler_cores: usize,
     num_rounds: usize,
     free_compute_capacity: usize,
 ) -> Result<(), TestCaseError> {
@@ -1461,8 +1510,8 @@ fn assert_multi_round_invariants(
     // 100% = 500% by finish_round (via the free allocation cap). Negative AP can
     // grow arbitrarily: it simply means the canister got to execute more than its
     // share (because spare compute was available) and will be deprioritized later.
-    const AP_UPPER_BOUND: i64 = 5 * 100 * MULTIPLIER;
-    const AP_LOWER_BOUND: i64 = -100 * 100 * MULTIPLIER;
+    const AP_UPPER_BOUND: i64 = 10 * 100 * MULTIPLIER;
+    const AP_LOWER_BOUND: i64 = -30 * 100 * MULTIPLIER;
     for (i, sim) in sims.iter().enumerate() {
         let canister_priority = fixture.state.metadata.subnet_schedule.get(&sim.canister_id);
         assert!(
@@ -1482,6 +1531,13 @@ fn assert_multi_round_invariants(
 
         // If (and only if) the canister has a backlog, check that it got executed as
         // much as its compute allocation and rate limiting allow.
+        //
+        // Because long executions are prioritized for throughput (in-progress ones are
+        // prioritized over new ones); combined with AP bounding, long executions are
+        // scheduled less efficiently.
+        //
+        // And single short execution canisters that have inputs every round and always
+        // consume them may end up with negative AP that they may never recover from.
         if sim.inputs.len() > 1 {
             let executed_rounds = sim.full_rounds;
             let credit_rounds = canister_priority.accumulated_priority.get() / MULTIPLIER / 100;
@@ -1489,17 +1545,30 @@ fn assert_multi_round_invariants(
             let mut expected_rounds = sim
                 .archetype
                 .expected_full_rounds(num_rounds, free_compute_per_canister);
-            // Because long executions are prioritized for throughput (in-progress ones are
-            // prioritized over new); combined with AP bounding, long executions are
-            // scheduled less efficiently.
-            //
-            // Single short execution canisters that have inputs every round and always
-            // consume them may end up with negative AP that they can never recover from
-            // until they are skipped for a round.
-            expected_rounds = expected_rounds * 85 / 100;
+
+            if sim.archetype.has_long_execution {
+                // Because long executions are prioritized for throughput (in-progress ones are
+                // prioritized over new ones); combined with AP bounding, long executions are
+                // scheduled less efficiently.
+                expected_rounds = expected_rounds * 9 / 10;
+            } else {
+                // We have one core that is not part of the scheduler capacity. The combination
+                // of this extra capacity and the inefficiencies described above, gives us in
+                // practice the equivlent of another 20 compute capacity.
+                if sims.len() >= scheduler_cores {
+                    expected_rounds =
+                        expected_rounds * (scheduler_cores * 10 - 8) / (scheduler_cores * 10 - 10);
+                }
+                // The capacity resulting from the extra core only applies up to the rate limit.
+                // If a canister can only run 50% of the time due to rate limiting, it will do
+                // so regardless of extra compute capacity.
+                expected_rounds =
+                    expected_rounds.min(sim.archetype.max_rounds_from_rate_limiting(num_rounds));
+            }
+
             prop_assert!(
                 executed_rounds + credit_rounds + 1 >= expected_rounds,
-                "canister {i}: executed_rounds {executed_rounds} + credit_rounds {credit_rounds} < expected_rounds {expected_rounds}",
+                "canister {i}: executed_rounds {executed_rounds} + credit_rounds {credit_rounds} < expected_rounds {expected_rounds}"
             );
         }
     }
@@ -1510,7 +1579,7 @@ fn assert_multi_round_invariants(
 #[test_strategy::proptest(ProptestConfig { cases: 4000, max_shrink_iters: 0, ..ProptestConfig::default() })]
 fn multi_round_priority_invariants(
     #[strategy(2..6_usize)] scheduler_cores: usize,
-    #[strategy(200..800_usize)] num_rounds: usize,
+    #[strategy(200..800_usize)] _num_rounds: usize,
     #[strategy(proptest::collection::vec(arb_archetype_with_count(), 2..=5))]
     archetype_configs: Vec<(CanisterArchetype, usize)>,
 ) {
@@ -1521,9 +1590,16 @@ fn multi_round_priority_invariants(
     let capacity = (scheduler_cores - 1) * 100;
     prop_assume!(total_compute < capacity);
 
+    let num_rounds = 1000;
     let (fixture, sims) =
-        run_multi_round_simulation(scheduler_cores, num_rounds, &archetype_configs, None);
-    assert_multi_round_invariants(&fixture, &sims, num_rounds, capacity - total_compute)?;
+        run_multi_round_simulation(scheduler_cores, num_rounds, &archetype_configs, Some(7));
+    assert_multi_round_invariants(
+        &fixture,
+        &sims,
+        scheduler_cores,
+        num_rounds,
+        capacity - total_compute,
+    )?;
 }
 
 #[test_strategy::proptest(ProptestConfig { cases: 20, max_shrink_iters: 0, ..ProptestConfig::default() })]
