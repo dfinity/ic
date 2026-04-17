@@ -168,7 +168,7 @@ pub struct NodeHeights {
     pub cert_share: u64,
 }
 
-/// Select a node with highest certification share height in the given subnet snapshot
+/// Select a node with highest certification share height among the nodes with highest CUP height
 pub fn node_with_highest_cup_and_cert_share_heights(
     subnet: &SubnetSnapshot,
     logger: &Logger,
