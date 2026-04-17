@@ -6184,7 +6184,7 @@ pub fn test_icrc152_feature_flag_disabled<T>(
 
     let mint_args = Icrc152MintArgs {
         to: Account::from(p1.0),
-        amount: Nat::from(1_000_000u64),
+        amount: Nat::from(1_000_000_u64),
         created_at_time: now_nanos(&env),
         reason: None,
     };
@@ -6201,7 +6201,7 @@ pub fn test_icrc152_feature_flag_disabled<T>(
 
     let burn_args = Icrc152BurnArgs {
         from: Account::from(p1.0),
-        amount: Nat::from(1_000u64),
+        amount: Nat::from(1_000_u64),
         created_at_time: now_nanos(&env),
         reason: None,
     };
@@ -6227,7 +6227,7 @@ where
 
     let mint_args = Icrc152MintArgs {
         to: Account::from(p1.0),
-        amount: Nat::from(1_000_000u64),
+        amount: Nat::from(1_000_000_u64),
         created_at_time: now_nanos(&env),
         reason: None,
     };
@@ -6239,7 +6239,7 @@ where
 
     let burn_args = Icrc152BurnArgs {
         from: Account::from(p1.0),
-        amount: Nat::from(1_000u64),
+        amount: Nat::from(1_000_u64),
         created_at_time: now_nanos(&env),
         reason: None,
     };
@@ -6269,7 +6269,7 @@ where
         controller,
         &Icrc152MintArgs {
             to: Account::from(p1.0),
-            amount: Nat::from(0u64),
+            amount: Nat::from(0_u64),
             created_at_time: now_nanos(&env),
             reason: None,
         },
@@ -6287,7 +6287,7 @@ where
         controller,
         &Icrc152BurnArgs {
             from: Account::from(p1.0),
-            amount: Nat::from(0u64),
+            amount: Nat::from(0_u64),
             created_at_time: now_nanos(&env),
             reason: None,
         },
@@ -6309,7 +6309,7 @@ where
                 owner: Principal::anonymous(),
                 subaccount: None,
             },
-            amount: Nat::from(1_000u64),
+            amount: Nat::from(1_000_u64),
             created_at_time: now_nanos(&env),
             reason: None,
         },
@@ -6328,7 +6328,7 @@ where
                 owner: Principal::anonymous(),
                 subaccount: None,
             },
-            amount: Nat::from(1_000u64),
+            amount: Nat::from(1_000_u64),
             created_at_time: now_nanos(&env),
             reason: None,
         },
@@ -6345,7 +6345,7 @@ where
         controller,
         &Icrc152MintArgs {
             to: MINTER,
-            amount: Nat::from(1_000u64),
+            amount: Nat::from(1_000_u64),
             created_at_time: now_nanos(&env),
             reason: None,
         },
@@ -6361,7 +6361,7 @@ where
         controller,
         &Icrc152BurnArgs {
             from: MINTER,
-            amount: Nat::from(1_000u64),
+            amount: Nat::from(1_000_u64),
             created_at_time: now_nanos(&env),
             reason: None,
         },
@@ -6379,7 +6379,7 @@ where
         controller,
         &Icrc152MintArgs {
             to: Account::from(p1.0),
-            amount: Nat::from(1_000u64),
+            amount: Nat::from(1_000_u64),
             created_at_time: now_nanos(&env),
             reason: Some(long_reason.clone()),
         },
@@ -6397,7 +6397,7 @@ where
         controller,
         &Icrc152BurnArgs {
             from: Account::from(p1.0),
-            amount: Nat::from(1_000u64),
+            amount: Nat::from(1_000_u64),
             created_at_time: now_nanos(&env),
             reason: Some(long_reason),
         },
@@ -6416,7 +6416,7 @@ where
         controller,
         &Icrc152BurnArgs {
             from: Account::from(p1.0),
-            amount: Nat::from(999_999_999u64),
+            amount: Nat::from(999_999_999_u64),
             created_at_time: now_nanos(&env),
             reason: None,
         },
@@ -6443,7 +6443,7 @@ where
     assert_eq!(supply_before, 0);
 
     // --- Mint ---
-    let mint_amount = 5_000_000u64;
+    let mint_amount = 5_000_000_u64;
     let mint_result = icrc152_mint(
         &env,
         canister_id,
@@ -6456,7 +6456,7 @@ where
         },
     );
     let mint_block_idx = mint_result.expect("icrc152_mint should succeed");
-    assert_eq!(mint_block_idx, Nat::from(0u64));
+    assert_eq!(mint_block_idx, Nat::from(0_u64));
 
     assert_eq!(balance_of(&env, canister_id, p1.0), mint_amount);
     assert_eq!(total_supply(&env, canister_id), mint_amount);
@@ -6478,7 +6478,7 @@ where
     );
 
     // --- Burn ---
-    let burn_amount = 2_000_000u64;
+    let burn_amount = 2_000_000_u64;
     let burn_result = icrc152_burn(
         &env,
         canister_id,
@@ -6491,7 +6491,7 @@ where
         },
     );
     let burn_block_idx = burn_result.expect("icrc152_burn should succeed");
-    assert_eq!(burn_block_idx, Nat::from(1u64));
+    assert_eq!(burn_block_idx, Nat::from(1_u64));
 
     assert_eq!(
         balance_of(&env, canister_id, p1.0),
@@ -6532,7 +6532,7 @@ where
     // First mint succeeds
     let mint_args = Icrc152MintArgs {
         to: Account::from(p1.0),
-        amount: Nat::from(1_000u64),
+        amount: Nat::from(1_000_u64),
         created_at_time: ts,
         reason: None,
     };
@@ -6549,7 +6549,7 @@ where
     // Mint with different created_at_time succeeds
     let mint_args2 = Icrc152MintArgs {
         to: Account::from(p1.0),
-        amount: Nat::from(1_000u64),
+        amount: Nat::from(1_000_u64),
         created_at_time: ts + 1,
         reason: None,
     };
@@ -6559,7 +6559,7 @@ where
     // Burn deduplication
     let burn_args = Icrc152BurnArgs {
         from: Account::from(p1.0),
-        amount: Nat::from(500u64),
+        amount: Nat::from(500_u64),
         created_at_time: ts + 2,
         reason: None,
     };

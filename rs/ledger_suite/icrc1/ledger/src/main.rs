@@ -910,7 +910,7 @@ fn icrc152_mint_not_async(
     let block_idx = Access::with_ledger_mut(|ledger| {
         if !ledger.feature_flags().icrc152 {
             return Err(Icrc152MintError::GenericError {
-                error_code: Nat::from(0u64),
+                error_code: Nat::from(0_u64),
                 message: "ICRC-152 is not enabled".to_string(),
             });
         }
@@ -919,15 +919,15 @@ fn icrc152_mint_not_async(
                 "caller is not a controller".to_string(),
             ));
         }
-        if args.amount == 0u64 {
+        if args.amount == 0_u64 {
             return Err(Icrc152MintError::GenericError {
-                error_code: Nat::from(0u64),
+                error_code: Nat::from(0_u64),
                 message: "amount must be greater than 0".to_string(),
             });
         }
         let amount =
             Tokens::try_from(args.amount.clone()).map_err(|_| Icrc152MintError::GenericError {
-                error_code: Nat::from(0u64),
+                error_code: Nat::from(0_u64),
                 message: "amount is too large".to_string(),
             })?;
         if args.to.owner == Principal::anonymous() {
@@ -944,7 +944,7 @@ fn icrc152_mint_not_async(
             && reason.len() > MAX_REASON_LENGTH
         {
             return Err(Icrc152MintError::GenericError {
-                error_code: Nat::from(0u64),
+                error_code: Nat::from(0_u64),
                 message: format!("reason must be at most {} bytes", MAX_REASON_LENGTH),
             });
         }
@@ -966,19 +966,19 @@ fn icrc152_mint_not_async(
                     duplicate_of: Nat::from(duplicate_of),
                 },
                 CoreTransferError::TxTooOld { .. } => Icrc152MintError::GenericError {
-                    error_code: Nat::from(0u64),
+                    error_code: Nat::from(0_u64),
                     message: "transaction too old".to_string(),
                 },
                 CoreTransferError::TxCreatedInFuture { .. } => Icrc152MintError::GenericError {
-                    error_code: Nat::from(0u64),
+                    error_code: Nat::from(0_u64),
                     message: "transaction created in the future".to_string(),
                 },
                 CoreTransferError::TxThrottled => Icrc152MintError::GenericError {
-                    error_code: Nat::from(0u64),
+                    error_code: Nat::from(0_u64),
                     message: "temporarily unavailable".to_string(),
                 },
                 other => Icrc152MintError::GenericError {
-                    error_code: Nat::from(0u64),
+                    error_code: Nat::from(0_u64),
                     message: format!("unexpected error: {:?}", other),
                 },
             })?;
@@ -1003,7 +1003,7 @@ fn icrc152_burn_not_async(
     let block_idx = Access::with_ledger_mut(|ledger| {
         if !ledger.feature_flags().icrc152 {
             return Err(Icrc152BurnError::GenericError {
-                error_code: Nat::from(0u64),
+                error_code: Nat::from(0_u64),
                 message: "ICRC-152 is not enabled".to_string(),
             });
         }
@@ -1012,15 +1012,15 @@ fn icrc152_burn_not_async(
                 "caller is not a controller".to_string(),
             ));
         }
-        if args.amount == 0u64 {
+        if args.amount == 0_u64 {
             return Err(Icrc152BurnError::GenericError {
-                error_code: Nat::from(0u64),
+                error_code: Nat::from(0_u64),
                 message: "amount must be greater than 0".to_string(),
             });
         }
         let amount =
             Tokens::try_from(args.amount.clone()).map_err(|_| Icrc152BurnError::GenericError {
-                error_code: Nat::from(0u64),
+                error_code: Nat::from(0_u64),
                 message: "amount is too large".to_string(),
             })?;
         if args.from.owner == Principal::anonymous() {
@@ -1037,7 +1037,7 @@ fn icrc152_burn_not_async(
             && reason.len() > MAX_REASON_LENGTH
         {
             return Err(Icrc152BurnError::GenericError {
-                error_code: Nat::from(0u64),
+                error_code: Nat::from(0_u64),
                 message: format!("reason must be at most {} bytes", MAX_REASON_LENGTH),
             });
         }
@@ -1064,19 +1064,19 @@ fn icrc152_burn_not_async(
                     }
                 }
                 CoreTransferError::TxTooOld { .. } => Icrc152BurnError::GenericError {
-                    error_code: Nat::from(0u64),
+                    error_code: Nat::from(0_u64),
                     message: "transaction too old".to_string(),
                 },
                 CoreTransferError::TxCreatedInFuture { .. } => Icrc152BurnError::GenericError {
-                    error_code: Nat::from(0u64),
+                    error_code: Nat::from(0_u64),
                     message: "transaction created in the future".to_string(),
                 },
                 CoreTransferError::TxThrottled => Icrc152BurnError::GenericError {
-                    error_code: Nat::from(0u64),
+                    error_code: Nat::from(0_u64),
                     message: "temporarily unavailable".to_string(),
                 },
                 other => Icrc152BurnError::GenericError {
-                    error_code: Nat::from(0u64),
+                    error_code: Nat::from(0_u64),
                     message: format!("unexpected error: {:?}", other),
                 },
             })?;
