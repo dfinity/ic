@@ -286,7 +286,12 @@ def filter_columns(columns_metadata, columns_list):
 
 
 def download_and_process_logs(
-    logs_base_dir, download_console_logs: bool, download_ic_logs: bool, verbose: bool, df: pd.DataFrame
+    logs_base_dir,
+    df: pd.DataFrame,
+    *,
+    download_console_logs: bool,
+    download_ic_logs: bool,
+    verbose: bool,
 ):
     """
     Download the logs of all runs in the given DataFrame,
@@ -336,7 +341,13 @@ def download_and_process_logs(
                 (row, attempt_num, attempt_status, download_url, attempt_dir, download_to_path, output_dir)
             )
 
-    execute_download_tasks(download_tasks, download_console_logs, download_ic_logs, verbose, df)
+    execute_download_tasks(
+        download_tasks,
+        df,
+        download_console_logs=download_console_logs,
+        download_ic_logs=download_ic_logs,
+        verbose=verbose,
+    )
 
     if len(output_dirs) == 1:
         output_dir = output_dirs.pop()
@@ -436,10 +447,11 @@ def convert_download_url(uri, cluster) -> str:
 
 def execute_download_tasks(
     download_tasks: list,
+    df: pd.DataFrame,
+    *,
     download_console_logs: bool,
     download_ic_logs: bool,
     verbose: bool,
-    df: pd.DataFrame,
 ):
     if verbose:
         print(f"Downloading {len(download_tasks)} log files...", file=sys.stderr)
@@ -812,7 +824,7 @@ def download_and_process_ic_logs_for_system_test(
             while True:
                 if verbose:
                     print(
-                        f"Downloading a maximum  {max_size} IC logs for attempt {attempt_dir.name} for testnet {group_name} from ElasticSearch between {gte} - {lte} with search_after={elasticsearch_query.get('search_after', None)} ...",
+                        f"Downloading a maximum of {max_size} IC logs for attempt {attempt_dir.name} for testnet {group_name} from ElasticSearch between {gte} - {lte} with search_after={elasticsearch_query.get('search_after', None)} ...",
                         file=sys.stderr,
                     )
                 response = requests.post(url, params=params, json=elasticsearch_query, timeout=60)
@@ -1251,7 +1263,11 @@ def last(args):
 
     if not args.skip_download:
         download_and_process_logs(
-            args.logs_base_dir, args.download_console_logs, args.download_ic_logs, args.verbose, df
+            args.logs_base_dir,
+            df,
+            download_console_logs=args.download_console_logs,
+            download_ic_logs=args.download_ic_logs,
+            verbose=args.verbose,
         )
 
     columns_metadata = LAST_COLUMNS
@@ -1294,7 +1310,11 @@ def main():
 
     # Arguments common to all subcommands:
     common_parser = argparse.ArgumentParser(add_help=False)
-    common_parser.add_argument("--verbose", action="store_true", help="Log queries")
+    common_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable verbose logging (SQL queries and log download/processing progress)",
+    )
     common_parser.add_argument(
         "--conninfo",
         metavar="STR",
