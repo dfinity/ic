@@ -54,7 +54,7 @@ use ic_test_utilities_types::{
     messages::{RequestBuilder, SignedIngressBuilder},
 };
 use ic_types::{
-    CanisterTimer, ComputeAllocation, ExecutionRound, MemoryAllocation, NumInstructions,
+    CanisterTimer, ComputeAllocation, ExecutionRound, Height, MemoryAllocation, NumInstructions,
     Randomness, ReplicaVersion, Time, UserId,
     batch::{AvailablePreSignatures, ChainKeyData},
     consensus::idkg::IDkgMasterPublicKeyId,
@@ -654,6 +654,7 @@ impl SchedulerTest {
             .charge_canisters_for_resource_allocation_and_usage(
                 self.state.as_mut().unwrap(),
                 subnet_size,
+                Height::from(self.round.get()),
             )
     }
 

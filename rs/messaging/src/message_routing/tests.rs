@@ -2383,7 +2383,7 @@ fn test_demux_delivers_certified_stream_slices() {
             log,
         ));
 
-        let (_, dst_state) = dst_state_manager.take_tip();
+        let (dst_height, dst_state) = dst_state_manager.take_tip();
 
         demux.process_payload(
             dst_state,
@@ -2391,6 +2391,7 @@ fn test_demux_delivers_certified_stream_slices() {
                 certified_stream_slices,
                 ..Default::default()
             },
+            dst_height,
         );
 
         assert_eq!(
