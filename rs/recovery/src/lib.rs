@@ -392,7 +392,7 @@ impl Recovery {
 
         let checkpoint_name = match download_height {
             CheckpointHeight::Specified(height) => {
-                let name = format!("{:016x}", height);
+                let name = format!("{height:016x}");
                 if !maybe_remote.path_exists(&ic_checkpoints_path.join(&name))? {
                     return Err(RecoveryError::invalid_output_error(format!(
                         "Checkpoint {} at height {} does not exist at {}",
