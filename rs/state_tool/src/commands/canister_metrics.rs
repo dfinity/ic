@@ -53,8 +53,8 @@ fn write_load_metrics_file(
         .map_err(|err| format!("Failed to create the output file: {err}"))?;
     // Write the header.
     writeln!(
-         output_file,
-         "canister_id,instructions_executed,ingress_messages_executed,remote_subnet_messages_executed,local_subnet_messages_executed,http_outcalls_executed,heartbeats_and_global_timers_executed"
+        output_file,
+        "canister_id,instructions_executed,ingress_messages_executed,remote_subnet_messages_executed,local_subnet_messages_executed,http_outcalls_executed,heartbeats_and_global_timers_executed"
      )
      .map_err(|err| format!("Failed to write header: {err}"))?;
 
@@ -75,8 +75,8 @@ fn write_load_metrics_file(
         let heartbeats_and_global_timers_executed =
             load_metrics.heartbeats_and_global_timers_executed();
         writeln!(
-             output_file,
-             "{canister_id},{instructions_executed},{ingress_messages_executed},{remote_subnet_messages_executed},{local_subnet_messages_executed},{http_outcalls_executed},{heartbeats_and_global_timers_executed}"
+            output_file,
+            "{canister_id},{instructions_executed},{ingress_messages_executed},{remote_subnet_messages_executed},{local_subnet_messages_executed},{http_outcalls_executed},{heartbeats_and_global_timers_executed}"
          )
          .map_err(|err| format!("Failed to write row: {err}"))?;
     }
