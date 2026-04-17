@@ -298,15 +298,12 @@ async fn upgrade_to(
     // triggered by this upgrade (not a pre-existing line from some earlier boot).
     let mut cursors_per_node: BTreeMap<NodeId, String> = BTreeMap::new();
     for node in &healthy_nodes {
-        let ssh_session = node
-            .block_on_ssh_session_async()
-            .await
-            .unwrap_or_else(|e| {
-                panic!(
-                    "Failed to establish SSH session for node {}: {e:#}",
-                    node.node_id
-                )
-            });
+        let ssh_session = node.block_on_ssh_session_async().await.unwrap_or_else(|e| {
+            panic!(
+                "Failed to establish SSH session for node {}: {e:#}",
+                node.node_id
+            )
+        });
         let cursor = JournalStreamer::new(ssh_session)
             .get_cursor()
             .unwrap_or_else(|e| {
