@@ -69,7 +69,7 @@ pub enum CallbackUpdate {
 }
 
 /// Cycles consumed via System API calls during message execution.
-#[derive(Clone, Copy, PartialEq, Debug, Deserialize, Serialize, Default)]
+#[derive(Copy, Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub(crate) struct ConsumedCyclesDuringExecution {
     burned: Option<CompoundCycles<BurnedCycles>>,
     instructions: Option<CompoundCycles<Instructions>>,

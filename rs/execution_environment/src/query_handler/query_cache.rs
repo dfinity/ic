@@ -142,7 +142,7 @@ impl QueryCacheMetrics {
 ///
 /// The key is to distinguish query cache entries, i.e. entries with different
 /// keys are (almost) completely independent from each other.
-#[derive(Clone, DeterministicHeapBytes, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, DeterministicHeapBytes)]
 pub(crate) struct EntryKey {
     /// Query source.
     pub source: UserId,
@@ -182,7 +182,7 @@ impl DiskBytes for EntryKey {}
 ///
 /// The cache entry is valid as long as the metadata is unchanged,
 /// or it can be proven that the query does not depend on the change.
-#[derive(DeterministicHeapBytes, PartialEq)]
+#[derive(PartialEq, DeterministicHeapBytes)]
 pub(crate) struct EntryEnv {
     /// The consensus-determined time when the query is executed.
     pub batch_time: Time,
