@@ -642,9 +642,9 @@ fn create_thread_pool(ident: &'static str) -> Arc<ThreadPool> {
             .get();
 
         if cores >= 16 {
-            6
+            8
         } else if cores >= 8 {
-            3
+            4
         } else {
             2
         }
