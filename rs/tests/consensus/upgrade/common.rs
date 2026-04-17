@@ -427,7 +427,8 @@ fn find_latest_computed_root_hashes_from_logs(
 /// grep match can be flushed back over the channel. On reboot the SSH session is simply
 /// re-established and the message is found in the previous boot's journal.
 ///
-/// This function will never return if an upgrade is not scheduled.
+/// If no upgrade is scheduled, this keeps retrying until the overall timeout elapses and then
+/// panics.
 fn assert_orchestrator_stopped_gracefully(node: &IcNodeSnapshot) {
     const GRACEFUL_SHUTDOWN_MSG: &str = "Orchestrator shut down gracefully";
     const OVERALL_TIMEOUT: Duration = Duration::from_secs(5 * 60);
@@ -441,14 +442,17 @@ fn assert_orchestrator_stopped_gracefully(node: &IcNodeSnapshot) {
         || {
             let session = node.block_on_ssh_session()?;
             session.set_timeout(30 * 1000);
-            if JournalStreamer::new(session).contains(GRACEFUL_SHUTDOWN_MSG)? {
-                Ok(())
-            } else {
-                anyhow::bail!(
+            // `JournalStreamer::contains` pipes through `grep`, which exits with status 1 when
+            // there are no matches. `execute_bash_script_from_session` converts any non-zero exit
+            // status into an `Err`, so "no matches yet" is indistinguishable from a real
+            // transport-level failure. Treat both as "keep retrying".
+            match JournalStreamer::new(session).contains(GRACEFUL_SHUTDOWN_MSG) {
+                Ok(true) => Ok(()),
+                Ok(false) | Err(_) => anyhow::bail!(
                     "Node {} has not logged '{}' yet",
                     node.node_id,
                     GRACEFUL_SHUTDOWN_MSG
-                )
+                ),
             }
         }
     )
