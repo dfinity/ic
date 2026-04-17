@@ -500,7 +500,8 @@ impl Scheduler for FlexibleSchedulerImpl {
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
     ) -> ReplicatedState {
-        if let Some(canister_id) = self.dts_canister.write().unwrap().take() {
+        let dts_canister = self.dts_canister.write().unwrap().take();
+        if let Some(canister_id) = dts_canister {
             return self.execute_single_canister(state, canister_id, registry_settings);
         }
         let next_message = self.next_message.write().unwrap().take();
