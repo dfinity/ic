@@ -25,7 +25,9 @@ def load_subnet_data(load_path: Path, load_baseline_path: Path, load_type: str, 
     """
     canister_data = pd.read_csv(load_path).set_index("canister_id")
     canister_baseline_data = pd.read_csv(load_baseline_path).set_index("canister_id")
-    canister_data = (canister_data.subtract(canister_baseline_data, fill_value=0)).loc[canister_data.index].reset_index()
+    canister_data = (
+        (canister_data.subtract(canister_baseline_data, fill_value=0)).loc[canister_data.index].reset_index()
+    )
 
     communication_data = pd.read_csv(communication_data_path)
 
