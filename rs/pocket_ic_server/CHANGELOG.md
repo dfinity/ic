@@ -15,9 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The endpoint `/instances/` takes an additional optional field `disable_ingress_validation` specifying that
   ingress validation is disabled for mainnet-like endpoints `/instances/<instance_id>/api/...` of the instance.
 - Support for canister signatures produced by the ICP mainnet in mainnet-like endpoints `/instances/<instance_id>/api/...`.
+- A new test threshold keys subnet kind (`TestThresholdKeys`): a new variant in `SubnetKind` and new fields in `SubnetConfigSet` and `ExtendedSubnetConfigSet`.
+  It is an application subnet with 13 nodes holding threshold keys with names `test_key_1` and `dfx_test_key` for all supported algorithms (ECDSA, Schnorr, VetKd).
+  Its canister range (`z474k-xiaaa-aaaao-qaaaa-cai` to `fxzgb-eaaaa-aaaao-7777q-cai`) matches the mainnet subnet `fuqsr-in2lc-zbcjj-ydmcw-pzq7h-4xm2z-pto4i-dcyee-5z4rz-x63ji-nae`.
+
+### Changed
 - The endpoints `/instances/<instance_id>/update/submit_ingress_message` and `/instances/<instance_id>/read/query`
   accept an additional optional field `sender_info` in the request body specifying additional information provided
   by the canister with which the sender principal is associated.
+- The II and fiduciary subnets no longer hold threshold keys with names `test_key_1` and `dfx_test_key`; these keys are now exclusively held by the `TestThresholdKeys` subnet.
 
 
 

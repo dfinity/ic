@@ -72,7 +72,7 @@ const REWARD_FLATTENING_DATE: IcTimestamp = IcTimestamp {
 };
 
 // See https://x.com/dominic_w/status/2011156143796781481 .
-const MISSION_70_VOTING_REWARDS_ADJUSTMENT_FACTOR: f64 = 0.635;
+const MISSION_70_VOTING_REWARDS_ADJUSTMENT_FACTOR: f64 = 0.6329;
 
 /// Computes the reward to distribute, as a fraction of the ICP supply, for one
 /// day.

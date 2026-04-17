@@ -45,6 +45,9 @@ impl LoadCanisterSnapshot {
 }
 
 impl CallCanister for LoadCanisterSnapshot {
+    // TODO: Use a typed reply instead of () so that the result is recorded.
+    type Reply = ();
+
     fn canister_and_function(&self) -> Result<(CanisterId, &str), GovernanceError> {
         Ok((ROOT_CANISTER_ID, "load_canister_snapshot"))
     }

@@ -26,6 +26,26 @@ use std::sync::OnceLock;
 /// number of messages per canister (and so delta log appends).
 const DELTA_LOG_SIZES_CAP: usize = 10_000;
 
+/// Canister log storage backed by a PageMap-based ring buffer.
+///
+/// Using PageMap allows log data to be stored outside the heap and
+/// checkpointed efficiently via copy-on-write pages.
+///
+/// Stores the canister's accumulated log records. During execution,
+/// log messages are collected into delta logs in the sandbox, then
+/// appended to this store in bulk after each message completes.
+///
+/// The ring buffer has a configurable capacity. Resizing reads all
+/// existing records and rewrites them into a new ring buffer of the
+/// requested size.
+///
+/// When the ring buffer is full, oldest records at the head are
+/// evicted to make room for new ones.
+///
+/// An index table partitions the data region into segments, enabling
+/// filtered queries by record index or timestamp without scanning
+/// the entire ring buffer. Returned results are trimmed to fit within
+/// the maximum message response size.
 #[derive(Debug, ValidateEq)]
 pub struct LogMemoryStore {
     /// Feature flag for controlling LogMemoryStore enabled.
@@ -161,7 +181,7 @@ impl LogMemoryStore {
             .get_or_init(|| self.load_ring_buffer().map(|rb| rb.get_header()))
     }
 
-    /// Returns actual memory usage of the ring buffer.
+    /// Returns the total allocated memory.
     pub fn memory_usage(&self) -> usize {
         self.total_virtual_memory_usage()
     }
@@ -187,6 +207,26 @@ impl LogMemoryStore {
             .unwrap_or(0)
     }
 
+    /// Returns `true` if calling `resize(limit)` would actually do work
+    /// (migrate records, reallocate, or deallocate), `false` if it would
+    /// be a no-op.
+    ///
+    /// Also used as the early-return guard inside `resize_impl`, so the
+    /// two cannot diverge.
+    pub fn would_resize(&self, limit: usize) -> bool {
+        if self.feature_flag == FlagStatus::Disabled {
+            // When disabled, resize deallocates — work only if allocated.
+            return self.maybe_page_map.is_some();
+        }
+        if limit == 0 {
+            // Limit zero deallocates — work only if allocated.
+            return self.maybe_page_map.is_some();
+        }
+        let target_limit = limit.max(DATA_CAPACITY_MIN);
+        let current_capacity = self.get_header().map(|h| h.data_capacity.get() as usize);
+        current_capacity != Some(target_limit)
+    }
+
     /// Resizes the ring buffer to the specified limit, preserving existing records.
     ///
     /// This method enforces a minimum safe capacity and performs no operation if the
@@ -203,15 +243,15 @@ impl LogMemoryStore {
     }
 
     fn resize_impl(&mut self, limit: usize, create_page_map: impl FnOnce() -> PageMap) {
+        if !self.would_resize(limit) {
+            return;
+        }
         if self.feature_flag == FlagStatus::Disabled || limit == 0 {
             self.deallocate();
             return;
         }
         let target_limit = limit.max(DATA_CAPACITY_MIN);
         let current_capacity = self.get_header().map(|h| h.data_capacity.get() as usize);
-        if current_capacity == Some(target_limit) {
-            return; // Only resize if the capacity actually changes.
-        }
 
         // Determine the PageMap strategy and create a new ring buffer.
         let page_map = match current_capacity {
@@ -245,10 +285,7 @@ impl LogMemoryStore {
         self.bytes_used() == 0
     }
 
-    /// Returns the number of bytes used by the ring buffer.
-    ///
-    /// This is the actual number of bytes used by the ring buffer, not the
-    /// allocated capacity.
+    /// Returns bytes occupied by stored log records (not allocated capacity).
     pub fn bytes_used(&self) -> usize {
         self.get_header()
             .map(|h| h.data_size.get() as usize)
@@ -318,7 +355,7 @@ impl LogMemoryStore {
 
     /// Calculates the size of a single log record when encoded
     /// and stored within the `LogMemoryStore`.
-    pub fn estimate_record_size(content_size: usize) -> usize {
+    pub const fn estimate_record_size(content_size: usize) -> usize {
         LogRecord::estimate_bytes_len(content_size)
     }
 }

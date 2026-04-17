@@ -6,6 +6,7 @@ use std::fmt::{self, Debug, Write};
 /// More precisely, middle characters are removed such that the return value has at most `max_len`
 /// characters. Some examples:
 /// ```
+/// use ic_nervous_system_string::clamp_string_len;
 /// println!("{}", clamp_string_len("abcdef", 5));  // a...f
 /// println!("{}", clamp_string_len("abcde", 5));   // abcde
 /// println!("{}", clamp_string_len("abcd", 5));    // abcd
@@ -107,6 +108,19 @@ impl fmt::Write for LimitedWriter {
             self.remaining -= char_count;
             Ok(())
         }
+    }
+}
+
+/// Hex-encodes bytes, truncating with a summary if longer than `max_bytes`.
+pub fn humanize_blob(bytes: &[u8], max_bytes: usize) -> String {
+    if bytes.len() <= max_bytes {
+        bytes.iter().map(|b| format!("{b:02x}")).collect()
+    } else {
+        let hex: String = bytes[..max_bytes]
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        format!("{hex}... ({} bytes total)", bytes.len())
     }
 }
 

@@ -112,6 +112,7 @@ const RESERVED_CLEANUP_INSTRUCTIONS_IN_PERCENT: u64 = 5;
 struct PausedResponseHelper {
     refund_for_sent_cycles: Cycles,
     prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
+    prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
     refund_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
     initial_cycles_balance: Cycles,
     response_sender: CanisterId,
@@ -123,6 +124,7 @@ struct ResponseHelper {
     canister: CanisterState,
     refund_for_sent_cycles: Cycles,
     prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
+    prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
     refund_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
     initial_cycles_balance: Cycles,
     response_sender: CanisterId,
@@ -190,6 +192,7 @@ impl ResponseHelper {
             prepayment_for_response_transmission: original
                 .callback
                 .prepayment_for_response_transmission,
+            prepayment_for_call_transmission: original.callback.prepayment_for_call_transmission,
             refund_for_response_transmission,
             initial_cycles_balance,
             response_sender,
@@ -210,8 +213,21 @@ impl ResponseHelper {
             .system_state
             .add_cycles(self.refund_for_sent_cycles);
 
+        // `self.prepayment_for_call_transmission` might be zero for any responses
+        // to requests that were produced before this field was stored in callbacks.
+        // In that scenario, use `self.prepayment_for_response_transmission` for some
+        // partial update to consumed metrics (the ones that behave like counters)
+        // during refund phase. This does not affect the refund to balance or the
+        // metrics that behave like gauges as these are updated based on the refund amount.
+        // This code can be dropped when all callbacks have the `prepayment_for_call_transmission`
+        // field set.
+        let prepayment_for_call_transmission = if self.prepayment_for_call_transmission.is_zero() {
+            self.prepayment_for_response_transmission
+        } else {
+            self.prepayment_for_call_transmission
+        };
         self.canister.system_state.refund_cycles(
-            self.prepayment_for_response_transmission,
+            prepayment_for_call_transmission,
             self.refund_for_response_transmission,
         );
     }
@@ -288,6 +304,7 @@ impl ResponseHelper {
         PausedResponseHelper {
             refund_for_sent_cycles: self.refund_for_sent_cycles,
             prepayment_for_response_transmission: self.prepayment_for_response_transmission,
+            prepayment_for_call_transmission: self.prepayment_for_call_transmission,
             refund_for_response_transmission: self.refund_for_response_transmission,
             initial_cycles_balance: self.initial_cycles_balance,
             response_sender: self.response_sender,
@@ -328,6 +345,7 @@ impl ResponseHelper {
             canister: clean_canister.clone(),
             refund_for_sent_cycles: paused.refund_for_sent_cycles,
             prepayment_for_response_transmission: paused.prepayment_for_response_transmission,
+            prepayment_for_call_transmission: paused.prepayment_for_call_transmission,
             refund_for_response_transmission: paused.refund_for_response_transmission,
             initial_cycles_balance: clean_canister.system_state.balance(),
             response_sender: paused.response_sender,

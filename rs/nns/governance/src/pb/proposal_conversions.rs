@@ -563,6 +563,10 @@ pub(crate) fn proposal_data_to_info(
     let reward_event_round = data.reward_event_round;
     let derived_proposal_information = data.derived_proposal_information.clone().map(|x| x.into());
     let total_potential_voting_power = data.total_potential_voting_power;
+    let success_value = data
+        .success_value
+        .clone()
+        .map(|success_value| success_value.into());
 
     let proposal = data
         .proposal
@@ -591,6 +595,7 @@ pub(crate) fn proposal_data_to_info(
         deadline_timestamp_seconds,
         derived_proposal_information,
         total_potential_voting_power,
+        success_value,
     }
 }
 

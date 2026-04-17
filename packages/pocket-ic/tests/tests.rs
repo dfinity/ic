@@ -1014,10 +1014,11 @@ fn test_canister_wasm() -> Vec<u8> {
 
 #[test]
 fn test_schnorr() {
-    // We create a PocketIC instance consisting of the NNS, II, and one application subnet.
+    // We create a PocketIC instance consisting of the NNS, II, test threshold keys, and one application subnet.
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
-        .with_ii_subnet() // this subnet has threshold keys
+        .with_ii_subnet() // this subnet has `key_1`
+        .with_test_threshold_keys_subnet() // this subnet has `test_key_1` and `dfx_test_key`
         .with_application_subnet()
         .build();
 
@@ -1132,10 +1133,11 @@ fn test_schnorr() {
 fn test_ecdsa() {
     use k256::ecdsa::signature::hazmat::PrehashVerifier;
 
-    // We create a PocketIC instance consisting of the NNS, II, and one application subnet.
+    // We create a PocketIC instance consisting of the NNS, II, test threshold keys, and one application subnet.
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
-        .with_ii_subnet() // this subnet has threshold keys
+        .with_ii_subnet() // this subnet has `key_1`
+        .with_test_threshold_keys_subnet() // this subnet has `test_key_1` and `dfx_test_key`
         .with_application_subnet()
         .build();
 
@@ -1259,9 +1261,10 @@ fn test_ecdsa_disabled() {
 fn test_vetkd() {
     use ic_vetkeys::{DerivedPublicKey, EncryptedVetKey, TransportSecretKey};
 
-    // We create a PocketIC instance consisting of the II and one application subnet.
+    // We create a PocketIC instance consisting of the II, test threshold keys, and one application subnet.
     let pic = PocketIcBuilder::new()
-        .with_ii_subnet() // this subnet has threshold keys
+        .with_ii_subnet() // this subnet has `key_1`
+        .with_test_threshold_keys_subnet() // this subnet has `test_key_1` and `dfx_test_key`
         .with_application_subnet()
         .build();
 
@@ -3492,6 +3495,26 @@ fn default_cost_schedule_on_cloud_engine() {
         ..Default::default()
     };
     let _pic = PocketIcBuilder::new_with_config(config).build();
+}
+
+#[test]
+fn cloud_engine_with_registry() {
+    // Regression test: creating a cloud engine subnet with the registry ICP feature enabled
+    // must not trigger the registry invariant check failure
+    // "is a cloud engine subnet but some nodes do not have reward type 4".
+    let icp_features = IcpFeatures {
+        registry: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    };
+    let subnet_spec = SubnetSpec::default().with_cost_schedule(CanisterCyclesCostSchedule::Free);
+    let config = ExtendedSubnetConfigSet {
+        nns: Some(SubnetSpec::default()),
+        cloud_engine: vec![subnet_spec],
+        ..Default::default()
+    };
+    let _pic = PocketIcBuilder::new_with_config(config)
+        .with_icp_features(icp_features)
+        .build();
 }
 
 #[test]

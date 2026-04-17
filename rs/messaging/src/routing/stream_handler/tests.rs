@@ -1238,61 +1238,66 @@ fn garbage_collect_local_state_with_reject_signals_for_request_success() {
 /// due to induction failure because no such canister is installed on `LOCAL_SUBNET`.
 #[test]
 fn garbage_collect_local_state_with_reject_signals_for_request_from_absent_canister() {
-    with_test_setup(
-        // An outgoing stream with one request from an absent `OTHER_LOCAL_CANISTER` @21 in it.
-        btreemap![REMOTE_SUBNET => StreamConfig {
-            begin: 21,
-            messages: vec![Request(*OTHER_LOCAL_CANISTER, *REMOTE_CANISTER)],
-            ..StreamConfig::default()
-        }],
-        // An incoming stream slice with one reject signal for the request @21.
-        btreemap![REMOTE_SUBNET => StreamSliceConfig {
-            signals_end: 22,
-            reject_signals: vec![RejectSignal::new(RejectReason::CanisterStopped, 21.into())],
-            ..StreamSliceConfig::default()
-        }],
-        |stream_handler, state, slices, metrics| {
-            let mut expected_state = state.clone();
-            // The expected outgoing stream is empty with `begin` avanced.
-            let expected_stream = stream_from_config(StreamConfig {
-                begin: 22,
+    for cost_schedule in [
+        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        with_test_setup(
+            // An outgoing stream with one request from an absent `OTHER_LOCAL_CANISTER` @21 in it.
+            btreemap![REMOTE_SUBNET => StreamConfig {
+                begin: 21,
+                messages: vec![Request(*OTHER_LOCAL_CANISTER, *REMOTE_CANISTER)],
                 ..StreamConfig::default()
-            });
-            expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
-            // Cycles attached to the request / reject response are lost.
-            expected_state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
-                message_in_stream(state.get_stream(&REMOTE_SUBNET), 21).cycles(),
-                CanisterCyclesCostSchedule::Normal,
-            ));
+            }],
+            // An incoming stream slice with one reject signal for the request @21.
+            btreemap![REMOTE_SUBNET => StreamSliceConfig {
+                signals_end: 22,
+                reject_signals: vec![RejectSignal::new(RejectReason::CanisterStopped, 21.into())],
+                ..StreamSliceConfig::default()
+            }],
+            |stream_handler, state, slices, metrics| {
+                let mut expected_state = state.clone();
+                // The expected outgoing stream is empty with `begin` advanced.
+                let expected_stream = stream_from_config(StreamConfig {
+                    begin: 22,
+                    ..StreamConfig::default()
+                });
+                expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
+                // Cycles attached to the request / reject response are lost.
+                expected_state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                    message_in_stream(state.get_stream(&REMOTE_SUBNET), 21).cycles(),
+                    cost_schedule,
+                ));
 
-            // Act and compare to expected.
-            let mut available_guaranteed_response_memory =
-                stream_handler.available_guaranteed_response_memory(&state);
-            let inducted_state = stream_handler.garbage_collect_local_state(
-                state,
-                &mut available_guaranteed_response_memory,
-                &slices,
-            );
-            assert_eq!(expected_state, inducted_state);
-            assert_eq!(
-                available_guaranteed_response_memory,
-                stream_handler.available_guaranteed_response_memory(&inducted_state),
-            );
+                // Act and compare to expected.
+                let mut available_guaranteed_response_memory =
+                    stream_handler.available_guaranteed_response_memory(&state);
+                let inducted_state = stream_handler.garbage_collect_local_state(
+                    state,
+                    &mut available_guaranteed_response_memory,
+                    &slices,
+                );
+                assert_eq!(expected_state, inducted_state);
+                assert_eq!(
+                    available_guaranteed_response_memory,
+                    stream_handler.available_guaranteed_response_memory(&inducted_state),
+                );
 
-            // 1 reject response failed to induct.
-            metrics.assert_inducted_xnet_messages_eq(&[(
-                LABEL_VALUE_TYPE_RESPONSE,
-                LABEL_VALUE_CANISTER_NOT_FOUND,
-                1,
-            )]);
+                // 1 reject response failed to induct.
+                metrics.assert_inducted_xnet_messages_eq(&[(
+                    LABEL_VALUE_TYPE_RESPONSE,
+                    LABEL_VALUE_CANISTER_NOT_FOUND,
+                    1,
+                )]);
 
-            // One critical error raised.
-            metrics.assert_eq_critical_errors(CriticalErrorCounts {
-                induct_response_failed: 1,
-                ..CriticalErrorCounts::default()
-            });
-        },
-    );
+                // One critical error raised.
+                metrics.assert_eq_critical_errors(CriticalErrorCounts {
+                    induct_response_failed: 1,
+                    ..CriticalErrorCounts::default()
+                });
+            },
+        );
+    }
 }
 
 /// Tests that an incoming reject signal for a request to and from `LOCAL_CANISTER` in the stream
@@ -1517,87 +1522,97 @@ fn garbage_collect_local_state_with_reject_signals_for_misrouted_refunds() {
 /// everything else is treated as a misrouted message, i.e. accepted but dropped.
 #[test]
 fn induct_stream_slices_reject_response_from_old_host_subnet_is_accepted() {
-    with_test_setup(
-        // A stream slice with 3 messages in it...
-        btreemap![],
-        btreemap![CANISTER_MIGRATION_SUBNET => StreamSliceConfig {
-            messages_begin: 0,
-            messages: vec![
-                // ...a reject response for a request sent to `REMOTE_CANISTER` @0...
-                RejectResponse(*REMOTE_CANISTER, *LOCAL_CANISTER, RejectReason::QueueFull),
-                // ...a reply @1...
-                Response(*REMOTE_CANISTER, *LOCAL_CANISTER),
-                // ...and a request @2.
-                Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
-            ],
-            ..StreamSliceConfig::default()
-        }],
-        |stream_handler, state, slices, metrics| {
-            // Mark `LOCAL_CANISTER` as having migrated from `CANISTER_MIGRATION_SUBNET` to `LOCAL_SUBNET`.
-            let state = simulate_canister_migration(
-                state,
-                *LOCAL_CANISTER,
-                CANISTER_MIGRATION_SUBNET,
-                LOCAL_SUBNET,
-            );
+    for cost_schedule in [
+        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        with_test_setup(
+            // A stream slice with 3 messages in it...
+            btreemap![],
+            btreemap![CANISTER_MIGRATION_SUBNET => StreamSliceConfig {
+                messages_begin: 0,
+                messages: vec![
+                    // ...a reject response for a request sent to `REMOTE_CANISTER` @0...
+                    RejectResponse(*REMOTE_CANISTER, *LOCAL_CANISTER, RejectReason::QueueFull),
+                    // ...a reply @1...
+                    Response(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                    // ...and a request @2.
+                    Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                ],
+                ..StreamSliceConfig::default()
+            }],
+            |stream_handler, state, slices, metrics| {
+                // Mark `LOCAL_CANISTER` as having migrated from `CANISTER_MIGRATION_SUBNET` to `LOCAL_SUBNET`.
+                let state = simulate_canister_migration(
+                    state,
+                    *LOCAL_CANISTER,
+                    CANISTER_MIGRATION_SUBNET,
+                    LOCAL_SUBNET,
+                );
 
-            // Expect a state, where the reject response was successfully inducted...
-            let mut expected_state = state.clone();
-            push_input(
-                &mut expected_state,
-                message_in_slice(slices.get(&CANISTER_MIGRATION_SUBNET), 0).clone(),
-            );
-            // ...and a stream to `CANISTER_MIGRATION_SUBNET` with the 2 responses accepted and the request rejected.
-            let expected_stream = stream_from_config(StreamConfig {
-                begin: 0,
-                signals_end: 3,
-                reject_signals: vec![RejectSignal::new(RejectReason::CanisterMigrating, 2.into())],
-                ..StreamConfig::default()
-            });
-            expected_state.with_streams(btreemap![CANISTER_MIGRATION_SUBNET => expected_stream]);
+                // Expect a state, where the reject response was successfully inducted...
+                let mut expected_state = state.clone();
+                push_input(
+                    &mut expected_state,
+                    message_in_slice(slices.get(&CANISTER_MIGRATION_SUBNET), 0).clone(),
+                );
+                // ...and a stream to `CANISTER_MIGRATION_SUBNET` with the 2 responses accepted and the request rejected.
+                let expected_stream = stream_from_config(StreamConfig {
+                    begin: 0,
+                    signals_end: 3,
+                    reject_signals: vec![RejectSignal::new(
+                        RejectReason::CanisterMigrating,
+                        2.into(),
+                    )],
+                    ..StreamConfig::default()
+                });
+                expected_state
+                    .with_streams(btreemap![CANISTER_MIGRATION_SUBNET => expected_stream]);
 
-            // Cycles attached to the dropped reply are lost.
-            let cycles_lost = message_in_slice(slices.get(&CANISTER_MIGRATION_SUBNET), 1).cycles();
-            expected_state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
-                cycles_lost,
-                CanisterCyclesCostSchedule::Normal,
-            ));
+                // Cycles attached to the dropped reply are lost.
+                let cycles_lost =
+                    message_in_slice(slices.get(&CANISTER_MIGRATION_SUBNET), 1).cycles();
+                expected_state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                    cycles_lost,
+                    cost_schedule,
+                ));
 
-            let mut available_guaranteed_response_memory =
-                stream_handler.available_guaranteed_response_memory(&state);
-            let inducted_state = stream_handler.induct_stream_slices(
-                state,
-                slices,
-                &mut available_guaranteed_response_memory,
-            );
+                let mut available_guaranteed_response_memory =
+                    stream_handler.available_guaranteed_response_memory(&state);
+                let inducted_state = stream_handler.induct_stream_slices(
+                    state,
+                    slices,
+                    &mut available_guaranteed_response_memory,
+                );
 
-            // Compare inducted to expected.
-            assert_eq!(expected_state, inducted_state);
-            assert_eq!(
-                stream_handler.available_guaranteed_response_memory(&inducted_state),
-                available_guaranteed_response_memory
-            );
+                // Compare inducted to expected.
+                assert_eq!(expected_state, inducted_state);
+                assert_eq!(
+                    stream_handler.available_guaranteed_response_memory(&inducted_state),
+                    available_guaranteed_response_memory
+                );
 
-            // Expect the reject response was inducted, the response and request got rejected.
-            metrics.assert_inducted_xnet_messages_eq(&[
-                (
-                    LABEL_VALUE_TYPE_RESPONSE,
-                    LABEL_VALUE_SENDER_SUBNET_MISMATCH,
-                    1,
-                ),
-                (
-                    LABEL_VALUE_TYPE_REQUEST,
-                    LABEL_VALUE_SENDER_SUBNET_MISMATCH_MIGRATING,
-                    1,
-                ),
-                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_SUCCESS, 1),
-            ]);
-            metrics.assert_eq_critical_errors(CriticalErrorCounts {
-                sender_subnet_mismatch: 1,
-                ..CriticalErrorCounts::default()
-            });
-        },
-    );
+                // Expect the reject response was inducted, the response and request got rejected.
+                metrics.assert_inducted_xnet_messages_eq(&[
+                    (
+                        LABEL_VALUE_TYPE_RESPONSE,
+                        LABEL_VALUE_SENDER_SUBNET_MISMATCH,
+                        1,
+                    ),
+                    (
+                        LABEL_VALUE_TYPE_REQUEST,
+                        LABEL_VALUE_SENDER_SUBNET_MISMATCH_MIGRATING,
+                        1,
+                    ),
+                    (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_SUCCESS, 1),
+                ]);
+                metrics.assert_eq_critical_errors(CriticalErrorCounts {
+                    sender_subnet_mismatch: 1,
+                    ..CriticalErrorCounts::default()
+                });
+            },
+        );
+    }
 }
 
 /// During single canister migration, we enforce that the canister has no ongoing calls.
@@ -2085,143 +2100,148 @@ fn inducting_best_effort_response_addressed_to_non_existent_canister_does_not_ra
 /// as appropriate.
 #[test]
 fn induct_stream_slices_partial_success() {
-    with_test_setup(
-        // An outgoing stream with one request and one response in it.
-        btreemap![REMOTE_SUBNET => StreamConfig {
-            begin: 31,
-            messages: vec![
-                Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                Response(*LOCAL_CANISTER, *REMOTE_CANISTER),
-            ],
-            signals_end: 43,
-            ..StreamConfig::default()
-        }],
-        // An incoming stream slice with...
-        btreemap![REMOTE_SUBNET => StreamSliceConfig {
-            messages_begin: 43,
-            messages: vec![
-                // ...two incoming requests @43 and @44...
-                Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
-                Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
-                // ...an incoming response @45...
-                Response(*REMOTE_CANISTER, *LOCAL_CANISTER),
-                // ...a request to a missing canister @46 (on this subnet according to the
-                // routing table); this is expected to trigger a reject signal...
-                Request(*REMOTE_CANISTER, *OTHER_LOCAL_CANISTER),
-                // ...a request not from `REMOTE_SUBNET` @47; this is also expected to trigger
-                // a reject signal...
-                Request(*LOCAL_CANISTER, *LOCAL_CANISTER),
-                // ...responses not from `REMOTE_SUBNET` @48 and @49; this is expected to be dropped...
-                Response(*LOCAL_CANISTER, *LOCAL_CANISTER),
-                Response(*UNKNOWN_CANISTER, *LOCAL_CANISTER),
-                // ...a request from a canister @50 not hosted anywhere according to the routing
-                // table; expected to produce a reject signal..
-                Request(*UNKNOWN_CANISTER, *LOCAL_CANISTER),
-                // ...and a response to a missing canister @51 (on this subnet according to the
-                // routing table); this expected to be accepted but dropped.
-                Response(*REMOTE_CANISTER, *OTHER_LOCAL_CANISTER),
-            ],
-            // ...and two accept signals.
-            signals_end: 33,
-            ..StreamSliceConfig::default()
-        }],
-        |stream_handler, state, slices, metrics| {
-            let mut expected_state = state.clone();
-            // The expected state has the first 3 messages inducted.
-            push_inputs(
-                &mut expected_state,
-                messages_in_slice(slices.get(&REMOTE_SUBNET), 43..=45),
-            );
-            let response_count_bytes =
-                response_in_slice(slices.get(&REMOTE_SUBNET), 45).count_bytes();
-
-            // The expected stream has...
-            let expected_stream = stream_from_config(StreamConfig {
+    for cost_schedule in [
+        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        with_test_setup(
+            // An outgoing stream with one request and one response in it.
+            btreemap![REMOTE_SUBNET => StreamConfig {
                 begin: 31,
-                // ...the two initial messages as `induct_stream_slices` does not gc,
-                // a reject signal for the request to a missing canister @46...
                 messages: vec![
-                    message_in_stream(state.get_stream(&REMOTE_SUBNET), 31).clone(),
-                    message_in_stream(state.get_stream(&REMOTE_SUBNET), 32).clone(),
+                    Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                    Response(*LOCAL_CANISTER, *REMOTE_CANISTER),
                 ],
-                // ...6 accept signals for the messages in the stream slice...
-                signals_end: 52,
-                reject_signals: vec![
-                    // ...and three reject signal for the 3 misrouted requests.
-                    RejectSignal::new(RejectReason::CanisterNotFound, 46.into()),
-                    RejectSignal::new(RejectReason::CanisterMigrating, 47.into()),
-                    RejectSignal::new(RejectReason::CanisterMigrating, 50.into()),
-                ],
+                signals_end: 43,
                 ..StreamConfig::default()
-            });
-            expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
+            }],
+            // An incoming stream slice with...
+            btreemap![REMOTE_SUBNET => StreamSliceConfig {
+                messages_begin: 43,
+                messages: vec![
+                    // ...two incoming requests @43 and @44...
+                    Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                    Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                    // ...an incoming response @45...
+                    Response(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                    // ...a request to a missing canister @46 (on this subnet according to the
+                    // routing table); this is expected to trigger a reject signal...
+                    Request(*REMOTE_CANISTER, *OTHER_LOCAL_CANISTER),
+                    // ...a request not from `REMOTE_SUBNET` @47; this is also expected to trigger
+                    // a reject signal...
+                    Request(*LOCAL_CANISTER, *LOCAL_CANISTER),
+                    // ...responses not from `REMOTE_SUBNET` @48 and @49; this is expected to be dropped...
+                    Response(*LOCAL_CANISTER, *LOCAL_CANISTER),
+                    Response(*UNKNOWN_CANISTER, *LOCAL_CANISTER),
+                    // ...a request from a canister @50 not hosted anywhere according to the routing
+                    // table; expected to produce a reject signal..
+                    Request(*UNKNOWN_CANISTER, *LOCAL_CANISTER),
+                    // ...and a response to a missing canister @51 (on this subnet according to the
+                    // routing table); this expected to be accepted but dropped.
+                    Response(*REMOTE_CANISTER, *OTHER_LOCAL_CANISTER),
+                ],
+                // ...and two accept signals.
+                signals_end: 33,
+                ..StreamSliceConfig::default()
+            }],
+            |stream_handler, state, slices, metrics| {
+                let mut expected_state = state.clone();
+                // The expected state has the first 3 messages inducted.
+                push_inputs(
+                    &mut expected_state,
+                    messages_in_slice(slices.get(&REMOTE_SUBNET), 43..=45),
+                );
+                let response_count_bytes =
+                    response_in_slice(slices.get(&REMOTE_SUBNET), 45).count_bytes();
 
-            // Cycles attached to the responses from a wrong subnet and to non-existent `OTHER_LOCAL_CANISTER` are lost.
-            let cycles_lost = message_in_slice(slices.get(&REMOTE_SUBNET), 48).cycles()
-                + message_in_slice(slices.get(&REMOTE_SUBNET), 49).cycles()
-                + message_in_slice(slices.get(&REMOTE_SUBNET), 51).cycles();
-            expected_state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
-                cycles_lost,
-                CanisterCyclesCostSchedule::Normal,
-            ));
+                // The expected stream has...
+                let expected_stream = stream_from_config(StreamConfig {
+                    begin: 31,
+                    // ...the two initial messages as `induct_stream_slices` does not gc,
+                    // a reject signal for the request to a missing canister @46...
+                    messages: vec![
+                        message_in_stream(state.get_stream(&REMOTE_SUBNET), 31).clone(),
+                        message_in_stream(state.get_stream(&REMOTE_SUBNET), 32).clone(),
+                    ],
+                    // ...6 accept signals for the messages in the stream slice...
+                    signals_end: 52,
+                    reject_signals: vec![
+                        // ...and three reject signal for the 3 misrouted requests.
+                        RejectSignal::new(RejectReason::CanisterNotFound, 46.into()),
+                        RejectSignal::new(RejectReason::CanisterMigrating, 47.into()),
+                        RejectSignal::new(RejectReason::CanisterMigrating, 50.into()),
+                    ],
+                    ..StreamConfig::default()
+                });
+                expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
 
-            let initial_available_guaranteed_response_memory =
-                stream_handler.available_guaranteed_response_memory(&state);
-            let mut available_guaranteed_response_memory =
-                initial_available_guaranteed_response_memory;
+                // Cycles attached to the responses from a wrong subnet and to non-existent `OTHER_LOCAL_CANISTER` are lost.
+                let cycles_lost = message_in_slice(slices.get(&REMOTE_SUBNET), 48).cycles()
+                    + message_in_slice(slices.get(&REMOTE_SUBNET), 49).cycles()
+                    + message_in_slice(slices.get(&REMOTE_SUBNET), 51).cycles();
+                expected_state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                    cycles_lost,
+                    cost_schedule,
+                ));
 
-            // Act
-            let inducted_state = stream_handler.induct_stream_slices(
-                state,
-                slices,
-                &mut available_guaranteed_response_memory,
-            );
+                let initial_available_guaranteed_response_memory =
+                    stream_handler.available_guaranteed_response_memory(&state);
+                let mut available_guaranteed_response_memory =
+                    initial_available_guaranteed_response_memory;
 
-            assert_eq!(expected_state, inducted_state);
-            // 2 requests and one response inducted (consuming 2 - 1 reservations).
-            assert_eq!(
-                initial_available_guaranteed_response_memory
-                    - MAX_RESPONSE_COUNT_BYTES as i64
-                    - response_count_bytes as i64,
-                available_guaranteed_response_memory
-            );
-            assert_eq!(
-                stream_handler.available_guaranteed_response_memory(&inducted_state),
-                available_guaranteed_response_memory
-            );
+                // Act
+                let inducted_state = stream_handler.induct_stream_slices(
+                    state,
+                    slices,
+                    &mut available_guaranteed_response_memory,
+                );
 
-            metrics.assert_inducted_xnet_messages_eq(&[
-                // Requests @43 and @44 successfully inducted.
-                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_SUCCESS, 2),
-                // Request @46 not inducted because of missing canister.
-                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_CANISTER_NOT_FOUND, 1),
-                // Request @47 not inducted because of canister not on `REMOTE_SUBNET`.
-                // Request @50 not inducted because of unknown canister sender.
-                (
-                    LABEL_VALUE_TYPE_REQUEST,
-                    LABEL_VALUE_SENDER_SUBNET_MISMATCH_MIGRATING,
-                    2,
-                ),
-                // Response @45 successfully inducted.
-                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_SUCCESS, 1),
-                // Responses @48 and @49 not inducted because it's a response from a wrong subnet.
-                (
-                    LABEL_VALUE_TYPE_RESPONSE,
-                    LABEL_VALUE_SENDER_SUBNET_MISMATCH,
-                    2,
-                ),
-                // Response @51 not inducted because of missing canister.
-                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_CANISTER_NOT_FOUND, 1),
-            ]);
-            assert_eq!(3, metrics.fetch_inducted_payload_sizes_stats().count);
-            // Three critical errors raised.
-            metrics.assert_eq_critical_errors(CriticalErrorCounts {
-                induct_response_failed: 1,
-                sender_subnet_mismatch: 2,
-                ..CriticalErrorCounts::default()
-            });
-        },
-    );
+                assert_eq!(expected_state, inducted_state);
+                // 2 requests and one response inducted (consuming 2 - 1 reservations).
+                assert_eq!(
+                    initial_available_guaranteed_response_memory
+                        - MAX_RESPONSE_COUNT_BYTES as i64
+                        - response_count_bytes as i64,
+                    available_guaranteed_response_memory
+                );
+                assert_eq!(
+                    stream_handler.available_guaranteed_response_memory(&inducted_state),
+                    available_guaranteed_response_memory
+                );
+
+                metrics.assert_inducted_xnet_messages_eq(&[
+                    // Requests @43 and @44 successfully inducted.
+                    (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_SUCCESS, 2),
+                    // Request @46 not inducted because of missing canister.
+                    (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_CANISTER_NOT_FOUND, 1),
+                    // Request @47 not inducted because of canister not on `REMOTE_SUBNET`.
+                    // Request @50 not inducted because of unknown canister sender.
+                    (
+                        LABEL_VALUE_TYPE_REQUEST,
+                        LABEL_VALUE_SENDER_SUBNET_MISMATCH_MIGRATING,
+                        2,
+                    ),
+                    // Response @45 successfully inducted.
+                    (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_SUCCESS, 1),
+                    // Responses @48 and @49 not inducted because it's a response from a wrong subnet.
+                    (
+                        LABEL_VALUE_TYPE_RESPONSE,
+                        LABEL_VALUE_SENDER_SUBNET_MISMATCH,
+                        2,
+                    ),
+                    // Response @51 not inducted because of missing canister.
+                    (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_CANISTER_NOT_FOUND, 1),
+                ]);
+                assert_eq!(3, metrics.fetch_inducted_payload_sizes_stats().count);
+                // Three critical errors raised.
+                metrics.assert_eq_critical_errors(CriticalErrorCounts {
+                    induct_response_failed: 1,
+                    sender_subnet_mismatch: 2,
+                    ..CriticalErrorCounts::default()
+                });
+            },
+        );
+    }
 }
 
 /// Tests that among messages addressed to canisters not currently hosted by
@@ -2688,102 +2708,107 @@ fn system_subnet_induct_stream_slices_with_subnet_message_memory_limit() {
 /// and refunds to explicitly and implicitly migrated canisters.
 #[test]
 fn induct_stream_slices_with_refunds() {
-    with_test_setup(
-        // An empty outgoing stream.
-        btreemap![REMOTE_SUBNET => StreamConfig {
-            begin: 21,
-            messages: vec![],
-            signals_end: 43,
-            ..StreamConfig::default()
-        }],
-        // An incoming stream slice with refunds to existent and nonexistent local
-        // canisters; and to explicitly and implicitly migrated canisters.
-        btreemap![REMOTE_SUBNET => StreamSliceConfig {
-            messages_begin: 43,
-            messages: vec![
-                // Existing local canister.
-                Refund(*LOCAL_CANISTER),
-                // Deleted local canister.
-                Refund(*OTHER_LOCAL_CANISTER),
-                // Remote canister (implicitly assumed to be migrated).
-                Refund(*REMOTE_CANISTER),
-                // Canister migrated from `LOCAL_SUBNET` to `REMOTE_SUBNET`.
-                Refund(*OTHER_REMOTE_CANISTER),
-                // Canister with unknown host subnet.
-                Refund(*UNKNOWN_CANISTER),
-            ],
-            signals_end: 21,
-            ..StreamSliceConfig::default()
-        }],
-        |stream_handler, state, slices, metrics| {
-            // Make it look like `OTHER_REMOTE_CANISTER` has migrated to `REMOTE_SUBNET`,
-            // with a `canister_migrations` entry still in place.
-            let state = prepare_canister_migration(
-                state,
-                *OTHER_REMOTE_CANISTER,
-                LOCAL_SUBNET,
-                REMOTE_SUBNET,
-            );
-
-            let mut expected_state = state.clone();
-            // Expecting a stream with...
-            let expected_stream = stream_from_config(StreamConfig {
+    for cost_schedule in [
+        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        with_test_setup(
+            // An empty outgoing stream.
+            btreemap![REMOTE_SUBNET => StreamConfig {
                 begin: 21,
                 messages: vec![],
-                // ...signals for all 5 refunds...
-                signals_end: 48,
-                // ...and reject signals for refunds @45, @46, and @47.
-                reject_signals: vec![
-                    RejectSignal::new(RejectReason::CanisterMigrating, 45.into()),
-                    RejectSignal::new(RejectReason::CanisterMigrating, 46.into()),
-                    RejectSignal::new(RejectReason::CanisterMigrating, 47.into()),
-                ],
+                signals_end: 43,
                 ..StreamConfig::default()
-            });
-            expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
+            }],
+            // An incoming stream slice with refunds to existent and nonexistent local
+            // canisters; and to explicitly and implicitly migrated canisters.
+            btreemap![REMOTE_SUBNET => StreamSliceConfig {
+                messages_begin: 43,
+                messages: vec![
+                    // Existing local canister.
+                    Refund(*LOCAL_CANISTER),
+                    // Deleted local canister.
+                    Refund(*OTHER_LOCAL_CANISTER),
+                    // Remote canister (implicitly assumed to be migrated).
+                    Refund(*REMOTE_CANISTER),
+                    // Canister migrated from `LOCAL_SUBNET` to `REMOTE_SUBNET`.
+                    Refund(*OTHER_REMOTE_CANISTER),
+                    // Canister with unknown host subnet.
+                    Refund(*UNKNOWN_CANISTER),
+                ],
+                signals_end: 21,
+                ..StreamSliceConfig::default()
+            }],
+            |stream_handler, state, slices, metrics| {
+                // Make it look like `OTHER_REMOTE_CANISTER` has migrated to `REMOTE_SUBNET`,
+                // with a `canister_migrations` entry still in place.
+                let state = prepare_canister_migration(
+                    state,
+                    *OTHER_REMOTE_CANISTER,
+                    LOCAL_SUBNET,
+                    REMOTE_SUBNET,
+                );
 
-            // Refund to `LOCAL_CANISTER` (@43) was applied.
-            let refund43 = refund_in_slice(slices.get(&REMOTE_SUBNET), 43);
-            expected_state.credit_refund(refund43);
+                let mut expected_state = state.clone();
+                // Expecting a stream with...
+                let expected_stream = stream_from_config(StreamConfig {
+                    begin: 21,
+                    messages: vec![],
+                    // ...signals for all 5 refunds...
+                    signals_end: 48,
+                    // ...and reject signals for refunds @45, @46, and @47.
+                    reject_signals: vec![
+                        RejectSignal::new(RejectReason::CanisterMigrating, 45.into()),
+                        RejectSignal::new(RejectReason::CanisterMigrating, 46.into()),
+                        RejectSignal::new(RejectReason::CanisterMigrating, 47.into()),
+                    ],
+                    ..StreamConfig::default()
+                });
+                expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
 
-            // Cycles in refund @44 are lost
-            let refund44 = refund_in_slice(slices.get(&REMOTE_SUBNET), 44);
-            expected_state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
-                refund44.amount(),
-                CanisterCyclesCostSchedule::Normal,
-            ));
+                // Refund to `LOCAL_CANISTER` (@43) was applied.
+                let refund43 = refund_in_slice(slices.get(&REMOTE_SUBNET), 43);
+                expected_state.credit_refund(refund43);
 
-            // Act.
-            let mut available_guaranteed_response_memory =
-                stream_handler.available_guaranteed_response_memory(&state);
-            let inducted_state = stream_handler.induct_stream_slices(
-                state,
-                slices,
-                &mut available_guaranteed_response_memory,
-            );
-            assert_eq!(
-                stream_handler.available_guaranteed_response_memory(&inducted_state),
-                available_guaranteed_response_memory
-            );
+                // Cycles in refund @44 are lost
+                let refund44 = refund_in_slice(slices.get(&REMOTE_SUBNET), 44);
+                expected_state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                    refund44.amount(),
+                    cost_schedule,
+                ));
 
-            // Assert.
-            assert_eq!(expected_state, inducted_state);
+                // Act.
+                let mut available_guaranteed_response_memory =
+                    stream_handler.available_guaranteed_response_memory(&state);
+                let inducted_state = stream_handler.induct_stream_slices(
+                    state,
+                    slices,
+                    &mut available_guaranteed_response_memory,
+                );
+                assert_eq!(
+                    stream_handler.available_guaranteed_response_memory(&inducted_state),
+                    available_guaranteed_response_memory
+                );
 
-            metrics.assert_inducted_xnet_messages_eq(&[
-                (LABEL_VALUE_TYPE_REFUND, LABEL_VALUE_SUCCESS, 1),
-                (LABEL_VALUE_TYPE_REFUND, LABEL_VALUE_DROPPED, 1),
-                (LABEL_VALUE_TYPE_REFUND, LABEL_VALUE_RECEIVER_MIGRATED, 1),
-                (
-                    LABEL_VALUE_TYPE_REFUND,
-                    LABEL_VALUE_RECEIVER_LIKELY_MIGRATED,
-                    2,
-                ),
-            ]);
-            assert_eq!(0, metrics.fetch_inducted_payload_sizes_stats().count);
-            // No critical errors raised.
-            metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
-        },
-    );
+                // Assert.
+                assert_eq!(expected_state, inducted_state);
+
+                metrics.assert_inducted_xnet_messages_eq(&[
+                    (LABEL_VALUE_TYPE_REFUND, LABEL_VALUE_SUCCESS, 1),
+                    (LABEL_VALUE_TYPE_REFUND, LABEL_VALUE_DROPPED, 1),
+                    (LABEL_VALUE_TYPE_REFUND, LABEL_VALUE_RECEIVER_MIGRATED, 1),
+                    (
+                        LABEL_VALUE_TYPE_REFUND,
+                        LABEL_VALUE_RECEIVER_LIKELY_MIGRATED,
+                        2,
+                    ),
+                ]);
+                assert_eq!(0, metrics.fetch_inducted_payload_sizes_stats().count);
+                // No critical errors raised.
+                metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
+            },
+        );
+    }
 }
 
 /// Tests that messages in the loopback stream and incoming slices are inducted

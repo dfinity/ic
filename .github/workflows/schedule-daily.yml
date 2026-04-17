@@ -52,9 +52,10 @@ jobs:
               --keep_going --test_timeout=43200
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
+# the main purpose of bazel-build-all-no-cache is to detect dead URLS of external dependencies, the actual build of the ic is tested in build-ic
+# we've moved it to schedule-daily because the ubuntu servers frequently return 503 errors and we don't want this job blocking releases
   bazel-build-all-no-cache:
     name: Bazel Build All No Cache
-    needs: [config]
     runs-on: *dind-large-setup
     container: *container-setup
     timeout-minutes: 90
