@@ -21,7 +21,7 @@ pub(crate) trait Demux: Send {
         &self,
         state: ReplicatedState,
         messages: BatchMessages,
-        height: Height,
+        state_height: Height,
     ) -> ReplicatedState;
 }
 
@@ -56,7 +56,7 @@ impl Demux for DemuxImpl<'_> {
         &self,
         state: ReplicatedState,
         batch_messages: BatchMessages,
-        height: Height,
+        state_height: Height,
     ) -> ReplicatedState {
         trace!(self.log, "Processing Payload");
 
@@ -77,8 +77,11 @@ impl Demux for DemuxImpl<'_> {
             .stream_handler
             .process_stream_slices(state, decoded_slices);
 
-        self.valid_set_rule
-            .induct_messages(&mut state, batch_messages.signed_ingress_msgs, height);
+        self.valid_set_rule.induct_messages(
+            &mut state,
+            batch_messages.signed_ingress_msgs,
+            state_height,
+        );
 
         for response in batch_messages.bitcoin_adapter_responses.into_iter() {
             state.push_response_bitcoin(response).unwrap_or_else(|err| {

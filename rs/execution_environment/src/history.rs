@@ -191,7 +191,7 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
         state: &mut Self::State,
         message_id: MessageId,
         status: IngressStatus,
-        height: Height,
+        state_height: Height,
     ) -> Arc<IngressStatus> {
         let time = state.time();
         let current_status = state.get_ingress_status(&message_id);
@@ -309,7 +309,7 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
         {
             let _ = self
                 .completed_execution_messages_tx
-                .try_send((message_id.clone(), height));
+                .try_send((message_id.clone(), state_height));
         };
         let observe_time_in_terminal_state = |time: u64| {
             self.metrics

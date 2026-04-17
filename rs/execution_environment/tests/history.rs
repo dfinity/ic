@@ -105,16 +105,21 @@ fn test_terminal_states_are_transmitted() {
             completed_execution_messages_tx,
         );
         let message_id = message_test_id(1);
-        let height = Height::new(11);
+        let state_height = Height::new(11);
 
-        ingress_history_writer.set_status(&mut state, message_id.clone(), received(), height);
+        ingress_history_writer.set_status(&mut state, message_id.clone(), received(), state_height);
         assert_eq!(
             completed_execution_messages_rx.try_recv(),
             Err(TryRecvError::Empty),
             "Non terminal state should not trigger a transmission."
         );
 
-        ingress_history_writer.set_status(&mut state, message_id.clone(), processing(), height);
+        ingress_history_writer.set_status(
+            &mut state,
+            message_id.clone(),
+            processing(),
+            state_height,
+        );
         assert_eq!(
             completed_execution_messages_rx.try_recv(),
             Err(TryRecvError::Empty),
@@ -123,20 +128,30 @@ fn test_terminal_states_are_transmitted() {
 
         {
             let mut state = state.clone();
-            ingress_history_writer.set_status(&mut state, message_id.clone(), completed(), height);
+            ingress_history_writer.set_status(
+                &mut state,
+                message_id.clone(),
+                completed(),
+                state_height,
+            );
             assert_eq!(
                 completed_execution_messages_rx.try_recv(),
-                Ok((message_id.clone(), height)),
+                Ok((message_id.clone(), state_height)),
                 "Terminal state, `Completed`, should trigger the height of state to be sent"
             );
         }
 
         {
             let mut state = state.clone();
-            ingress_history_writer.set_status(&mut state, message_id.clone(), failed(), height);
+            ingress_history_writer.set_status(
+                &mut state,
+                message_id.clone(),
+                failed(),
+                state_height,
+            );
             assert_eq!(
                 completed_execution_messages_rx.try_recv(),
-                Ok((message_id.clone(), height)),
+                Ok((message_id.clone(), state_height)),
                 "Terminal state, `Failed`, should trigger the height of state to be sent"
             );
         }

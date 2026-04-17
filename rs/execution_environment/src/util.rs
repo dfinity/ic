@@ -48,7 +48,7 @@ pub fn process_responses(
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     log: ReplicaLogger,
     canister_not_found_error: &IntCounter,
-    height: Height,
+    state_height: Height,
 ) {
     responses.into_iter().for_each(|response| match response {
         Response::Ingress(ingress_response) => {
@@ -56,7 +56,7 @@ pub fn process_responses(
                 state,
                 ingress_response.message_id,
                 ingress_response.status,
-                height,
+                state_height,
             );
         }
         Response::Canister(canister_response) => {
