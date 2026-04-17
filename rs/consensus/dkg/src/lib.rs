@@ -1606,6 +1606,7 @@ mod tests {
 
                     // The last summary contains two local configs, but the state contains an initial DKG context.
                     // dkg.on_state_change should create 4 dealings for those for all 4 resulting configs.
+                    sync_dkg_key_manager(&dgk_key_manager_1, &pool_1);
                     let change_set = dkg_1.on_state_change(&dkg_pool_1);
                     match &change_set.as_slice() {
                         &[
