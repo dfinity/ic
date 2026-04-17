@@ -87,6 +87,27 @@ use tower_test::mock::Handle;
 pub type IngressFilterHandle = Handle<IngressFilterInput, IngressFilterResponse>;
 pub type QueryExecutionHandle = Handle<QueryExecutionInput, QueryExecutionResponse>;
 
+/// Unified endpoint type used to parameterise tests that cover both the canister and subnet
+/// synchronous call paths.
+#[derive(Copy, Clone, Debug)]
+pub enum UpdateEndpoint {
+    Canister(ic_http_endpoints_test_agent::Call),
+    Subnet(ic_http_endpoints_test_agent::CallSubnet),
+}
+
+impl UpdateEndpoint {
+    pub async fn call(
+        self,
+        addr: SocketAddr,
+        message: ic_http_endpoints_test_agent::IngressMessage,
+    ) -> reqwest::Response {
+        match self {
+            UpdateEndpoint::Canister(c) => c.call(addr, message).await,
+            UpdateEndpoint::Subnet(s) => s.call(addr, message).await,
+        }
+    }
+}
+
 fn setup_query_execution_mock() -> (QueryExecutionService, QueryExecutionHandle) {
     let (service, handle) = tower_test::mock::pair::<QueryExecutionInput, QueryExecutionResponse>();
 

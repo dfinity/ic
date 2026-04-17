@@ -4,7 +4,7 @@
 pub mod common;
 
 use crate::common::{
-    HttpEndpointBuilder, basic_state_manager_mock, create_conn_and_send_request,
+    HttpEndpointBuilder, UpdateEndpoint, basic_state_manager_mock, create_conn_and_send_request,
     default_get_latest_state, default_read_certified_state, get_free_localhost_socket_addr,
 };
 use axum::body::{Body, to_bytes};
@@ -28,7 +28,8 @@ use ic_crypto_tree_hash::{
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_http_endpoints_public::{query, read_state};
 use ic_http_endpoints_test_agent::{
-    self, APPLICATION_CBOR, Call, CanisterReadState, IngressMessage, Query, wait_for_status_healthy,
+    self, APPLICATION_CBOR, Call, CallSubnet, CanisterReadState, IngressMessage, Query,
+    wait_for_status_healthy,
 };
 use ic_interfaces::execution_environment::QueryExecutionError;
 use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
@@ -1122,7 +1123,12 @@ fn test_http_1_requests_are_accepted() {
 /// return the certificate in the response with a 200 status code.
 #[rstest]
 fn test_call_handler_returns_early_for_ingress_message_already_in_certified_state(
-    #[values(Call::V3, Call::V4)] endpoint: Call,
+    #[values(
+        UpdateEndpoint::Canister(Call::V3),
+        UpdateEndpoint::Canister(Call::V4),
+        UpdateEndpoint::Subnet(CallSubnet::V4(subnet_test_id(1).get())),
+    )]
+    endpoint: UpdateEndpoint,
 ) {
     use ic_crypto_tree_hash::MatchPatternPath;
 
@@ -1409,7 +1415,12 @@ fn test_duplicate_concurrent_requests_return_early(#[values(Call::V3, Call::V4)]
 #[case(Height::from(1), None, Height::from(1))]
 #[case(Height::from(1), Some(Height::from(0)), Height::from(1))]
 fn test_sync_call_endpoint_responds_with_certificate(
-    #[values(Call::V3, Call::V4)] endpoint: Call,
+    #[values(
+        UpdateEndpoint::Canister(Call::V3),
+        UpdateEndpoint::Canister(Call::V4),
+        UpdateEndpoint::Subnet(CallSubnet::V4(subnet_test_id(1).get())),
+    )]
+    endpoint: UpdateEndpoint,
     #[case] initial_certified_height: Height,
     #[case] transitioned_certified_height: Option<Height>,
     #[case] message_finalization_height: Height,
@@ -1727,6 +1738,84 @@ fn test_call_response_when_p2p_not_running(
         assert_eq!(
             "P2P is not running on this node.",
             response.text().await.unwrap()
+        );
+    });
+}
+
+/// Tests that /api/v4/subnet/../call rejects a request whose URL subnet ID does not match
+/// the node's own subnet ID.
+#[test]
+fn test_call_v4_subnet_wrong_subnet_id() {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ingress_message_certificate_timeout_seconds: 0,
+        ..Default::default()
+    };
+
+    // HttpEndpointBuilder configures the node with subnet_test_id(1).
+    let node_subnet_id = subnet_test_id(1).get();
+    let wrong_subnet_id = subnet_test_id(2).get();
+
+    // Ingress filter is never reached; spawn a dummy handler so the loop doesn't hang.
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
+            resp.send_response(Ok(Ok(())))
+        }
+    });
+
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+        let response = CallSubnet::V4(wrong_subnet_id)
+            .call(addr, IngressMessage::default())
+            .await;
+
+        assert_eq!(StatusCode::BAD_REQUEST, response.status());
+        assert_eq!(
+            format!(
+                "Specified SubnetId {wrong_subnet_id} does not match the subnet id of this node {node_subnet_id}"
+            ),
+            response.text().await.unwrap()
+        );
+    });
+}
+
+/// Tests that /api/v4/subnet/../call accepts a request whose URL subnet ID matches
+/// the node's own subnet ID.
+#[test]
+fn test_call_v4_subnet_correct_subnet_id() {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ingress_message_certificate_timeout_seconds: 0,
+        ..Default::default()
+    };
+
+    let subnet_id = subnet_test_id(1).get();
+
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
+            resp.send_response(Ok(Ok(())))
+        }
+    });
+
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+        let response = CallSubnet::V4(subnet_id)
+            .call(addr, IngressMessage::default())
+            .await;
+
+        assert_eq!(
+            StatusCode::ACCEPTED,
+            response.status(),
+            "{:?}",
+            response.text().await
         );
     });
 }
