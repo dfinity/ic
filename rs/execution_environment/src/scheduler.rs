@@ -1911,7 +1911,7 @@ fn can_execute_subnet_msg(
 ///
 /// This is primarily done because upgrading a canister might need to
 /// (de)-serialize a large state and thus consume a lot of instructions.
-fn get_instruction_limits_for_subnet_message(
+pub fn get_instruction_limits_for_subnet_message(
     config: &SchedulerConfig,
     msg: &SubnetMessage,
 ) -> InstructionLimits {

@@ -29,6 +29,7 @@ pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{
     ExecutionEnvironment, ExecutionServices, IngressHistoryReaderImpl, InstructionLimits,
     RoundLimits, as_round_instructions, execute_canister,
+    get_instruction_limits_for_subnet_message,
 };
 use ic_http_endpoints_public::{IngressWatcher, IngressWatcherHandle, metrics::HttpHandlerMetrics};
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
@@ -248,8 +249,6 @@ impl Verifier for FakeVerifier {
 /// Tasks not listed here may execute implicitly during any step:
 /// - DTS continuation (PausedExecution) runs with highest priority
 /// - OnLowWasmMemory hook runs before heartbeat/timer/messages if triggered
-/// - induct_messages_on_same_subnet moves output → input queues each round
-/// - build_streams routes output to loopback each round
 #[derive(Clone, Debug)]
 pub enum OrderedMessage {
     Ingress(CanisterId, MessageId),
@@ -310,25 +309,25 @@ impl FlexibleSchedulerImpl {
         let time = state.time();
         let cost_schedule = state.get_own_cost_schedule();
 
-        let mut canister = match state.take_canister_state(&canister_id) {
-            Some(c) => c,
-            None => return state,
-        };
+        let mut canister = state.take_canister_state(&canister_id).unwrap();
 
         // Mirroring SchedulerImpl: if the task queue is empty and the canister
         // is scheduled to run a heartbeat or timer next, push the task now.
         if canister.system_state.task_queue.is_empty() {
             let method = canister.get_next_scheduled_method();
             let push_task = match method {
-                NextScheduledMethod::Heartbeat => canister
-                    .exports_heartbeat_method()
-                    .then_some(ExecutionTask::Heartbeat),
-                NextScheduledMethod::GlobalTimer => (canister.exports_global_timer_method()
-                    && canister
+                NextScheduledMethod::Heartbeat => {
+                  assert!(canister.exports_heartbeat_method(), "Canister {canister_id} does not export heartbeat");
+                  Some(ExecutionTask::Heartbeat)
+                },
+                NextScheduledMethod::GlobalTimer => {
+                  assert!(canister.exports_global_timer_method(), "Canister {canister_id} does not export global timer");
+                  assert!(canister
                         .system_state
                         .global_timer
-                        .has_reached_deadline(time))
-                .then_some(ExecutionTask::GlobalTimer),
+                        .has_reached_deadline(time), "Canister {canister_id} has not reached its global timer deadline");
+                  Some(ExecutionTask::GlobalTimer)
+                }
                 NextScheduledMethod::Message => None,
             };
             if let Some(task) = push_task {
@@ -340,33 +339,8 @@ impl FlexibleSchedulerImpl {
         }
 
         match canister.next_execution() {
-            NextExecution::ContinueInstallCode => {
-                let instruction_limits = InstructionLimits::new(
-                    self.config.max_instructions_per_install_code,
-                    self.config.max_instructions_per_install_code_slice,
-                );
-                state.put_canister_state(canister);
-                let mut round_limits = RoundLimits {
-                    instructions: as_round_instructions(
-                        self.config.max_instructions_per_install_code,
-                    ),
-                    subnet_available_memory: self.exec_env.scaled_subnet_available_memory(&state),
-                    subnet_available_callbacks: self.exec_env.subnet_available_callbacks(&state),
-                    compute_allocation_used: state.total_compute_allocation(),
-                    subnet_memory_reservation: self.exec_env.scaled_subnet_memory_reservation(),
-                };
-                let (new_state, _) = self.exec_env.resume_install_code(
-                    state,
-                    &canister_id,
-                    instruction_limits,
-                    &mut round_limits,
-                    subnet_size,
-                );
-                state = new_state;
-            }
-            NextExecution::None => {
-                state.put_canister_state(canister);
-            }
+            NextExecution::ContinueInstallCode => panic!("Cannot execute a canister method while install_code is in progress"),
+            NextExecution::None => panic!("Cannot execute a canister if it has nothing to execute"),
             NextExecution::StartNew | NextExecution::ContinueLong => {
                 let instruction_limits = InstructionLimits::new(
                     self.config.max_instructions_per_message,
@@ -399,7 +373,6 @@ impl FlexibleSchedulerImpl {
             }
         }
 
-        state = self.exec_env.process_stopping_canisters(state);
         state.prune_ingress_history();
         state
     }
@@ -414,10 +387,7 @@ impl FlexibleSchedulerImpl {
         registry_settings: &RegistryExecutionSettings,
     ) -> ReplicatedState {
         if let Some(msg) = state.pop_subnet_input() {
-            let instruction_limits = InstructionLimits::new(
-                self.config.max_instructions_per_install_code,
-                self.config.max_instructions_per_install_code_slice,
-            );
+            let instruction_limits = get_instruction_limits_for_subnet_message(self.subnet_config.scheduler_config, &msg);
             let mut rng = StdRng::from_seed(randomness.get());
             let mut round_limits = RoundLimits {
                 instructions: as_round_instructions(self.config.max_instructions_per_install_code),
@@ -471,12 +441,11 @@ impl Scheduler for FlexibleSchedulerImpl {
                     source,
                     target: target_id,
                 } => {
-                    if let Some(canister) = state.canister_state_make_mut(&target_id) {
+                    let canister = state.canister_state_make_mut(&target_id).unwrap();
                         canister
                             .system_state
                             .queues_mut()
                             .rotate_local_sender_to_front(source);
-                    }
                 }
                 NextSender::SubnetQueue { source } => {
                     state
@@ -3022,7 +2991,7 @@ impl StateMachine {
             .expect("build the StateMachine with with_flexible_ordering()")
     }
 
-    pub fn set_ordering_target(&self, target: Option<CanisterId>) {
+    fn set_ordering_target(&self, target: Option<CanisterId>) {
         self.flexible_message_ordering().set_ordering_target(target);
     }
 
@@ -3045,7 +3014,7 @@ impl StateMachine {
 
     /// Each step in the ordering is executed with the following sequence:
     ///
-    /// 1. Ensure message is available (rotate sender schedule / induct loopback).
+    /// 1. Ensure message is available (rotate sender schedule).
     /// 2. Set budget (prioritise canister or subnet execution).
     /// 3. Set scheduling hints (next_scheduled_method, next_input_source, ordering_target).
     /// 4. Tick (execute one round).
@@ -3078,7 +3047,6 @@ impl StateMachine {
                             ingress_id,
                             self.ingress_status(ingress_id),
                         );
-                        flexible_message_ordering.set_subnet_execution_mode(true);
                         self.tick();
                     }
                 }
@@ -3169,6 +3137,7 @@ impl StateMachine {
     }
 
     fn complete_dts(&self, canister_id: CanisterId, max_ticks: usize) {
+        self.set_ordering_target(Some(canister_id));
         for tick in 0..max_ticks {
             match self
                 .get_latest_state()
@@ -3176,7 +3145,6 @@ impl StateMachine {
                 .map(|c| c.next_execution())
             {
                 Some(NextExecution::ContinueLong | NextExecution::ContinueInstallCode) => {
-                    self.set_ordering_target(Some(canister_id));
                     self.tick();
                 }
                 _ => return,
