@@ -48,7 +48,7 @@ use ic_replicated_state::{
 };
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
-    CryptoHashOfPartialState, Height, RegistryVersion,
+    CanisterId, CryptoHashOfPartialState, Height, RegistryVersion,
     artifact::UnvalidatedArtifactMutation,
     batch::RawQueryStats,
     consensus::certification::{Certification, CertificationContent},
@@ -104,6 +104,15 @@ impl UpdateEndpoint {
         match self {
             UpdateEndpoint::Canister(c) => c.call(addr, message).await,
             UpdateEndpoint::Subnet(s) => s.call(addr, message).await,
+        }
+    }
+
+    pub fn default_ingress_message(&self) -> ic_http_endpoints_test_agent::IngressMessage {
+        match self {
+            UpdateEndpoint::Canister(_) => ic_http_endpoints_test_agent::IngressMessage::default(),
+            UpdateEndpoint::Subnet(_) => ic_http_endpoints_test_agent::IngressMessage::default()
+                .with_canister_id(CanisterId::ic_00().get(), CanisterId::ic_00().get())
+                .with_method_name("create_canister".to_string()),
         }
     }
 }

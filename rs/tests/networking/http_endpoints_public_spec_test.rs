@@ -790,17 +790,48 @@ fn update_calls_subnet_v4(env: TestEnv) {
     let socket = get_socket_addr(&snapshot);
     let (sys_subnet_id, app_subnet_id) = get_subnet_ids(&snapshot);
 
+    let mgmt_message = || {
+        IngressMessage::default()
+            .with_canister_id(CanisterId::ic_00().get(), CanisterId::ic_00().get())
+            .with_method_name("create_canister".to_string())
+    };
+
     block_on(async {
         // Correct subnet ID → accepted
         let response = CallSubnet::V4(sys_subnet_id.get())
-            .call(socket, IngressMessage::default())
+            .call(socket, mgmt_message())
             .await;
         let status = inspect_response(response, "CallSubnet", &logger).await;
         assert_2xx(&status);
 
         // Wrong subnet ID → rejected
         let response = CallSubnet::V4(app_subnet_id.get())
-            .call(socket, IngressMessage::default())
+            .call(socket, mgmt_message())
+            .await;
+        let status = inspect_response(response, "CallSubnet", &logger).await;
+        assert_4xx(&status);
+
+        // Non-management canister with "create_canister" → rejected
+        let (non_mgmt_canister, _) = get_canister_test_ids(&snapshot);
+        let response = CallSubnet::V4(sys_subnet_id.get())
+            .call(
+                socket,
+                IngressMessage::default()
+                    .with_canister_id(non_mgmt_canister.get(), non_mgmt_canister.get())
+                    .with_method_name("create_canister".to_string()),
+            )
+            .await;
+        let status = inspect_response(response, "CallSubnet", &logger).await;
+        assert_4xx(&status);
+
+        // IC_00 with wrong method → rejected
+        let response = CallSubnet::V4(sys_subnet_id.get())
+            .call(
+                socket,
+                IngressMessage::default()
+                    .with_canister_id(CanisterId::ic_00().get(), CanisterId::ic_00().get())
+                    .with_method_name("install_code".to_string()),
+            )
             .await;
         let status = inspect_response(response, "CallSubnet", &logger).await;
         assert_4xx(&status);

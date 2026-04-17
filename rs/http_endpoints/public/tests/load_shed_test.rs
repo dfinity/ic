@@ -477,7 +477,7 @@ fn test_load_shedding_update_call_when_ingress_channel_is_full(#[case] endpoint:
     rt.block_on(async move {
         wait_for_status_healthy(&addr).await.unwrap();
         for _ in 0..capacity {
-            let message = Default::default();
+            let message = endpoint.default_ingress_message();
             let call_response = endpoint.call(addr, message).await;
             assert_eq!(
                 call_response.status(),
@@ -486,7 +486,7 @@ fn test_load_shedding_update_call_when_ingress_channel_is_full(#[case] endpoint:
                 call_response.text().await.unwrap()
             );
         }
-        let message = Default::default();
+        let message = endpoint.default_ingress_message();
         let call_response = endpoint.call(addr, message).await;
         assert_eq!(
             call_response.status(),

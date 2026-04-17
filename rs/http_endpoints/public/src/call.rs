@@ -278,6 +278,19 @@ impl IngressValidator {
                         ),
                     })?;
                 }
+                if msg.canister_id() != CanisterId::ic_00()
+                    || msg.method_name() != "create_canister"
+                {
+                    Err(HttpError {
+                        status: StatusCode::BAD_REQUEST,
+                        message: format!(
+                            "Subnet call endpoint only accepts calls to the management canister ({}) 'create_canister' method, got canister_id={} method_name='{}'",
+                            CanisterId::ic_00(),
+                            msg.canister_id(),
+                            msg.method_name()
+                        ),
+                    })?;
+                }
             }
         }
 
