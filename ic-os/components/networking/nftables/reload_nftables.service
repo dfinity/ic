@@ -1,5 +1,11 @@
 [Unit]
 Description=Reload nftables when the configuration changes
+# The orchestrator-generated nftables config uses the hostname "hostos" which
+# is resolved via the nss_icos NSS plugin. We must wait for name resolution to
+# be available, otherwise the nft reload fails with "Could not resolve hostname"
+# and the entire ruleset is discarded (nft is transactional).
+After=nss-lookup.target systemd-resolved.service
+Wants=nss-lookup.target
 
 [Service]
 Type=oneshot
