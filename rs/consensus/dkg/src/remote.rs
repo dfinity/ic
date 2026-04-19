@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::{
     MAX_REMOTE_DKG_ATTEMPTS, REMOTE_DKG_REPEATED_FAILURE_ERROR,
     payload_builder::{
