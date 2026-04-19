@@ -173,7 +173,7 @@ pub(crate) fn build_callback_id_config_map(
             if attempts == 0 {
                 continue;
             }
-            if attempts > MAX_REMOTE_DKG_ATTEMPTS {
+            if attempts >= MAX_REMOTE_DKG_ATTEMPTS {
                 callback_id_config_map.insert(
                     callback_id,
                     Err(context.generate_timeout_errors(dkg_summary.height, this_subnet_id)),
@@ -431,9 +431,9 @@ mod tests {
             BTreeMap::new(),
             BTreeMap::new(),
             BTreeMap::from([
-                (target_id, MAX_REMOTE_DKG_ATTEMPTS + 1),
-                (target_id2, MAX_REMOTE_DKG_ATTEMPTS + 1),
-                (target_id3, MAX_REMOTE_DKG_ATTEMPTS + 1),
+                (target_id, MAX_REMOTE_DKG_ATTEMPTS),
+                (target_id2, MAX_REMOTE_DKG_ATTEMPTS),
+                (target_id3, MAX_REMOTE_DKG_ATTEMPTS),
             ]),
         );
         let max_attempts_map = build_callback_id_config_map(
