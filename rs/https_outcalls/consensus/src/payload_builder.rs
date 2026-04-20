@@ -1042,12 +1042,12 @@ fn flexible_error_into_consensus_response(
 ) -> Option<ConsensusResponse> {
     let callback_id = error.callback_id();
 
-    let (global_error, node_details, message) = match error {
-        FlexibleCanisterHttpError::Timeout { .. } => (
-            FlexibleHttpGlobalError::Timeout(candid::Reserved),
-            vec![],
-            "Flexible HTTP request timed out".to_string(),
-        ),
+    let err = match error {
+        FlexibleCanisterHttpError::Timeout { .. } => FlexibleHttpRequestErr {
+            global_error: Some(FlexibleHttpGlobalError::Timeout(candid::Reserved)),
+            node_details: vec![],
+            message: "Flexible HTTP request timed out".to_string(),
+        },
         FlexibleCanisterHttpError::TooManyRequestErrors {
             reject_responses, ..
         } => {
@@ -1079,11 +1079,13 @@ fn flexible_error_into_consensus_response(
                     }
                 })
                 .collect();
-            (
-                FlexibleHttpGlobalError::TooManyRequestErrors(candid::Reserved),
+            FlexibleHttpRequestErr {
+                global_error: Some(FlexibleHttpGlobalError::TooManyRequestErrors(
+                    candid::Reserved,
+                )),
                 node_details,
                 message,
-            )
+            }
         }
         FlexibleCanisterHttpError::ResponsesTooLarge {
             all_seen_shares,
@@ -1133,19 +1135,14 @@ fn flexible_error_into_consensus_response(
                  ({num_ok} ok + {num_reject} reject + {num_unseen} unseen = {total_requests} total_requests)",
                 relevant_ok_sizes.join(", "),
             );
-            (
-                FlexibleHttpGlobalError::ResponsesTooLarge(candid::Reserved),
+            FlexibleHttpRequestErr {
+                global_error: Some(FlexibleHttpGlobalError::ResponsesTooLarge(candid::Reserved)),
                 node_details,
                 message,
-            )
+            }
         }
     };
 
-    let err = FlexibleHttpRequestErr {
-        global_error: Some(global_error),
-        node_details,
-        message,
-    };
     let bytes = Encode!(&FlexibleHttpRequestResult::Err(err)).ok()?;
 
     Some(ConsensusResponse::new(callback_id, Payload::Data(bytes)))
