@@ -329,14 +329,7 @@ pub fn start_server(
     let call_v3_router = call_sync_router(call_sync::Version::V3);
     let call_v4_router = call_sync_router(call_sync::Version::V4);
 
-    let subnet_call_v4_router = call_sync::new_subnet_v4_router(
-        call_handler.clone(),
-        ingress_watcher_handle.clone(),
-        metrics.clone(),
-        config.ingress_message_certificate_timeout_seconds,
-        nns_delegation_reader.clone(),
-        state_reader.clone(),
-    );
+    let subnet_call_v4_router = call_sync_router(call_sync::Version::SubnetV4);
 
     let query_router = |version| {
         QueryServiceBuilder::builder(
@@ -821,8 +814,10 @@ pub(crate) mod tests {
                 call_sync::route(call_sync::Version::V4),
                 axum::routing::post(dummy),
             ),
-            subnet_call_v4_router: Router::new()
-                .route(call_sync::route_subnet_v4(), axum::routing::post(dummy)),
+            subnet_call_v4_router: Router::new().route(
+                call_sync::route(call_sync::Version::SubnetV4),
+                axum::routing::post(dummy),
+            ),
             query_v2_router: Router::new().route(
                 QueryService::route(query::Version::V2),
                 axum::routing::post(dummy_cbor),

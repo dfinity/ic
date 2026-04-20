@@ -54,6 +54,8 @@ pub enum Version {
     V3,
     // Synchronous endpoint with the NNS delegation using the tree format of the canister ranges.
     V4,
+    // Synchronous subnet endpoint with no canister ranges in the NNS delegation.
+    SubnetV4,
 }
 
 enum SyncCallResponse {
@@ -133,11 +135,8 @@ pub(crate) fn route(version: Version) -> &'static str {
     match version {
         Version::V3 => "/api/v3/canister/{effective_canister_id}/call",
         Version::V4 => "/api/v4/canister/{effective_canister_id}/call",
+        Version::SubnetV4 => "/api/v4/subnet/{effective_subnet_id}/call",
     }
-}
-
-pub(crate) fn route_subnet_v4() -> &'static str {
-    "/api/v4/subnet/{effective_subnet_id}/call"
 }
 
 pub(crate) fn new_router(
@@ -159,12 +158,21 @@ pub(crate) fn new_router(
         version,
     };
 
-    Router::new().route_service(
-        route(version),
-        axum::routing::post(call_sync)
-            .with_state(call_service)
-            .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
-    )
+    let layer = ServiceBuilder::new().layer(DefaultBodyLimit::disable());
+    match version {
+        Version::SubnetV4 => Router::new().route_service(
+            route(version),
+            axum::routing::post(call_sync_subnet)
+                .with_state(call_service)
+                .layer(layer),
+        ),
+        Version::V3 | Version::V4 => Router::new().route_service(
+            route(version),
+            axum::routing::post(call_sync)
+                .with_state(call_service)
+                .layer(layer),
+        ),
+    }
 }
 
 pub fn new_service(
@@ -188,32 +196,6 @@ pub fn new_service(
     BoxCloneService::new(router.into_service())
 }
 
-pub(crate) fn new_subnet_v4_router(
-    call_handler: IngressValidator,
-    ingress_watcher_handle: IngressWatcherHandle,
-    metrics: HttpHandlerMetrics,
-    ingress_message_certificate_timeout_seconds: u64,
-    nns_delegation_reader: NNSDelegationReader,
-    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-) -> Router {
-    let state = SynchronousCallHandlerState {
-        nns_delegation_reader,
-        ingress_watcher_handle,
-        metrics,
-        ingress_message_certificate_timeout_seconds,
-        call_handler,
-        state_reader,
-        version: Version::V4,
-    };
-
-    Router::new().route_service(
-        route_subnet_v4(),
-        axum::routing::post(call_sync_subnet)
-            .with_state(state)
-            .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
-    )
-}
-
 /// Handles a call to /api/{v3,v4}/canister/../call
 async fn call_sync(
     axum::extract::Path(effective_canister_id): axum::extract::Path<CanisterId>,
@@ -223,6 +205,7 @@ async fn call_sync(
     let delegation_filter = match state.version {
         Version::V3 => CanisterRangesFilter::Flat,
         Version::V4 => CanisterRangesFilter::Tree(effective_canister_id),
+        Version::SubnetV4 => CanisterRangesFilter::None,
     };
     call_sync_impl(
         EffectiveDestination::Canister(effective_canister_id),
