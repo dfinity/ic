@@ -710,7 +710,7 @@ mod test {
         };
         let response = get_certificate_and_create_response(
             Vec::new(),
-            None,
+            /*delegation_from_nns=*/ None,
             &reader,
             DeprecatedCanisterRangesFilter::KeepAll,
         );
@@ -724,7 +724,7 @@ mod test {
         };
         let response = get_certificate_and_create_response(
             Vec::new(),
-            None,
+            /*delegation_from_nns=*/ None,
             &reader,
             DeprecatedCanisterRangesFilter::KeepOnlyNNS(NNS_SUBNET_ID),
         );
