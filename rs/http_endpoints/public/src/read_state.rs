@@ -944,6 +944,21 @@ mod test {
                 version,
                 &state,
                 &user_test_id(1),
+                &[Path::from(Label::from("subnet"))],
+                &CanisterIdSet::all(),
+                APP_SUBNET_ID.get(),
+                NNS_SUBNET_ID,
+            ),
+            Ok(())
+        );
+
+        assert_eq!(
+            verify_paths(
+                &metrics,
+                Target::Subnet,
+                version,
+                &state,
+                &user_test_id(1),
                 &[
                     Path::new(vec![
                         Label::from("subnet"),
