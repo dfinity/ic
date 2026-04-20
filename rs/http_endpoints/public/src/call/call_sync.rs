@@ -235,11 +235,10 @@ async fn call_sync(
 
 /// Handles a call to /api/v4/subnet/../call
 async fn call_sync_subnet(
-    axum::extract::Path(effective_subnet_id): axum::extract::Path<CanisterId>,
+    axum::extract::Path(effective_subnet_id): axum::extract::Path<SubnetId>,
     State(state): State<SynchronousCallHandlerState>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpCallContent>>>,
 ) -> SyncCallResponse {
-    let effective_subnet_id = SubnetId::from(effective_subnet_id.get());
     call_sync_impl(
         EffectiveDestination::Subnet(effective_subnet_id),
         CanisterRangesFilter::None,
