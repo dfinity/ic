@@ -11,7 +11,7 @@
 //! this start the canister back up again, and unlocks it.
 
 #![allow(deprecated)]
-use crate::{LOG_PREFIX, private::exclusively_stop_and_start_canister};
+use crate::{LOG_PREFIX, private::perform_offline_canister_maintenance};
 use candid::{CandidType, Deserialize, Encode, Principal};
 use dfn_core::api::CanisterId;
 #[cfg(target_arch = "wasm32")]
@@ -234,11 +234,11 @@ pub async fn change_canister(request: ChangeCanisterRequest) -> Result<(), Strin
 
     // Ship code to the canister.
     //
-    let result = exclusively_stop_and_start_canister::<_, _, _>(
+    let result = perform_offline_canister_maintenance::<_, _, _>(
         canister_id,
         &request_str,
         stop_before_installing,
-        || async {
+        || async move {
             // Note that there's no guarantee that the canister to install/reinstall/upgrade
             // is actually stopped here, even if stop_before_installing is true. This is
             // because there could be a concurrent request to restart it. This could be
@@ -254,7 +254,7 @@ pub async fn change_canister(request: ChangeCanisterRequest) -> Result<(), Strin
     .await;
 
     // This handles errors such as not being able to acquire canister lock,
-    // which gets emited directly by exclusively_stop_and_start_canister
+    // which gets emited directly by perform_offline_canister_maintenance
     // itself.
     let result = match result {
         Ok(ok) => ok,
