@@ -316,7 +316,7 @@ impl Iterator for CanisterOutputQueuesIterator<'_> {
 /// and canister requests / responses, `pop_input()` / `peek_input()` may also
 /// return concise "reject response for callback ID" messages.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) enum CanisterInput {
+pub enum CanisterInput {
     Ingress(Arc<Ingress>),
     Request(Arc<Request>),
     Response(Arc<Response>),
@@ -1028,7 +1028,7 @@ impl CanisterQueues {
     ///
     /// Requires a `&mut self` reference to achieve amortized `O(1)` time complexity
     /// by immediately consuming empty input queues when encountered.
-    pub(crate) fn peek_input(&mut self) -> Option<CanisterInput> {
+    pub fn peek_input(&mut self) -> Option<CanisterInput> {
         // Try all 3 input sources: ingress, local and remote subnets.
         for _ in 0..InputSource::COUNT {
             let peeked = match self.input_schedule.input_source() {
@@ -1987,7 +1987,7 @@ pub fn memory_usage_of_request(req: &Request) -> MessageMemoryUsage {
 
 pub mod testing {
     use super::input_schedule::testing::InputScheduleTesting;
-    use super::{CanisterQueues, MessageStore};
+    use super::{CanisterInput, CanisterQueues, MessageStore};
     use crate::replicated_state::InputSource;
     use crate::{InputQueueType, StateError};
     use ic_types::messages::{Request, RequestOrResponse, Response};
@@ -2026,6 +2026,9 @@ pub mod testing {
         /// Rotates the local sender schedule so that `sender` is at the front.
         /// Panics if `sender` is not in the schedule.
         fn rotate_local_sender_to_front(&mut self, sender: CanisterId);
+
+        /// Publicly exposes `CanisterQueues::peek_input()`.
+        fn peek_input(&mut self) -> Option<CanisterInput>;
 
         /// Returns an iterator over the raw contents of the output queue to
         /// `canister_id`; or `None` if no such output queue exists.
@@ -2070,6 +2073,10 @@ pub mod testing {
 
         fn rotate_local_sender_to_front(&mut self, sender: CanisterId) {
             self.input_schedule.rotate_local_sender_to_front(sender);
+        }
+
+        fn peek_input(&mut self) -> Option<CanisterInput> {
+            self.peek_input()
         }
 
         fn output_queue_iter_for_testing(

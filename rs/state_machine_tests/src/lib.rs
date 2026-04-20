@@ -123,7 +123,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CheckpointLoadingMetrics, ExecutionTask, InputSource, Memory, PageMap, ReplicatedState,
     canister_state::{
-        NextExecution, NumWasmPages, WASM_PAGE_SIZE_IN_BYTES,
+        CanisterInput, NextExecution, NumWasmPages, WASM_PAGE_SIZE_IN_BYTES,
         canister_snapshots::CanisterSnapshots, execution_state::NextScheduledMethod,
         system_state::CanisterHistory,
     },
@@ -299,6 +299,7 @@ impl FlexibleSchedulerImpl {
         mut state: ReplicatedState,
         canister_id: CanisterId,
         registry_settings: &RegistryExecutionSettings,
+        ordered_msg: Option<OrderedMessage>,
     ) -> ReplicatedState {
         let subnet_size = registry_settings.subnet_size;
         let resource_limits = state.metadata.own_resource_limits;
@@ -307,6 +308,60 @@ impl FlexibleSchedulerImpl {
         let cost_schedule = state.get_own_cost_schedule();
 
         let mut canister = state.take_canister_state(&canister_id).unwrap();
+
+        match &ordered_msg {
+            None => {
+                assert!(
+                    matches!(
+                        canister.next_execution(),
+                        NextExecution::ContinueLong | NextExecution::ContinueInstallCode
+                    ),
+                    "No DTS scheduled for canister {}",
+                    canister_id
+                );
+            }
+            Some(OrderedMessage::Ingress(_, ingress_id)) => {
+                let front = Arc::make_mut(&mut canister)
+                    .system_state
+                    .queues_mut()
+                    .peek_input();
+                assert!(
+                    matches!(&front, Some(CanisterInput::Ingress(i)) if i.message_id == *ingress_id),
+                    "Expected ingress {:?} at front of canister {} input queue, got {:?}",
+                    ingress_id,
+                    canister_id,
+                    front
+                );
+            }
+            Some(
+                OrderedMessage::Request { source, .. } | OrderedMessage::Response { source, .. },
+            ) => {
+                // The management canister sets `respondent = own_subnet_id` (not IC_00).
+                let expected_source = if source == &IC_00 {
+                    CanisterId::from(state.metadata.own_subnet_id)
+                } else {
+                    *source
+                };
+                let front = Arc::make_mut(&mut canister)
+                    .system_state
+                    .queues_mut()
+                    .peek_input();
+                let origin = match &front {
+                    Some(CanisterInput::Request(r)) => Some(r.sender),
+                    Some(CanisterInput::Response(r)) => Some(r.respondent),
+                    _ => None,
+                };
+                assert_eq!(
+                    origin,
+                    Some(expected_source),
+                    "Expected canister input from {} at front of canister {} input queue, got {:?}",
+                    source,
+                    canister_id,
+                    front
+                );
+            }
+            Some(OrderedMessage::Heartbeat(_) | OrderedMessage::Timer(_)) => {}
+        }
 
         // Mirroring SchedulerImpl: if the task queue is empty and the canister
         // is scheduled to run a heartbeat or timer next, push the task now.
@@ -515,7 +570,7 @@ impl Scheduler for FlexibleSchedulerImpl {
     ) -> ReplicatedState {
         let dts_canister = self.dts_canister.write().unwrap().take();
         if let Some(canister_id) = dts_canister {
-            return self.execute_single_canister(state, canister_id, registry_settings);
+            return self.execute_single_canister(state, canister_id, registry_settings, None);
         }
         let next_message = self.next_message.write().unwrap().take();
         match next_message {
@@ -539,11 +594,24 @@ impl Scheduler for FlexibleSchedulerImpl {
                     registry_settings,
                     OrderedMessage::Ingress(target, ingress_id),
                 ),
-            Some(OrderedMessage::Ingress(canister_id, _))
-            | Some(OrderedMessage::Heartbeat(canister_id))
-            | Some(OrderedMessage::Timer(canister_id)) => {
-                self.execute_single_canister(state, canister_id, registry_settings)
-            }
+            Some(OrderedMessage::Ingress(canister_id, ingress_id)) => self.execute_single_canister(
+                state,
+                canister_id,
+                registry_settings,
+                Some(OrderedMessage::Ingress(canister_id, ingress_id)),
+            ),
+            Some(OrderedMessage::Heartbeat(canister_id)) => self.execute_single_canister(
+                state,
+                canister_id,
+                registry_settings,
+                Some(OrderedMessage::Heartbeat(canister_id)),
+            ),
+            Some(OrderedMessage::Timer(canister_id)) => self.execute_single_canister(
+                state,
+                canister_id,
+                registry_settings,
+                Some(OrderedMessage::Timer(canister_id)),
+            ),
             // Apply the queue rotation after the induction phase has moved loopback messages.
             Some(OrderedMessage::Request { source, target }) if target == IC_00 => {
                 state
@@ -560,18 +628,49 @@ impl Scheduler for FlexibleSchedulerImpl {
                 )
             }
             Some(OrderedMessage::Response { source, target }) if source == IC_00 => {
-                self.execute_single_canister(state, target, registry_settings)
+                // The management canister sets `respondent = own_subnet_id` (not IC_00) in
+                // responses, and `replicated_state::push_input` classifies it as LocalSubnet.
+                let actual_respondent = CanisterId::from(state.metadata.own_subnet_id);
+                state
+                    .canister_state_make_mut(&target)
+                    .unwrap()
+                    .system_state
+                    .queues_mut()
+                    .rotate_local_sender_to_front(actual_respondent);
+                self.execute_single_canister(
+                    state,
+                    target,
+                    registry_settings,
+                    Some(OrderedMessage::Response { source, target }),
+                )
             }
-            Some(
-                OrderedMessage::Request { source, target }
-                | OrderedMessage::Response { source, target },
-            ) => {
-                let canister = state.canister_state_make_mut(&target).unwrap();
-                canister
+            Some(OrderedMessage::Request { source, target }) => {
+                state
+                    .canister_state_make_mut(&target)
+                    .unwrap()
                     .system_state
                     .queues_mut()
                     .rotate_local_sender_to_front(source);
-                self.execute_single_canister(state, target, registry_settings)
+                self.execute_single_canister(
+                    state,
+                    target,
+                    registry_settings,
+                    Some(OrderedMessage::Request { source, target }),
+                )
+            }
+            Some(OrderedMessage::Response { source, target }) => {
+                state
+                    .canister_state_make_mut(&target)
+                    .unwrap()
+                    .system_state
+                    .queues_mut()
+                    .rotate_local_sender_to_front(source);
+                self.execute_single_canister(
+                    state,
+                    target,
+                    registry_settings,
+                    Some(OrderedMessage::Response { source, target }),
+                )
             }
         }
     }
