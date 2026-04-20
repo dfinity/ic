@@ -285,7 +285,14 @@ def filter_columns(columns_metadata, columns_list):
     return result
 
 
-def download_and_process_logs(logs_base_dir, download_console_logs: bool, download_ic_logs: bool, df: pd.DataFrame):
+def download_and_process_logs(
+    logs_base_dir,
+    df: pd.DataFrame,
+    *,
+    download_console_logs: bool,
+    download_ic_logs: bool,
+    verbose: bool,
+):
     """
     Download the logs of all runs in the given DataFrame,
     save them to the specified logs_base_dir
@@ -334,7 +341,13 @@ def download_and_process_logs(logs_base_dir, download_console_logs: bool, downlo
                 (row, attempt_num, attempt_status, download_url, attempt_dir, download_to_path, output_dir)
             )
 
-    execute_download_tasks(download_tasks, download_console_logs, download_ic_logs, df)
+    execute_download_tasks(
+        download_tasks,
+        df,
+        download_console_logs=download_console_logs,
+        download_ic_logs=download_ic_logs,
+        verbose=verbose,
+    )
 
     if len(output_dirs) == 1:
         output_dir = output_dirs.pop()
@@ -434,11 +447,14 @@ def convert_download_url(uri, cluster) -> str:
 
 def execute_download_tasks(
     download_tasks: list,
+    df: pd.DataFrame,
+    *,
     download_console_logs: bool,
     download_ic_logs: bool,
-    df: pd.DataFrame,
+    verbose: bool,
 ):
-    print(f"Downloading {len(download_tasks)} log files...", file=sys.stderr)
+    if verbose:
+        print(f"Downloading {len(download_tasks)} log files...", file=sys.stderr)
 
     # These executors are used for downloading IC logs from ElasticSearch
     # and console logs from Farm concurrently. Limit to 10 concurrent downloads
@@ -470,6 +486,7 @@ def execute_download_tasks(
                             df,
                             download_console_logs,
                             download_ic_logs,
+                            verbose,
                             download_console_log_executor,
                             download_ic_log_executor,
                         ),
@@ -502,10 +519,11 @@ def execute_download_tasks(
     # Render the error_summaries to human-readable form.
     df["errors"] = df["error_summaries"].apply(render_error_summaries)
 
-    print(
-        f"Successfully downloaded and processed {successes}/{len(download_tasks)} logs.",
-        file=sys.stderr,
-    )
+    if verbose:
+        print(
+            f"Successfully downloaded and processed {successes}/{len(download_tasks)} logs.",
+            file=sys.stderr,
+        )
 
 
 TIMESTAMP_LEN = 23
@@ -520,6 +538,7 @@ def process_log(
     df: pd.DataFrame,
     download_console_logs: bool,
     download_ic_logs: bool,
+    verbose: bool,
     download_console_log_executor: ThreadPoolExecutor,
     download_ic_log_executor: ThreadPoolExecutor,
 ):
@@ -585,6 +604,7 @@ def process_log(
                     download_console_log,
                     console_link_raw,
                     console_logs_dir / f"{vm_name}.log",
+                    verbose,
                 )
 
         if group_name is not None and download_ic_logs:
@@ -597,6 +617,7 @@ def process_log(
                 test_start_time,
                 last_seen_timestamp,
                 vm_ipv6s,
+                verbose,
             )
     else:
         # Efficiently get the last line of the log:
@@ -731,7 +752,7 @@ def shorten(msg: str, max_length: int) -> str:
     return msg
 
 
-def download_console_log(console_link_raw: str, output_path: Path):
+def download_console_log(console_link_raw: str, output_path: Path, verbose: bool):
     """Download the log of the console of a Farm VM"""
     try:
         response = requests.get(console_link_raw, timeout=60, stream=True)
@@ -739,7 +760,8 @@ def download_console_log(console_link_raw: str, output_path: Path):
             with open(output_path, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
-            print(f"Downloaded console log to {output_path}", file=sys.stderr)
+            if verbose:
+                print(f"Downloaded console log to {output_path}", file=sys.stderr)
         else:
             print(
                 f"Failed to download console log from {console_link_raw} with HTTP {response.status_code}: '{response.text.strip()}'",
@@ -755,13 +777,14 @@ def download_and_process_ic_logs_for_system_test(
     test_start_time: datetime,
     test_end_time: datetime,
     vm_ipv6s: dict[str, str],
+    verbose: bool,
 ):
     # Create a queue for passing hits from download thread to processing thread
     hits_queue = Queue(maxsize=100)  # Limit memory usage with bounded queue
 
     # Start processing thread
     processing_thread = threading.Thread(
-        target=process_elasticsearch_hits_from_queue, args=(attempt_dir, group_name, hits_queue, vm_ipv6s)
+        target=process_elasticsearch_hits_from_queue, args=(attempt_dir, group_name, hits_queue, vm_ipv6s, verbose)
     )
     processing_thread.start()
 
@@ -799,10 +822,11 @@ def download_and_process_ic_logs_for_system_test(
 
         try:
             while True:
-                print(
-                    f"Downloading a maximum  {max_size} IC logs for attempt {attempt_dir.name} for testnet {group_name} from ElasticSearch between {gte} - {lte} with search_after={elasticsearch_query.get('search_after', None)} ...",
-                    file=sys.stderr,
-                )
+                if verbose:
+                    print(
+                        f"Downloading a maximum of {max_size} IC logs for attempt {attempt_dir.name} for testnet {group_name} from ElasticSearch between {gte} - {lte} with search_after={elasticsearch_query.get('search_after', None)} ...",
+                        file=sys.stderr,
+                    )
                 response = requests.post(url, params=params, json=elasticsearch_query, timeout=60)
 
                 if not response.ok:
@@ -840,6 +864,7 @@ def process_elasticsearch_hits_from_queue(
     group_name: str,
     hits_queue: Queue,
     vm_ipv6s: dict[str, str],
+    verbose: bool,
 ):
     """Consumer thread: Process ElasticSearch hits from queue and write IC node log files."""
     log_file_by_node = {}
@@ -853,10 +878,11 @@ def process_elasticsearch_hits_from_queue(
             if hits is None:
                 break
 
-            print(
-                f"Processing and writing {len(hits)} IC logs for attempt {attempt_dir.name} for testnet {group_name} ...",
-                file=sys.stderr,
-            )
+            if verbose:
+                print(
+                    f"Processing and writing {len(hits)} IC logs for attempt {attempt_dir.name} for testnet {group_name} ...",
+                    file=sys.stderr,
+                )
             for hit in hits:
                 # Sentinel value signals end of download
                 if hit is None:
@@ -1236,7 +1262,13 @@ def last(args):
     df["duration"] = df["duration"].apply(normalize_duration)
 
     if not args.skip_download:
-        download_and_process_logs(args.logs_base_dir, args.download_console_logs, args.download_ic_logs, df)
+        download_and_process_logs(
+            args.logs_base_dir,
+            df,
+            download_console_logs=args.download_console_logs,
+            download_ic_logs=args.download_ic_logs,
+            verbose=args.verbose,
+        )
 
     columns_metadata = LAST_COLUMNS
     # When downlods are skipped we don't have any error information so skip the "errors" column.
@@ -1278,7 +1310,11 @@ def main():
 
     # Arguments common to all subcommands:
     common_parser = argparse.ArgumentParser(add_help=False)
-    common_parser.add_argument("--verbose", action="store_true", help="Log queries")
+    common_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable verbose logging (SQL queries and log download/processing progress)",
+    )
     common_parser.add_argument(
         "--conninfo",
         metavar="STR",

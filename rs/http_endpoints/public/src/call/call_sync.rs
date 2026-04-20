@@ -1,7 +1,7 @@
 //! Module that deals with requests to /api/{v3,v4}/canister/.../call.
 
 use super::{
-    IngressError, IngressValidator,
+    EffectiveDestination, IngressError, IngressValidator,
     ingress_watcher::{IngressWatcherHandle, SubscriptionError},
 };
 use crate::{
@@ -33,7 +33,7 @@ use ic_logger::{error, warn};
 use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    CanisterId,
+    CanisterId, PrincipalId, SubnetId,
     consensus::certification::Certification,
     messages::{Blob, Certificate, HttpCallContent, HttpRequestEnvelope, MessageId},
 };
@@ -54,6 +54,8 @@ pub enum Version {
     V3,
     // Synchronous endpoint with the NNS delegation using the tree format of the canister ranges.
     V4,
+    // Synchronous subnet endpoint with no canister ranges in the NNS delegation.
+    SubnetV4,
 }
 
 enum SyncCallResponse {
@@ -133,6 +135,7 @@ pub(crate) fn route(version: Version) -> &'static str {
     match version {
         Version::V3 => "/api/v3/canister/{effective_canister_id}/call",
         Version::V4 => "/api/v4/canister/{effective_canister_id}/call",
+        Version::SubnetV4 => "/api/v4/subnet/{effective_subnet_id}/call",
     }
 }
 
@@ -184,9 +187,9 @@ pub fn new_service(
     BoxCloneService::new(router.into_service())
 }
 
-/// Handles a call to /api/{v3,v4}/canister/../call
+/// Handles a call to /api/{v3,v4}/canister/../call and /api/v4/subnet/../call
 async fn call_sync(
-    axum::extract::Path(effective_canister_id): axum::extract::Path<CanisterId>,
+    axum::extract::Path(id): axum::extract::Path<PrincipalId>,
     State(SynchronousCallHandlerState {
         call_handler,
         ingress_watcher_handle,
@@ -198,10 +201,30 @@ async fn call_sync(
     }): State<SynchronousCallHandlerState>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpCallContent>>>,
 ) -> SyncCallResponse {
+    let (effective_destination, delegation_filter) = match version {
+        Version::V3 => {
+            let canister_id = CanisterId::unchecked_from_principal(id);
+            (
+                EffectiveDestination::Canister(canister_id),
+                CanisterRangesFilter::Flat,
+            )
+        }
+        Version::V4 => {
+            let canister_id = CanisterId::unchecked_from_principal(id);
+            (
+                EffectiveDestination::Canister(canister_id),
+                CanisterRangesFilter::Tree(canister_id),
+            )
+        }
+        Version::SubnetV4 => (
+            EffectiveDestination::Subnet(SubnetId::from(id)),
+            CanisterRangesFilter::None,
+        ),
+    };
     let log = call_handler.log.clone();
 
     let ingress_submitter = match call_handler
-        .validate_ingress_message(request, effective_canister_id)
+        .validate_ingress_message(request, effective_destination)
         .await
     {
         Ok(ingress_submitter) => ingress_submitter,
@@ -217,11 +240,6 @@ async fn call_sync(
         tree_and_certificate_for_message(state_reader.clone(), message_id.clone()).await
         && let ParsedMessageStatus::Known(_) = parsed_message_status(&tree, &message_id)
     {
-        let delegation_from_nns = match version {
-            Version::V3 => nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat),
-            Version::V4 => nns_delegation_reader
-                .get_delegation(CanisterRangesFilter::Tree(effective_canister_id)),
-        };
         let signature = certification.signed.signature.signature.get().0;
 
         metrics
@@ -232,7 +250,7 @@ async fn call_sync(
         return SyncCallResponse::Certificate(Certificate {
             tree,
             signature: Blob(signature),
-            delegation: delegation_from_nns,
+            delegation: nns_delegation_reader.get_delegation(delegation_filter),
         });
     };
 
@@ -335,18 +353,12 @@ async fn call_sync(
         );
     }
 
-    let delegation_from_nns = match version {
-        Version::V3 => nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat),
-        Version::V4 => {
-            nns_delegation_reader.get_delegation(CanisterRangesFilter::Tree(effective_canister_id))
-        }
-    };
     let signature = certification.signed.signature.signature.get().0;
 
     SyncCallResponse::Certificate(Certificate {
         tree,
         signature: Blob(signature),
-        delegation: delegation_from_nns,
+        delegation: nns_delegation_reader.get_delegation(delegation_filter),
     })
 }
 

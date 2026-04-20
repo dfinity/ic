@@ -47,7 +47,7 @@ pub const USER_ID: u64 = 0;
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX;
 
 /// Enables Wasm64 benchmarks.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum Wasm64 {
     Enabled,
     Disabled,
@@ -170,6 +170,7 @@ where
         call_context_id,
         canister_test_id(REMOTE_CANISTER_ID),
         Cycles::new(0),
+        CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
         CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
         CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
         WasmClosure::new(0, 1),

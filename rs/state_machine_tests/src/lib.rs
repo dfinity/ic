@@ -1034,6 +1034,10 @@ impl StateManager for StateMachineStateManager {
         self.deref().commit_and_certify(state, scope, batch_summary)
     }
 
+    fn tip_height(&self) -> Height {
+        self.deref().tip_height()
+    }
+
     fn take_tip(&self) -> (Height, ReplicatedState) {
         self.deref().take_tip()
     }

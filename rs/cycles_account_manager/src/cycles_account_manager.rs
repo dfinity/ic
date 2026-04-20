@@ -14,7 +14,7 @@ use ic_types::{
     SubnetId,
     canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
     canister_log::MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES,
-    messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, Request, SignedIngress},
+    messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, SignedIngress},
 };
 use ic_types_cycles::{
     CanisterCreation, CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase,
@@ -778,32 +778,18 @@ impl CyclesAccountManager {
         canister_current_memory_usage: NumBytes,
         canister_current_message_memory_usage: MessageMemoryUsage,
         canister_compute_allocation: ComputeAllocation,
-        request: &Request,
         prepayment_for_response_execution: CompoundCycles<Instructions>,
-        prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
+        prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
         reserved_balance: Cycles,
         reveal_top_up: bool,
-    ) -> Result<
-        (
-            CompoundCycles<Instructions>,
-            CompoundCycles<RequestAndResponseTransmission>,
-        ),
-        CanisterOutOfCyclesError,
-    > {
+    ) -> Result<(), CanisterOutOfCyclesError> {
         // The total amount charged consists of:
-        // the fee to do the xnet call (request + response),
-        // the fee to send the request (by size),
-        // the fee for the largest possible response,
-        let transmission_fee = self.xnet_total_transmission_fee(
-            request.payload_size_bytes(),
-            subnet_size,
-            cost_schedule,
-            prepayment_for_response_transmission,
-        );
+        // the total fee for transmitting the call (includes both request and largest allowed response)
         // and the fee for executing the largest allowed response when it eventually arrives.
-        let fee = transmission_fee.real() + prepayment_for_response_execution.real();
+        let fee =
+            prepayment_for_call_transmission.real() + prepayment_for_response_execution.real();
 
         self.withdraw_with_threshold(
             canister_id,
@@ -822,7 +808,7 @@ impl CyclesAccountManager {
             reveal_top_up,
         )?;
 
-        Ok((prepayment_for_response_execution, transmission_fee))
+        Ok(())
     }
 
     /// The total amount for an xnet call transmission. Includes response transmission, but
@@ -832,11 +818,10 @@ impl CyclesAccountManager {
         payload_size: NumBytes,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
-        prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
     ) -> CompoundCycles<RequestAndResponseTransmission> {
         self.xnet_call_performed_fee(subnet_size, cost_schedule)
             + self.xnet_call_bytes_transmitted_fee(payload_size, subnet_size, cost_schedule)
-            + prepayment_for_response_transmission
+            + self.prepayment_for_response_transmission(subnet_size, cost_schedule)
     }
 
     /// The total fee for an xnet call, including payload size, transmission (both ways)
@@ -850,18 +835,11 @@ impl CyclesAccountManager {
         execution_mode: WasmExecutionMode,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Cycles {
-        let prepayment_for_response_transmission =
-            self.prepayment_for_response_transmission(subnet_size, cost_schedule);
         // response execution might be free depending on cost_schedule
         let prepayment_for_response_execution =
             self.prepayment_for_response_execution(subnet_size, cost_schedule, execution_mode);
-        self.xnet_total_transmission_fee(
-            payload_size,
-            subnet_size,
-            cost_schedule,
-            prepayment_for_response_transmission,
-        )
-        .real()
+        self.xnet_total_transmission_fee(payload_size, subnet_size, cost_schedule)
+            .real()
             + prepayment_for_response_execution.real()
     }
 
