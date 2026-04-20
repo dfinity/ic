@@ -46,7 +46,6 @@ use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::driver::test_setup::GroupSetup;
 use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
-use ic_testnet_mainnet_nns::MAINNET_NODE_VM_RESOURCE_OVERRIDES;
 use slog::{info, warn};
 use std::time::Duration;
 
