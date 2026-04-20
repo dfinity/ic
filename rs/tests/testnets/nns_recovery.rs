@@ -58,7 +58,7 @@ fn setup(env: TestEnv, use_mainnet_state: bool) {
 
     let dkg_interval = std::env::var("DKG_INTERVAL")
         .ok()
-        .and_then(|s| s.parse::<u64>().ok())
+        .map(|s| s.parse::<u64>().expect("DKG_INTERVAL must be a valid u64"))
         .unwrap_or(DKG_INTERVAL_HEIGHT);
 
     let vm_resource_overrides = if use_mainnet_state {

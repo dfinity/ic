@@ -4730,6 +4730,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-registry-subnet-type",
  "ic-replicated-state",
+ "ic-sys",
  "ic-test-utilities",
  "ic-test-utilities-execution-environment",
  "ic-test-utilities-state",
@@ -15245,6 +15246,7 @@ dependencies = [
  "serde",
  "slog",
  "ssh2",
+ "tokio",
  "url",
 ]
 
@@ -15552,6 +15554,7 @@ dependencies = [
  "assert_matches",
  "base64 0.13.1",
  "hex",
+ "ic-crypto-iccsa",
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-sha2",
@@ -16087,6 +16090,7 @@ dependencies = [
  "candid",
  "ic-agent",
  "ic-certification 3.1.0",
+ "ic-crypto-iccsa",
  "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-internal-bls12-381-type",
  "ic-crypto-sha2",
@@ -16157,6 +16161,7 @@ dependencies = [
 name = "ic_os_logging"
 version = "0.0.0"
 dependencies = [
+ "tracing",
  "tracing-journald",
  "tracing-subscriber",
 ]
@@ -16291,7 +16296,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-agent"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "candid",
  "ciborium",
@@ -16305,7 +16310,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-client"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -16314,7 +16319,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-client-cdk"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -16324,7 +16329,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-types"
-version = "0.1.13"
+version = "0.2.0"
 dependencies = [
  "assert_matches",
  "base32",
@@ -18964,6 +18969,7 @@ dependencies = [
  "ic-nns-governance-api",
  "ic-types",
  "ic_device",
+ "ic_os_logging",
  "linux_kernel_command_line",
  "pem",
  "rand 0.8.5",
@@ -18972,6 +18978,7 @@ dependencies = [
  "sev_guest",
  "sev_guest_testing",
  "tempfile",
+ "tracing",
  "uuid",
 ]
 

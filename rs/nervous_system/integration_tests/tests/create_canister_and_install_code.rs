@@ -41,8 +41,11 @@ async fn test_create_canister_and_install_code() {
 
     // Step 2.1: Get the system subnet ID to use as host_subnet_id.
     let topology = pocket_ic.topology().await;
+    let nns_subnet_id = PrincipalId::from(topology.get_nns().unwrap());
     let system_subnets = topology.get_system_subnets();
     let host_subnet_id = PrincipalId::from(*system_subnets.first().unwrap());
+    // Sanity check: we want to exercise canister creation on a non-NNS subnet.
+    assert_ne!(host_subnet_id, nns_subnet_id);
 
     // Step 2.2: Prepare the WASM and compute its expected hash.
     let wasm_module_bytes = SMALLEST_VALID_WASM_BYTES;

@@ -1881,6 +1881,9 @@ impl SyncMessageRouting {
     }
 
     pub fn expected_batch_height(&self) -> Height {
-        self.state_manager.latest_state_height().increment()
+        self.state_manager
+            .latest_state_height()
+            .increment()
+            .max(self.state_manager.tip_height().increment())
     }
 }

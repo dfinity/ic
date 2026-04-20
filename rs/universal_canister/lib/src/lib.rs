@@ -85,7 +85,7 @@ enum CallCycles {
 ///
 /// Payloads for the UC encode `Ops` representing what instructions to
 /// execute.
-#[derive(Default, Clone)]
+#[derive(Clone, Default)]
 pub struct PayloadBuilder(Vec<u8>);
 
 impl PayloadBuilder {

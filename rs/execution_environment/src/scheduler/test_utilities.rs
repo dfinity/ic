@@ -1484,6 +1484,14 @@ impl TestWasmExecutorCore {
         let prepayment_for_response_transmission = self
             .cycles_account_manager
             .prepayment_for_response_transmission(self.subnet_size, system_state.cost_schedule());
+        // Scheduler uses `TestCall` requests which have zero payload.
+        let payload_size = NumBytes::from(0);
+        let prepayment_for_call_transmission =
+            self.cycles_account_manager.xnet_total_transmission_fee(
+                payload_size,
+                self.subnet_size,
+                system_state.cost_schedule(),
+            );
         let deadline = NO_DEADLINE;
         let callback = system_state
             .register_callback(Callback {
@@ -1492,6 +1500,7 @@ impl TestWasmExecutorCore {
                 cycles_sent: Cycles::zero(),
                 prepayment_for_response_execution,
                 prepayment_for_response_transmission,
+                prepayment_for_call_transmission,
                 on_reply: closure.clone(),
                 on_reject: closure,
                 on_cleanup: None,

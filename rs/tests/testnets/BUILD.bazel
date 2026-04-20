@@ -366,7 +366,6 @@ rust_binary(
         "//rs/limits",
         "//rs/tests/consensus/subnet_recovery:lib",
         "//rs/tests/driver:ic-system-test-driver",
-        "//rs/tests/nested",
         "//rs/tests/nested/nns_recovery:common",
         "//rs/tests/testnets/mainnet_nns:lib",
         "@crate_index//:anyhow",
@@ -380,7 +379,6 @@ system_test_nns(
     env = {
         "USE_MAINNET_STATE": "false",
     },
-    guestos_update = "test",
     setupos = True,
     tags = [
         "dynamic_testnet",
