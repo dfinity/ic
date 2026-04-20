@@ -16,7 +16,7 @@
 // The driver will print how to reboot the host-1 VM and how to get to its console such that you can interact with its grub:
 //
 // ```
-// $ ict testnet create (mainnet_)nns_recovery  --verbose -- --test_env=SUBNET_SIZE=40 --test_env=DKG_INTERVAL=499 --test_env=NUM_NODES_TO_BREAK=14 --test_env=BREAK_AT_HEIGHT=2123 --test_tmpdir=./nns_recovery_testnet
+// $ ict testnet create (mainnet_)nns_recovery --verbose -- --test_env=SUBNET_SIZE=40 --test_env=DKG_INTERVAL=499 --test_env=NUM_NODES_TO_BREAK=14 --test_env=BREAK_AT_HEIGHT=2123 --test_tmpdir=./nns_recovery_testnet
 // ...
 // 2025-09-02 18:35:22.985 INFO[log_instructions:rs/tests/testnets/nested.rs:16:0] To reboot the host VM run the following command:
 // 2025-09-02 18:35:22.985 INFO[log_instructions:rs/tests/testnets/nested.rs:17:0] curl -X PUT 'https://farm.dfinity.systems/group/nested--1756837630333/vm/host-1/reboot'
@@ -61,11 +61,6 @@ fn setup(env: TestEnv, use_mainnet_state: bool) {
         .map(|s| s.parse::<u64>().expect("DKG_INTERVAL must be a valid u64"))
         .unwrap_or(DKG_INTERVAL_HEIGHT);
 
-    let vm_resource_overrides = if use_mainnet_state {
-        MAINNET_NODE_VM_RESOURCE_OVERRIDES
-    } else {
-        Default::default()
-    };
     ic_nested_nns_recovery_common::setup(
         env.clone(),
         SetupConfig {
@@ -73,7 +68,7 @@ fn setup(env: TestEnv, use_mainnet_state: bool) {
             use_mainnet_state,
             subnet_size,
             dkg_interval,
-            nested_nodes_vm_resource_overrides: vm_resource_overrides,
+            nested_nodes_vm_resource_overrides: Default::default(),
         },
     );
 }
