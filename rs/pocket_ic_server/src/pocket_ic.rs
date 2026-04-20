@@ -5012,6 +5012,7 @@ impl Operation for SubnetReadStateRequest {
                     nns_subnet_id,
                     self.version,
                 )
+                .with_malicious_flags(pic.malicious_flags.clone())
                 .build_service();
 
                 let version_str = match self.version {
