@@ -479,7 +479,7 @@ fn get_effective_canister_id(message: &SubnetMessage) -> Option<CanisterId> {
                 None,
                 None,
             );
-            extract_effective_canister_id(&signed_ingress_content).ok()?
+            extract_effective_canister_id(&signed_ingress_content).unwrap()
         }
     }
 }
@@ -545,10 +545,6 @@ impl Scheduler for FlexibleSchedulerImpl {
             Some(OrderedMessage::Response { source, target }) if source == IC_00 => {
                 let subnet_canister_id = CanisterId::unchecked_from_principal(self.subnet_id.get());
                 let canister = state.canister_state_make_mut(&target).unwrap();
-                canister
-                    .system_state
-                    .queues_mut()
-                    .rotate_local_sender_to_front(subnet_canister_id);
                 self.execute_single_canister(state, target, registry_settings)
             }
             Some(
