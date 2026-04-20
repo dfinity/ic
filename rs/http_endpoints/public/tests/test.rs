@@ -175,8 +175,7 @@ fn test_healthy_behind() {
 // with different canister ids should be rejected.
 #[rstest]
 fn test_unauthorized_controller(
-    #[values(read_state::canister::Version::V2, read_state::canister::Version::V3)]
-    version: read_state::canister::Version,
+    #[values(read_state::Version::V2, read_state::Version::V3)] version: read_state::Version,
 ) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
@@ -671,8 +670,7 @@ fn test_graceful_shutdown_of_the_endpoint() {
 /// If a requested path is too long, the endpoint should return early with 404 (NOT FOUND) status code.
 #[rstest]
 fn test_too_long_paths_are_rejected(
-    #[values(read_state::canister::Version::V2, read_state::canister::Version::V3)]
-    version: read_state::canister::Version,
+    #[values(read_state::Version::V2, read_state::Version::V3)] version: read_state::Version,
 ) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
@@ -740,8 +738,7 @@ fn test_query_endpoint_returns_service_unavailable_on_missing_state(
 
 #[rstest]
 fn can_retrieve_subnet_metrics(
-    #[values(read_state::canister::Version::V2, read_state::canister::Version::V3)]
-    version: read_state::canister::Version,
+    #[values(read_state::Version::V2, read_state::Version::V3)] version: read_state::Version,
 ) {
     use ic_crypto_tree_hash::MatchPatternPath;
 
@@ -883,8 +880,8 @@ fn can_retrieve_subnet_metrics(
             wait_for_status_healthy(&addr).await.unwrap();
             let client = Client::builder(TokioExecutor::new()).build_http();
             let version_str = match version {
-                read_state::canister::Version::V2 => "v2",
-                read_state::canister::Version::V3 => "v3",
+                read_state::Version::V2 => "v2",
+                read_state::Version::V3 => "v3",
             };
 
             let req = Request::builder()
@@ -927,8 +924,7 @@ fn can_retrieve_subnet_metrics(
 
 #[rstest]
 fn subnet_metrics_not_supported_via_canister_read_state(
-    #[values(read_state::canister::Version::V2, read_state::canister::Version::V3)]
-    version: read_state::canister::Version,
+    #[values(read_state::Version::V2, read_state::Version::V3)] version: read_state::Version,
 ) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
@@ -947,8 +943,8 @@ fn subnet_metrics_not_supported_via_canister_read_state(
             wait_for_status_healthy(&addr).await.unwrap();
             let client = Client::builder(TokioExecutor::new()).build_http();
             let version_str = match version {
-                read_state::canister::Version::V2 => "v2",
-                read_state::canister::Version::V3 => "v3",
+                read_state::Version::V2 => "v2",
+                read_state::Version::V3 => "v3",
             };
 
             let req = Request::builder()
