@@ -529,7 +529,7 @@ fn verify_paths(
                 b"request_status",
                 request_id,
                 b"status" | b"reply" | b"reject_code" | b"reject_message" | b"error_code",
-            ] if target == Target::Canister || version == Version::V3 => {
+            ] if target == Target::Canister => {
                 let message_id = MessageId::try_from(*request_id).map_err(|_| HttpError {
                     status: StatusCode::BAD_REQUEST,
                     message: format!(
@@ -993,67 +993,24 @@ mod test {
             Ok(())
         );
 
-        // request_status allowed on V3 only for subnet endpoint
-        let request_status_paths = vec![
-            Path::new(vec![
-                Label::from("request_status"),
-                [0; 32].into(),
-                Label::from("status"),
-            ]),
-            Path::new(vec![
-                Label::from("request_status"),
-                [0; 32].into(),
-                Label::from("reply"),
-            ]),
-        ];
-        if version == Version::V3 {
-            assert_eq!(
-                verify_paths(
-                    &metrics,
-                    Target::Subnet,
-                    version,
-                    &state,
-                    &user_test_id(1),
-                    &request_status_paths,
-                    &CanisterIdSet::all(),
-                    APP_SUBNET_ID.get(),
-                    NNS_SUBNET_ID,
-                ),
-                Ok(())
-            );
-        } else {
-            let err = verify_paths(
-                &metrics,
-                Target::Subnet,
-                version,
-                &state,
-                &user_test_id(1),
-                &request_status_paths,
-                &CanisterIdSet::all(),
-                APP_SUBNET_ID.get(),
-                NNS_SUBNET_ID,
-            )
-            .expect_err("Should fail on V2");
-            assert_eq!(err.status, StatusCode::NOT_FOUND);
-        }
-
-        // two different request IDs rejected on V3 subnet
+        // request_status not allowed on subnet endpoint
         let err = verify_paths(
             &metrics,
             Target::Subnet,
-            Version::V3,
+            version,
             &state,
             &user_test_id(1),
-            &[
-                Path::new(vec![Label::from("request_status"), [0; 32].into()]),
-                Path::new(vec![Label::from("request_status"), [1; 32].into()]),
-            ],
+            &[Path::new(vec![
+                Label::from("request_status"),
+                [0; 32].into(),
+                Label::from("status"),
+            ])],
             &CanisterIdSet::all(),
             APP_SUBNET_ID.get(),
             NNS_SUBNET_ID,
         )
         .expect_err("Should fail");
-        assert_eq!(err.status, StatusCode::BAD_REQUEST);
+        assert_eq!(err.status, StatusCode::NOT_FOUND);
 
         // canister/* not allowed on subnet endpoint
         let err = verify_paths(
@@ -1254,24 +1211,6 @@ mod test {
         )
         .unwrap();
 
-        // subnet endpoint V3 request_status metric
-        verify_paths(
-            &metrics,
-            Target::Subnet,
-            Version::V3,
-            &state,
-            &user_test_id(1),
-            &[Path::new(vec![
-                Label::from("request_status"),
-                [0; 32].into(),
-                Label::from("status"),
-            ])],
-            &CanisterIdSet::all(),
-            APP_SUBNET_ID.get(),
-            NNS_SUBNET_ID,
-        )
-        .unwrap();
-
         assert_eq!(
             metrics
                 .read_state_path_type_total
@@ -1318,13 +1257,6 @@ mod test {
             metrics
                 .read_state_path_type_total
                 .with_label_values(&["subnet", "subnet_canister_ranges"])
-                .get(),
-            1
-        );
-        assert_eq!(
-            metrics
-                .read_state_path_type_total
-                .with_label_values(&["subnet", "request_status"])
                 .get(),
             1
         );
