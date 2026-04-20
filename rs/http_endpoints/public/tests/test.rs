@@ -1911,11 +1911,16 @@ fn test_call_v4_subnet_wrong_canister_or_method(
             )
             .await;
 
+        assert_eq!(StatusCode::BAD_REQUEST, response.status());
+        let body = response.text().await.unwrap();
         assert_eq!(
-            StatusCode::BAD_REQUEST,
-            response.status(),
-            "{:?}",
-            response.text().await
+            body,
+            format!(
+                "Subnet call endpoint only accepts calls to the management canister ({}) 'create_canister' method, got canister_id={} method_name='{}'",
+                CanisterId::ic_00(),
+                CanisterId::unchecked_from_principal(canister_id),
+                method_name,
+            )
         );
     });
 }
