@@ -1120,12 +1120,19 @@ fn flexible_error_into_consensus_response(
                 })
                 .collect();
 
-            let relevant_ok_sizes: Vec<_> = all_seen_shares
+            let mut ok_sizes: Vec<_> = all_seen_shares
                 .iter()
                 .filter(|s| !s.content.is_reject)
-                .take(min_known_ok_needed as usize)
-                .map(|share| share.content.content_size.to_string())
+                .map(|share| share.content.content_size)
                 .collect();
+            // Sort defensively, as validator doesn't enforce ordering on `all_seen_shares`
+            ok_sizes.sort_unstable();
+            let relevant_ok_sizes: Vec<_> = ok_sizes
+                .iter()
+                .take(min_known_ok_needed as usize)
+                .map(|size| size.to_string())
+                .collect();
+
             let message = format!(
                 "Responses too large: need at least {min_known_ok_needed} \
                  (= {min_responses} min_responses - {num_unseen} unseen) \
