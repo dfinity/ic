@@ -44,7 +44,7 @@ use ic_read_state_response_parser::parse_subnet_read_state_response;
 use ic_registry_keys::make_crypto_threshold_signing_pubkey_key;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities_state::ReplicatedStateBuilder;
-use ic_test_utilities_types::ids::{NODE_1, canister_test_id, subnet_test_id, user_test_id};
+use ic_test_utilities_types::ids::{NODE_1, canister_test_id, subnet_test_id};
 use ic_types::{
     CanisterId, CryptoHashOfPartialState, Height, NumBytes, PrincipalId, RegistryVersion,
     artifact::UnvalidatedArtifactMutation,
@@ -897,7 +897,7 @@ fn can_retrieve_subnet_metrics(
         })
     };
 
-    let sender = Sender::from_principal_id(user_test_id(1).get());
+    let sender = Sender::from_principal_id(PrincipalId::new_anonymous());
     let body = prepare_read_state(
         &sender,
         &[Path::new(vec![
