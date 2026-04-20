@@ -279,18 +279,18 @@ struct FlexibleSchedulerImpl {
     next_message: Arc<RwLock<Option<OrderedMessage>>>,
     /// Set by `execute_round` when a DTS slice pauses mid-execution,
     /// so the next `execute_round` can resume it without consuming `next_message`.
-    dts_canister: RwLock<Option<CanisterId>>,
+    /// Stores the canister ID and the expected `NextExecution` for the resume.
+    dts_canister: RwLock<Option<(CanisterId, NextExecution)>>,
 }
 
 impl FlexibleSchedulerImpl {
     fn set_dts_canister(&self, state: &ReplicatedState, canister_id: CanisterId) {
-        if matches!(
+        if let Some(next @ (NextExecution::ContinueLong | NextExecution::ContinueInstallCode)) =
             state
                 .canister_state(&canister_id)
-                .map(|c| c.next_execution()),
-            Some(NextExecution::ContinueLong | NextExecution::ContinueInstallCode)
-        ) {
-            *self.dts_canister.write().unwrap() = Some(canister_id);
+                .map(|c| c.next_execution())
+        {
+            *self.dts_canister.write().unwrap() = Some((canister_id, next));
         }
     }
 
@@ -300,6 +300,7 @@ impl FlexibleSchedulerImpl {
         canister_id: CanisterId,
         registry_settings: &RegistryExecutionSettings,
         ordered_msg: Option<OrderedMessage>,
+        expected_dts: Option<NextExecution>,
     ) -> ReplicatedState {
         let subnet_size = registry_settings.subnet_size;
         let resource_limits = state.metadata.own_resource_limits;
@@ -311,12 +312,13 @@ impl FlexibleSchedulerImpl {
 
         match &ordered_msg {
             None => {
-                assert!(
-                    matches!(
-                        canister.next_execution(),
-                        NextExecution::ContinueLong | NextExecution::ContinueInstallCode
-                    ),
-                    "No DTS scheduled for canister {}",
+                let expected = expected_dts
+                    .expect("expected_dts must be set when ordered_msg is None (DTS resume)");
+                assert_eq!(
+                    canister.next_execution(),
+                    expected,
+                    "Expected {:?} DTS for canister {}",
+                    expected,
                     canister_id
                 );
             }
@@ -569,8 +571,14 @@ impl Scheduler for FlexibleSchedulerImpl {
         registry_settings: &RegistryExecutionSettings,
     ) -> ReplicatedState {
         let dts_canister = self.dts_canister.write().unwrap().take();
-        if let Some(canister_id) = dts_canister {
-            return self.execute_single_canister(state, canister_id, registry_settings, None);
+        if let Some((canister_id, expected_dts)) = dts_canister {
+            return self.execute_single_canister(
+                state,
+                canister_id,
+                registry_settings,
+                None,
+                Some(expected_dts),
+            );
         }
         let next_message = self.next_message.write().unwrap().take();
         match next_message {
@@ -599,18 +607,21 @@ impl Scheduler for FlexibleSchedulerImpl {
                 canister_id,
                 registry_settings,
                 Some(OrderedMessage::Ingress(canister_id, ingress_id)),
+                None,
             ),
             Some(OrderedMessage::Heartbeat(canister_id)) => self.execute_single_canister(
                 state,
                 canister_id,
                 registry_settings,
                 Some(OrderedMessage::Heartbeat(canister_id)),
+                None,
             ),
             Some(OrderedMessage::Timer(canister_id)) => self.execute_single_canister(
                 state,
                 canister_id,
                 registry_settings,
                 Some(OrderedMessage::Timer(canister_id)),
+                None,
             ),
             // Apply the queue rotation after the induction phase has moved loopback messages.
             Some(OrderedMessage::Request { source, target }) if target == IC_00 => {
@@ -642,6 +653,7 @@ impl Scheduler for FlexibleSchedulerImpl {
                     target,
                     registry_settings,
                     Some(OrderedMessage::Response { source, target }),
+                    None,
                 )
             }
             Some(OrderedMessage::Request { source, target }) => {
@@ -656,6 +668,7 @@ impl Scheduler for FlexibleSchedulerImpl {
                     target,
                     registry_settings,
                     Some(OrderedMessage::Request { source, target }),
+                    None,
                 )
             }
             Some(OrderedMessage::Response { source, target }) => {
@@ -670,6 +683,7 @@ impl Scheduler for FlexibleSchedulerImpl {
                     target,
                     registry_settings,
                     Some(OrderedMessage::Response { source, target }),
+                    None,
                 )
             }
         }
