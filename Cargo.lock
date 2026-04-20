@@ -4394,6 +4394,7 @@ dependencies = [
  "candid",
  "canister-test",
  "criterion",
+ "ic-embedders",
  "ic-test-utilities-execution-environment",
  "ic-types",
  "wirm",
