@@ -9006,8 +9006,8 @@ fn fake_certification_for_height_with_hash(height: Height, hash: CryptoHash) -> 
 fn commit_and_certify_optimization_conditions() {
     state_manager_test(|metrics, sm| {
         // update `fast_forward_height` to enable optimization
-        sm.update_fast_forward_height(Height::new(21));
-        assert_eq!(sm.fast_forward_height(), 21);
+        sm.update_fast_forward_height(Height::new(11));
+        assert_eq!(sm.fast_forward_height(), 11);
 
         // optimization has not triggered yet
         assert_eq!(no_state_clone_count(metrics), 0);
@@ -9026,13 +9026,11 @@ fn commit_and_certify_optimization_conditions() {
         sm.commit_and_certify_at_height(state, Height::new(2), CertificationScope::Full, None);
         assert_eq!(no_state_clone_count(metrics), 1);
 
-        // heights of 10 and 20 are divisible by 10 => optimization does not trigger at those heights
+        // deliver cert -> optimization triggers
         let mut expected_no_state_clone_count = 1;
-        for height in 3_u64..21_u64 {
-            if !height.is_multiple_of(10) {
-                expected_no_state_clone_count += 1;
-                sm.deliver_state_certification(fake_certification_for_height(Height::new(height)));
-            }
+        for height in 3_u64..10_u64 {
+            expected_no_state_clone_count += 1;
+            sm.deliver_state_certification(fake_certification_for_height(Height::new(height)));
             let state = sm.take_tip().1;
             sm.commit_and_certify_at_height(
                 state,
@@ -9042,11 +9040,34 @@ fn commit_and_certify_optimization_conditions() {
             );
             assert_eq!(no_state_clone_count(metrics), expected_no_state_clone_count);
         }
-
-        // height of 21 is not less than `fast_forward_height` => optimization does not trigger
-        assert_eq!(sm.fast_forward_height(), 21);
+        // at height 10, do deliver cert, but it should skip optimization anyway
+        let height = 10;
+        sm.deliver_state_certification(fake_certification_for_height_with_hash(
+            Height::new(height),
+            CryptoHash(
+                hex::decode("d90d05f3d971482d2ccdc594de723d786afaed32737b19e42f85a1ebe8e21a21")
+                    .unwrap(),
+            ),
+        ));
         let state = sm.take_tip().1;
-        sm.commit_and_certify_at_height(state, Height::new(21), CertificationScope::Metadata, None);
+        sm.commit_and_certify_at_height(
+            state,
+            Height::new(height),
+            CertificationScope::Metadata,
+            None,
+        );
+        assert_eq!(no_state_clone_count(metrics), expected_no_state_clone_count);
+
+        // height of 11 is not less than `fast_forward_height` => optimization does not trigger
+        let height = 11;
+        assert_eq!(sm.fast_forward_height(), height);
+        let state = sm.take_tip().1;
+        sm.commit_and_certify_at_height(
+            state,
+            Height::new(height),
+            CertificationScope::Metadata,
+            None,
+        );
         assert_eq!(no_state_clone_count(metrics), expected_no_state_clone_count);
     });
 }
