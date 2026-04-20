@@ -108,9 +108,11 @@ RUN set -eux; \
 # Build only the amd64 "generic" flavor, skipping debug and retpoline extras
 # to cut build time. Signed image packages are not produced (and not needed
 # for GuestOS, which signs kernels as part of the IC image build).
+# DEB_BUILD_OPTIONS=parallel=N makes debian/rules fan out to $(nproc) jobs.
 RUN set -eux; \
     srcdir="$(find /build -maxdepth 1 -mindepth 1 -type d -name 'linux-*' | head -n1)"; \
     cd "$srcdir"; \
+    export DEB_BUILD_OPTIONS="parallel=$(nproc)"; \
     fakeroot debian/rules clean; \
     fakeroot debian/rules binary-generic skipdbg=true skipretpoline=true
 
