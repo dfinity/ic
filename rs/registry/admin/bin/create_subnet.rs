@@ -166,6 +166,11 @@ pub(crate) struct ProposeToCreateSubnetCmd {
     #[clap(long)]
     pub max_number_of_canisters: Option<u64>,
 
+    /// The canister cycles cost schedule for this subnet.
+    /// Can be "normal" (default) or "free" (used by cloud engine subnets).
+    #[clap(long)]
+    pub canister_cycles_cost_schedule: Option<do_create_subnet::CanisterCyclesCostSchedule>,
+
     /// The features that are enabled and disabled on the subnet.
     #[clap(long)]
     pub features: Option<SubnetFeatures>,
@@ -272,6 +277,8 @@ impl ProposeToCreateSubnetCmd {
                 .get_or_insert(ReplicaVersion::default());
             self.max_number_of_canisters.get_or_insert(0);
             self.features.get_or_insert(SubnetFeatures::default());
+            self.canister_cycles_cost_schedule
+                .get_or_insert(do_create_subnet::CanisterCyclesCostSchedule::Normal);
         }
     }
 
@@ -329,7 +336,8 @@ impl ProposeToCreateSubnetCmd {
             max_number_of_canisters: self.max_number_of_canisters.unwrap_or_default(),
             chain_key_config,
             canister_cycles_cost_schedule: Some(
-                do_create_subnet::CanisterCyclesCostSchedule::Normal,
+                self.canister_cycles_cost_schedule
+                    .expect("canister_cycles_cost_schedule must be specified."),
             ),
             subnet_admins: Some(self.subnet_admins.clone()),
             resource_limits: self.resource_limits,
@@ -411,6 +419,7 @@ mod tests {
             features: None,
             subnet_admins: vec![],
             resource_limits: None,
+            canister_cycles_cost_schedule: None,
         }
     }
 
@@ -452,6 +461,9 @@ mod tests {
 
             replica_version_id: Some(replica_version_id.clone()),
             features: Some(features),
+            canister_cycles_cost_schedule: Some(
+                do_create_subnet::CanisterCyclesCostSchedule::Normal,
+            ),
             ..empty_propose_to_create_subnet_cmd()
         };
         assert_eq!(

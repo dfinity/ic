@@ -31,6 +31,7 @@ use on_wire::bytes;
 use prost::Message;
 use serde::Serialize;
 use std::{collections::HashSet, convert::TryFrom};
+use strum_macros::{Display, EnumString};
 
 impl Registry {
     /// Adds the new subnet to the registry.
@@ -503,14 +504,28 @@ impl TryFrom<KeyConfigRequest> for KeyConfigRequestInternal {
 ///
 ///     1. Execute instructions.
 ///     2. Store Data - In normal memory, and stable memory.
-#[derive(Clone, Copy, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
+#[derive(
+    Clone,
+    Copy,
+    Eq,
+    PartialEq,
+    Debug,
+    Default,
+    CandidType,
+    Deserialize,
+    Display,
+    EnumString,
+    Serialize,
+)]
 pub enum CanisterCyclesCostSchedule {
     /// Use the cost schedule associate with the subnet's type.
     #[default]
+    #[strum(serialize = "normal")]
     Normal,
 
     /// This is used by rented subnets. This is because rented subnets get paid
     /// for in a different way.
+    #[strum(serialize = "free")]
     Free,
 }
 
