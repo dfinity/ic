@@ -276,7 +276,6 @@ struct FlexibleSchedulerImpl {
     exec_env: Arc<ExecutionEnvironment>,
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     config: SchedulerConfig,
-    subnet_id: SubnetId,
     next_message: Arc<RwLock<Option<OrderedMessage>>>,
     /// Set by `execute_round` when a DTS slice pauses mid-execution,
     /// so the next `execute_round` can resume it without consuming `next_message`.
@@ -543,8 +542,6 @@ impl Scheduler for FlexibleSchedulerImpl {
                 )
             }
             Some(OrderedMessage::Response { source, target }) if source == IC_00 => {
-                let subnet_canister_id = CanisterId::unchecked_from_principal(self.subnet_id.get());
-                let canister = state.canister_state_make_mut(&target).unwrap();
                 self.execute_single_canister(state, target, registry_settings)
             }
             Some(
@@ -2514,7 +2511,6 @@ impl StateMachine {
                 ingress_history_writer: Arc::clone(&execution_services.ingress_history_writer)
                     as Arc<_>,
                 config: subnet_config.scheduler_config.clone(),
-                subnet_id,
                 next_message,
                 dts_canister: RwLock::new(None),
             });
