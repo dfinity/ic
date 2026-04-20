@@ -330,7 +330,7 @@ fn split_fixture() -> StateMachineTestFixture {
 fn test_online_split(new_subnet_id: SubnetId, other_subnet_id: SubnetId) -> ReplicatedState {
     let fixture = split_fixture();
     let split_batch = Batch {
-        batch_number: Height::from(0),
+        batch_number: Height::from(1),
         batch_summary: None,
         content: BatchContent::Splitting {
             new_subnet_id,
