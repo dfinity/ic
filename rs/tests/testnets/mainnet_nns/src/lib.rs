@@ -72,8 +72,8 @@ const MAINNET_NNS_DAPP_CANISTER_ID: &str = "qoctq-giaaa-aaaaa-aaaea-cai";
 // and switch the corresponding flag flag to `true`. We must then hope that no incompatibles
 // changes were also introduced. It is thus then advised to switch back the flag to `false` when
 // the changes reach mainnet NNS.
-const USE_HEAD_IC_REPLAY: bool = true;
-const USE_HEAD_IC_RECOVERY: bool = true;
+const USE_HEAD_IC_REPLAY: bool = false;
+const USE_HEAD_IC_RECOVERY: bool = false;
 
 pub mod proposals;
 
