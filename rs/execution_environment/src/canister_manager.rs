@@ -591,10 +591,17 @@ impl CanisterManager {
     /// Applies the requested settings on the canister.
     /// Note: Called only after validating the settings.
     /// Keep this function in sync with `validate_canister_settings()`.
+    ///
+    /// If `metrics` is `Some`, a `log_memory_limit` resize that does real
+    /// work (see `LogMemoryStore::would_resize`) is timed and recorded into
+    /// `canister_log_resize_duration`. Pass `None` to skip observation on
+    /// paths where the resize isn't the user-facing operation (e.g. first
+    /// allocation during canister creation).
     fn do_update_settings(
         &self,
         settings: &ValidatedCanisterSettings,
         canister: &mut CanisterState,
+        metrics: Option<&ExecutionEnvironmentMetrics>,
     ) {
         // Note: At this point, the settings are validated.
         if let Some(controllers) = settings.controllers() {
@@ -632,10 +639,19 @@ impl CanisterManager {
             canister.system_state.snapshot_visibility = snapshot_visibility.clone();
         }
         if let Some(log_memory_limit) = settings.log_memory_limit() {
-            canister
-                .system_state
-                .log_memory_store
-                .resize(log_memory_limit.get() as usize, self.fd_factory.clone());
+            let limit = log_memory_limit.get() as usize;
+            let log_memory_store = &mut canister.system_state.log_memory_store;
+            // Only measure when both asked to (`metrics` present) and the
+            // resize would actually do work (`would_resize`); avoids no-op
+            // samples and keeps the histogram scoped to real resizes.
+            let resize_timer = metrics
+                .filter(|_| log_memory_store.would_resize(limit))
+                .map(|_| Instant::now());
+            log_memory_store.resize(limit, self.fd_factory.clone());
+            if let (Some(start), Some(m)) = (resize_timer, metrics) {
+                m.canister_log_resize_duration
+                    .observe(start.elapsed().as_secs_f64());
+            }
         }
         if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
             canister.system_state.wasm_memory_limit = Some(wasm_memory_limit);
@@ -697,16 +713,7 @@ impl CanisterManager {
         let old_compute_allocation = canister.compute_allocation().as_percent();
         let old_log_bytes_used = canister.system_state.log_memory_store.bytes_used() as u64;
 
-        // Observe the resize duration when the update actually triggers one.
-        // Other settings mutations inside `do_update_settings` are near-instant
-        // setters; the duration is dominated by the resize itself.
-        let resize_timer = log_resize_needed.then(Instant::now);
-        self.do_update_settings(&validated_settings, canister);
-        if let Some(start) = resize_timer {
-            metrics
-                .canister_log_resize_duration
-                .observe(start.elapsed().as_secs_f64());
-        }
+        self.do_update_settings(&validated_settings, canister, Some(metrics));
 
         let new_compute_allocation = canister.compute_allocation().as_percent();
         if old_compute_allocation < new_compute_allocation {
@@ -1570,7 +1577,10 @@ impl CanisterManager {
             CanisterSnapshots::default(),
         );
 
-        self.do_update_settings(&settings, &mut new_canister);
+        // Canister creation's first-time allocation is a different event class
+        // from user-triggered `log_memory_limit` resize — don't mix their
+        // distributions. Pass `None` to skip observation here.
+        self.do_update_settings(&settings, &mut new_canister, None);
         let new_usage = new_canister.memory_usage();
         let new_mem = new_canister
             .system_state
