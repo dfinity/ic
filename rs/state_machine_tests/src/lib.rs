@@ -416,47 +416,63 @@ impl FlexibleSchedulerImpl {
         replica_version: &ReplicaVersion,
         current_round: ic_types::ExecutionRound,
         registry_settings: &RegistryExecutionSettings,
+        ordered_msg: OrderedMessage,
     ) -> ReplicatedState {
-        if let Some(msg) = state.pop_subnet_input() {
-            let mut rng = StdRng::from_seed(randomness.get());
-            let mut round_limits = RoundLimits {
-                instructions: as_round_instructions(self.config.max_instructions_per_install_code),
-                subnet_available_memory: self.exec_env.scaled_subnet_available_memory(&state),
-                subnet_available_callbacks: self.exec_env.subnet_available_callbacks(&state),
-                compute_allocation_used: state.total_compute_allocation(),
-                subnet_memory_reservation: self.exec_env.scaled_subnet_memory_reservation(),
-            };
-            let ongoing_long_install_code = state
-                .canisters_iter()
-                .any(|canister| canister.has_long_install_code());
-            assert!(
-                can_execute_subnet_msg(
-                    &msg,
-                    ongoing_long_install_code,
-                    state.canister_states(),
-                    &mut round_limits,
-                ),
-                "Canister {:?} cannot execute a subnet message",
-                msg.effective_canister_id(),
-            );
-            let instruction_limits = get_instruction_limits_for_subnet_message(&self.config, &msg);
-            let effective_canister_id = get_effective_canister_id(&msg);
-            let (new_state, _) = self.exec_env.execute_subnet_message(
-                msg,
-                state,
-                instruction_limits,
-                &mut rng,
-                chain_key_data,
-                replica_version,
-                registry_settings,
-                current_round,
-                &mut round_limits,
-            );
-            state = new_state;
-
-            if let Some(canister_id) = effective_canister_id {
-                self.set_dts_canister(&state, canister_id);
+        let msg = state
+            .pop_subnet_input()
+            .expect("Cannot execute a subnet message if there is nothing to execute");
+        match (&ordered_msg, &msg) {
+            (OrderedMessage::Ingress(_, expected_id), SubnetMessage::Ingress(ingress)) => {
+                assert_eq!(
+                    ingress.message_id, *expected_id,
+                    "Subnet ingress message ID mismatch"
+                );
             }
+            (OrderedMessage::Request { source, .. }, SubnetMessage::Request(request)) => {
+                assert_eq!(request.sender, *source, "Subnet request sender mismatch");
+            }
+            _ => panic!(
+                "Unexpected subnet message combination: ordered {:?}, got {:?}",
+                ordered_msg, msg
+            ),
+        }
+        let mut rng = StdRng::from_seed(randomness.get());
+        let mut round_limits = RoundLimits {
+            instructions: as_round_instructions(self.config.max_instructions_per_install_code),
+            subnet_available_memory: self.exec_env.scaled_subnet_available_memory(&state),
+            subnet_available_callbacks: self.exec_env.subnet_available_callbacks(&state),
+            compute_allocation_used: state.total_compute_allocation(),
+            subnet_memory_reservation: self.exec_env.scaled_subnet_memory_reservation(),
+        };
+        let ongoing_long_install_code = state
+            .canisters_iter()
+            .any(|canister| canister.has_long_install_code());
+        assert!(
+            can_execute_subnet_msg(
+                &msg,
+                ongoing_long_install_code,
+                state.canister_states(),
+                &mut round_limits,
+            ),
+            "Canister {:?} cannot execute a subnet message",
+            msg.effective_canister_id(),
+        );
+        let instruction_limits = get_instruction_limits_for_subnet_message(&self.config, &msg);
+        let effective_canister_id = get_effective_canister_id(&msg);
+        let (new_state, _) = self.exec_env.execute_subnet_message(
+            msg,
+            state,
+            instruction_limits,
+            &mut rng,
+            chain_key_data,
+            replica_version,
+            registry_settings,
+            current_round,
+            &mut round_limits,
+        );
+        state = new_state;
+        if let Some(canister_id) = effective_canister_id {
+            self.set_dts_canister(&state, canister_id);
         }
         state = self.exec_env.process_stopping_canisters(state);
         state.prune_ingress_history();
@@ -513,7 +529,7 @@ impl Scheduler for FlexibleSchedulerImpl {
                 current_round_type,
                 registry_settings,
             ),
-            Some(OrderedMessage::Ingress(target, _)) if target == IC_00 => self
+            Some(OrderedMessage::Ingress(target, ingress_id)) if target == IC_00 => self
                 .execute_single_subnet_message(
                     state,
                     randomness,
@@ -521,6 +537,7 @@ impl Scheduler for FlexibleSchedulerImpl {
                     replica_version,
                     current_round,
                     registry_settings,
+                    OrderedMessage::Ingress(target, ingress_id),
                 ),
             Some(OrderedMessage::Ingress(canister_id, _))
             | Some(OrderedMessage::Heartbeat(canister_id))
@@ -539,6 +556,7 @@ impl Scheduler for FlexibleSchedulerImpl {
                     replica_version,
                     current_round,
                     registry_settings,
+                    OrderedMessage::Request { source, target },
                 )
             }
             Some(OrderedMessage::Response { source, target }) if source == IC_00 => {
