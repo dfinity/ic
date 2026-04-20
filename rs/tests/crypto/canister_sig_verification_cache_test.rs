@@ -13,10 +13,11 @@ query (checking the count) calls for each user to the counter canister. Then, sc
 from the node directly, fetching the cache statistics. Finally, check that the cache statistics are sound:
 - cache size == number of cache misses
 - number of cache misses is between 2 and number of users + 1
-- number of cache hits + number of cache misses equals number of BLS sig verification per
-  request * user_id * number of calls per user, for each user
+- number of cache hits + number of cache misses is at least number of BLS sig verification per
+  request * user_id * number of calls per user, for each user (the actual number may be higher
+  due to additional BLS sig verifications triggered by, e.g., `read_state` polls during
+  `call_and_wait`)
 - for the 1st user, number of cache misses is exactly 2
-- for the 1st user, implicitly ensures the correct number of cache hits after *each* counter canister call
 - for the 2nd user, number of cache misses is exactly 3
 end::catalog[] */
 
@@ -48,9 +49,13 @@ use std::time::Duration;
 const HITS_STR: &str = "crypto_bls12_381_sig_cache_hits";
 const MISSES_STR: &str = "crypto_bls12_381_sig_cache_misses";
 const SIZE_STR: &str = "crypto_bls12_381_sig_cache_size";
-/// in the current implementation, for a single-replica subnet, a user call requires
-/// 8 BLS signature verifications for updating the counter of the counter canister
-const NUM_BLS_SIG_VERS_PER_CALL: usize = 8;
+/// In the current implementation, for a single-replica subnet, a user call requires
+/// at least 8 BLS signature verifications for updating the counter of the counter
+/// canister. The actual number may be higher, e.g., because `ic-agent`'s
+/// `call_and_wait` issues additional `read_state` polls while waiting for the
+/// response, each of which triggers additional BLS signature verifications on the
+/// replica during ingress message validation.
+const MIN_NUM_BLS_SIG_VERS_PER_CALL: usize = 8;
 
 /// delay for retrying a failed action in this test
 const RETRY_DELAY: Duration = Duration::from_secs(1);
@@ -314,7 +319,7 @@ async fn scrape_metrics_and_check_cache_stats(env: &TestEnv, user_i: usize, call
                 let num_cache_misses = val[MISSES_STR][0];
                 let cache_size = val[SIZE_STR][0];
                 if (num_cache_hits + num_cache_misses) as usize
-                    == (NUM_BLS_SIG_VERS_PER_CALL * (user_i + 1) * (call_j + 1))
+                    >= (MIN_NUM_BLS_SIG_VERS_PER_CALL * (user_i + 1) * (call_j + 1))
                 {
                     assert_eq!(
                         cache_size, num_cache_misses,
@@ -360,10 +365,10 @@ async fn scrape_metrics_and_check_cache_stats(env: &TestEnv, user_i: usize, call
                         "For user={user_i} after call={call_j}, \
                         observed (num_cache_hits={num_cache_hits}, num_cache_misses={num_cache_misses}, cache_size={cache_size}) = \
                         with num_cache_hits + num_cache_misses = {} \
-                        while expecting (NUM_BLS_SIG_VERS_PER_CALL * (user + 1) * (call + 1)) = {} -> Retrying \
+                        while expecting at least (MIN_NUM_BLS_SIG_VERS_PER_CALL * (user + 1) * (call + 1)) = {} -> Retrying \
                         {count_waiting_for_expected_values}/{NUM_RETRIES}",
                         num_cache_hits + num_cache_misses,
-                        (NUM_BLS_SIG_VERS_PER_CALL * (user_i + 1) * (call_j + 1))
+                        (MIN_NUM_BLS_SIG_VERS_PER_CALL * (user_i + 1) * (call_j + 1))
                     );
                     tokio::time::sleep(RETRY_DELAY).await;
                 }

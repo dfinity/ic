@@ -3,8 +3,10 @@ use crate::{
     change_canister::{start_canister, stop_canister},
 };
 use dfn_core::api::CanisterId;
+use ic_cdk::futures::spawn_migratory;
 use ic_nervous_system_lock::acquire_for;
 use ic_nervous_system_runtime::CdkRuntime;
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use std::{
     cell::RefCell,
     collections::BTreeMap,
@@ -20,6 +22,19 @@ thread_local! {
         // (A description of) what operation is being performed on it.
         String,
     >> = const { RefCell::new(BTreeMap::new()) };
+}
+
+/// Provides a placeholder "looks ok" value for use when the operation
+/// runs in the background and the actual outcome is known before returning
+/// the reply from the canister method.
+pub(crate) trait Optimistic {
+    fn new_optimistic() -> Self;
+}
+
+impl<E> Optimistic for Result<(), E> {
+    fn new_optimistic() -> Self {
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,7 +53,7 @@ impl From<(i32, String)> for Reject {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(clippy::enum_variant_names)] // Because all names end with "Failed".
-pub(crate) enum ExclusivelyStopAndStartCanisterError {
+pub(crate) enum OfflineMaintenanceError {
     LockAcquisitionFailed {
         ongoing_operation_description: String,
     },
@@ -54,11 +69,11 @@ pub(crate) enum ExclusivelyStopAndStartCanisterError {
     },
 }
 
-pub(crate) use ExclusivelyStopAndStartCanisterError::{
+pub(crate) use OfflineMaintenanceError::{
     LockAcquisitionFailed, StartAfterMainOperationFailed, StopBeforeMainOperationFailed,
 };
 
-impl Display for ExclusivelyStopAndStartCanisterError {
+impl Display for OfflineMaintenanceError {
     fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
         let result = match self {
             LockAcquisitionFailed {
@@ -117,51 +132,98 @@ impl Display for ExclusivelyStopAndStartCanisterError {
 /// The "after" operations are performed regardless of the outcome of the main
 /// operation. Releasing the lock is performed regardless of whether re-starting
 /// succeeds.
-pub(crate) async fn exclusively_stop_and_start_canister<MainOperation, Fut, R>(
+///
+/// # Special Governance Behavior
+///
+/// To avoid deadlock, when `canister_id` is Governance, everything is done
+/// in the background (via spawn_migratory). Furthermore,
+/// `Ok(R::new_optimistic())` is returned immediately, i.e. with no .await.
+///
+/// Without this, deadlock would occur:
+///
+/// 1. Governance calls some root method, and the implementation of that method
+///    uses this function.
+/// 2. The first thing this does is stop canister_id, which in this special case,
+///    is Governance itself.
+///
+/// At this point, Governance and Root are waiting for each other before they
+/// can proceeed.
+pub(crate) async fn perform_offline_canister_maintenance<MainOperation, Fut, R>(
     canister_id: CanisterId,
     operation_description: &str,
     stop_before: bool,
     main_operation: MainOperation,
-) -> Result<R, ExclusivelyStopAndStartCanisterError>
+) -> Result<R, OfflineMaintenanceError>
 where
-    MainOperation: FnOnce() -> Fut,
-    Fut: Future<Output = R>,
-    R: Debug,
+    MainOperation: FnOnce() -> Fut + 'static,
+    Fut: Future<Output = R> + 'static,
+    R: Debug + Optimistic + 'static,
 {
-    // Try to acquire lock for this canister; fail immediately if the canister
-    // is already locked (indicating that some other operation is currently in
-    // progress).
-    let _release_on_drop = acquire_for(
-        &CANISTER_LOCK_ACQUISITIONS,
-        canister_id,
-        operation_description.to_string(),
-    )
-    .map_err(|ongoing_operation_description| LockAcquisitionFailed {
-        ongoing_operation_description,
-    })?;
+    // These will be moved into the following async blocks.
+    let operation_description = operation_description.to_string();
+    let operation_description_for_log = operation_description.clone();
 
-    if stop_before {
-        stop_before_main_operation(canister_id, operation_description).await?;
-    }
-
-    let main_operation_result = main_operation().await;
-
-    if stop_before {
-        return restart_after_main_operation(
+    // Compose all work into a single future so it can be either awaited
+    // directly or spawned in the background.
+    let operation = async move {
+        // Try to acquire lock for this canister; fail immediately if the canister
+        // is already locked (indicating that some other operation is currently in
+        // progress).
+        let _release_on_drop = acquire_for(
+            &CANISTER_LOCK_ACQUISITIONS,
             canister_id,
-            operation_description,
-            main_operation_result,
+            operation_description.clone(),
         )
-        .await;
+        .map_err(|ongoing_operation_description| LockAcquisitionFailed {
+            ongoing_operation_description,
+        })?;
+
+        if stop_before {
+            stop_before_main_operation(canister_id, &operation_description).await?;
+        }
+
+        let main_operation_result = main_operation().await;
+
+        if stop_before {
+            return restart_after_main_operation(
+                canister_id,
+                &operation_description,
+                main_operation_result,
+            )
+            .await;
+        }
+
+        Ok(main_operation_result)
+    };
+
+    // Log result.
+    let operation = async move {
+        let result = operation.await;
+        println!(
+            "{LOG_PREFIX}Result of {operation_description_for_log} on {canister_id}: {result:?}."
+        );
+        result
+    };
+
+    if canister_id == GOVERNANCE_CANISTER_ID {
+        spawn_migratory(async move {
+            // Result is discarded here; it is above.
+            let _: Result<R, OfflineMaintenanceError> = operation.await;
+        });
+
+        // Even though we do not yet know that the operation will succeed, we
+        // return the optimistic value here, because we also do not know that it
+        // will fail. The important thing is that we launched the operation.
+        return Ok(R::new_optimistic());
     }
 
-    Ok(main_operation_result)
+    operation.await
 }
 
 async fn stop_before_main_operation(
     canister_id: CanisterId,
     operation_description: &str,
-) -> Result<(), ExclusivelyStopAndStartCanisterError> {
+) -> Result<(), OfflineMaintenanceError> {
     let stop_reject = match stop_canister::<CdkRuntime>(canister_id).await {
         Ok(()) => {
             return Ok(());
@@ -211,7 +273,7 @@ async fn restart_after_main_operation<R>(
     canister_id: CanisterId,
     operation_description: &str,
     main_operation_result: R,
-) -> Result<R, ExclusivelyStopAndStartCanisterError>
+) -> Result<R, OfflineMaintenanceError>
 where
     R: Debug,
 {

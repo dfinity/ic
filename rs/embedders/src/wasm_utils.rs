@@ -28,7 +28,7 @@ mod system_api_replacements;
 pub mod validation;
 
 #[derive(
-    Copy, Clone, DeterministicHeapBytes, Eq, PartialEq, Debug, Default, Deserialize, Serialize,
+    Copy, Clone, Eq, PartialEq, Debug, Default, Deserialize, DeterministicHeapBytes, Serialize,
 )]
 pub struct WasmImportsDetails {
     // True if the module imports these IC0 methods.

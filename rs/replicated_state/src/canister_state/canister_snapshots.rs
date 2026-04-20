@@ -577,7 +577,7 @@ impl ValidatedSnapshotMetadata {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum MetadataValidationError {
     WasmModuleEmpty,
     WasmModuleTooLarge,

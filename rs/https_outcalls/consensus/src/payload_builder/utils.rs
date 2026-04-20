@@ -458,6 +458,8 @@ pub(crate) fn find_flexible_result(
             let error = FlexibleCanisterHttpError::ResponsesTooLarge {
                 callback_id,
                 all_seen_shares,
+                total_requests: committee.len() as u32,
+                min_responses: min_responses as u32,
             };
             let error_size = error.count_bytes();
             return FlexibleFindResult::Error(error, error_size);

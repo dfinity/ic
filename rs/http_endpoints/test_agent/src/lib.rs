@@ -176,6 +176,30 @@ impl Call {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+pub enum CallSubnet {
+    V4(PrincipalId),
+}
+
+impl CallSubnet {
+    pub async fn call(
+        self,
+        addr: SocketAddr,
+        ingress_message: IngressMessage,
+    ) -> reqwest::Response {
+        let CallSubnet::V4(subnet_id) = self;
+        let body = serde_cbor::to_vec(&ingress_message.envelope()).unwrap();
+        let url = format!("http://{addr}/api/v4/subnet/{subnet_id}/call");
+        reqwest::Client::new()
+            .post(url)
+            .body(body)
+            .header(CONTENT_TYPE, APPLICATION_CBOR)
+            .send()
+            .await
+            .unwrap()
+    }
+}
+
 pub struct Query {
     canister_id: PrincipalId,
     effective_canister_id: PrincipalId,

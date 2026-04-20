@@ -89,6 +89,7 @@ system_test_nns(
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
+    test_timeout = "eternal",  # the suite runs many sub-tests sequentially and is close to the "long" (15min) limit.
     deps = [
         # Keep sorted.
         "//rs/nns/common",

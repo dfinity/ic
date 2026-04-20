@@ -878,7 +878,7 @@ impl ExecutionTest {
     pub fn process_stopping_canisters(&mut self) {
         let state = self
             .exec_env
-            .process_stopping_canisters(self.state.take().unwrap());
+            .process_stopping_canisters(self.state.take().unwrap(), ExecutionRound::from(0));
         self.state = Some(state);
     }
 
@@ -1227,6 +1227,7 @@ impl ExecutionTest {
                 time: self.time,
                 state: IngressState::Received,
             },
+            ExecutionRound::from(0),
         );
         self.state = Some(state);
         if !self.manual_execution {
@@ -1512,6 +1513,7 @@ impl ExecutionTest {
                 time: self.time,
                 state: IngressState::Received,
             },
+            ExecutionRound::from(0),
         );
 
         self.state = Some(state);
@@ -1835,8 +1837,12 @@ impl ExecutionTest {
                 }
                 canister = result.canister;
                 if let Some(ir) = result.ingress_status {
-                    self.ingress_history_writer
-                        .set_status(&mut state, ir.0, ir.1);
+                    self.ingress_history_writer.set_status(
+                        &mut state,
+                        ir.0,
+                        ir.1,
+                        ExecutionRound::from(0),
+                    );
                 };
                 executed_any = true;
             }
@@ -1895,6 +1901,7 @@ impl ExecutionTest {
                         self.install_code_instruction_limits.clone(),
                         &mut round_limits,
                         self.subnet_size(),
+                        ExecutionRound::from(0),
                     );
                 let slice_instructions_used =
                     remaining_round_instructions_before - round_limits.instructions;
@@ -1977,8 +1984,12 @@ impl ExecutionTest {
                 }
                 canister = result.canister;
                 if let Some(ir) = result.ingress_status {
-                    self.ingress_history_writer
-                        .set_status(&mut state, ir.0, ir.1);
+                    self.ingress_history_writer.set_status(
+                        &mut state,
+                        ir.0,
+                        ir.1,
+                        ExecutionRound::from(0),
+                    );
                 };
                 canisters.insert(canister_id, canister);
                 state.put_canister_states(canisters);

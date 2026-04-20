@@ -26,7 +26,8 @@ use ic_interfaces::{
 use ic_interfaces_mocks::crypto::MockCrypto;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
-    CanisterHttpResponsePayload, FlexibleHttpRequestResult, HttpHeader,
+    CanisterHttpResponsePayload, FlexibleHttpGlobalError, FlexibleHttpRequestResult, HttpHeader,
+    HttpRequestResourceReport,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
@@ -2797,6 +2798,185 @@ fn flexible_ok_responses_into_messages_decode_failure_is_skipped() {
 }
 
 #[test]
+fn flexible_error_into_messages_timeout() {
+    let callback_id = CallbackId::from(42);
+
+    let payload = CanisterHttpPayload {
+        flexible_errors: vec![FlexibleCanisterHttpError::Timeout { callback_id }],
+        ..Default::default()
+    };
+    let bytes = payload_to_bytes_max_4mb(payload);
+
+    let (responses, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
+
+    assert_eq!(responses.len(), 1);
+    assert_eq!(responses[0].callback, callback_id);
+    assert_eq!(stats.flexible_errors, 1);
+    assert_eq!(stats.flexible_errors_candid_failures, 0);
+
+    let Payload::Data(ref data) = responses[0].payload else {
+        panic!("Expected Payload::Data, got {:?}", responses[0].payload);
+    };
+    let result = Decode!(data, FlexibleHttpRequestResult).unwrap();
+    let FlexibleHttpRequestResult::Err(err) = result else {
+        panic!("Expected Err variant, got {result:?}");
+    };
+    assert_eq!(
+        err.global_error,
+        Some(FlexibleHttpGlobalError::Timeout(candid::Reserved))
+    );
+    assert!(err.node_details.is_empty());
+    assert!(err.message.contains("timed out"));
+}
+
+#[test]
+fn flexible_error_into_messages_too_many_request_errors() {
+    let callback_id = CallbackId::from(42);
+
+    let reject_entries: Vec<_> = (0..2_u64)
+        .map(|node_idx| flexible_reject_response(callback_id.get(), node_idx))
+        .collect();
+
+    let payload = CanisterHttpPayload {
+        flexible_errors: vec![FlexibleCanisterHttpError::TooManyRequestErrors {
+            callback_id,
+            reject_responses: reject_entries,
+        }],
+        ..Default::default()
+    };
+    let bytes = payload_to_bytes_max_4mb(payload);
+
+    let (responses, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
+
+    assert_eq!(responses.len(), 1);
+    assert_eq!(responses[0].callback, callback_id);
+    assert_eq!(stats.flexible_errors, 1);
+    assert_eq!(stats.flexible_errors_candid_failures, 0);
+
+    let Payload::Data(ref data) = responses[0].payload else {
+        panic!("Expected Payload::Data, got {:?}", responses[0].payload);
+    };
+    let result = Decode!(data, FlexibleHttpRequestResult).unwrap();
+    let FlexibleHttpRequestResult::Err(err) = result else {
+        panic!("Expected Err variant, got {result:?}");
+    };
+    assert_eq!(
+        err.global_error,
+        Some(FlexibleHttpGlobalError::TooManyRequestErrors(
+            candid::Reserved
+        ))
+    );
+    assert_eq!(err.node_details.len(), 2);
+    for (i, detail) in err.node_details.iter().enumerate() {
+        assert_eq!(
+            detail.node_id,
+            candid::Principal::from(node_test_id(i as u64).get())
+        );
+        assert_eq!(detail.report, HttpRequestResourceReport::default());
+        let error = detail.error.as_ref().unwrap();
+        assert_eq!(error.code, format!("{:?}", RejectCode::SysTransient));
+        assert_eq!(error.message, "could not connect");
+    }
+    assert!(err.message.contains("Too many request errors"));
+    assert!(err.message.contains("2 responses are rejects"));
+}
+
+#[test]
+fn flexible_error_into_messages_responses_too_large() {
+    let callback_id = CallbackId::from(42);
+
+    // Deliberately construct OK shares in non-ascending size order so that
+    // `into_messages` must sort them to report the correct "smallest" sizes.
+    let share_a = metadata_share_with_content_size(callback_id.get(), 0, 1_400_000);
+    let share_b = metadata_share_with_content_size(callback_id.get(), 1, 1_200_000);
+    let share_c = metadata_share_with_content_size(callback_id.get(), 2, 1_300_000);
+    let share_reject = reject_metadata_share(callback_id.get(), 3);
+
+    let payload = CanisterHttpPayload {
+        flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
+            callback_id,
+            all_seen_shares: vec![share_a, share_b, share_c, share_reject],
+            total_requests: 5,
+            min_responses: 3,
+        }],
+        ..Default::default()
+    };
+    let bytes = payload_to_bytes_max_4mb(payload);
+
+    let (responses, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
+
+    assert_eq!(responses.len(), 1);
+    assert_eq!(responses[0].callback, callback_id);
+    assert_eq!(stats.flexible_errors, 1);
+    assert_eq!(stats.flexible_errors_candid_failures, 0);
+
+    let Payload::Data(ref data) = responses[0].payload else {
+        panic!("Expected Payload::Data, got {:?}", responses[0].payload);
+    };
+    let result = Decode!(data, FlexibleHttpRequestResult).unwrap();
+    let FlexibleHttpRequestResult::Err(err) = result else {
+        panic!("Expected Err variant, got {result:?}");
+    };
+    assert_eq!(
+        err.global_error,
+        Some(FlexibleHttpGlobalError::ResponsesTooLarge(candid::Reserved))
+    );
+    // All 4 shares (3 ok + 1 reject) are in node_details
+    assert_eq!(err.node_details.len(), 4);
+    for detail in &err.node_details {
+        assert_eq!(detail.report, HttpRequestResourceReport::default());
+    }
+
+    assert_eq!(
+        err.node_details[0].node_id,
+        candid::Principal::from(node_test_id(0).get())
+    );
+    assert_eq!(err.node_details[0].error.as_ref().unwrap().code, "ok");
+    assert_eq!(
+        err.node_details[0].error.as_ref().unwrap().message,
+        "1400000 bytes"
+    );
+
+    assert_eq!(
+        err.node_details[1].node_id,
+        candid::Principal::from(node_test_id(1).get())
+    );
+    assert_eq!(err.node_details[1].error.as_ref().unwrap().code, "ok");
+    assert_eq!(
+        err.node_details[1].error.as_ref().unwrap().message,
+        "1200000 bytes"
+    );
+
+    assert_eq!(
+        err.node_details[2].node_id,
+        candid::Principal::from(node_test_id(2).get())
+    );
+    assert_eq!(err.node_details[2].error.as_ref().unwrap().code, "ok");
+    assert_eq!(
+        err.node_details[2].error.as_ref().unwrap().message,
+        "1300000 bytes"
+    );
+
+    assert_eq!(
+        err.node_details[3].node_id,
+        candid::Principal::from(node_test_id(3).get())
+    );
+    assert_eq!(err.node_details[3].error.as_ref().unwrap().code, "reject");
+    assert_eq!(
+        err.node_details[3].error.as_ref().unwrap().message,
+        "50 bytes"
+    );
+    // min_known_ok_needed = 3 - 1 unseen = 2, so message lists only the 2 smallest OK sizes
+    assert!(err.message.contains("3 min_responses"));
+    assert!(err.message.contains("5 total_requests"));
+    assert!(err.message.contains("3 ok"));
+    assert!(err.message.contains("1 reject"));
+    assert!(err.message.contains("1 unseen"));
+    assert!(err.message.contains("[1200000, 1300000]"));
+    assert!(!err.message.contains("1400000"));
+}
+
+#[test]
 fn flexible_build_timeout() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
@@ -2857,10 +3037,14 @@ fn flexible_build_responses_too_large() {
             FlexibleCanisterHttpError::ResponsesTooLarge {
                 callback_id: cb,
                 all_seen_shares,
+                total_requests,
+                min_responses,
             } => {
                 assert_eq!(*cb, callback_id);
                 assert_eq!(all_seen_shares.len(), 4);
                 assert!(all_seen_shares.iter().all(|s| !s.content.is_reject));
+                assert_eq!(*total_requests, 4);
+                assert_eq!(*min_responses, 2);
             }
         );
     });
@@ -2946,6 +3130,8 @@ fn flexible_build_responses_too_large_with_rejects_reducing_unseen() {
             FlexibleCanisterHttpError::ResponsesTooLarge {
                 callback_id: cb,
                 all_seen_shares,
+                total_requests,
+                min_responses,
             } => {
                 assert_eq!(*cb, callback_id);
                 assert_eq!(all_seen_shares.len(), 5);
@@ -2953,6 +3139,8 @@ fn flexible_build_responses_too_large_with_rejects_reducing_unseen() {
                 let reject_count = all_seen_shares.iter().filter(|s| s.content.is_reject).count();
                 assert_eq!(ok_count, 3);
                 assert_eq!(reject_count, 2);
+                assert_eq!(*total_requests, 6);
+                assert_eq!(*min_responses, 3);
             }
         );
     });
@@ -3004,6 +3192,8 @@ fn flexible_build_responses_too_large_fewer_ok_than_min_responses() {
             FlexibleCanisterHttpError::ResponsesTooLarge {
                 callback_id: cb,
                 all_seen_shares,
+                total_requests,
+                min_responses,
             } => {
                 assert_eq!(*cb, callback_id);
                 assert_eq!(all_seen_shares.len(), 5);
@@ -3011,6 +3201,8 @@ fn flexible_build_responses_too_large_fewer_ok_than_min_responses() {
                 let reject_count = all_seen_shares.iter().filter(|s| s.content.is_reject).count();
                 assert_eq!(ok_count, 3);
                 assert_eq!(reject_count, 2);
+                assert_eq!(*total_requests, 6);
+                assert_eq!(*min_responses, 4);
             }
         );
     });
@@ -3375,6 +3567,8 @@ fn flexible_error_responses_too_large_valid() {
             flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
                 callback_id,
                 all_seen_shares,
+                total_requests: 4,
+                min_responses: 2,
             }],
             ..Default::default()
         };
@@ -3410,6 +3604,8 @@ fn flexible_error_responses_too_large_valid_with_unseen_members() {
             flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
                 callback_id,
                 all_seen_shares,
+                total_requests: 6,
+                min_responses: 4,
             }],
             ..Default::default()
         };
@@ -3442,6 +3638,8 @@ fn flexible_error_responses_too_large_valid_with_mixed_ok_and_reject() {
             flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
                 callback_id,
                 all_seen_shares: vec![ok_a, ok_b, reject_c, reject_d],
+                total_requests: 4,
+                min_responses: 2,
             }],
             ..Default::default()
         };
@@ -3452,6 +3650,92 @@ fn flexible_error_responses_too_large_valid_with_mixed_ok_and_reject() {
             &[],
         );
         assert_matches!(result, Ok(()));
+    });
+}
+
+#[test]
+fn flexible_error_responses_too_large_wrong_total_requests() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    let huge = (MAX_CANISTER_HTTP_PAYLOAD_SIZE as u32 / 2) + 100_000;
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, _pool| {
+        let all_seen_shares: Vec<_> = (0..4)
+            .map(|i| metadata_share_with_content_size(callback_id.get(), i, huge))
+            .collect();
+
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
+                callback_id,
+                all_seen_shares,
+                total_requests: 99,
+                min_responses: 2,
+            }],
+            ..Default::default()
+        };
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_to_bytes_max_4mb(payload),
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::FlexibleResponsesTooLargeParamMismatch {
+                        field: "total_requests",
+                        expected: 4,
+                        actual: 99,
+                        ..
+                    }
+                )
+            ))
+        );
+    });
+}
+
+#[test]
+fn flexible_error_responses_too_large_wrong_min_responses() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    let huge = (MAX_CANISTER_HTTP_PAYLOAD_SIZE as u32 / 2) + 100_000;
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, _pool| {
+        let all_seen_shares: Vec<_> = (0..4)
+            .map(|i| metadata_share_with_content_size(callback_id.get(), i, huge))
+            .collect();
+
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
+                callback_id,
+                all_seen_shares,
+                total_requests: 4,
+                min_responses: 99,
+            }],
+            ..Default::default()
+        };
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_to_bytes_max_4mb(payload),
+            &[],
+        );
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::FlexibleResponsesTooLargeParamMismatch {
+                        field: "min_responses",
+                        expected: 2,
+                        actual: 99,
+                        ..
+                    }
+                )
+            ))
+        );
     });
 }
 
@@ -3471,6 +3755,8 @@ fn flexible_error_responses_too_large_invalid_when_small() {
             flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
                 callback_id,
                 all_seen_shares: vec![entry_a.proof.clone(), entry_b.proof.clone()],
+                total_requests: 4,
+                min_responses: 2,
             }],
             ..Default::default()
         };
@@ -3508,6 +3794,8 @@ fn flexible_error_responses_too_large_invalid_when_committee_members_omitted() {
             flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
                 callback_id,
                 all_seen_shares: vec![share_a, share_b],
+                total_requests: 4,
+                min_responses: 2,
             }],
             ..Default::default()
         };
@@ -3547,6 +3835,8 @@ fn flexible_error_responses_too_large_too_few_ok_shares() {
             flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
                 callback_id,
                 all_seen_shares: vec![ok_a, ok_b, reject_c, reject_d],
+                total_requests: 4,
+                min_responses: 3,
             }],
             ..Default::default()
         };
@@ -3588,6 +3878,8 @@ fn flexible_error_responses_too_large_callback_id_mismatch() {
             flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
                 callback_id,
                 all_seen_shares: vec![share_ok, share_wrong],
+                total_requests: 4,
+                min_responses: 2,
             }],
             ..Default::default()
         };
@@ -3624,6 +3916,8 @@ fn flexible_error_responses_too_large_duplicate_signer() {
             flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
                 callback_id,
                 all_seen_shares: vec![share_a, share_b],
+                total_requests: 4,
+                min_responses: 2,
             }],
             ..Default::default()
         };
@@ -3659,6 +3953,8 @@ fn flexible_error_responses_too_large_signer_not_in_committee() {
             flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
                 callback_id,
                 all_seen_shares: vec![share_ok, share_bad],
+                total_requests: 4,
+                min_responses: 2,
             }],
             ..Default::default()
         };
@@ -3696,6 +3992,8 @@ fn flexible_error_responses_too_large_registry_version_mismatch() {
             flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
                 callback_id,
                 all_seen_shares: vec![share_ok, share_bad],
+                total_requests: 4,
+                min_responses: 2,
             }],
             ..Default::default()
         };
@@ -3732,6 +4030,8 @@ fn flexible_error_responses_too_large_invalid_signature() {
             flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
                 callback_id,
                 all_seen_shares: vec![share_a, share_b],
+                total_requests: 4,
+                min_responses: 2,
             }],
             ..Default::default()
         };

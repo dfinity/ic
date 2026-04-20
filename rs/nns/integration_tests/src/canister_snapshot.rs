@@ -3,19 +3,18 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_management_canister_types_private::{CanisterSnapshotResponse, ListCanisterSnapshotArgs};
 use ic_nervous_system_common::E8;
-use ic_nns_constants::{LEDGER_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance::pb::v1::ProposalStatus;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
+use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::{
-    LoadCanisterSnapshot, MakeProposalRequest, ProposalActionRequest, TakeCanisterSnapshot,
-    manage_neuron_response::Command,
+    LoadCanisterSnapshot, MakeProposalRequest, Motion, ProposalActionRequest, TakeCanisterSnapshot,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    neuron_helpers::get_neuron_1,
     state_test_helpers::{
-        icrc1_balance, icrc1_transfer, nns_governance_get_proposal_info_as_anonymous,
-        nns_governance_make_proposal, nns_wait_for_proposal_execution, setup_nns_canisters,
-        state_machine_builder_for_nns_tests, update_with_sender,
+        icrc1_balance, icrc1_transfer, nns_execute_proposal, nns_get_proposal_info,
+        nns_governance_make_proposal, setup_nns_canisters, state_machine_builder_for_nns_tests,
+        update_with_sender,
     },
 };
 use ic_state_machine_tests::StateMachine;
@@ -56,54 +55,20 @@ fn test_canister_snapshot() {
 
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
-    // Basic facts.
-    let neuron = get_neuron_1();
     let target_canister_id = LEDGER_CANISTER_ID;
 
     // Scenario A: The most basic thing: take a snapshot.
 
     // Step 2(A): Run the code under test: Take a snapshot via proposal.
-
-    // Step 2(A).1: Assemble MakeProposalRequest.
-    let take_snapshot = TakeCanisterSnapshot {
-        canister_id: Some(target_canister_id.get()),
-        replace_snapshot: None,
-    };
-    let action = ProposalActionRequest::TakeCanisterSnapshot(take_snapshot);
-    let make_proposal_request = MakeProposalRequest {
-        title: Some("Take a Snapshot of the Ledger Canister".to_string()),
-        summary: "Do what the title says.".to_string(),
-        url: "https://forum.dfinity.org/discuss-take-canister-snapshot".to_string(),
-        action: Some(action),
-    };
-
-    // Step 2A.2: Submit the proposal.
-    let make_proposal_response = nns_governance_make_proposal(
+    let first_proposal_id = nns_execute_proposal(
         &state_machine,
-        neuron.principal_id,
-        neuron.neuron_id,
-        &make_proposal_request,
-    );
-    let first_proposal_id = match make_proposal_response.command.as_ref().unwrap() {
-        Command::MakeProposal(response) => response.proposal_id.unwrap(),
-        _ => panic!("{make_proposal_response:#?}"),
-    };
-
-    // Step 2A.3: Wait for execution.
-    nns_wait_for_proposal_execution(&state_machine, first_proposal_id.id);
-
-    // Step 3A. Verify results.
-
-    // Step 3A.1: Proposal marked success.
-    let first_proposal_info =
-        nns_governance_get_proposal_info_as_anonymous(&state_machine, first_proposal_id.id);
-    assert_eq!(
-        ProposalStatus::try_from(first_proposal_info.status),
-        Ok(ProposalStatus::Executed),
-        "{first_proposal_info:#?}",
+        ProposalActionRequest::TakeCanisterSnapshot(TakeCanisterSnapshot {
+            canister_id: Some(target_canister_id.get()),
+            replace_snapshot: None,
+        }),
     );
 
-    // Step 3A.2: Verify that a snapshot was created, by calling
+    // Step 3A: Verify that a snapshot was created, by calling
     // list_canister_snapshots.
     let list_canister_snapshots_response: Vec<CanisterSnapshotResponse> = update_with_sender(
         &state_machine,
@@ -167,38 +132,15 @@ fn test_canister_snapshot() {
 
     // Make a proposal, like in scenario A, but this time, set the
     // replace_snapshot field to the ID of the first snapshot (from scenario A).
-    let take_snapshot_replace = TakeCanisterSnapshot {
-        canister_id: Some(target_canister_id.get()),
-        replace_snapshot: Some(first_snapshot.snapshot_id().to_vec()),
-    };
-    let action = ProposalActionRequest::TakeCanisterSnapshot(take_snapshot_replace);
-    let make_proposal_request = MakeProposalRequest {
-        title: Some("Take ANOTHER Snapshot and clobber the first".to_string()),
-        summary: "Delete old, make new.".to_string(),
-        url: "https://forum.dfinity.org/clobber-snapshot".to_string(),
-        action: Some(action),
-    };
-    let propose_replace_response = nns_governance_make_proposal(
+    let replace_proposal_id = nns_execute_proposal(
         &state_machine,
-        neuron.principal_id,
-        neuron.neuron_id,
-        &make_proposal_request,
+        ProposalActionRequest::TakeCanisterSnapshot(TakeCanisterSnapshot {
+            canister_id: Some(target_canister_id.get()),
+            replace_snapshot: Some(first_snapshot.snapshot_id().to_vec()),
+        }),
     );
-    let replace_proposal_id = match propose_replace_response.command.unwrap() {
-        Command::MakeProposal(response) => response.proposal_id.unwrap(),
-        _ => panic!("Propose replace didn't return MakeProposal"),
-    };
 
     assert_ne!(replace_proposal_id, first_proposal_id);
-    nns_wait_for_proposal_execution(&state_machine, replace_proposal_id.id);
-
-    let replace_proposal_info =
-        nns_governance_get_proposal_info_as_anonymous(&state_machine, replace_proposal_id.id);
-    assert_eq!(
-        ProposalStatus::try_from(replace_proposal_info.status),
-        Ok(ProposalStatus::Executed),
-        "{replace_proposal_info:#?}",
-    );
 
     // Step 3(B): Verify results.
 
@@ -304,35 +246,156 @@ fn test_canister_snapshot() {
     // `second_snapshot`, which was taken BEFORE the transfer (which took place
     // in Step 1(C)).
 
-    let load_snapshot = LoadCanisterSnapshot {
-        canister_id: Some(target_canister_id.get()),
-        snapshot_id: Some(second_snapshot.snapshot_id().to_vec()),
-    };
-    let action = ProposalActionRequest::LoadCanisterSnapshot(load_snapshot);
-    let make_proposal_request = MakeProposalRequest {
-        title: Some("Restore Ledger Canister to Snapshot 2".to_string()),
-        summary: r#"This will revert the ICP transfer."#.to_string(),
-        url: "https://forum.dfinity.org/restore-ledger-canister-to-snapshot-2".to_string(),
-        action: Some(action),
-    };
-    let make_proposal_response = nns_governance_make_proposal(
+    nns_execute_proposal(
         &state_machine,
-        neuron.principal_id,
-        neuron.neuron_id,
-        &make_proposal_request,
+        ProposalActionRequest::LoadCanisterSnapshot(LoadCanisterSnapshot {
+            canister_id: Some(target_canister_id.get()),
+            snapshot_id: Some(second_snapshot.snapshot_id().to_vec()),
+        }),
     );
-    let load_canister_snapshot_proposal_id = match make_proposal_response.command.as_ref().unwrap()
-    {
-        Command::MakeProposal(response) => response.proposal_id.unwrap(),
-        _ => panic!("{make_proposal_response:#?}"),
-    };
 
-    // Step 3C: Verify LoadCanisterSnapshot execution.
-
-    nns_wait_for_proposal_execution(&state_machine, load_canister_snapshot_proposal_id.id);
+    // Step 3(C): Verify results.
 
     // Balanaces are back to what they were.
     assert_balance(&state_machine, icp_token_sender, initial_balance);
     assert_balance(&state_machine, icp_token_receiver, initial_balance);
     assert_balance(&state_machine, stable_balance_principal, initial_balance);
+}
+
+/// Similar to previous test with the main difference being that Governance
+/// is the guinea pig.
+///
+/// The reason for this additional test is that when the target canister is
+/// Governance, there is special behavior: Root is supposed to do the operation
+/// in the background. Without this, proposal execution would deadlock.
+///
+/// Minor difference: To verify that LoadCanisterSnapshot actually rolled
+/// back Governance's state, we create a Motion proposal after the snapshot
+/// and confirm it disappears after loading the snapshot.
+#[test]
+fn test_governance_canister_snapshot() {
+    // Step 1: Prepare the world.
+
+    let state_machine = state_machine_builder_for_nns_tests().build();
+    let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+
+    let target_canister_id = GOVERNANCE_CANISTER_ID;
+
+    // Create a Motion proposal BEFORE taking a snapshot. This one should survive
+    // loading the snapshot near the end.
+    let pre_snapshot_motion_proposal_id = nns_execute_proposal(
+        &state_machine,
+        ProposalActionRequest::Motion(Motion {
+            motion_text: "This one survives.".to_string(),
+        }),
+    );
+
+    // Take a snapshot of Governance (via proposal).
+    //
+    // Cannot use nns_execute_proposal for the same reason as LoadCanisterSnapshot
+    // below: Root stops/restarts Governance in the background, racing with the poll.
+    nns_governance_make_proposal(
+        &state_machine,
+        *TEST_NEURON_1_OWNER_PRINCIPAL,
+        NeuronId {
+            id: TEST_NEURON_1_ID,
+        },
+        &MakeProposalRequest {
+            title: Some("TakeCanisterSnapshot".to_string()),
+            summary: String::new(),
+            url: String::new(),
+            action: Some(ProposalActionRequest::TakeCanisterSnapshot(
+                TakeCanisterSnapshot {
+                    canister_id: Some(target_canister_id.get()),
+                    replace_snapshot: None,
+                },
+            )),
+        },
+    );
+    // Let the background work (stop → take snapshot → start Governance) complete.
+    for _ in 0..50 {
+        state_machine.tick();
+    }
+
+    // Verify that the proposal had the desired effect: a new snapshot of
+    // the Governance canister.
+    let snapshots: Vec<CanisterSnapshotResponse> = update_with_sender(
+        &state_machine,
+        CanisterId::ic_00(),
+        "list_canister_snapshots",
+        ListCanisterSnapshotArgs::new(target_canister_id),
+        ROOT_CANISTER_ID.get(),
+    )
+    .unwrap();
+    assert_eq!(snapshots.len(), 1, "{snapshots:#?}");
+    let snapshot = &snapshots[0];
+    assert_eq!(snapshot.id.get_canister_id(), GOVERNANCE_CANISTER_ID,);
+
+    // Change Governance's state by creating ANOTHER (Motion) proposal.
+    // This will get blown away at the end when we load the snapshot,
+    // because the snapshot was taken before this proposal.
+    let doomed_motion_proposal_id = nns_execute_proposal(
+        &state_machine,
+        ProposalActionRequest::Motion(Motion {
+            motion_text: "This one gets rolled back.".to_string(),
+        }),
+    );
+    // Verify the second/doommed Motion proposal exists. This is so that
+    // when we find it absent after loading the canister snapshot, we are
+    // seeing a CHANGE, not just the final state.
+    let doomed_motion_proposal_info_before_load =
+        nns_get_proposal_info(&state_machine, doomed_motion_proposal_id.id);
+    assert_ne!(doomed_motion_proposal_info_before_load, None,);
+
+    // Step 2: Execute the code under test: Load the snapshot (via proposal).
+    //
+    // We cannot use nns_execute_proposal here: when targeting Governance,
+    // the proposal is marked Executed immediately (to avoid deadlock), then
+    // Root stops/restores/starts Governance in the background, at which point
+    // the proposal itself is gone (rolled back with the snapshot). Polling for
+    // Executed status would race with the stop or never find the proposal.
+    nns_governance_make_proposal(
+        &state_machine,
+        *TEST_NEURON_1_OWNER_PRINCIPAL,
+        NeuronId {
+            id: TEST_NEURON_1_ID,
+        },
+        &MakeProposalRequest {
+            title: Some("LoadCanisterSnapshot".to_string()),
+            summary: String::new(),
+            url: String::new(),
+            action: Some(ProposalActionRequest::LoadCanisterSnapshot(
+                LoadCanisterSnapshot {
+                    canister_id: Some(target_canister_id.get()),
+                    snapshot_id: Some(snapshot.snapshot_id().to_vec()),
+                },
+            )),
+        },
+    );
+
+    // Let the background work (stop → load snapshot → start Governance) complete.
+    for _ in 0..50 {
+        state_machine.tick();
+    }
+
+    // Step 3: Verify results.
+
+    // The pre-snapshot Motion proposal should still exist (it was part of the
+    // snapshot).
+    let pre_snapshot_motion_info_after =
+        nns_get_proposal_info(&state_machine, pre_snapshot_motion_proposal_id.id);
+    assert_ne!(
+        pre_snapshot_motion_info_after, None,
+        "Pre-snapshot Motion proposal should still exist: {pre_snapshot_motion_info_after:#?}",
+    );
+
+    // The post-snapshot Motion proposal should be gone, because it was not in
+    // the snapshot.
+    //
+    // (As a side effect, the load proposal itself also disappears, but we use
+    // this Motion proposal as the primary indicator since it is less confusing.)
+    let doomed_motion_info_after_load =
+        nns_get_proposal_info(&state_machine, doomed_motion_proposal_id.id);
+    assert_eq!(doomed_motion_info_after_load, None,);
 }

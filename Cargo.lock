@@ -4394,6 +4394,7 @@ dependencies = [
  "candid",
  "canister-test",
  "criterion",
+ "ic-embedders",
  "ic-test-utilities-execution-environment",
  "ic-types",
  "wirm",
@@ -11788,6 +11789,7 @@ dependencies = [
  "ic-nervous-system-clients",
  "ic-nervous-system-lock",
  "ic-nervous-system-runtime",
+ "ic-nns-constants",
  "serde",
  "serde_bytes",
  "tokio",
@@ -15224,7 +15226,6 @@ dependencies = [
  "ic-canister-client",
  "ic-canister-client-sender",
  "ic-crypto-utils-threshold-sig-der",
- "ic-limits",
  "ic-nervous-system-common",
  "ic-nns-common",
  "ic-nns-constants",
@@ -15243,6 +15244,7 @@ dependencies = [
  "serde",
  "slog",
  "ssh2",
+ "tokio",
  "url",
 ]
 
@@ -16153,6 +16155,7 @@ dependencies = [
 name = "ic_os_logging"
 version = "0.0.0"
 dependencies = [
+ "tracing",
  "tracing-journald",
  "tracing-subscriber",
 ]
@@ -18960,6 +18963,7 @@ dependencies = [
  "ic-nns-governance-api",
  "ic-types",
  "ic_device",
+ "ic_os_logging",
  "linux_kernel_command_line",
  "pem",
  "rand 0.8.5",
@@ -18968,6 +18972,7 @@ dependencies = [
  "sev_guest",
  "sev_guest_testing",
  "tempfile",
+ "tracing",
  "uuid",
 ]
 
