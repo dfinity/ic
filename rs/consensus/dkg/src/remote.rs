@@ -103,8 +103,8 @@ impl<'a> RemoteDkgContext<'a> {
                     start_block_height,
                     dealer_subnet,
                     context.target_id,
-                    &dealers,
-                    &context.nodes_in_target_subnet,
+                    dealers,
+                    context.nodes_in_target_subnet.clone(),
                     &context.registry_version,
                     logger,
                 )
@@ -115,7 +115,7 @@ impl<'a> RemoteDkgContext<'a> {
                 start_block_height,
                 dealer_subnet,
                 context.context.target_id,
-                &context.context.nodes,
+                context.context.nodes.clone(),
                 get_reshare_transcript,
                 &context.context.registry_version,
             )

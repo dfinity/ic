@@ -798,6 +798,7 @@ fn process_reshare_chain_key_contexts(
         .metadata
         .subnet_call_context_manager
         .reshare_chain_key_contexts;
+    let get_reshare_transcript = |tag: &NiDkgTag| reshared_transcripts.get(tag).cloned();
 
     for (_callback_id, context) in contexts.iter() {
         // if we haven't reached the required registry version yet, skip this context
@@ -810,13 +811,12 @@ fn process_reshare_chain_key_contexts(
             continue;
         };
 
-        let get_reshare_transcript = |tag: &NiDkgTag| reshared_transcripts.get(tag).cloned();
         match create_remote_dkg_config_for_key_id(
             key_id,
             start_block_height,
             this_subnet_id,
             context.target_id,
-            &context.nodes,
+            context.nodes.clone(),
             get_reshare_transcript,
             &context.registry_version,
         ) {
@@ -866,8 +866,8 @@ fn process_setup_initial_dkg_contexts(
             start_block_height,
             this_subnet_id,
             context.target_id,
-            &dealers,
-            &context.nodes_in_target_subnet,
+            dealers,
+            context.nodes_in_target_subnet.clone(),
             &context.registry_version,
             logger,
         ) {
@@ -953,8 +953,8 @@ pub(crate) fn create_low_high_remote_dkg_configs(
     start_block_height: Height,
     dealer_subnet: SubnetId,
     target_subnet: NiDkgTargetId,
-    dealers: &BTreeSet<NodeId>,
-    receivers: &BTreeSet<NodeId>,
+    dealers: BTreeSet<NodeId>,
+    receivers: BTreeSet<NodeId>,
     registry_version: &RegistryVersion,
     logger: &ReplicaLogger,
 ) -> Result<(NiDkgConfig, NiDkgConfig), Vec<(NiDkgId, String)>> {
@@ -974,8 +974,8 @@ pub(crate) fn create_low_high_remote_dkg_configs(
 
     let low_thr_config = create_remote_dkg_config(
         low_thr_dkg_id.clone(),
-        dealers,
-        receivers,
+        dealers.clone(),
+        receivers.clone(),
         registry_version,
         None,
     );
@@ -1020,7 +1020,7 @@ pub(crate) fn create_remote_dkg_config_for_key_id(
     start_block_height: Height,
     dealer_subnet: SubnetId,
     target_id: NiDkgTargetId,
-    receivers: &BTreeSet<NodeId>,
+    receivers: BTreeSet<NodeId>,
     get_reshare_transcript: impl Fn(&NiDkgTag) -> Option<NiDkgTranscript>,
     registry_version: &RegistryVersion,
 ) -> Result<NiDkgConfig, Box<(NiDkgId, String)>> {
@@ -1043,7 +1043,7 @@ pub(crate) fn create_remote_dkg_config_for_key_id(
 
     create_remote_dkg_config(
         dkg_id.clone(),
-        dealers.get(),
+        dealers.into(),
         receivers,
         registry_version,
         Some(resharing_transcript),
@@ -1053,8 +1053,8 @@ pub(crate) fn create_remote_dkg_config_for_key_id(
 
 fn create_remote_dkg_config(
     dkg_id: NiDkgId,
-    dealers: &BTreeSet<NodeId>,
-    receivers: &BTreeSet<NodeId>,
+    dealers: BTreeSet<NodeId>,
+    receivers: BTreeSet<NodeId>,
     registry_version: &RegistryVersion,
     resharing_transcript: Option<NiDkgTranscript>,
 ) -> Result<NiDkgConfig, NiDkgConfigValidationError> {
@@ -1065,8 +1065,8 @@ fn create_remote_dkg_config(
         dkg_id,
         max_corrupt_dealers: NumberOfNodes::from(get_faults_tolerated(dealers.len()) as u32),
         max_corrupt_receivers: NumberOfNodes::from(get_faults_tolerated(receivers.len()) as u32),
-        dealers: dealers.clone(),
-        receivers: receivers.clone(),
+        dealers,
+        receivers,
         registry_version: *registry_version,
         resharing_transcript,
     })
@@ -1246,7 +1246,7 @@ mod tests {
             start_block_height,
             dealer_subnet,
             target_id,
-            &receivers,
+            receivers,
             get_reshare_transcript,
             &registry_version,
         )
