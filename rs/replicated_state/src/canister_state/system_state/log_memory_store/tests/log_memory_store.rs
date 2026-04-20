@@ -78,10 +78,10 @@ fn test_retention_across_lifecycle() {
     assert_eq!(s.max_timestamp(), None);
     assert_eq!(s.retention(), None);
 
-    // Allocated but still empty: header exists but both timestamps are 0.
+    // Allocated but still empty: both timestamps report None.
     s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
     assert_eq!(s.first_timestamp(), None);
-    assert_eq!(s.max_timestamp(), Some(0));
+    assert_eq!(s.max_timestamp(), None);
     assert_eq!(s.retention(), None);
 
     // Single record: retention is zero.
@@ -101,10 +101,10 @@ fn test_retention_across_lifecycle() {
     assert_eq!(s.max_timestamp(), Some(61_000_000_000));
     assert_eq!(s.retention(), Some(Duration::from_secs(60)));
 
-    // Clear empties the buffer — caches reset to None.
+    // Clear empties the buffer — both timestamps report None.
     s.clear();
     assert_eq!(s.first_timestamp(), None);
-    assert_eq!(s.max_timestamp(), Some(0)); // header retained, max reset to 0
+    assert_eq!(s.max_timestamp(), None);
     assert_eq!(s.retention(), None);
 
     // Reappend, then deallocate — both caches go empty.

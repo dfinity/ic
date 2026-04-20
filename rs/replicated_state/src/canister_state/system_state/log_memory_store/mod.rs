@@ -200,7 +200,8 @@ impl LogMemoryStore {
     /// Returns the timestamp of the most recently appended record, or `None`
     /// if the buffer is empty. O(1) via the cached header.
     pub fn max_timestamp(&self) -> Option<u64> {
-        self.get_header().map(|h| h.max_timestamp)
+        let header = self.get_header()?;
+        (header.data_size.get() > 0).then_some(header.max_timestamp)
     }
 
     /// Returns the timestamp of the oldest live record, or `None` if the
