@@ -136,7 +136,7 @@ pub(crate) fn route(version: Version) -> &'static str {
     }
 }
 
-pub(crate) fn route_v4_subnet() -> &'static str {
+pub(crate) fn route_subnet_v4() -> &'static str {
     "/api/v4/subnet/{effective_subnet_id}/call"
 }
 
@@ -188,7 +188,7 @@ pub fn new_service(
     BoxCloneService::new(router.into_service())
 }
 
-pub(crate) fn new_router_v4_subnet(
+pub(crate) fn new_subnet_v4_router(
     call_handler: IngressValidator,
     ingress_watcher_handle: IngressWatcherHandle,
     metrics: HttpHandlerMetrics,
@@ -207,7 +207,7 @@ pub(crate) fn new_router_v4_subnet(
     };
 
     Router::new().route_service(
-        route_v4_subnet(),
+        route_subnet_v4(),
         axum::routing::post(call_sync_subnet)
             .with_state(state)
             .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
