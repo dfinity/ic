@@ -55,8 +55,16 @@ pub enum Version {
     V3,
 }
 
+/// Distinguishes between the `/api/v{2,3}/canister/…/read_state` and
+/// `/api/v{2,3}/subnet/…/read_state` endpoints.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Target {
+    Canister,
+    Subnet,
+}
+
 #[derive(Clone)]
-pub struct CanisterReadStateService {
+pub struct ReadStateService {
     log: ReplicaLogger,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     metrics: HttpHandlerMetrics,
@@ -68,9 +76,10 @@ pub struct CanisterReadStateService {
     additional_root_of_trust: Option<IcRootOfTrust>,
     nns_subnet_id: SubnetId,
     version: Version,
+    target: Target,
 }
 
-pub struct CanisterReadStateServiceBuilder {
+pub struct ReadStateServiceBuilder {
     log: ReplicaLogger,
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
     metrics: HttpHandlerMetrics,
@@ -83,19 +92,26 @@ pub struct CanisterReadStateServiceBuilder {
     additional_root_of_trust: Option<IcRootOfTrust>,
     nns_subnet_id: SubnetId,
     version: Version,
+    target: Target,
 }
 
-impl CanisterReadStateService {
-    pub(crate) fn route(version: Version) -> &'static str {
-        match version {
-            Version::V2 => "/api/v2/canister/{effective_canister_id}/read_state",
-            Version::V3 => "/api/v3/canister/{effective_canister_id}/read_state",
+impl ReadStateService {
+    pub(crate) fn route(version: Version, target: Target) -> &'static str {
+        match (version, target) {
+            (Version::V2, Target::Canister) => {
+                "/api/v2/canister/{effective_canister_id}/read_state"
+            }
+            (Version::V3, Target::Canister) => {
+                "/api/v3/canister/{effective_canister_id}/read_state"
+            }
+            (Version::V2, Target::Subnet) => "/api/v2/subnet/{effective_canister_id}/read_state",
+            (Version::V3, Target::Subnet) => "/api/v3/subnet/{effective_canister_id}/read_state",
         }
     }
 }
 
-impl CanisterReadStateServiceBuilder {
-    pub fn builder(
+impl ReadStateServiceBuilder {
+    pub fn canister_builder(
         log: ReplicaLogger,
         metrics: HttpHandlerMetrics,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -118,6 +134,34 @@ impl CanisterReadStateServiceBuilder {
             additional_root_of_trust: None,
             nns_subnet_id,
             version,
+            target: Target::Canister,
+        }
+    }
+
+    pub fn subnet_builder(
+        log: ReplicaLogger,
+        metrics: HttpHandlerMetrics,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+        registry_client: Arc<dyn RegistryClient>,
+        ingress_verifier: Arc<dyn IngressSigVerifier>,
+        nns_delegation_reader: NNSDelegationReader,
+        nns_subnet_id: SubnetId,
+        version: Version,
+    ) -> Self {
+        Self {
+            log,
+            health_status: None,
+            metrics,
+            malicious_flags: None,
+            nns_delegation_reader,
+            state_reader,
+            time_source: None,
+            ingress_verifier,
+            registry_client,
+            additional_root_of_trust: None,
+            nns_subnet_id,
+            version,
+            target: Target::Subnet,
         }
     }
 
@@ -148,7 +192,9 @@ impl CanisterReadStateServiceBuilder {
     }
 
     pub(crate) fn build_router(self) -> Router {
-        let state = CanisterReadStateService {
+        let version = self.version;
+        let target = self.target;
+        let state = ReadStateService {
             log: self.log,
             health_status: self
                 .health_status
@@ -161,11 +207,12 @@ impl CanisterReadStateServiceBuilder {
             registry_client: self.registry_client,
             additional_root_of_trust: self.additional_root_of_trust,
             nns_subnet_id: self.nns_subnet_id,
-            version: self.version,
+            version,
+            target,
         };
         Router::new().route(
-            CanisterReadStateService::route(self.version),
-            axum::routing::post(canister_read_state)
+            ReadStateService::route(version, target),
+            axum::routing::post(read_state)
                 .with_state(state)
                 .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
         )
@@ -177,9 +224,9 @@ impl CanisterReadStateServiceBuilder {
     }
 }
 
-pub(crate) async fn canister_read_state(
+pub(crate) async fn read_state(
     axum::extract::Path(effective_canister_id): axum::extract::Path<CanisterId>,
-    State(CanisterReadStateService {
+    State(ReadStateService {
         log,
         health_status,
         metrics,
@@ -191,7 +238,8 @@ pub(crate) async fn canister_read_state(
         additional_root_of_trust,
         nns_subnet_id,
         version,
-    }): State<CanisterReadStateService>,
+        target,
+    }): State<ReadStateService>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpReadStateContent>>>,
 ) -> impl IntoResponse {
     if health_status.load() != ReplicaHealthStatus::Healthy {
@@ -203,7 +251,6 @@ pub(crate) async fn canister_read_state(
         return (status, text).into_response();
     }
 
-    // Convert the message to a strongly-typed struct.
     let request = match HttpRequest::<ReadState>::try_from(request) {
         Ok(request) => request,
         Err(e) => {
@@ -224,7 +271,6 @@ pub(crate) async fn canister_read_state(
     } else {
         RegistryRootOfTrustProvider::new(registry_client, registry_version)
     };
-    // Since spawn blocking requires 'static we can't use any references
     let request_c = request.clone();
 
     let response = tokio::task::spawn_blocking(move || {
@@ -244,9 +290,9 @@ pub(crate) async fn canister_read_state(
             return make_service_unavailable_response();
         };
 
-        // Verify authorization for requested paths.
         if let Err(HttpError { status, message }) = verify_paths(
             &metrics,
+            target,
             version,
             certified_state_reader.get_state(),
             &read_state.source,
@@ -258,10 +304,13 @@ pub(crate) async fn canister_read_state(
             return (status, message).into_response();
         }
 
-        let delegation_from_nns = match version {
-            Version::V2 => nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat),
-            Version::V3 => nns_delegation_reader
+        let delegation_from_nns = match (version, target) {
+            (Version::V2, _) => nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat),
+            (Version::V3, Target::Canister) => nns_delegation_reader
                 .get_delegation(CanisterRangesFilter::Tree(effective_canister_id)),
+            (Version::V3, Target::Subnet) => {
+                nns_delegation_reader.get_delegation(CanisterRangesFilter::None)
+            }
         };
 
         let maybe_nns_subnet_filter = match version {
@@ -284,9 +333,9 @@ pub(crate) async fn canister_read_state(
     }
 }
 
-// Verifies that the `user` is authorized to retrieve the `paths` requested.
 fn verify_paths(
     metrics: &HttpHandlerMetrics,
+    target: Target,
     version: Version,
     state: &ReplicatedState,
     user: &UserId,
@@ -295,11 +344,13 @@ fn verify_paths(
     effective_principal_id: PrincipalId,
     nns_subnet_id: SubnetId,
 ) -> Result<(), HttpError> {
-    const ENDPOINT: &str = "canister";
+    let endpoint = match target {
+        Target::Canister => "canister",
+        Target::Subnet => "subnet",
+    };
 
     let mut last_request_status_id: Option<MessageId> = None;
 
-    // Convert the paths to slices to make it easier to match below.
     let paths: Vec<Vec<&[u8]>> = paths
         .iter()
         .map(|path| path.iter().map(|label| label.as_bytes()).collect())
@@ -308,22 +359,21 @@ fn verify_paths(
     for path in paths {
         match path.as_slice() {
             [b"time"] => {
-                metrics.observe_read_state_path(ENDPOINT, "time");
+                metrics.observe_read_state_path(endpoint, "time");
             }
-            [b"canister", canister_id, b"controllers" | b"module_hash"] => {
+            [b"canister", canister_id, b"controllers" | b"module_hash"]
+                if target == Target::Canister =>
+            {
                 let canister_id = parse_principal_id(canister_id)?;
                 verify_principal_ids(&canister_id, &effective_principal_id)?;
-                metrics.observe_read_state_path(ENDPOINT, "canister_info");
+                metrics.observe_read_state_path(endpoint, "canister_info");
             }
-            [b"canister", canister_id, b"metadata", name] => {
+            [b"canister", canister_id, b"metadata", name] if target == Target::Canister => {
                 let name = String::from_utf8(Vec::from(*name)).map_err(|err| HttpError {
                     status: StatusCode::BAD_REQUEST,
                     message: format!("Could not parse the custom section name: {err}."),
                 })?;
-
-                // Get principal id from byte slice.
                 let principal_id = parse_principal_id(canister_id)?;
-                // Verify that canister id and effective canister id match.
                 verify_principal_ids(&principal_id, &effective_principal_id)?;
                 can_read_canister_metadata(
                     user,
@@ -331,10 +381,10 @@ fn verify_paths(
                     &name,
                     state,
                 )?;
-                metrics.observe_read_state_path(ENDPOINT, "canister_metadata");
+                metrics.observe_read_state_path(endpoint, "canister_metadata");
             }
             [b"api_boundary_nodes"] => {
-                metrics.observe_read_state_path(ENDPOINT, "api_boundary_nodes");
+                metrics.observe_read_state_path(endpoint, "api_boundary_nodes");
             }
             [b"api_boundary_nodes", _node_id]
             | [
@@ -342,47 +392,52 @@ fn verify_paths(
                 _node_id,
                 b"domain" | b"ipv4_address" | b"ipv6_address",
             ] => {
-                metrics.observe_read_state_path(ENDPOINT, "api_boundary_nodes_info");
+                metrics.observe_read_state_path(endpoint, "api_boundary_nodes_info");
             }
             [b"subnet"] => {
-                metrics.observe_read_state_path(ENDPOINT, "subnet");
+                metrics.observe_read_state_path(endpoint, "subnet");
             }
             [b"subnet", _subnet_id] => {
-                metrics.observe_read_state_path(ENDPOINT, "subnet_info");
+                metrics.observe_read_state_path(endpoint, "subnet_info");
             }
             [b"subnet", _subnet_id, b"public_key"] => {
-                metrics.observe_read_state_path(ENDPOINT, "subnet_public_key");
+                metrics.observe_read_state_path(endpoint, "subnet_public_key");
             }
             [b"subnet", _subnet_id, b"type"] => {
-                metrics.observe_read_state_path(ENDPOINT, "subnet_type");
+                metrics.observe_read_state_path(endpoint, "subnet_type");
+            }
+            [b"subnet", subnet_id, b"metrics"] if target == Target::Subnet => {
+                let principal_id = parse_principal_id(subnet_id)?;
+                verify_principal_ids(&principal_id, &effective_principal_id)?;
+                metrics.observe_read_state_path(endpoint, "subnet_metrics");
             }
             [b"subnet", _subnet_id, b"node"] => {
-                metrics.observe_read_state_path(ENDPOINT, "subnet_node");
+                metrics.observe_read_state_path(endpoint, "subnet_node");
             }
             [b"subnet", _subnet_id, b"node", _node_id] => {
-                metrics.observe_read_state_path(ENDPOINT, "subnet_node_info");
+                metrics.observe_read_state_path(endpoint, "subnet_node_info");
             }
             [b"subnet", _subnet_id, b"node", _node_id, b"public_key"] => {
-                metrics.observe_read_state_path(ENDPOINT, "subnet_node_public_key");
+                metrics.observe_read_state_path(endpoint, "subnet_node_public_key");
             }
-            // `/subnet/<subnet_id>/canister_ranges` is always allowed on the `/api/v2` endpoint
             [b"subnet", _subnet_id, b"canister_ranges"] if version == Version::V2 => {
-                metrics.observe_read_state_path(ENDPOINT, "subnet_canister_ranges");
+                metrics.observe_read_state_path(endpoint, "subnet_canister_ranges");
             }
-            // `/subnet/<subnet_id>/canister_ranges` is allowed on the `/api/v3` endpoint
-            // only when `subnet_id == nns_subnet_id`.
             [b"subnet", subnet_id, b"canister_ranges"]
                 if version == Version::V3
                     && parse_principal_id(subnet_id)? == nns_subnet_id.get() =>
             {
-                metrics.observe_read_state_path(ENDPOINT, "subnet_canister_ranges");
+                metrics.observe_read_state_path(endpoint, "subnet_canister_ranges");
+            }
+            [b"canister_ranges", _subnet_id] if target == Target::Subnet => {
+                metrics.observe_read_state_path(endpoint, "canister_ranges");
             }
             [b"request_status", request_id]
             | [
                 b"request_status",
                 request_id,
                 b"status" | b"reply" | b"reject_code" | b"reject_message" | b"error_code",
-            ] => {
+            ] if target == Target::Canister || version == Version::V3 => {
                 let message_id = MessageId::try_from(*request_id).map_err(|_| HttpError {
                     status: StatusCode::BAD_REQUEST,
                     message: format!(
@@ -405,7 +460,6 @@ fn verify_paths(
                 }
                 last_request_status_id = Some(message_id.clone());
 
-                // Verify that the request was signed by the same user.
                 let ingress_status = state.get_ingress_status(&message_id);
                 if let Some(ingress_user_id) = ingress_status.user_id()
                     && ingress_user_id != *user
@@ -427,10 +481,9 @@ fn verify_paths(
                             .to_string(),
                     });
                 }
-                metrics.observe_read_state_path(ENDPOINT, "request_status");
+                metrics.observe_read_state_path(endpoint, "request_status");
             }
             _ => {
-                // All other paths are unsupported.
                 return Err(HttpError {
                     status: StatusCode::NOT_FOUND,
                     message: "Invalid path requested.".to_string(),
@@ -463,7 +516,6 @@ fn can_read_canister_metadata(
                 None => return Ok(()),
             };
 
-            // Only the controller can request this custom section.
             if custom_section.visibility() == CustomSectionType::Private
                 && !canister.system_state.controllers.contains(&user.get())
             {
@@ -494,10 +546,13 @@ mod test {
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{CanisterQueues, RefundPool, ReplicatedState, SystemMetadata};
     use ic_test_utilities_state::insert_dummy_canister;
-    use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1, canister_test_id, user_test_id};
+    use ic_test_utilities_types::ids::{
+        SUBNET_0, SUBNET_1, canister_test_id, subnet_test_id, user_test_id,
+    };
     use ic_types::{batch::RawQueryStats, time::UNIX_EPOCH};
     use ic_validator::CanisterIdSet;
     use rstest::rstest;
+    use serde_bytes::ByteBuf;
     use std::collections::BTreeMap;
 
     const NNS_SUBNET_ID: SubnetId = SUBNET_0;
@@ -505,6 +560,18 @@ mod test {
 
     fn test_metrics() -> HttpHandlerMetrics {
         HttpHandlerMetrics::new(&MetricsRegistry::new())
+    }
+
+    fn fake_replicated_state() -> ReplicatedState {
+        let mut metadata = SystemMetadata::new(APP_SUBNET_ID, SubnetType::Application);
+        metadata.batch_time = UNIX_EPOCH;
+        ReplicatedState::new_from_checkpoint(
+            BTreeMap::new(),
+            metadata,
+            CanisterQueues::default(),
+            RefundPool::default(),
+            RawQueryStats::default(),
+        )
     }
 
     #[test]
@@ -574,16 +641,12 @@ mod test {
         insert_dummy_canister(&mut state, canister_id, controller.get());
 
         let public_name = "dummy";
-        // Controller can read the public custom section
         assert!(can_read_canister_metadata(&controller, &canister_id, public_name, &state).is_ok());
-
-        // Non-controller can read public custom section
         assert!(
             can_read_canister_metadata(&non_controller, &canister_id, public_name, &state).is_ok()
         );
 
         let private_name = "candid";
-        // Controller can read private custom section
         assert!(
             can_read_canister_metadata(&controller, &canister_id, private_name, &state).is_ok()
         );
@@ -598,7 +661,6 @@ mod test {
         let mut state = ReplicatedState::new(APP_SUBNET_ID, SubnetType::Application);
         insert_dummy_canister(&mut state, canister_id, controller.get());
 
-        // Non-controller cannot read private custom section named `candid`.
         assert_eq!(
             can_read_canister_metadata(&non_controller, &canister_id, "candid", &state),
             Err(HttpError {
@@ -608,69 +670,38 @@ mod test {
             })
         );
 
-        // Non existent public custom section.
         assert_eq!(
             can_read_canister_metadata(&non_controller, &canister_id, "unknown-name", &state),
             Ok(())
         );
     }
 
-    fn fake_replicated_state() -> ReplicatedState {
-        let mut metadata = SystemMetadata::new(APP_SUBNET_ID, SubnetType::Application);
-        metadata.batch_time = UNIX_EPOCH;
-        ReplicatedState::new_from_checkpoint(
-            BTreeMap::new(),
-            metadata,
-            CanisterQueues::default(),
-            RefundPool::default(),
-            RawQueryStats::default(),
-        )
-    }
-
     #[rstest]
-    fn test_canister_ranges_are_not_allowed(#[values(Version::V2, Version::V3)] version: Version) {
+    fn test_verify_canister_path(#[values(Version::V2, Version::V3)] version: Version) {
         let metrics = test_metrics();
         let state = fake_replicated_state();
+        let canister_id = canister_test_id(1);
 
-        let error = verify_paths(
-            &metrics,
-            version,
-            &state,
-            &user_test_id(1),
-            &[Path::new(vec![
-                Label::from("canister_ranges"),
-                [0; 32].into(),
-            ])],
-            &CanisterIdSet::all(),
-            canister_test_id(1).get(),
-            NNS_SUBNET_ID,
-        )
-        .expect_err("Should fail because canister_ranges are not allowed");
-
-        assert_eq!(error.status, StatusCode::NOT_FOUND)
-    }
-
-    #[rstest]
-    fn test_verify_path(#[values(Version::V2, Version::V3)] version: Version) {
-        let metrics = test_metrics();
-        let state = fake_replicated_state();
         assert_eq!(
             verify_paths(
                 &metrics,
+                Target::Canister,
                 version,
                 &state,
                 &user_test_id(1),
                 &[Path::from(Label::from("time"))],
                 &CanisterIdSet::all(),
-                canister_test_id(1).get(),
+                canister_id.get(),
                 NNS_SUBNET_ID,
             ),
             Ok(())
         );
 
+        // request_status allowed for canister on both V2 and V3
         assert_eq!(
             verify_paths(
                 &metrics,
+                Target::Canister,
                 version,
                 &state,
                 &user_test_id(1),
@@ -687,14 +718,16 @@ mod test {
                     ]),
                 ],
                 &CanisterIdSet::all(),
-                canister_test_id(1).get(),
+                canister_id.get(),
                 NNS_SUBNET_ID,
             ),
             Ok(())
         );
 
+        // two different request IDs rejected
         let err = verify_paths(
             &metrics,
+            Target::Canister,
             version,
             &state,
             &user_test_id(1),
@@ -703,20 +736,211 @@ mod test {
                 Path::new(vec![Label::from("request_status"), [1; 32].into()]),
             ],
             &CanisterIdSet::all(),
-            canister_test_id(1).get(),
+            canister_id.get(),
             NNS_SUBNET_ID,
         )
-        .expect_err("Should fail the validation");
+        .expect_err("Should fail");
         assert_eq!(err.status, StatusCode::BAD_REQUEST);
-    }
 
-    #[test]
-    fn deprecated_canister_ranges_path_is_not_allowed_on_the_v3_endpoint_except_for_the_nns_subnet()
-    {
-        let metrics = test_metrics();
-        let state = fake_replicated_state();
+        // canister_ranges not allowed on canister endpoint
         let err = verify_paths(
             &metrics,
+            Target::Canister,
+            version,
+            &state,
+            &user_test_id(1),
+            &[Path::new(vec![
+                Label::from("canister_ranges"),
+                ByteBuf::from(subnet_test_id(1).get().to_vec()).into(),
+            ])],
+            &CanisterIdSet::all(),
+            canister_id.get(),
+            NNS_SUBNET_ID,
+        )
+        .expect_err("Should fail");
+        assert_eq!(err.status, StatusCode::NOT_FOUND);
+
+        // subnet/*/metrics not allowed on canister endpoint
+        let err = verify_paths(
+            &metrics,
+            Target::Canister,
+            version,
+            &state,
+            &user_test_id(1),
+            &[Path::new(vec![
+                Label::from("subnet"),
+                APP_SUBNET_ID.get().to_vec().into(),
+                Label::from("metrics"),
+            ])],
+            &CanisterIdSet::all(),
+            canister_id.get(),
+            NNS_SUBNET_ID,
+        )
+        .expect_err("Should fail");
+        assert_eq!(err.status, StatusCode::NOT_FOUND);
+    }
+
+    #[rstest]
+    fn test_verify_subnet_path(#[values(Version::V2, Version::V3)] version: Version) {
+        let metrics = test_metrics();
+        let state = fake_replicated_state();
+
+        assert_eq!(
+            verify_paths(
+                &metrics,
+                Target::Subnet,
+                version,
+                &state,
+                &user_test_id(1),
+                &[Path::from(Label::from("time"))],
+                &CanisterIdSet::all(),
+                APP_SUBNET_ID.get(),
+                NNS_SUBNET_ID,
+            ),
+            Ok(())
+        );
+
+        assert_eq!(
+            verify_paths(
+                &metrics,
+                Target::Subnet,
+                version,
+                &state,
+                &user_test_id(1),
+                &[
+                    Path::new(vec![
+                        Label::from("subnet"),
+                        APP_SUBNET_ID.get().to_vec().into(),
+                        Label::from("public_key"),
+                    ]),
+                    Path::new(vec![
+                        Label::from("subnet"),
+                        APP_SUBNET_ID.get().to_vec().into(),
+                        Label::from("metrics"),
+                    ]),
+                    Path::new(vec![
+                        Label::from("canister_ranges"),
+                        ByteBuf::from(subnet_test_id(1).get().to_vec()).into(),
+                    ]),
+                ],
+                &CanisterIdSet::all(),
+                APP_SUBNET_ID.get(),
+                NNS_SUBNET_ID,
+            ),
+            Ok(())
+        );
+
+        // request_status allowed on V3 only for subnet endpoint
+        let request_status_paths = vec![
+            Path::new(vec![
+                Label::from("request_status"),
+                [0; 32].into(),
+                Label::from("status"),
+            ]),
+            Path::new(vec![
+                Label::from("request_status"),
+                [0; 32].into(),
+                Label::from("reply"),
+            ]),
+        ];
+        if version == Version::V3 {
+            assert_eq!(
+                verify_paths(
+                    &metrics,
+                    Target::Subnet,
+                    version,
+                    &state,
+                    &user_test_id(1),
+                    &request_status_paths,
+                    &CanisterIdSet::all(),
+                    APP_SUBNET_ID.get(),
+                    NNS_SUBNET_ID,
+                ),
+                Ok(())
+            );
+        } else {
+            let err = verify_paths(
+                &metrics,
+                Target::Subnet,
+                version,
+                &state,
+                &user_test_id(1),
+                &request_status_paths,
+                &CanisterIdSet::all(),
+                APP_SUBNET_ID.get(),
+                NNS_SUBNET_ID,
+            )
+            .expect_err("Should fail on V2");
+            assert_eq!(err.status, StatusCode::NOT_FOUND);
+        }
+
+        // two different request IDs rejected on V3 subnet
+        let err = verify_paths(
+            &metrics,
+            Target::Subnet,
+            Version::V3,
+            &state,
+            &user_test_id(1),
+            &[
+                Path::new(vec![Label::from("request_status"), [0; 32].into()]),
+                Path::new(vec![Label::from("request_status"), [1; 32].into()]),
+            ],
+            &CanisterIdSet::all(),
+            APP_SUBNET_ID.get(),
+            NNS_SUBNET_ID,
+        )
+        .expect_err("Should fail");
+        assert_eq!(err.status, StatusCode::BAD_REQUEST);
+
+        // canister/* not allowed on subnet endpoint
+        let err = verify_paths(
+            &metrics,
+            Target::Subnet,
+            version,
+            &state,
+            &user_test_id(1),
+            &[Path::new(vec![
+                Label::from("canister"),
+                ByteBuf::from(canister_test_id(1).get().to_vec()).into(),
+                Label::from("controllers"),
+            ])],
+            &CanisterIdSet::all(),
+            APP_SUBNET_ID.get(),
+            NNS_SUBNET_ID,
+        )
+        .expect_err("Should fail");
+        assert_eq!(err.status, StatusCode::NOT_FOUND);
+
+        // standalone canister_ranges (no subnet_id) not allowed
+        let err = verify_paths(
+            &metrics,
+            Target::Subnet,
+            version,
+            &state,
+            &user_test_id(1),
+            &[Path::new(vec![Label::from("canister_ranges")])],
+            &CanisterIdSet::all(),
+            APP_SUBNET_ID.get(),
+            NNS_SUBNET_ID,
+        )
+        .expect_err("Should fail");
+        assert_eq!(err.status, StatusCode::NOT_FOUND);
+    }
+
+    #[rstest]
+    fn deprecated_canister_ranges_path_is_not_allowed_on_the_v3_endpoint_except_for_the_nns_subnet(
+        #[values(Target::Canister, Target::Subnet)] target: Target,
+    ) {
+        let metrics = test_metrics();
+        let state = fake_replicated_state();
+        let effective_principal_id = match target {
+            Target::Canister => canister_test_id(1).get(),
+            Target::Subnet => APP_SUBNET_ID.get(),
+        };
+
+        let err = verify_paths(
+            &metrics,
+            target,
             Version::V3,
             &state,
             &user_test_id(1),
@@ -726,15 +950,16 @@ mod test {
                 Label::from("canister_ranges"),
             ])],
             &CanisterIdSet::all(),
-            canister_test_id(1).get(),
+            effective_principal_id,
             NNS_SUBNET_ID,
         )
-        .expect_err("Should fail the validation");
+        .expect_err("Should fail");
         assert_eq!(err.status, StatusCode::NOT_FOUND);
 
         assert!(
             verify_paths(
                 &metrics,
+                target,
                 Version::V3,
                 &state,
                 &user_test_id(1),
@@ -744,20 +969,28 @@ mod test {
                     Label::from("canister_ranges"),
                 ])],
                 &CanisterIdSet::all(),
-                canister_test_id(1).get(),
+                effective_principal_id,
                 NNS_SUBNET_ID,
             )
             .is_ok()
         );
     }
 
-    #[test]
-    fn deprecated_canister_ranges_path_is_allowed_on_the_v2_endpoint() {
+    #[rstest]
+    fn deprecated_canister_ranges_path_is_allowed_on_the_v2_endpoint(
+        #[values(Target::Canister, Target::Subnet)] target: Target,
+    ) {
         let metrics = test_metrics();
         let state = fake_replicated_state();
+        let effective_principal_id = match target {
+            Target::Canister => canister_test_id(1).get(),
+            Target::Subnet => APP_SUBNET_ID.get(),
+        };
+
         assert!(
             verify_paths(
                 &metrics,
+                target,
                 Version::V2,
                 &state,
                 &user_test_id(1),
@@ -767,7 +1000,26 @@ mod test {
                     Label::from("canister_ranges"),
                 ])],
                 &CanisterIdSet::all(),
-                canister_test_id(1).get(),
+                effective_principal_id,
+                NNS_SUBNET_ID,
+            )
+            .is_ok()
+        );
+
+        assert!(
+            verify_paths(
+                &metrics,
+                target,
+                Version::V2,
+                &state,
+                &user_test_id(1),
+                &[Path::new(vec![
+                    Label::from("subnet"),
+                    NNS_SUBNET_ID.get().to_vec().into(),
+                    Label::from("canister_ranges"),
+                ])],
+                &CanisterIdSet::all(),
+                effective_principal_id,
                 NNS_SUBNET_ID,
             )
             .is_ok()
@@ -780,8 +1032,10 @@ mod test {
         let state = fake_replicated_state();
         let canister_id = canister_test_id(1);
 
+        // canister endpoint metrics
         verify_paths(
             &metrics,
+            Target::Canister,
             Version::V2,
             &state,
             &user_test_id(1),
@@ -806,6 +1060,51 @@ mod test {
             ],
             &CanisterIdSet::all(),
             canister_id.get(),
+            NNS_SUBNET_ID,
+        )
+        .unwrap();
+
+        // subnet endpoint metrics
+        verify_paths(
+            &metrics,
+            Target::Subnet,
+            Version::V2,
+            &state,
+            &user_test_id(1),
+            &[
+                Path::new(vec![
+                    Label::from("subnet"),
+                    APP_SUBNET_ID.get().to_vec().into(),
+                    Label::from("node"),
+                    NNS_SUBNET_ID.get().to_vec().into(),
+                    Label::from("public_key"),
+                ]),
+                Path::new(vec![
+                    Label::from("subnet"),
+                    APP_SUBNET_ID.get().to_vec().into(),
+                    Label::from("canister_ranges"),
+                ]),
+            ],
+            &CanisterIdSet::all(),
+            APP_SUBNET_ID.get(),
+            NNS_SUBNET_ID,
+        )
+        .unwrap();
+
+        // subnet endpoint V3 request_status metric
+        verify_paths(
+            &metrics,
+            Target::Subnet,
+            Version::V3,
+            &state,
+            &user_test_id(1),
+            &[Path::new(vec![
+                Label::from("request_status"),
+                [0; 32].into(),
+                Label::from("status"),
+            ])],
+            &CanisterIdSet::all(),
+            APP_SUBNET_ID.get(),
             NNS_SUBNET_ID,
         )
         .unwrap();
@@ -842,6 +1141,27 @@ mod test {
             metrics
                 .read_state_path_type_total
                 .with_label_values(&["canister", "request_status"])
+                .get(),
+            1
+        );
+        assert_eq!(
+            metrics
+                .read_state_path_type_total
+                .with_label_values(&["subnet", "subnet_node_public_key"])
+                .get(),
+            1
+        );
+        assert_eq!(
+            metrics
+                .read_state_path_type_total
+                .with_label_values(&["subnet", "subnet_canister_ranges"])
+                .get(),
+            1
+        );
+        assert_eq!(
+            metrics
+                .read_state_path_type_total
+                .with_label_values(&["subnet", "request_status"])
                 .get(),
             1
         );

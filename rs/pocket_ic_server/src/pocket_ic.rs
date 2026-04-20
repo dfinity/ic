@@ -45,8 +45,8 @@ use ic_doge_interface::{
 };
 use ic_http_endpoints_public::query;
 use ic_http_endpoints_public::{
-    CanisterReadStateServiceBuilder, IngressValidatorBuilder, QueryServiceBuilder,
-    SubnetReadStateServiceBuilder, call_async, call_sync, metrics::HttpHandlerMetrics, read_state,
+    IngressValidatorBuilder, QueryServiceBuilder, ReadStateServiceBuilder, call_async, call_sync,
+    metrics::HttpHandlerMetrics, read_state,
 };
 use ic_https_outcalls_adapter::{
     Config as HttpsOutcallsConfig, IncomingSource as CanisterHttpIncomingSource,
@@ -4886,7 +4886,7 @@ impl Operation for QueryRequest {
 pub struct CanisterReadStateRequest {
     pub effective_canister_id: CanisterId,
     pub bytes: Bytes,
-    pub version: read_state::canister::Version,
+    pub version: read_state::Version,
 }
 
 impl Operation for CanisterReadStateRequest {
@@ -4919,7 +4919,7 @@ impl Operation for CanisterReadStateRequest {
                 let metrics = HttpHandlerMetrics::new(&MetricsRegistry::new());
                 let mainnet_root_of_trust =
                     IcRootOfTrust::from(icp_mainnet_root_public_key_for_testing());
-                let svc = CanisterReadStateServiceBuilder::builder(
+                let svc = ReadStateServiceBuilder::canister_builder(
                     subnet.replica_logger.clone(),
                     metrics,
                     subnet.state_manager.clone(),
@@ -4935,8 +4935,8 @@ impl Operation for CanisterReadStateRequest {
                 .build_service();
 
                 let version_str = match self.version {
-                    read_state::canister::Version::V2 => "v2",
-                    read_state::canister::Version::V3 => "v3",
+                    read_state::Version::V2 => "v2",
+                    read_state::Version::V3 => "v3",
                 };
 
                 let request = axum::http::Request::builder()
@@ -4975,7 +4975,7 @@ impl Operation for CanisterReadStateRequest {
 pub struct SubnetReadStateRequest {
     pub subnet_id: SubnetId,
     pub bytes: Bytes,
-    pub version: read_state::subnet::Version,
+    pub version: read_state::Version,
 }
 
 impl Operation for SubnetReadStateRequest {
@@ -5002,18 +5002,21 @@ impl Operation for SubnetReadStateRequest {
                         "The NNS subnet should already exist if we are already executing requests",
                     );
                 let metrics = HttpHandlerMetrics::new(&MetricsRegistry::new());
-                let svc = SubnetReadStateServiceBuilder::builder(
+                let svc = ReadStateServiceBuilder::subnet_builder(
+                    subnet.replica_logger.clone(),
                     metrics,
-                    NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     subnet.state_manager.clone(),
+                    subnet.registry_client.clone(),
+                    Arc::new(StandaloneIngressSigVerifier),
+                    NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     nns_subnet_id,
                     self.version,
                 )
                 .build_service();
 
                 let version_str = match self.version {
-                    read_state::subnet::Version::V2 => "v2",
-                    read_state::subnet::Version::V3 => "v3",
+                    read_state::Version::V2 => "v2",
+                    read_state::Version::V3 => "v3",
                 };
 
                 let request = axum::http::Request::builder()

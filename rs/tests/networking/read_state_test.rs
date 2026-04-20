@@ -212,13 +212,13 @@ fn read_state_with_identity_and_principal_id(
 
     let node_url = match endpoint {
         Endpoint::CanisterReadState(read_state::canister::Version::V2)
-        | Endpoint::SubnetReadState(read_state::subnet::Version::V2) => {
+        | Endpoint::SubnetReadState(read_state::canister::Version::V2) => {
             api_boundary_node.get_public_url()
         }
         // TODO(CON-1586): switch to api_boundary_node once the endpoints are
         // allowlisted by the boundary nodes.
         Endpoint::CanisterReadState(read_state::canister::Version::V3)
-        | Endpoint::SubnetReadState(read_state::subnet::Version::V3) => node.get_public_url(),
+        | Endpoint::SubnetReadState(read_state::canister::Version::V3) => node.get_public_url(),
     };
 
     let certificate = endpoint.read_state(node_url, paths, principal_id, identity)?;
@@ -831,7 +831,7 @@ fn test_canister_canister_ranges_paths(env: TestEnv, version: read_state::canist
 
 /// Queries the `api/{v2,v3}/subnet/{subnet_id}/read_state` endpoint for the canister ranges.
 /// and compares the result with the canister ranges obtained from the registry.
-fn test_subnet_canister_ranges_paths(env: TestEnv, version: read_state::subnet::Version) {
+fn test_subnet_canister_ranges_paths(env: TestEnv, version: read_state::canister::Version) {
     let endpoint = Endpoint::SubnetReadState(version);
     let subnet = get_first_app_subnet(&env);
 
@@ -850,9 +850,9 @@ fn test_subnet_canister_ranges_paths(env: TestEnv, version: read_state::subnet::
 fn test_deprecated_subnet_canister_ranges_paths(env: TestEnv, endpoint: Endpoint) {
     let should_accept_deprecated_canister_ranges_path = match endpoint {
         Endpoint::CanisterReadState(read_state::canister::Version::V2)
-        | Endpoint::SubnetReadState(read_state::subnet::Version::V2) => true,
+        | Endpoint::SubnetReadState(read_state::canister::Version::V2) => true,
         Endpoint::CanisterReadState(read_state::canister::Version::V3)
-        | Endpoint::SubnetReadState(read_state::subnet::Version::V3) => false,
+        | Endpoint::SubnetReadState(read_state::canister::Version::V3) => false,
     };
 
     let app_subnet = get_first_app_subnet(&env);
@@ -995,7 +995,7 @@ fn validate_canister_ranges(
 #[derive(Copy, Clone, Debug)]
 enum Endpoint {
     CanisterReadState(read_state::canister::Version),
-    SubnetReadState(read_state::subnet::Version),
+    SubnetReadState(read_state::canister::Version),
 }
 
 impl Endpoint {
@@ -1007,10 +1007,10 @@ impl Endpoint {
             Endpoint::CanisterReadState(read_state::canister::Version::V3) => {
                 base.join(&format!("/api/v3/canister/{principal_id}/read_state"))
             }
-            Endpoint::SubnetReadState(read_state::subnet::Version::V2) => {
+            Endpoint::SubnetReadState(read_state::canister::Version::V2) => {
                 base.join(&format!("/api/v2/subnet/{principal_id}/read_state"))
             }
-            Endpoint::SubnetReadState(read_state::subnet::Version::V3) => {
+            Endpoint::SubnetReadState(read_state::canister::Version::V3) => {
                 base.join(&format!("/api/v3/subnet/{principal_id}/read_state"))
             }
         }
@@ -1094,8 +1094,8 @@ where
 fn main() -> Result<()> {
     let mut parallel_group = SystemTestSubGroup::new()
         .add_test(systest!(test_non_utf8_metadata))
-        .add_test(systest!(test_subnet_canister_ranges_paths; read_state::subnet::Version::V2))
-        .add_test(systest!(test_subnet_canister_ranges_paths; read_state::subnet::Version::V3))
+        .add_test(systest!(test_subnet_canister_ranges_paths; read_state::canister::Version::V2))
+        .add_test(systest!(test_subnet_canister_ranges_paths; read_state::canister::Version::V3))
         .add_test(systest!(test_canister_canister_ranges_paths; read_state::canister::Version::V2))
         .add_test(systest!(test_canister_canister_ranges_paths; read_state::canister::Version::V3))
         // Only /api/{v2,v3}/canister/read_state endpoints are tested because paths with
@@ -1122,8 +1122,8 @@ fn main() -> Result<()> {
     for endpoint in [
         Endpoint::CanisterReadState(read_state::canister::Version::V2),
         Endpoint::CanisterReadState(read_state::canister::Version::V3),
-        Endpoint::SubnetReadState(read_state::subnet::Version::V2),
-        Endpoint::SubnetReadState(read_state::subnet::Version::V3),
+        Endpoint::SubnetReadState(read_state::canister::Version::V2),
+        Endpoint::SubnetReadState(read_state::canister::Version::V3),
     ] {
         parallel_group = parallel_group
             .add_test(systest!(test_empty_paths_return_time; endpoint))

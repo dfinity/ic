@@ -740,8 +740,8 @@ fn test_query_endpoint_returns_service_unavailable_on_missing_state(
 
 #[rstest]
 fn can_retrieve_subnet_metrics(
-    #[values(read_state::subnet::Version::V2, read_state::subnet::Version::V3)]
-    version: read_state::subnet::Version,
+    #[values(read_state::canister::Version::V2, read_state::canister::Version::V3)]
+    version: read_state::canister::Version,
 ) {
     use ic_crypto_tree_hash::MatchPatternPath;
 
@@ -883,8 +883,8 @@ fn can_retrieve_subnet_metrics(
             wait_for_status_healthy(&addr).await.unwrap();
             let client = Client::builder(TokioExecutor::new()).build_http();
             let version_str = match version {
-                read_state::subnet::Version::V2 => "v2",
-                read_state::subnet::Version::V3 => "v3",
+                read_state::canister::Version::V2 => "v2",
+                read_state::canister::Version::V3 => "v3",
             };
 
             let req = Request::builder()
