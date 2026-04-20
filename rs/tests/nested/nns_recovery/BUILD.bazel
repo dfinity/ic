@@ -64,17 +64,17 @@ system_test_nns(
 #
 #     bazel \
 #         test \
-#         --test_env=SSH_AUTH_SOCK \
 #         --test_timeout=7200 \  # 2 hours
 #         //rs/tests/nested/nns_recovery:nr_large_with_mainnet_state
 #
-# The only unusual thing in this command is `--test_env=SSH_AUTH_SOCK`. That causes the
-# SSH_AUTH_SOCK environment variable to be "forwarded" from your shell to the sandbox where the test
-# is run. This authorizes the test to download the test data.
+# You should use `--test_timeout=7200` because the test is expected to take a very long time.
+# You should also have your `SSH_AUTH_SOCK` environment variable set, and the corresponding SSH agent
+# should be running and have permission to fetch mainnet test data.
 system_test_nns(
     name = "nr_large_with_mainnet_state",
     enable_head_nns_variant = False,
     env = ENV,
+    env_inherit = ["SSH_AUTH_SOCK"],
     guestos = "mainnet_nns_dev",  # necessary for configuring NNS public key
     guestos_update = "test",
     setupos = "mainnet_nns_dev",
