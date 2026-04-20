@@ -170,7 +170,30 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
     let vm = deployed_universal_vm.get_vm().unwrap();
     let ipv6 = vm.ipv6.to_string();
-    let ipv4 = vm.ipv4.map_or("".to_string(), |ipv4| ipv4.to_string());
+    // If Farm hasn't already populated the IPv4 address on the AllocatedVm, fall back
+    // to retrieving it directly from the UVM (when it's configured with an IPv4
+    // interface). This polls the guest until DHCP assigns a globally scoped address.
+    let ipv4 = match vm.ipv4 {
+        Some(ipv4) => Some(ipv4),
+        None => {
+            let has_ipv4_iface = deployed_universal_vm
+                .block_on_bash_script(
+                    "if ip link show dev enp2s0 >/dev/null 2>&1; then echo yes; else echo no; fi",
+                )
+                .map(|s| s.trim() == "yes")
+                .unwrap_or(false);
+            if has_ipv4_iface {
+                Some(
+                    deployed_universal_vm
+                        .block_on_ipv4()
+                        .expect("Failed to retrieve IPv4 address from UVM"),
+                )
+            } else {
+                None
+            }
+        }
+    };
+    let ipv4 = ipv4.map_or("".to_string(), |ipv4| ipv4.to_string());
     // We need to use port 443 as it's among the only ports that the Dante socks server can proxy to.
     let http_bin_port = 443;
     info!(
@@ -187,23 +210,6 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
         nip_io_hostname="${{ipv6//:/-}}.ipv6.nip.io"
         echo "Calculated nip.io hostname: $nip_io_hostname"
 
-        if [[ "$ipv4" == "" ]] && ip link show dev enp2s0 >/dev/null; then
-            count=0
-            # Wait up to 5 minutes for DHCP to assign a globally scoped IPv4 address
-            # on enp2s0. 120s has been observed to be insufficient on slow/busy Farm
-            # hosts, causing this test to flake.
-            until ipv4=$(ip -j address show dev enp2s0 \
-                        | jq -r -e \
-                        '.[0].addr_info | map(select(.scope == "global")) | .[0].local'); \
-            do
-                if [ "$count" -ge 300 ]; then
-                    echo "Timed out waiting for IPv4 address on enp2s0!" >&2
-                    exit 1
-                fi
-                sleep 1
-                count=$((count+1))
-            done
-        fi
         echo "IPv4 is ${{ipv4:-disabled}}"
 
         echo "Generate ipv6 service cert with root cert and key, using minica ..."
