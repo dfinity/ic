@@ -140,6 +140,7 @@ pub(crate) fn build_callback_id_config_map(
     let call_contexts = &state.metadata.subnet_call_context_manager;
     let remote_dkg_attempts = &dkg_summary.initial_dkg_attempts;
 
+    // Iterate over all context types
     let setup_contexts = call_contexts
         .setup_initial_dkg_contexts
         .iter()
@@ -149,6 +150,7 @@ pub(crate) fn build_callback_id_config_map(
             .reshare_chain_key_contexts
             .iter()
             .filter_map(|(&callback_id, context)| {
+                // Filter out IDKG contexts.
                 NiDkgReshareChainKeyContext::try_from(context)
                     .ok()
                     .map(|context| (callback_id, RemoteDkgContext::ReshareChainKey(context)))
@@ -158,20 +160,25 @@ pub(crate) fn build_callback_id_config_map(
         dkg_summary
             .next_transcripts()
             .get(tag)
+            .or_else(|| dkg_summary.current_transcripts().get(tag))
             .cloned()
-            .or_else(|| dkg_summary.current_transcripts().get(tag).cloned())
     };
 
     for (callback_id, context) in setup_contexts.chain(reshare_contexts) {
         if context.registry_version() > registry_version {
+            // Skip contexts with a registry version that hasn't been reached yet
             continue;
         }
 
         if let Some(&attempts) = remote_dkg_attempts.get(context.target_id()) {
             if attempts == 0 {
+                // An attempt count of 0 means that the context has already been completed
+                // in the last interval. We skip the context to avoid handling it again in
+                // the current interval.
                 continue;
             }
             if attempts >= MAX_REMOTE_DKG_ATTEMPTS {
+                // Add timeout errors for contexts that have been attempted too many times
                 callback_id_config_map.insert(
                     callback_id,
                     Err(context.generate_timeout_errors(dkg_summary.height, this_subnet_id)),
@@ -180,6 +187,7 @@ pub(crate) fn build_callback_id_config_map(
             }
         }
 
+        // Create configs for the context and insert them into the map
         callback_id_config_map.insert(
             callback_id,
             context.create_configs(
@@ -212,6 +220,7 @@ pub(crate) fn merge_configs<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::{local_dkg_id, make_test_config, remote_dkg_id_with_target};
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::{
@@ -225,9 +234,7 @@ mod tests {
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_test_utilities_types::messages::RequestBuilder;
     use ic_types::{
-        NodeId, NumberOfNodes, RegistryVersion,
-        crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetSubnet, config::NiDkgConfigData},
-        messages::CallbackId,
+        NodeId, RegistryVersion, crypto::threshold_sig::ni_dkg::NiDkgTag, messages::CallbackId,
         time::UNIX_EPOCH,
     };
     use std::collections::BTreeSet;
@@ -278,39 +285,6 @@ mod tests {
             registry_version,
             time: UNIX_EPOCH,
             target_id,
-        }
-    }
-
-    fn make_test_config(dkg_id: NiDkgId, max_corrupt_dealers: u32) -> NiDkgConfig {
-        let nodes: BTreeSet<_> = (0..10).map(node_test_id).collect();
-        NiDkgConfig::new(NiDkgConfigData {
-            dkg_id,
-            max_corrupt_dealers: NumberOfNodes::from(max_corrupt_dealers),
-            dealers: nodes.clone(),
-            max_corrupt_receivers: NumberOfNodes::from(1),
-            receivers: nodes,
-            threshold: NumberOfNodes::from(2),
-            registry_version: RegistryVersion::from(1),
-            resharing_transcript: None,
-        })
-        .unwrap()
-    }
-
-    fn local_dkg_id(tag: NiDkgTag) -> NiDkgId {
-        NiDkgId {
-            start_block_height: Height::from(0),
-            dealer_subnet: subnet_test_id(0),
-            dkg_tag: tag,
-            target_subnet: NiDkgTargetSubnet::Local,
-        }
-    }
-
-    fn remote_dkg_id_with_target(tag: NiDkgTag, target_id: [u8; 32]) -> NiDkgId {
-        NiDkgId {
-            start_block_height: Height::from(0),
-            dealer_subnet: subnet_test_id(0),
-            dkg_tag: tag,
-            target_subnet: NiDkgTargetSubnet::Remote(NiDkgTargetId::new(target_id)),
         }
     }
 
@@ -407,6 +381,7 @@ mod tests {
                 && config.dkg_id().target_subnet == NiDkgTargetSubnet::Remote(target_id)
         }));
 
+        // Zero attempts => context must be skipped.
         let zero_attempts_summary = test_dkg_summary(
             Height::from(101),
             BTreeMap::new(),
@@ -424,6 +399,7 @@ mod tests {
         .expect("expected callback-id config map");
         assert!(zero_attempts_map.is_empty());
 
+        // Attempts above the max => timeout errors must be returned.
         let max_attempts_summary = test_dkg_summary(
             Height::from(102),
             BTreeMap::new(),
@@ -463,6 +439,7 @@ mod tests {
             BTreeSet::from([NiDkgTag::LowThreshold, NiDkgTag::HighThreshold])
         );
 
+        // Setup context creation error should be propagated.
         state
             .metadata
             .subnet_call_context_manager

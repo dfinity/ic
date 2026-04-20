@@ -1073,7 +1073,13 @@ fn create_remote_dkg_config(
 
 #[cfg(test)]
 mod tests {
-    use crate::{test_utils::create_dealing, tests::test_vet_key_config};
+    use crate::{
+        test_utils::{
+            create_dealing, local_dkg_id, make_test_config, remote_dkg_id,
+            remote_dkg_id_with_target,
+        },
+        tests::test_vet_key_config,
+    };
 
     use super::{super::test_utils::complement_state_manager_with_setup_initial_dkg_request, *};
     use ic_consensus_mocks::{
@@ -1998,43 +2004,6 @@ mod tests {
         }
         fn validated_contains(&self, _msg: &Message) -> bool {
             unimplemented!()
-        }
-    }
-
-    fn make_test_config(dkg_id: NiDkgId, max_corrupt_dealers: u32) -> NiDkgConfig {
-        let nodes: BTreeSet<_> = (0..10).map(node_test_id).collect();
-        NiDkgConfig::new(NiDkgConfigData {
-            dkg_id,
-            max_corrupt_dealers: NumberOfNodes::from(max_corrupt_dealers),
-            dealers: nodes.clone(),
-            max_corrupt_receivers: NumberOfNodes::from(1),
-            receivers: nodes,
-            threshold: NumberOfNodes::from(2),
-            registry_version: RegistryVersion::from(1),
-            resharing_transcript: None,
-        })
-        .unwrap()
-    }
-
-    fn local_dkg_id(tag: NiDkgTag) -> NiDkgId {
-        NiDkgId {
-            start_block_height: Height::from(0),
-            dealer_subnet: subnet_test_id(0),
-            dkg_tag: tag,
-            target_subnet: NiDkgTargetSubnet::Local,
-        }
-    }
-
-    fn remote_dkg_id(tag: NiDkgTag) -> NiDkgId {
-        remote_dkg_id_with_target(tag, [0_u8; 32])
-    }
-
-    fn remote_dkg_id_with_target(tag: NiDkgTag, target_id: [u8; 32]) -> NiDkgId {
-        NiDkgId {
-            start_block_height: Height::from(0),
-            dealer_subnet: subnet_test_id(0),
-            dkg_tag: tag,
-            target_subnet: NiDkgTargetSubnet::Remote(NiDkgTargetId::new(target_id)),
         }
     }
 
