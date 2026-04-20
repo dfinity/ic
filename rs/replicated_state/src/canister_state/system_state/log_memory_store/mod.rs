@@ -20,6 +20,7 @@ use ic_validate_eq_derive::ValidateEq;
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::OnceLock;
+use std::time::Duration;
 
 /// Upper bound on stored delta-log sizes used for metrics.
 /// Limits memory growth, 10k covers expected per-round
@@ -71,6 +72,15 @@ pub struct LogMemoryStore {
     #[validate_eq(Ignore)]
     header_cache: OnceLock<Option<Header>>,
 
+    /// Caches the timestamp of the oldest live record. Populated alongside
+    /// `header_cache` inside `save_ring_buffer` (while the first-record page
+    /// is still hot from the preceding `append_log`), lazy-initialised after
+    /// checkpoint reload, and invalidated in `clear` / `deallocate`.
+    ///
+    /// Avoids a cold page read at observation time for the retention metric.
+    #[validate_eq(Ignore)]
+    first_timestamp_cache: OnceLock<Option<u64>>,
+
     /// (!) No need to preserve across checkpoints.
     /// Tracks the size of each delta log appended during a round.
     /// Multiple logs can be appended in one round (e.g. heartbeat, timers, or message executions).
@@ -117,6 +127,7 @@ impl LogMemoryStore {
                 0
             },
             header_cache: OnceLock::new(),
+            first_timestamp_cache: OnceLock::new(),
             delta_log_sizes: VecDeque::new(),
         }
     }
@@ -148,13 +159,17 @@ impl LogMemoryStore {
             self.save_ring_buffer(ring_buffer);
         } else {
             self.header_cache = OnceLock::new();
+            self.first_timestamp_cache = OnceLock::new();
         }
     }
 
-    /// Update page_map, header_cache and persistent_next_idx.
+    /// Update page_map, header_cache, first_timestamp_cache and persistent_next_idx.
     fn save_ring_buffer(&mut self, ring_buffer: RingBuffer) {
         self.maybe_page_map = Some(ring_buffer.to_page_map());
         self.header_cache = OnceLock::from(Some(ring_buffer.get_header()));
+        // Page at `data_head` is hot from the just-completed `append_log` —
+        // compute here rather than lazy-loading on observation.
+        self.first_timestamp_cache = OnceLock::from(ring_buffer.first_timestamp());
         // Must come after header_cache update, since next_idx() reads from it.
         self.persistent_next_idx = self.next_idx();
     }
@@ -165,6 +180,7 @@ impl LogMemoryStore {
         self.persistent_next_idx = self.next_idx();
         self.maybe_page_map = None;
         self.header_cache = OnceLock::new();
+        self.first_timestamp_cache = OnceLock::new();
     }
 
     /// Loads the ring buffer from the page map.
@@ -179,6 +195,30 @@ impl LogMemoryStore {
         *self
             .header_cache
             .get_or_init(|| self.load_ring_buffer().map(|rb| rb.get_header()))
+    }
+
+    /// Returns the timestamp of the most recently appended record, or `None`
+    /// if the buffer is empty. O(1) via the cached header.
+    pub fn max_timestamp(&self) -> Option<u64> {
+        self.get_header().map(|h| h.max_timestamp)
+    }
+
+    /// Returns the timestamp of the oldest live record, or `None` if the
+    /// buffer is empty. O(1) via the cache; after checkpoint reload the cache
+    /// lazy-initialises on first call via one record-header read.
+    pub fn first_timestamp(&self) -> Option<u64> {
+        *self
+            .first_timestamp_cache
+            .get_or_init(|| self.load_ring_buffer().and_then(|rb| rb.first_timestamp()))
+    }
+
+    /// Returns the time span between the oldest and newest records, or
+    /// `None` if the buffer is empty. Returns `Duration::ZERO` when both
+    /// timestamps are equal (single record).
+    pub fn retention(&self) -> Option<Duration> {
+        let max = self.max_timestamp()?;
+        let first = self.first_timestamp()?;
+        Some(Duration::from_nanos(max.saturating_sub(first)))
     }
 
     /// Returns the total allocated memory.
@@ -374,13 +414,18 @@ impl Clone for LogMemoryStore {
                 Some(val) => OnceLock::from(*val),
                 None => OnceLock::new(),
             },
+            first_timestamp_cache: match self.first_timestamp_cache.get() {
+                Some(val) => OnceLock::from(*val),
+                None => OnceLock::new(),
+            },
         }
     }
 }
 
 impl PartialEq for LogMemoryStore {
     fn eq(&self, other: &Self) -> bool {
-        // header_cache is a transient cache and should not be compared.
+        // header_cache and first_timestamp_cache are transient caches and
+        // should not be compared.
         self.feature_flag == other.feature_flag
             && self.maybe_page_map == other.maybe_page_map
             && self.persistent_next_idx == other.persistent_next_idx
