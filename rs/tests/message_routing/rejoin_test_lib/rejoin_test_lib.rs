@@ -432,7 +432,7 @@ pub fn rejoin_test_long_rounds(
     // The restarted node will be the slowest node
     // required for consensus in terms of batch processing time:
     // this way, the restarted node cannot catch up with the subnet
-    // without additional measures (to be implemented in the future).
+    // without additional measures.
     // E.g., for `n = 13`, we have `f = 4` and the nodes at indices
     // `0`, `1`, ..., `n - (f + 1)` are required for consensus,
     // i.e., we restart the node at (0-based) index
@@ -452,7 +452,7 @@ pub fn rejoin_test_long_rounds(
 
     // Wait for the subnet to produce a CUP and then restart the rejoin_node.
     // This way, the restarted node starts from that CUP
-    // and we can assert it to catch up until the next CUP.
+    // and we can assert it to catch up until the second next CUP.
     info!(logger, "Waiting for a CUP ...");
     let reference_node_status = reference_node
         .status()
@@ -470,10 +470,10 @@ pub fn rejoin_test_long_rounds(
     info!(logger, "Start the killed node again ...");
     rejoin_node.vm().start();
 
-    info!(logger, "Waiting for the next CUP ...");
+    info!(logger, "Waiting for the second next CUP ...");
     let last_cup_height = block_on(wait_for_cup(
         &logger,
-        latest_certified_height + dkg_interval + 1,
+        latest_certified_height + 2 * (dkg_interval + 1),
         reference_node.clone(),
     ));
 

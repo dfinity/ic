@@ -5,7 +5,7 @@ use crate::{
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{crypto::ErrorReproducibility, dkg::DkgPool};
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateManager;
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, error, warn};
 use ic_protobuf::registry::subnet::v1::{
     CatchUpPackageContents, chain_key_initialization::Initialization,
@@ -47,7 +47,7 @@ pub fn create_payload(
     pool_reader: &PoolReader<'_>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
     parent: &Block,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
     max_dealings_per_block: usize,
@@ -70,7 +70,7 @@ pub fn create_payload(
             last_dkg_summary,
             parent,
             last_summary_block.context.registry_version,
-            state_manager,
+            state_reader,
             validation_context,
             logger,
         )
@@ -249,7 +249,7 @@ pub(super) fn create_summary_payload(
     last_summary: &DkgSummary,
     parent: &Block,
     registry_version: RegistryVersion,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
 ) -> Result<DkgSummary, DkgPayloadCreationError> {
@@ -334,7 +334,7 @@ pub(super) fn create_summary_payload(
             subnet_id,
             height,
             registry_client,
-            state_manager,
+            state_reader,
             validation_context,
             transcripts_for_remote_subnets,
             &previous_transcripts,
@@ -414,7 +414,7 @@ fn compute_remote_dkg_data(
     subnet_id: SubnetId,
     height: Height,
     registry_client: &dyn RegistryClient,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
     validation_context: &ValidationContext,
     mut new_transcripts: BTreeMap<NiDkgId, Result<NiDkgTranscript, String>>,
     previous_transcripts: &BTreeMap<NiDkgId, Result<NiDkgTranscript, String>>,
@@ -429,7 +429,7 @@ fn compute_remote_dkg_data(
     ),
     DkgPayloadCreationError,
 > {
-    let state = state_manager
+    let state = state_reader
         .get_state_at(validation_context.certified_height)
         .map_err(DkgPayloadCreationError::StateManagerError)?;
     let (context_configs, errors, valid_target_ids) = process_subnet_call_context(

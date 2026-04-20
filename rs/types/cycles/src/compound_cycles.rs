@@ -127,6 +127,12 @@ impl<T: CyclesUseCaseKind> CompoundCycles<T> {
     pub fn nominal(&self) -> NominalCycles {
         self.nominal
     }
+
+    // Returns true if both the real and nominal parts of this `CompoundCycles`
+    // are zero.
+    pub fn is_zero(&self) -> bool {
+        self.real.is_zero() && self.nominal.is_zero()
+    }
 }
 
 impl<T: CyclesUseCaseKind> Add for CompoundCycles<T> {

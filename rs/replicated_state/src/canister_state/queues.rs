@@ -316,7 +316,7 @@ impl Iterator for CanisterOutputQueuesIterator<'_> {
 /// and canister requests / responses, `pop_input()` / `peek_input()` may also
 /// return concise "reject response for callback ID" messages.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub enum CanisterInput {
+pub(crate) enum CanisterInput {
     Ingress(Arc<Ingress>),
     Request(Arc<Request>),
     Response(Arc<Response>),
