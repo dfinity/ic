@@ -1,4 +1,4 @@
-From 03b75f017ffe6cf556fefbd44f44655bf4a9af48 Mon Sep 17 00:00:00 2001
+]633;E;cat <<'HEADER'\x0aFrom 03b75f017ffe6cf556fefbd44f44655bf4a9af48 Mon Sep 17 00:00:00 2001\x0aFrom: Zi Yan <ziy@nvidia.com>\x0aDate: Fri, 27 Feb 2026 14:11:36 -0500\x0aSubject: [PATCH] mm/huge_memory: fix folio_split() race condition with\x0a folio_try_get()\x0a\x0aDuring a pagecache folio split, the values in the related xarray should not\x0abe changed from the original folio at xarray split time until all\x0aafter-split folios are ready and stored in the xarray. Otherwise, a\x0aparallel folio_try_get() can see stale values in the xarray and a stale\x0avalue can be a unfrozen after-split folio. This leads to a wrong folio\x0areturned to userspace.\x0a\x0aBackport of upstream commit 577a1f495fd78d8fb61b67ac3d3b595b01f6fcb0\x0a(merged in mainline v7.0-rc4, 2026-03\x3b also applied to linux-6.18.y as\x0a08b2b65c63bb26dbb2a4e2adc2ce96e2929b8b60 on 2026-03-25). Adapted to\x0aUbuntu's linux-hwe-6.17 6.17.0-22.22~24.04.1 tree, which predates the\x0aupstream __split_unmapped_folio() refactor that introduced SPLIT_TYPE_*\x0aand folio_split_supported()\x3b the fix itself is identical in effect.\x0a\x0aAs of 2026-04-20, the fix has NOT yet reached Ubuntu's linux-hwe-6.17\x0apackage on noble (24.04). Reported against the IC GuestOS by\x0aBas van Dijk <bas@dfinity.org>\x3b reproducer at\x0ahttps://github.com/dfinity/thp-madv-remove-test.\x0a\x0aSigned-off-by: Zi Yan <ziy@nvidia.com>\x0a---\x0a mm/huge_memory.c | 9 ++++++++-\x0a 1 file changed, 8 insertions(+), 1 deletion(-)\x0a\x0adiff --git a/mm/huge_memory.c b/mm/huge_memory.c\x0a--- a/mm/huge_memory.c\x0a+++ b/mm/huge_memory.c\x0aHEADER\x0a;8240f2f2-5632-44e0-a1a2-5d0a94045861]633;CFrom 03b75f017ffe6cf556fefbd44f44655bf4a9af48 Mon Sep 17 00:00:00 2001
 From: Zi Yan <ziy@nvidia.com>
 Date: Fri, 27 Feb 2026 14:11:36 -0500
 Subject: [PATCH] mm/huge_memory: fix folio_split() race condition with
@@ -13,7 +13,10 @@ returned to userspace.
 
 Backport of upstream commit 577a1f495fd78d8fb61b67ac3d3b595b01f6fcb0
 (merged in mainline v7.0-rc4, 2026-03; also applied to linux-6.18.y as
-08b2b65c63bb26dbb2a4e2adc2ce96e2929b8b60 on 2026-03-25).
+08b2b65c63bb26dbb2a4e2adc2ce96e2929b8b60 on 2026-03-25). Adapted to
+Ubuntu's linux-hwe-6.17 6.17.0-22.22~24.04.1 tree, which predates the
+upstream __split_unmapped_folio() refactor that introduced SPLIT_TYPE_*
+and folio_split_supported(); the fix itself is identical in effect.
 
 As of 2026-04-20, the fix has NOT yet reached Ubuntu's linux-hwe-6.17
 package on noble (24.04). Reported against the IC GuestOS by
@@ -26,31 +29,30 @@ Signed-off-by: Zi Yan <ziy@nvidia.com>
  1 file changed, 8 insertions(+), 1 deletion(-)
 
 diff --git a/mm/huge_memory.c b/mm/huge_memory.c
-index d4ca8cfd7f9d..3d5bf3bb8a3e 100644
 --- a/mm/huge_memory.c
 +++ b/mm/huge_memory.c
-@@ -3628,6 +3628,7 @@ static int __split_unmapped_folio(struct folio *folio, int new_order,
- 	const bool is_anon = folio_test_anon(folio);
- 	int old_order = folio_order(folio);
- 	int start_order = split_type == SPLIT_TYPE_UNIFORM ? new_order : old_order - 1;
+@@ -3422,6 +3422,7 @@
+ {
+ 	int order = folio_order(folio);
+ 	int start_order = uniform_split ? new_order : order - 1;
 +	struct folio *origin_folio = folio;
+ 	bool stop_split = false;
+ 	struct folio *next;
  	int split_order;
- 
- 	/*
-@@ -3653,7 +3654,13 @@ static int __split_unmapped_folio(struct folio *folio, int new_order,
+@@ -3459,7 +3460,13 @@
  				xas_split(xas, folio, old_order);
  			else {
  				xas_set_order(xas, folio->index, split_order);
 -				xas_try_split(xas, folio, old_order);
 +				/*
-+				 * use the original folio, so that a parallel
-+				 * folio_try_get() waits on it until xarray is
-+				 * updated with after-split folios and
-+				 * the original one is unfreezed
++				 * use the original folio, so that a
++				 * parallel folio_try_get() waits on it
++				 * until xarray is updated with after-split
++				 * folios and the original one is unfreezed
 +				 */
 +				xas_try_split(xas, origin_folio, old_order);
- 				if (xas_error(xas))
- 					return xas_error(xas);
- 			}
+ 				if (xas_error(xas)) {
+ 					ret = xas_error(xas);
+ 					stop_split = true;
 -- 
 2.51.0
