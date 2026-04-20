@@ -2618,21 +2618,24 @@ impl StateManagerImpl {
             hash_tree,
         })
     }
+}
 
-    fn update_latest_certified_height(&self, height: Height) {
-        let latest_certified = update_latest_height(&self.latest_certified_height, height);
-        self.metrics
-            .latest_certified_height
-            .set(latest_certified as i64);
-        self.max_certified_height_tx.send_if_modified(|h| {
-            if height > *h {
-                *h = height;
-                true
-            } else {
-                false
-            }
-        });
-    }
+fn update_latest_certified_height(
+    latest_certified_height: &AtomicU64,
+    metrics: &StateManagerMetrics,
+    max_certified_height_tx: &watch::Sender<Height>,
+    height: Height,
+) {
+    let latest_certified = update_latest_height(latest_certified_height, height);
+    metrics.latest_certified_height.set(latest_certified as i64);
+    max_certified_height_tx.send_if_modified(|h| {
+        if height > *h {
+            *h = height;
+            true
+        } else {
+            false
+        }
+    });
 }
 
 fn initial_state(own_subnet_id: SubnetId, own_subnet_type: SubnetType) -> Labeled<ReplicatedState> {
@@ -3070,7 +3073,12 @@ impl StateManager for StateManagerImpl {
                 );
             }
 
-            self.update_latest_certified_height(certification_height);
+            update_latest_certified_height(
+                &self.latest_certified_height,
+                &self.metrics,
+                &self.max_certified_height_tx,
+                certification_height,
+            );
 
             if let Some((_, certification_requested_at)) = metadata.hash_tree {
                 self.metrics
@@ -3681,19 +3689,12 @@ fn spawn_hash_thread(
                                 // in that case `certification_metadata` is never inserted and the
                                 // certified state at this height would not be available.
                                 if has_certification {
-                                    let latest_certified =
-                                        update_latest_height(&latest_certified_height, height);
-                                    metrics
-                                        .latest_certified_height
-                                        .set(latest_certified as i64);
-                                    max_certified_height_tx.send_if_modified(|h| {
-                                        if height > *h {
-                                            *h = height;
-                                            true
-                                        } else {
-                                            false
-                                        }
-                                    });
+                                    update_latest_certified_height(
+                                        &latest_certified_height,
+                                        &metrics,
+                                        &max_certified_height_tx,
+                                        height,
+                                    );
                                 }
                             }
                         }
