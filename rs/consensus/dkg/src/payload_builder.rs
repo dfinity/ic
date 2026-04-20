@@ -1039,11 +1039,10 @@ pub(crate) fn create_remote_dkg_config_for_key_id(
         );
         return Err(Box::new((dkg_id, err)));
     };
-    let dealers = resharing_transcript.committee.clone();
 
     create_remote_dkg_config(
         dkg_id.clone(),
-        dealers.into(),
+        resharing_transcript.committee.get().clone(),
         receivers,
         registry_version,
         Some(resharing_transcript),

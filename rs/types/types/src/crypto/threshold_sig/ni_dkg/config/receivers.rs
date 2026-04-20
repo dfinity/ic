@@ -75,9 +75,3 @@ impl NiDkgReceivers {
         self.count
     }
 }
-
-impl From<NiDkgReceivers> for BTreeSet<NodeId> {
-    fn from(receivers: NiDkgReceivers) -> Self {
-        receivers.receivers
-    }
-}
