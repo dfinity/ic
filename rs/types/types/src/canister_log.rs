@@ -531,9 +531,9 @@ mod tests {
         let span = CanisterLog::new_aggregate(
             3,
             canister_log_records(&[
-                (0, 1_000_000_000, b"a"),   // t = 1 s
-                (1, 1_500_000_000, b"b"),   // t = 1.5 s
-                (2, 61_000_000_000, b"c"),  // t = 61 s
+                (0, 1_000_000_000, b"a"),  // t = 1 s
+                (1, 1_500_000_000, b"b"),  // t = 1.5 s
+                (2, 61_000_000_000, b"c"), // t = 61 s
             ]),
         );
         assert_eq!(span.retention(), Some(Duration::from_secs(60)));
