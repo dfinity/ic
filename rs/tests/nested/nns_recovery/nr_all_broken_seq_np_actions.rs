@@ -53,7 +53,7 @@ fn main() -> Result<()> {
             fix_dfinity_owned_node_like_np: false,
             sequential_np_actions: true,
         }))
-        .with_timeout_per_test(Duration::from_secs(35 * 60))
+        .with_timeout_per_test(Duration::from_mins(35))
         .execute_from_args()?;
 
     Ok(())
