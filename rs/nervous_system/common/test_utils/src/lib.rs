@@ -3,7 +3,6 @@ pub use crate::prometheus::{get_counter, get_gauge, get_samples};
 
 use async_trait::async_trait;
 use candid::Nat;
-use dfn_core::CanisterId;
 use futures::{
     StreamExt,
     channel::{
@@ -11,6 +10,7 @@ use futures::{
         oneshot::{self, Sender as OneShotSender},
     },
 };
+use ic_base_types::CanisterId;
 use ic_nervous_system_canisters::ledger::{ICRC1Ledger, IcpLedger};
 use ic_nervous_system_common::NervousSystemError;
 use icp_ledger::{AccountIdentifier, Tokens};

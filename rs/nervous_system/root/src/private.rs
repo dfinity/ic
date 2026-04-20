@@ -2,7 +2,7 @@ use crate::{
     LOG_PREFIX,
     change_canister::{start_canister, stop_canister},
 };
-use dfn_core::api::CanisterId;
+use ic_base_types::CanisterId;
 use ic_nervous_system_lock::acquire_for;
 use ic_nervous_system_runtime::CdkRuntime;
 use std::{

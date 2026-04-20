@@ -7,8 +7,7 @@ use crate::{
     registry::Registry,
     storage::with_chunks,
 };
-use dfn_core::CanisterId;
-use ic_base_types::{PrincipalId, SubnetId};
+use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_protobuf::registry::routing_table::v1 as pb;
 use ic_registry_canister_chunkify::decode_high_capacity_registry_value;
 use ic_registry_keys::{
