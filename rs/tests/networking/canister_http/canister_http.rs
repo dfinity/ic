@@ -189,11 +189,15 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
 
         if [[ "$ipv4" == "" ]] && ip link show dev enp2s0 >/dev/null; then
             count=0
+            # Wait up to 5 minutes for DHCP to assign a globally scoped IPv4 address
+            # on enp2s0. 120s has been observed to be insufficient on slow/busy Farm
+            # hosts, causing this test to flake.
             until ipv4=$(ip -j address show dev enp2s0 \
                         | jq -r -e \
                         '.[0].addr_info | map(select(.scope == "global")) | .[0].local'); \
             do
-                if [ "$count" -ge 120 ]; then
+                if [ "$count" -ge 300 ]; then
+                    echo "Timed out waiting for IPv4 address on enp2s0!" >&2
                     exit 1
                 fi
                 sleep 1
