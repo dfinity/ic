@@ -325,6 +325,10 @@ async fn deploy_canisters_for_long_rounds(
     );
     let mut create_many_canisters_futs = vec![];
     for seed_canister_id in seed_canisters {
+        info!(
+            logger,
+            "Creating {num_canisters_per_seed_canister:?} canisters via seed canister {seed_canister_id:?} by calling create_many_canisters ...",
+        );
         let agent = agent.clone();
         let fut = async move {
             loop {
@@ -335,11 +339,21 @@ async fn deploy_canisters_for_long_rounds(
                     .with_arg(bytes)
                     .call_and_wait()
                     .await;
-                if res.is_ok() {
-                    break;
+                match res {
+                    Ok(_) => break,
+                    Err(err) => {
+                        info!(
+                            logger,
+                            "Creating {num_canisters_per_seed_canister:?} canisters via seed canister {seed_canister_id:?} failed because {err:?}. Retrying ...",
+                        );
+                    }
                 }
                 tokio::time::sleep(Duration::from_millis(BACKOFF_TIME_MILLIS)).await;
             }
+            info!(
+                logger,
+                "Successfully called create_many_canisters on seed canister {seed_canister_id:?}. Now querying canister_creation_status ...",
+            );
             loop {
                 let bytes = Encode!(&()).expect("Failed to candid encode unit type");
                 let res = agent
@@ -347,14 +361,33 @@ async fn deploy_canisters_for_long_rounds(
                     .with_arg(bytes)
                     .call()
                     .await;
-                if let Ok(bytes) = res {
-                    let status = Decode!(&bytes, CanisterCreationStatus)
-                        .expect("Failed to candid decode canister creation status");
-                    match status {
-                        CanisterCreationStatus::Idle | CanisterCreationStatus::InProgress(_) => (),
-                        CanisterCreationStatus::Done(_) => {
-                            break;
+                match res {
+                    Ok(bytes) => {
+                        let status = Decode!(&bytes, CanisterCreationStatus)
+                            .expect("Failed to candid decode canister creation status");
+                        match status {
+                            CanisterCreationStatus::Idle => {
+                                info!(
+                                    logger,
+                                    "Canister creation on seed canister {seed_canister_id:?} is idle. Retrying canister_creation_status query ...",
+                                );
+                            }
+                            CanisterCreationStatus::InProgress(n) => {
+                                info!(
+                                    logger,
+                                    "Canister creation on seed canister {seed_canister_id:?} is in progress ({n}). Retrying canister_creation_status query ...",
+                                );
+                            }
+                            CanisterCreationStatus::Done(_) => {
+                                break;
+                            }
                         }
+                    }
+                    Err(err) => {
+                        info!(
+                            logger,
+                            "Querying canister_creation_status on seed canister {seed_canister_id:?} failed because {err:?}. Retrying canister_creation_status query...",
+                        );
                     }
                 }
                 tokio::time::sleep(Duration::from_millis(BACKOFF_TIME_MILLIS)).await;
