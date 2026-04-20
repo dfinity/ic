@@ -654,6 +654,7 @@ impl SchedulerTest {
             .charge_canisters_for_resource_allocation_and_usage(
                 self.state.as_mut().unwrap(),
                 subnet_size,
+                ExecutionRound::from(0),
             )
     }
 
