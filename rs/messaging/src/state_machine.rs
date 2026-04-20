@@ -135,6 +135,16 @@ impl StateMachine for StateMachineImpl {
                 batch.batch_number,
             )
         }
+        if batch.batch_number > state.metadata.batch_number {
+            state.metadata.batch_number = batch.batch_number;
+        } else {
+            // Batch number did not advance. This is a bug. (Implicitly) retain the old batch number.
+            self.metrics.observe_non_increasing_batch_number(
+                &self.log,
+                state.metadata.batch_number,
+                batch.batch_number,
+            )
+        }
 
         state.metadata.network_topology = network_topology;
         state.metadata.own_subnet_features = subnet_features;

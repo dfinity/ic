@@ -131,6 +131,7 @@ const CRITICAL_ERROR_MISSING_OR_INVALID_API_BOUNDARY_NODES: &str =
 const CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE: &str = "mr_empty_canister_allocation_range";
 const CRITICAL_ERROR_FAILED_TO_READ_REGISTRY: &str = "mr_failed_to_read_registry_error";
 pub const CRITICAL_ERROR_NON_INCREASING_BATCH_TIME: &str = "mr_non_increasing_batch_time";
+pub const CRITICAL_ERROR_NON_INCREASING_BATCH_NUMBER: &str = "mr_non_increasing_batch_number";
 pub const CRITICAL_ERROR_INDUCT_RESPONSE_FAILED: &str = "mr_induct_response_failed";
 const CRITICAL_ERROR_ILLEGAL_NON_EMPTY_SUBNET_ADMINS: &str = "mr_illegal_non_empty_subnet_admins";
 
@@ -364,6 +365,9 @@ pub(crate) struct MessageRoutingMetrics {
     /// Critical error: the batch times of successive batches were not strictly
     /// monotonically increasing.
     critical_error_non_increasing_batch_time: IntCounter,
+    /// Critical error: the batch numbers of successive batches were not strictly
+    /// monotonically increasing.
+    critical_error_non_increasing_batch_number: IntCounter,
     /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking
     /// failures to induct responses.
     pub critical_error_induct_response_failed: IntCounter,
@@ -526,6 +530,8 @@ impl MessageRoutingMetrics {
                 .error_counter(CRITICAL_ERROR_FAILED_TO_READ_REGISTRY),
             critical_error_non_increasing_batch_time: metrics_registry
                 .error_counter(CRITICAL_ERROR_NON_INCREASING_BATCH_TIME),
+            critical_error_non_increasing_batch_number: metrics_registry
+                .error_counter(CRITICAL_ERROR_NON_INCREASING_BATCH_NUMBER),
             critical_error_induct_response_failed: metrics_registry
                 .error_counter(CRITICAL_ERROR_INDUCT_RESPONSE_FAILED),
             critical_error_illegal_non_empty_subnet_admins: metrics_registry
@@ -565,6 +571,22 @@ impl MessageRoutingMetrics {
             batch_height,
             state_time,
             batch_time
+        );
+    }
+
+    pub fn observe_non_increasing_batch_number(
+        &self,
+        log: &ReplicaLogger,
+        state_batch_number: Height,
+        batch_number: Height,
+    ) {
+        self.critical_error_non_increasing_batch_number.inc();
+        warn!(
+            log,
+            "{}: Non-increasing batch number: state_batch_number = {}, batch_number = {}.",
+            CRITICAL_ERROR_NON_INCREASING_BATCH_NUMBER,
+            state_batch_number,
+            batch_number
         );
     }
 }

@@ -1,5 +1,7 @@
 use super::*;
-use crate::message_routing::CRITICAL_ERROR_NON_INCREASING_BATCH_TIME;
+use crate::message_routing::{
+    CRITICAL_ERROR_NON_INCREASING_BATCH_NUMBER, CRITICAL_ERROR_NON_INCREASING_BATCH_TIME,
+};
 use crate::routing::demux::MockDemux;
 use crate::routing::stream_builder::MockStreamBuilder;
 use crate::state_machine::StateMachineImpl;
@@ -498,5 +500,89 @@ fn fetch_critical_error_non_increasing_batch_time_count(
 ) -> Option<u64> {
     fetch_int_counter_vec(metrics_registry, "critical_errors")
         .get(&btreemap! { "error".to_string() => CRITICAL_ERROR_NON_INCREASING_BATCH_TIME.to_string() })
+        .cloned()
+}
+
+#[test]
+fn test_batch_number_regression() {
+    test_batch_number_impl(Height::from(2), Height::new(1), Height::from(2), 1);
+}
+
+#[test]
+fn test_batch_number_same() {
+    test_batch_number_impl(Height::from(2), Height::new(2), Height::from(2), 1);
+}
+
+#[test]
+fn test_batch_number_advance() {
+    test_batch_number_impl(Height::from(2), Height::new(3), Height::from(3), 0);
+}
+
+/// Executes a batch with the given `batch_number` on a state with the given
+/// `state_batch_number`. Tests the resulting state's `batch_number` against
+/// `expected_batch_number`, as well as the `mr_non_increasing_batch_number`
+/// critical error counter.
+fn test_batch_number_impl(
+    state_batch_number: Height,
+    batch_number: Height,
+    expected_batch_number: Height,
+    expected_regression_count: u64,
+) {
+    // Batch with the provided `batch_number` and an advancing time.
+    let provided_batch = BatchBuilder::new()
+        .batch_number(batch_number)
+        .time(Time::from_nanos_since_unix_epoch(1))
+        .build();
+
+    // Fixture wrapping a state with the given `state_batch_number` as `batch_number`.
+    let mut fixture = test_fixture(&provided_batch);
+    fixture.initial_state.metadata.batch_number = state_batch_number;
+
+    with_test_replica_logger(|log| {
+        let _ = &fixture;
+        let state_machine = StateMachineImpl::new(
+            fixture.scheduler,
+            fixture.demux,
+            fixture.stream_builder,
+            Default::default(),
+            log,
+            fixture.metrics,
+        );
+
+        assert_eq!(
+            Some(0),
+            fetch_critical_error_non_increasing_batch_number_count(&fixture.metrics_registry)
+        );
+        assert_eq!(
+            state_batch_number,
+            fixture.initial_state.metadata.batch_number
+        );
+
+        let state = state_machine.execute_round(
+            fixture.initial_state,
+            fixture.network_topology.clone(),
+            provided_batch,
+            Default::default(),
+            Default::default(),
+            &test_registry_settings(),
+            Default::default(),
+            Default::default(),
+        );
+
+        assert_eq!(
+            Some(expected_regression_count),
+            fetch_critical_error_non_increasing_batch_number_count(&fixture.metrics_registry)
+        );
+        assert_eq!(expected_batch_number, state.metadata.batch_number);
+    });
+}
+
+fn fetch_critical_error_non_increasing_batch_number_count(
+    metrics_registry: &MetricsRegistry,
+) -> Option<u64> {
+    fetch_int_counter_vec(metrics_registry, "critical_errors")
+        .get(
+            &btreemap! { "error".to_string() => CRITICAL_ERROR_NON_INCREASING_BATCH_NUMBER.to_string() },
+        )
         .cloned()
 }
