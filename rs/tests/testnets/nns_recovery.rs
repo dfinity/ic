@@ -40,7 +40,7 @@ use ic_consensus_system_test_subnet_recovery::utils::{
     break_nodes, node_with_highest_certification_share_height,
 };
 use ic_limits::DKG_INTERVAL_HEIGHT;
-use ic_nested_nns_recovery_common::{NNS_RECOVERY_VM_RESOURCE_OVERRIDES, SetupConfig};
+use ic_nested_nns_recovery_common::SetupConfig;
 use ic_system_test_driver::driver::nested::HasNestedVms;
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
@@ -62,9 +62,9 @@ fn setup(env: TestEnv, use_mainnet_state: bool) {
         .unwrap_or(DKG_INTERVAL_HEIGHT);
 
     let vm_resource_overrides = if use_mainnet_state {
-        MAINNET_NODE_VM_RESOURCE_OVERRIDES.layer(&NNS_RECOVERY_VM_RESOURCE_OVERRIDES)
+        MAINNET_NODE_VM_RESOURCE_OVERRIDES
     } else {
-        NNS_RECOVERY_VM_RESOURCE_OVERRIDES
+        Default::default()
     };
     ic_nested_nns_recovery_common::setup(
         env.clone(),
