@@ -365,7 +365,7 @@ async fn scrape_metrics_and_check_cache_stats(env: &TestEnv, user_i: usize, call
                         "For user={user_i} after call={call_j}, \
                         observed (num_cache_hits={num_cache_hits}, num_cache_misses={num_cache_misses}, cache_size={cache_size}) = \
                         with num_cache_hits + num_cache_misses = {} \
-                        while expecting (MIN_NUM_BLS_SIG_VERS_PER_CALL * (user + 1) * (call + 1)) = {} -> Retrying \
+                        while expecting at least (MIN_NUM_BLS_SIG_VERS_PER_CALL * (user + 1) * (call + 1)) = {} -> Retrying \
                         {count_waiting_for_expected_values}/{NUM_RETRIES}",
                         num_cache_hits + num_cache_misses,
                         (MIN_NUM_BLS_SIG_VERS_PER_CALL * (user_i + 1) * (call_j + 1))
