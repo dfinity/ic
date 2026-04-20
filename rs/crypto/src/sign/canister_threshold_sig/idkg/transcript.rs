@@ -1,4 +1,5 @@
 //! Implementations of IDkgProtocol related to transcripts
+use crate::CryptoComponentRng;
 use crate::sign::basic_sig::BasicSigVerifierInternal;
 use crate::sign::canister_threshold_sig::idkg::complaint::verify_complaint;
 use crate::sign::canister_threshold_sig::idkg::utils::{
@@ -36,9 +37,9 @@ use std::sync::Arc;
 #[cfg(test)]
 mod tests;
 
-pub fn create_transcript<C: CspSigner>(
+pub fn create_transcript<C: CspSigner, R: CryptoComponentRng>(
     csp_client: &C,
-    csprng: &CspRwLock<Box<rand_chacha::ChaCha20Rng>>,
+    csprng: &CspRwLock<R>,
     registry: &dyn RegistryClient,
     params: &IDkgTranscriptParams,
     dealings: &BatchSignedIDkgDealings,
@@ -102,9 +103,9 @@ pub fn create_transcript<C: CspSigner>(
 }
 
 #[allow(clippy::result_large_err)]
-pub fn verify_transcript<C: CspSigner>(
+pub fn verify_transcript<C: CspSigner, R: CryptoComponentRng>(
     csp_client: &C,
-    csprng: &CspRwLock<Box<rand_chacha::ChaCha20Rng>>,
+    csprng: &CspRwLock<R>,
     registry: &dyn RegistryClient,
     params: &IDkgTranscriptParams,
     transcript: &IDkgTranscript,
@@ -609,9 +610,9 @@ fn signature_batch_err_to_verify_transcript_err(
 }
 
 #[allow(clippy::result_large_err)]
-fn verify_signature_batch<C: CspSigner>(
+fn verify_signature_batch<C: CspSigner, R: CryptoComponentRng>(
     csp_client: &C,
-    csprng: &CspRwLock<Box<rand_chacha::ChaCha20Rng>>,
+    csprng: &CspRwLock<R>,
     registry: &dyn RegistryClient,
     dealing: &BatchSignedIDkgDealing,
     verification_threshold: NumberOfNodes,

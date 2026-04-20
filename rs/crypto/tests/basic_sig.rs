@@ -186,7 +186,8 @@ fn should_fail_verifying_for_wrong_node_id() {
 pub fn crypto_component_with_vault(
     vault: MockLocalCspVault,
     registry_client: Arc<dyn RegistryClient>,
-) -> CryptoComponentImpl<MockAllCryptoServiceProvider> {
+) -> CryptoComponentImpl<MockAllCryptoServiceProvider, rand_chacha::ChaCha20Rng> {
+    use rand::SeedableRng;
     CryptoComponentImpl::new_for_test(
         MockAllCryptoServiceProvider::new(),
         Arc::new(vault),
@@ -195,7 +196,7 @@ pub fn crypto_component_with_vault(
         NODE_1,
         Arc::new(CryptoMetrics::none()),
         None,
-        [0_u8; 32],
+        rand_chacha::ChaCha20Rng::from_seed([0_u8; 32]),
     )
 }
 

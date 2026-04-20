@@ -1,10 +1,10 @@
 use super::*;
+use crate::CryptoComponentRng;
 use ic_crypto_internal_csp::CspRwLock;
 use ic_crypto_internal_csp::api::CspSigner;
 use ic_crypto_internal_csp::types::SigConverter;
 use ic_crypto_internal_csp::vault::api::{BasicSignatureCspVault, CspBasicSignatureError};
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult};
-use rand::Rng;
 
 #[cfg(test)]
 mod tests;
@@ -47,8 +47,8 @@ impl BasicSigVerifierInternal {
         Ok(BasicSignatureBatch { signatures_map })
     }
 
-    pub fn verify_basic_sig_batch<H: Signable>(
-        csprng: &CspRwLock<Box<ChaCha20Rng>>,
+    pub fn verify_basic_sig_batch<H: Signable, R: CryptoComponentRng>(
+        csprng: &CspRwLock<R>,
         registry: &dyn RegistryClient,
         signatures: &BasicSignatureBatch<H>,
         message: &H,

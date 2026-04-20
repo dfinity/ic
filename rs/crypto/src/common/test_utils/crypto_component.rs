@@ -5,6 +5,8 @@ use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
 use ic_types_test_utils::ids::node_test_id;
+use rand::SeedableRng;
+use rand_chacha::ChaCha20Rng;
 use std::sync::Arc;
 
 const NODE_ID: u64 = 42;
@@ -13,7 +15,7 @@ pub fn crypto_component_with_csp(
     csp: MockAllCryptoServiceProvider,
     registry_client: Arc<dyn RegistryClient>,
     seed: [u8; 32],
-) -> CryptoComponentImpl<MockAllCryptoServiceProvider> {
+) -> CryptoComponentImpl<MockAllCryptoServiceProvider, ChaCha20Rng> {
     CryptoComponentImpl::new_for_test(
         csp,
         Arc::new(MockLocalCspVault::new()),
@@ -22,7 +24,7 @@ pub fn crypto_component_with_csp(
         node_test_id(NODE_ID),
         Arc::new(CryptoMetrics::none()),
         None,
-        seed,
+        ChaCha20Rng::from_seed(seed),
     )
 }
 
@@ -31,7 +33,7 @@ pub fn crypto_component_with_csp_and_vault(
     vault: MockLocalCspVault,
     registry_client: Arc<dyn RegistryClient>,
     seed: [u8; 32],
-) -> CryptoComponentImpl<MockAllCryptoServiceProvider> {
+) -> CryptoComponentImpl<MockAllCryptoServiceProvider, ChaCha20Rng> {
     CryptoComponentImpl::new_for_test(
         csp,
         Arc::new(vault),
@@ -40,6 +42,6 @@ pub fn crypto_component_with_csp_and_vault(
         node_test_id(NODE_ID),
         Arc::new(CryptoMetrics::none()),
         None,
-        seed,
+        ChaCha20Rng::from_seed(seed),
     )
 }

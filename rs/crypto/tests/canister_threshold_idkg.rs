@@ -287,7 +287,7 @@ mod create_dealing {
         ) -> (
             CanisterThresholdSigTestEnvironment,
             IDkgTranscriptParams,
-            CryptoComponentImpl<Csp>,
+            CryptoComponentImpl<Csp, rand_chacha::ChaCha20Rng>,
         ) {
             let subnet_size = rng.gen_range(1..10);
             let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
@@ -323,7 +323,7 @@ mod create_dealing {
                 env.nodes.random_dealer(&params, rng).id(),
                 Arc::new(CryptoMetrics::none()),
                 None,
-                rng.r#gen::<[u8; 32]>(),
+                <rand_chacha::ChaCha20Rng as rand::SeedableRng>::from_seed(rng.r#gen()),
             );
 
             (env, params, dealer)
@@ -2087,7 +2087,7 @@ mod load_transcript_with_openings {
                 node_id_not_in_receivers,
                 metrics,
                 None,
-                rng.r#gen::<[u8; 32]>(),
+                <rand_chacha::ChaCha20Rng as rand::SeedableRng>::from_seed(rng.r#gen()),
             );
 
             env.nodes
@@ -2810,7 +2810,7 @@ mod verify_dealing_private {
     }
 
     struct Setup {
-        crypto: CryptoComponentImpl<MockAllCryptoServiceProvider>,
+        crypto: CryptoComponentImpl<MockAllCryptoServiceProvider, rand_chacha::ChaCha20Rng>,
         params: IDkgTranscriptParams,
         signed_dealing: SignedIDkgDealing,
     }
@@ -2900,7 +2900,7 @@ mod verify_dealing_private {
                 node_id,
                 crypto_metrics,
                 time_source,
-                rng.r#gen(),
+                <rand_chacha::ChaCha20Rng as rand::SeedableRng>::from_seed(rng.r#gen()),
             );
 
             Setup {

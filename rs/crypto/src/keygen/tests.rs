@@ -1348,7 +1348,7 @@ mod rotate_idkg_dealing_encryption_keys {
             node_id(),
             Arc::new(CryptoMetrics::none()),
             Some(Arc::clone(&time_source) as Arc<_>),
-            [0_u8; 32],
+            <rand_chacha::ChaCha20Rng as rand::SeedableRng>::from_seed([0_u8; 32]),
         );
         registry_client.reload();
 
@@ -1749,7 +1749,7 @@ mod rotate_idkg_dealing_encryption_keys {
 
 struct Setup {
     metrics_registry: MetricsRegistry,
-    crypto: CryptoComponentImpl<MockAllCryptoServiceProvider>,
+    crypto: CryptoComponentImpl<MockAllCryptoServiceProvider, rand_chacha::ChaCha20Rng>,
     registry_client: Arc<dyn RegistryClient>,
     time_source: Arc<FastForwardTimeSource>,
 }
@@ -1970,7 +1970,7 @@ impl SetupBuilder {
             node_id(),
             crypto_metrics,
             Some(Arc::clone(&time_source) as Arc<_>),
-            [0_u8; 32],
+            <rand_chacha::ChaCha20Rng as rand::SeedableRng>::from_seed([0_u8; 32]),
         );
 
         Setup {
