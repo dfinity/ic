@@ -170,30 +170,27 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
     let vm = deployed_universal_vm.get_vm().unwrap();
     let ipv6 = vm.ipv6.to_string();
-    // If Farm hasn't already populated the IPv4 address on the AllocatedVm, fall back
-    // to retrieving it directly from the UVM (when it's configured with an IPv4
-    // interface). This polls the guest until DHCP assigns a globally scoped address.
-    let ipv4 = match vm.ipv4 {
-        Some(ipv4) => Some(ipv4),
-        None => {
-            let has_ipv4_iface = deployed_universal_vm
-                .block_on_bash_script(
-                    "if ip link show dev enp2s0 >/dev/null 2>&1; then echo yes; else echo no; fi",
-                )
-                .map(|s| s.trim() == "yes")
-                .unwrap_or(false);
-            if has_ipv4_iface {
-                Some(
-                    deployed_universal_vm
-                        .block_on_ipv4()
-                        .expect("Failed to retrieve IPv4 address from UVM"),
-                )
-            } else {
-                None
-            }
-        }
+    let session = deployed_universal_vm
+        .block_on_ssh_session()
+        .expect("Failed to establish SSH session to UVM");
+    // Retrieve the UVM's IPv4 address directly from the guest if it's configured
+    // with an IPv4 interface. This polls the guest until DHCP assigns a globally
+    // scoped address.
+    let has_ipv4_iface = deployed_universal_vm
+        .block_on_bash_script_from_session(
+            &session,
+            "if ip link show dev enp2s0 >/dev/null 2>&1; then echo yes; else echo no; fi",
+        )
+        .map(|s| s.trim() == "yes")
+        .unwrap_or(false);
+    let ipv4 = if has_ipv4_iface {
+        deployed_universal_vm
+            .block_on_ipv4_from_session(&session)
+            .expect("Failed to retrieve IPv4 address from UVM")
+            .to_string()
+    } else {
+        "".to_string()
     };
-    let ipv4 = ipv4.map_or("".to_string(), |ipv4| ipv4.to_string());
     // We need to use port 443 as it's among the only ports that the Dante socks server can proxy to.
     let http_bin_port = 443;
     info!(
@@ -201,8 +198,10 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
         "Starting httpbin service on UVM '{UNIVERSAL_VM_NAME}' ..."
     );
     deployed_universal_vm
-        .block_on_bash_script(&format!(
-            r#"
+        .block_on_bash_script_from_session(
+            &session,
+            &format!(
+                r#"
         set -e -o pipefail
         ipv6="{ipv6}"
         ipv4="{ipv4}"
@@ -254,7 +253,8 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
             httpbin:image \
             --cert-file /certs/cert.pem --key-file /certs/key.pem --port {http_bin_port}
     "#
-        ))
+            ),
+        )
         .unwrap_or_else(|e| panic!("Could not start httpbin on {UNIVERSAL_VM_NAME} because {e:?}"));
 
     wait_for_orchestrator_fw_rules(env);
