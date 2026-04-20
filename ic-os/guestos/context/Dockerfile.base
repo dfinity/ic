@@ -90,17 +90,18 @@ COPY kernel-patches /tmp/kernel-patches
 # Apply all *.patch files in lexicographic order. Tolerate a missing/empty
 # directory so that removing the patches (once upstream ships the fix) only
 # requires deleting files under kernel-patches/.
+#
+# Note: /bin/sh in the base image is dash, which does not support "shopt", so
+# we iterate explicitly and skip the loop when no *.patch files exist.
 RUN set -eux; \
     srcdir="$(find /build -maxdepth 1 -mindepth 1 -type d -name 'linux-*' | head -n1)"; \
     test -n "$srcdir"; \
     cd "$srcdir"; \
-    shopt -s nullglob; \
     for p in /tmp/kernel-patches/*.patch; do \
+        [ -e "$p" ] || continue; \
         echo "Applying $p"; \
         patch -p1 --no-backup-if-mismatch < "$p"; \
     done; \
-    # Bump the Debian changelog so the produced .debs have a distinguishable
-    # version string (e.g. "...+dfinity1"). Non-interactive.
     EDITOR=true DEBFULLNAME="IC GuestOS build" DEBEMAIL="devnull@dfinity.org" \
         debchange --local=+dfinity "Apply DFINITY custom kernel patches."
 
