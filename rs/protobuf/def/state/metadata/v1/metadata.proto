@@ -408,6 +408,8 @@ message SystemMetadata {
   repeated ApiBoundaryNodeEntry api_boundary_nodes = 21;
 
   registry.subnet.v1.ResourceLimits own_resource_limits = 24;
+
+  uint64 batch_number = 25;
 }
 
 message StableMemory {

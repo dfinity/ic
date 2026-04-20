@@ -24,7 +24,7 @@ use ic_registry_routing_table::{
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
+    CountBytes, CryptoHashOfPartialState, Height, NodeId, NumBytes, PrincipalId, SubnetId,
     batch::BlockmakerMetrics,
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus},
@@ -86,6 +86,11 @@ pub struct SystemMetadata {
     /// NOTE: this time is monotonically increasing (and not strictly
     /// increasing).
     pub batch_time: Time,
+
+    /// The Consensus-determined height of this batch.
+    /// NOTE: this height is monotonically increasing (and not strictly
+    /// increasing).
+    pub batch_number: Height,
 
     pub network_topology: NetworkTopology,
 
@@ -498,6 +503,7 @@ impl SystemMetadata {
             canister_allocation_ranges: Default::default(),
             last_generated_canister_id: None,
             batch_time: UNIX_EPOCH,
+            batch_number: Height::from(0),
             network_topology: Default::default(),
             subnet_call_context_manager: Default::default(),
             own_subnet_features: SubnetFeatures::default(),
@@ -740,6 +746,7 @@ impl SystemMetadata {
         } else {
             self.batch_time
         };
+        res.batch_number = self.batch_number;
 
         // All other fields have been reset to default.
         Ok(res)
@@ -797,6 +804,8 @@ impl SystemMetadata {
             prev_state_hash: _,
             // Overwritten as soon as the round begins, no explicit action needed.
             batch_time: _,
+            // Overwritten as soon as the round begins, no explicit action needed.
+            batch_number: _,
             // Overwritten as soon as the round begins, no explicit action needed.
             network_topology: _,
             ref own_subnet_id,
@@ -927,6 +936,7 @@ impl SystemMetadata {
             mut bitcoin_get_successors_follow_up_responses,
             blockmaker_metrics_time_series,
             unflushed_checkpoint_ops,
+            batch_number,
         } = self;
 
         assert_eq!(None, split_from);
@@ -1011,6 +1021,7 @@ impl SystemMetadata {
             last_generated_canister_id,
             prev_state_hash,
             batch_time,
+            batch_number,
             // Already populated from the registry.
             network_topology,
             // New subnet ID.
@@ -2118,6 +2129,7 @@ pub mod testing {
             canister_allocation_ranges: Default::default(),
             last_generated_canister_id: None,
             batch_time: UNIX_EPOCH,
+            batch_number: Height::from(0),
             // Not relevant, gets populated every round.
             network_topology: Default::default(),
             // Covered in `super::subnet_call_context_manager::testing`.

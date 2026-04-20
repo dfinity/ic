@@ -319,6 +319,7 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                 .clone()
                 .map(|prev_hash| prev_hash.get().0),
             batch_time_nanos: item.batch_time.as_nanos_since_unix_epoch(),
+            batch_number: item.batch_number.get(),
             streams: item
                 .streams
                 .iter()
@@ -434,6 +435,7 @@ impl
         }
 
         let batch_time = Time::from_nanos_since_unix_epoch(item.batch_time_nanos);
+        let batch_number = Height::from(item.batch_number);
 
         let mut node_public_keys = BTreeMap::<NodeId, Vec<u8>>::new();
         for entry in item.node_public_keys {
@@ -477,6 +479,7 @@ impl
             last_generated_canister_id,
             prev_state_hash: item.prev_state_hash.map(|b| CryptoHash(b).into()),
             batch_time,
+            batch_number,
             // Ingress history is persisted separately. We rely on `load_checkpoint()` to
             // properly set this value.
             ingress_history: Default::default(),

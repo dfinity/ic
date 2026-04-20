@@ -1588,6 +1588,7 @@ impl BatchProcessor for FakeBatchProcessorImpl {
 
         let time = batch.time;
         state.metadata.batch_time = time;
+        state.metadata.batch_number = batch.batch_number;
 
         let certification_scope = if batch.requires_full_state_hash() {
             CertificationScope::Full

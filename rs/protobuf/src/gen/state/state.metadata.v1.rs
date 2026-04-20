@@ -589,6 +589,8 @@ pub struct SystemMetadata {
     #[prost(message, optional, tag = "24")]
     pub own_resource_limits:
         ::core::option::Option<super::super::super::registry::subnet::v1::ResourceLimits>,
+    #[prost(uint64, tag = "25")]
+    pub batch_number: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StableMemory {
