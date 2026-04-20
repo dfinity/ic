@@ -349,7 +349,7 @@ async fn deploy_canisters_for_long_rounds(
                         );
                     }
                 }
-                tokio::time::sleep(Duration::from_millis(BACKOFF_TIME_MILLIS)).await;
+                tokio::time::sleep(Duration::from_secs(5)).await;
             }
             info!(
                 logger,
@@ -391,7 +391,7 @@ async fn deploy_canisters_for_long_rounds(
                         );
                     }
                 }
-                tokio::time::sleep(Duration::from_millis(BACKOFF_TIME_MILLIS)).await;
+                tokio::time::sleep(Duration::from_secs(5)).await;
             }
         };
         create_many_canisters_futs.push(fut);
