@@ -1042,12 +1042,12 @@ fn flexible_error_into_consensus_response(
 ) -> Option<ConsensusResponse> {
     let callback_id = error.callback_id();
 
-    let (global_error, node_details, message) = match error {
-        FlexibleCanisterHttpError::Timeout { .. } => (
-            FlexibleHttpGlobalError::Timeout(candid::Reserved),
-            vec![],
-            "Flexible HTTP request timed out".to_string(),
-        ),
+    let err = match error {
+        FlexibleCanisterHttpError::Timeout { .. } => FlexibleHttpRequestErr {
+            global_error: Some(FlexibleHttpGlobalError::Timeout(candid::Reserved)),
+            node_details: vec![],
+            message: "Flexible HTTP request timed out".to_string(),
+        },
         FlexibleCanisterHttpError::TooManyRejects {
             reject_responses, ..
         } => {
@@ -1079,11 +1079,11 @@ fn flexible_error_into_consensus_response(
                     }
                 })
                 .collect();
-            (
-                FlexibleHttpGlobalError::TooManyRejects(candid::Reserved),
+            FlexibleHttpRequestErr {
+                global_error: Some(FlexibleHttpGlobalError::TooManyRejects(candid::Reserved)),
                 node_details,
                 message,
-            )
+            }
         }
         FlexibleCanisterHttpError::ResponsesTooLarge {
             all_seen_shares,
@@ -1118,34 +1118,36 @@ fn flexible_error_into_consensus_response(
                 })
                 .collect();
 
-            let relevant_ok_sizes: Vec<_> = all_seen_shares
+            let mut ok_sizes: Vec<_> = all_seen_shares
                 .iter()
                 .filter(|s| !s.content.is_reject)
-                .take(min_known_ok_needed as usize)
-                .map(|share| share.content.content_size.to_string())
+                .map(|share| share.content.content_size)
                 .collect();
+            // Sort defensively, as validator doesn't enforce ordering on `all_seen_shares`
+            ok_sizes.sort_unstable();
+            let relevant_ok_sizes: Vec<_> = ok_sizes
+                .iter()
+                .take(min_known_ok_needed as usize)
+                .map(|size| size.to_string())
+                .collect();
+
             let message = format!(
-                "Responses too large: need at least {min_known_ok_needed} \
-                 (= {min_responses} min_responses - {num_unseen} unseen) \
+                "Responses too large: need at least {min_responses} \
                  OK responses to fit within {MAX_CANISTER_HTTP_PAYLOAD_SIZE} bytes, \
-                 but even the smallest {min_known_ok_needed} of {num_ok} \
+                 but even the smallest {min_known_ok_needed} \
+                 (= {min_responses} min_responses - {num_unseen} unseen) of {num_ok} \
                  OK responses have sizes [{}] bytes \
                  ({num_ok} ok + {num_reject} reject + {num_unseen} unseen = {total_requests} total_requests)",
                 relevant_ok_sizes.join(", "),
             );
-            (
-                FlexibleHttpGlobalError::ResponsesTooLarge(candid::Reserved),
+            FlexibleHttpRequestErr {
+                global_error: Some(FlexibleHttpGlobalError::ResponsesTooLarge(candid::Reserved)),
                 node_details,
                 message,
-            )
+            }
         }
     };
 
-    let err = FlexibleHttpRequestErr {
-        global_error: Some(global_error),
-        node_details,
-        message,
-    };
     let bytes = Encode!(&FlexibleHttpRequestResult::Err(err)).ok()?;
 
     Some(ConsensusResponse::new(callback_id, Payload::Data(bytes)))

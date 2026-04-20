@@ -2883,10 +2883,11 @@ fn flexible_error_into_messages_too_many_rejects() {
 fn flexible_error_into_messages_responses_too_large() {
     let callback_id = CallbackId::from(42);
 
-    let share_a = metadata_share_with_content_size(callback_id.get(), 0, 1_200_000);
-    let share_b = metadata_share_with_content_size(callback_id.get(), 1, 1_300_000);
-
-    let share_c = metadata_share_with_content_size(callback_id.get(), 2, 1_400_000);
+    // Deliberately construct OK shares in non-ascending size order so that
+    // `into_messages` must sort them to report the correct "smallest" sizes.
+    let share_a = metadata_share_with_content_size(callback_id.get(), 0, 1_400_000);
+    let share_b = metadata_share_with_content_size(callback_id.get(), 1, 1_200_000);
+    let share_c = metadata_share_with_content_size(callback_id.get(), 2, 1_300_000);
     let share_reject = reject_metadata_share(callback_id.get(), 3);
 
     let payload = CanisterHttpPayload {
@@ -2931,7 +2932,7 @@ fn flexible_error_into_messages_responses_too_large() {
     assert_eq!(err.node_details[0].error.as_ref().unwrap().code, "ok");
     assert_eq!(
         err.node_details[0].error.as_ref().unwrap().message,
-        "1200000 bytes"
+        "1400000 bytes"
     );
 
     assert_eq!(
@@ -2941,7 +2942,7 @@ fn flexible_error_into_messages_responses_too_large() {
     assert_eq!(err.node_details[1].error.as_ref().unwrap().code, "ok");
     assert_eq!(
         err.node_details[1].error.as_ref().unwrap().message,
-        "1300000 bytes"
+        "1200000 bytes"
     );
 
     assert_eq!(
@@ -2951,7 +2952,7 @@ fn flexible_error_into_messages_responses_too_large() {
     assert_eq!(err.node_details[2].error.as_ref().unwrap().code, "ok");
     assert_eq!(
         err.node_details[2].error.as_ref().unwrap().message,
-        "1400000 bytes"
+        "1300000 bytes"
     );
 
     assert_eq!(
@@ -2969,8 +2970,7 @@ fn flexible_error_into_messages_responses_too_large() {
     assert!(err.message.contains("3 ok"));
     assert!(err.message.contains("1 reject"));
     assert!(err.message.contains("1 unseen"));
-    assert!(err.message.contains("1200000"));
-    assert!(err.message.contains("1300000"));
+    assert!(err.message.contains("[1200000, 1300000]"));
     assert!(!err.message.contains("1400000"));
 }
 
