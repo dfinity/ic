@@ -1141,7 +1141,7 @@ fn sign_with_threshold_context_roundtrip() {
                     request: RequestBuilder::new().build(),
                     args,
                     derivation_path: Arc::new(vec![]),
-                    pseudo_random_id: [1; 32],
+                    deprecated_pseudo_random_id: Some([1; 32]),
                     batch_time: UNIX_EPOCH,
                     nonce: Some([3; 32]),
                 },

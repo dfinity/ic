@@ -903,13 +903,13 @@ impl std::fmt::Display for ApiType {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 enum ExecutionMemoryType {
     WasmMemory,
     StableMemory,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Copy, Clone, Debug)]
 /// Some cost API endpoints can fail in various ways. A return value of this
 /// type must be used by the caller to determine success or failure.
 pub enum CostReturnCode {
@@ -1882,7 +1882,7 @@ impl SystemApiImpl {
         &mut self,
         req: Request,
         prepayment_for_response_execution: CompoundCycles<Instructions>,
-        prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
+        prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
     ) -> HypervisorResult<i32> {
         let abort = |request: Request, sandbox_safe_system_state: &mut SandboxSafeSystemState| {
             sandbox_safe_system_state.refund_cycles(request.payment);
@@ -1912,7 +1912,7 @@ impl SystemApiImpl {
             self.memory_usage.current_message_usage,
             req,
             prepayment_for_response_execution,
-            prepayment_for_response_transmission,
+            prepayment_for_call_transmission,
         ) {
             Ok(()) => Ok(0),
             Err(request) => {
@@ -1988,6 +1988,26 @@ impl SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::Cleanup { .. } => page_limit.message,
+        }
+    }
+
+    fn sender_info(&self, method_name: &str) -> Result<Option<&SenderInfo>, HypervisorError> {
+        match &self.api_type {
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::SystemTask { .. } => Err(self.error_for(method_name)),
+            ApiType::Update { sender_info, .. }
+            | ApiType::ReplicatedQuery { sender_info, .. }
+            | ApiType::NonReplicatedQuery { sender_info, .. }
+            | ApiType::CompositeQuery { sender_info, .. }
+            | ApiType::ReplyCallback { sender_info, .. }
+            | ApiType::CompositeReplyCallback { sender_info, .. }
+            | ApiType::RejectCallback { sender_info, .. }
+            | ApiType::CompositeRejectCallback { sender_info, .. }
+            | ApiType::InspectMessage { sender_info, .. }
+            | ApiType::Cleanup { sender_info, .. }
+            | ApiType::CompositeCleanup { sender_info, .. } => Ok(sender_info.as_ref()),
         }
     }
 }
@@ -2458,6 +2478,98 @@ impl SystemApi for SystemApiImpl {
         trace_syscall!(
             self,
             MsgCallerCopy,
+            result,
+            dst,
+            offset,
+            size,
+            summarize(heap, dst, size)
+        );
+        result
+    }
+
+    fn ic0_msg_caller_info_data_size(&self) -> HypervisorResult<usize> {
+        let result = self
+            .sender_info("ic0_msg_caller_info_data_size")
+            .map(|sender_info| sender_info.map_or(0, |si| si.info.len()));
+        trace_syscall!(self, MsgCallerInfoDataSize, result);
+        result
+    }
+
+    fn ic0_msg_caller_info_data_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let result = self
+            .sender_info("ic0_msg_caller_info_data_copy")
+            .and_then(|sender_info| {
+                let info_bytes: &[u8] = sender_info.map_or(&[], |si| si.info.as_slice());
+                valid_subslice(
+                    "ic0.msg_caller_info_data_copy heap",
+                    InternalAddress::new(dst),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
+                let slice = valid_subslice(
+                    "ic0.msg_caller_info_data_copy info",
+                    InternalAddress::new(offset),
+                    InternalAddress::new(size),
+                    info_bytes,
+                )?;
+                deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
+                Ok(())
+            });
+        trace_syscall!(
+            self,
+            MsgCallerInfoDataCopy,
+            result,
+            dst,
+            offset,
+            size,
+            summarize(heap, dst, size)
+        );
+        result
+    }
+
+    fn ic0_msg_caller_info_signer_size(&self) -> HypervisorResult<usize> {
+        let result = self
+            .sender_info("ic0_msg_caller_info_signer_size")
+            .map(|sender_info| sender_info.map_or(0, |si| si.signer.get_ref().as_slice().len()));
+        trace_syscall!(self, MsgCallerInfoSignerSize, result);
+        result
+    }
+
+    fn ic0_msg_caller_info_signer_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let result = self
+            .sender_info("ic0_msg_caller_info_signer_copy")
+            .and_then(|sender_info| {
+                let id_bytes: &[u8] = sender_info.map_or(&[], |si| si.signer.get_ref().as_slice());
+                valid_subslice(
+                    "ic0.msg_caller_info_signer_copy heap",
+                    InternalAddress::new(dst),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
+                let slice = valid_subslice(
+                    "ic0.msg_caller_info_signer_copy signer",
+                    InternalAddress::new(offset),
+                    InternalAddress::new(size),
+                    id_bytes,
+                )?;
+                deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
+                Ok(())
+            });
+        trace_syscall!(
+            self,
+            MsgCallerInfoSignerCopy,
             result,
             dst,
             offset,
@@ -3198,7 +3310,7 @@ impl SystemApi for SystemApiImpl {
                 self.push_output_request(
                     req.request,
                     req.prepayment_for_response_execution,
-                    req.prepayment_for_response_transmission,
+                    req.prepayment_for_call_transmission,
                 )
             }
         };
@@ -4225,6 +4337,7 @@ impl SystemApi for SystemApiImpl {
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
+        let subnet_size = self.sandbox_safe_system_state.subnet_size;
         let execution_mode =
             WasmExecutionMode::from_is_wasm64(self.sandbox_safe_system_state.is_wasm64_execution);
         let cost = self
@@ -4232,6 +4345,7 @@ impl SystemApi for SystemApiImpl {
             .get_cycles_account_manager()
             .xnet_call_total_fee(
                 (method_name_size.saturating_add(payload_size)).into(),
+                subnet_size,
                 execution_mode,
                 self.get_cost_schedule(),
             );

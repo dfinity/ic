@@ -29,8 +29,8 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-test-utilities = { path = ".." }
 ic-test-utilities-types = { path = "../types" }
-ic-types-cycles = { path = "../../types/cycles" }
 ic-types = { path = "../../types/types" }
+ic-types-cycles = { path = "../../types/cycles" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
 ic-wasm-types = { path = "../../types/wasm_types" }

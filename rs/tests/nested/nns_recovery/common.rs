@@ -11,7 +11,7 @@ use ic_consensus_system_test_utils::{
     node::await_subnet_earliest_topology_version_with_retries,
     rw_message::store_message_with_retries,
     ssh_access::{
-        AuthMean, disable_ssh_access_to_node, get_updatesubnetpayload_with_keys,
+        AuthMean, disable_ssh_access_to_node, get_update_subnet_payload_with_keys,
         update_subnet_record, wait_until_authentication_is_granted,
     },
     subnet::assert_subnet_is_healthy,
@@ -152,7 +152,7 @@ pub fn grant_backup_access_to_all_nns_nodes(
     let nns_node = nns_subnet.nodes().next().unwrap();
 
     info!(logger, "Update the registry with the backup key");
-    let payload = get_updatesubnetpayload_with_keys(
+    let payload = get_update_subnet_payload_with_keys(
         nns_subnet.subnet_id,
         None,
         Some(vec![ssh_backup_pub_key.to_string()]),
@@ -191,6 +191,16 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
     )
     .setup_and_start(&env)
     .unwrap();
+
+    nested::registration(env.clone());
+    replace_nns_with_unassigned_nodes(&env);
+
+    let SshKeys {
+        ssh_priv_key_path: _,
+        auth: backup_auth,
+        ssh_pub_key: ssh_backup_pub_key,
+    } = get_ssh_keys_for_user(&env, BACKUP_USERNAME);
+    grant_backup_access_to_all_nns_nodes(&env, &backup_auth, &ssh_backup_pub_key);
 }
 
 pub fn test(env: TestEnv, cfg: TestConfig) {
@@ -205,13 +215,9 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     } = get_ssh_keys_for_user(&env, SSH_USERNAME);
     let SshKeys {
         ssh_priv_key_path: ssh_backup_priv_key_path,
-        auth: backup_auth,
-        ssh_pub_key: ssh_backup_pub_key,
+        auth: _,
+        ssh_pub_key: _,
     } = get_ssh_keys_for_user(&env, BACKUP_USERNAME);
-
-    nested::registration(env.clone());
-    replace_nns_with_unassigned_nodes(&env);
-    grant_backup_access_to_all_nns_nodes(&env, &backup_auth, &ssh_backup_pub_key);
 
     let current_version = get_guestos_img_version();
     info!(logger, "Current GuestOS version: {:?}", current_version);

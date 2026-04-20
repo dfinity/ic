@@ -57,8 +57,8 @@ use crate::{
     common::rest::{
         AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet,
         HttpsConfig, IcpConfig, IcpFeatures, InitialTime, InstanceHttpGatewayConfig, InstanceId,
-        MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, RawSubnetBlockmakers,
-        RawTickConfigs, RawTime, SubnetId, SubnetKind, SubnetSpec, Topology,
+        MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, RawSenderInfo,
+        RawSubnetBlockmakers, RawTickConfigs, RawTime, SubnetId, SubnetKind, SubnetSpec, Topology,
     },
     nonblocking::PocketIc as PocketIcAsync,
 };
@@ -364,6 +364,7 @@ impl PocketIcBuilder {
             SubnetKind::II => config.ii = Some(subnet_spec),
             SubnetKind::Fiduciary => config.fiduciary = Some(subnet_spec),
             SubnetKind::Bitcoin => config.bitcoin = Some(subnet_spec),
+            SubnetKind::TestThresholdKeys => config.test_threshold_keys = Some(subnet_spec),
             SubnetKind::Application => config.application.push(subnet_spec),
             SubnetKind::CloudEngine => config.cloud_engine.push(subnet_spec),
             SubnetKind::System => config.system.push(subnet_spec),
@@ -401,6 +402,14 @@ impl PocketIcBuilder {
     pub fn with_bitcoin_subnet(mut self) -> Self {
         let mut config = self.config.unwrap_or_default();
         config.bitcoin = Some(config.bitcoin.unwrap_or_default());
+        self.config = Some(config);
+        self
+    }
+
+    /// Add an empty test threshold keys subnet unless a test threshold keys subnet has already been added.
+    pub fn with_test_threshold_keys_subnet(mut self) -> Self {
+        let mut config = self.config.unwrap_or_default();
+        config.test_threshold_keys = Some(config.test_threshold_keys.unwrap_or_default());
         self.config = Some(config);
         self
     }
@@ -949,6 +958,48 @@ impl PocketIc {
         })
     }
 
+    /// Submit an update call with a provided effective principal and sender info (without executing it immediately).
+    pub fn submit_call_with_effective_principal_and_sender_info(
+        &self,
+        canister_id: CanisterId,
+        effective_principal: RawEffectivePrincipal,
+        sender: Principal,
+        method: &str,
+        payload: Vec<u8>,
+        sender_info: RawSenderInfo,
+    ) -> Result<RawMessageId, RejectResponse> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .submit_call_with_effective_principal_and_sender_info(
+                    canister_id,
+                    effective_principal,
+                    sender,
+                    method,
+                    payload,
+                    sender_info,
+                )
+                .await
+        })
+    }
+
+    /// Submit an update call with sender info (without executing it immediately).
+    pub fn submit_call_with_sender_info(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+        method: &str,
+        payload: Vec<u8>,
+        sender_info: RawSenderInfo,
+    ) -> Result<RawMessageId, RejectResponse> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .submit_call_with_sender_info(canister_id, sender, method, payload, sender_info)
+                .await
+        })
+    }
+
     /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
     pub fn await_call(&self, message_id: RawMessageId) -> Result<Vec<u8>, RejectResponse> {
         let runtime = self.runtime.clone();
@@ -1423,6 +1474,48 @@ impl PocketIc {
         })
     }
 
+    /// Execute an update call with a provided effective principal and sender info on a canister.
+    pub fn update_call_with_effective_principal_and_sender_info(
+        &self,
+        canister_id: CanisterId,
+        effective_principal: RawEffectivePrincipal,
+        sender: Principal,
+        method: &str,
+        payload: Vec<u8>,
+        sender_info: RawSenderInfo,
+    ) -> Result<Vec<u8>, RejectResponse> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .update_call_with_effective_principal_and_sender_info(
+                    canister_id,
+                    effective_principal,
+                    sender,
+                    method,
+                    payload,
+                    sender_info,
+                )
+                .await
+        })
+    }
+
+    /// Execute an update call with sender info on a canister.
+    pub fn update_call_with_sender_info(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+        method: &str,
+        payload: Vec<u8>,
+        sender_info: RawSenderInfo,
+    ) -> Result<Vec<u8>, RejectResponse> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .update_call_with_sender_info(canister_id, sender, method, payload, sender_info)
+                .await
+        })
+    }
+
     /// Execute a query call on a canister explicitly specifying an effective principal to route the request:
     /// this API is useful for making generic query calls (including management canister query calls) without using dedicated functions from this library
     /// (e.g., making generic query calls in dfx to a PocketIC instance).
@@ -1445,6 +1538,48 @@ impl PocketIc {
                     method,
                     payload,
                 )
+                .await
+        })
+    }
+
+    /// Execute a query call with a provided effective principal and sender info on a canister.
+    pub fn query_call_with_effective_principal_and_sender_info(
+        &self,
+        canister_id: CanisterId,
+        effective_principal: RawEffectivePrincipal,
+        sender: Principal,
+        method: &str,
+        payload: Vec<u8>,
+        sender_info: RawSenderInfo,
+    ) -> Result<Vec<u8>, RejectResponse> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .query_call_with_effective_principal_and_sender_info(
+                    canister_id,
+                    effective_principal,
+                    sender,
+                    method,
+                    payload,
+                    sender_info,
+                )
+                .await
+        })
+    }
+
+    /// Execute a query call with sender info on a canister.
+    pub fn query_call_with_sender_info(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+        method: &str,
+        payload: Vec<u8>,
+        sender_info: RawSenderInfo,
+    ) -> Result<Vec<u8>, RejectResponse> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .query_call_with_sender_info(canister_id, sender, method, payload, sender_info)
                 .await
         })
     }

@@ -41,7 +41,7 @@ const AP_ROUNDS_MAX: i64 = 5;
 const AP_ROUNDS_MIN: i64 = -20;
 
 /// Round metrics required to prioritize a canister.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub(super) struct CanisterRoundState {
     /// Copy of canister ID.
     canister_id: CanisterId,

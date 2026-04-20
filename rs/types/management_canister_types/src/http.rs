@@ -159,7 +159,7 @@ impl Payload<'_> for FlexibleCanisterHttpRequestArgs {}
 ///     total_requests: nat32;
 ///   };
 /// ```
-#[derive(CandidType, Deserialize, Debug, Clone, Default, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct ReplicationCounts {
     pub total_requests: u32,
     pub min_responses: u32,

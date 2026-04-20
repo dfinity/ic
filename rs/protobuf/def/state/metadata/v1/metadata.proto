@@ -112,7 +112,7 @@ message SignWithThresholdContext {
   state.queues.v1.Request request = 1;
   ThresholdArguments args = 2;
   repeated bytes derivation_path_vec = 3;
-  bytes pseudo_random_id = 4;
+  bytes deprecated_pseudo_random_id = 4;
   uint64 batch_time = 5;
   optional bytes nonce = 8;
 }

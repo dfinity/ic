@@ -34,7 +34,7 @@ use std::fs::OpenOptions;
 use std::io::{Error, Write};
 
 /// Result of marking files readonly, containing counts for monitoring
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct ReadonlyMarkingResult {
     pub files_traversed: usize,
     pub files_made_readonly: usize,
@@ -3032,7 +3032,7 @@ struct CopyAndSyncFile {
     dst: PathBuf,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Eq, PartialEq)]
 enum CopyInstruction {
     /// The file doesn't need to be copied
     Skip,

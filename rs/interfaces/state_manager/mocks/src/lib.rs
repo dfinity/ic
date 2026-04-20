@@ -42,6 +42,8 @@ mock! {
     }
 
     impl StateManager for StateManager {
+        fn tip_height(&self) -> Height;
+
         fn take_tip(&self) -> (Height, ReplicatedState);
 
         fn take_tip_at(&self, h: Height) -> StateManagerResult<ReplicatedState>;

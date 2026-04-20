@@ -324,6 +324,7 @@ system_test_nns(
     name = "network_large_test",
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     tags = [
+        "colocate",
         "system_test_large",
     ],
     test_timeout = "eternal",

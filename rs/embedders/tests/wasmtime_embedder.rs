@@ -12,7 +12,9 @@ use ic_embedders::{
         system_api_complexity,
     },
 };
-use ic_interfaces::execution_environment::{HypervisorError, SystemApi, TrapCode};
+use ic_interfaces::execution_environment::{
+    CanisterBacktrace, HypervisorError, SystemApi, TrapCode,
+};
 use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
@@ -315,11 +317,9 @@ fn stack_overflow_traps() {
                 panic!("Unexpected error {err:?}");
             };
             assert_eq!(trap_code, TrapCode::StackOverflow);
-            // TODO(DSM): Re-enable backtrace checking when backtraces are enabled again.
-            // for (_index, name) in backtrace.unwrap().0 {
-            //     assert_eq!(name, Some("f".to_string()));
-            // }
-            assert!(backtrace.is_none());
+            for (_index, name) in backtrace.unwrap().0 {
+                assert_eq!(name, Some("f".to_string()));
+            }
         })
         .unwrap();
 
@@ -1657,19 +1657,11 @@ fn wasm_heap_oob_access() {
     let err = instance
         .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
         .unwrap_err();
-    // TODO(DSM): Re-enable backtrace checking when backtraces are enabled again.
-    // assert_eq!(
-    //     err,
-    //     HypervisorError::Trapped {
-    //         trap_code: TrapCode::HeapOutOfBounds,
-    //         backtrace: Some(CanisterBacktrace(vec![(5, Some("foo".to_string()))]))
-    //     }
-    // );
     assert_eq!(
         err,
         HypervisorError::Trapped {
             trap_code: TrapCode::HeapOutOfBounds,
-            backtrace: None,
+            backtrace: Some(CanisterBacktrace(vec![(5, Some("foo".to_string()))]))
         }
     );
 }
@@ -3518,9 +3510,6 @@ fn test_environment_variable_system_api() {
     env_vars.insert("TEST_VAR_1".to_string(), "Hello World".to_string());
     env_vars.insert("TEST_VAR_2".to_string(), "Test Value".to_string());
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.environment_variables = FlagStatus::Enabled;
-
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_api_type(ApiType::update(
             UNIX_EPOCH,
@@ -3530,7 +3519,6 @@ fn test_environment_variable_system_api() {
             0.into(),
             None,
         ))
-        .with_config(config)
         .with_environment_variables(env_vars)
         .with_wat(wat)
         .build();
@@ -3544,42 +3532,6 @@ fn test_environment_variable_system_api() {
     assert_eq!(
         result,
         Ok(Some(WasmResult::Reply(b"Hello WorldTest Value".to_vec())))
-    );
-}
-
-// TODO(EXC-2071): Delete test when feature flag is removed.
-#[test]
-fn test_environment_variable_system_api_not_enabled() {
-    let wat = r#"
-    (module
-        (import "ic0" "env_var_count" (func $ic0_env_var_count (result i32)))
-
-        (func (export "canister_update go")
-            (call $ic0_env_var_count)
-            drop
-        )
-    )"#;
-
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.environment_variables = FlagStatus::Disabled;
-
-    let builder = WasmtimeInstanceBuilder::new()
-        .with_wat(wat)
-        .with_config(config)
-        .with_api_type(ApiType::update(
-            UNIX_EPOCH,
-            vec![],
-            Cycles::zero(),
-            PrincipalId::new_user_test_id(0),
-            0.into(),
-            None,
-        ));
-
-    let instance = builder.try_build();
-    assert!(instance.is_err());
-    assert_matches!(
-        instance.err().unwrap().0,
-        HypervisorError::WasmEngineError { .. }
     );
 }
 

@@ -14,6 +14,7 @@ use crate::{
     },
 };
 use ic_error_types::{ErrorCode, UserError};
+use ic_heap_bytes::DeterministicHeapBytes;
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, CanisterMetadataRequest, ClearChunkStoreArgs,
     DeleteCanisterSnapshotArgs, IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2,
@@ -397,6 +398,12 @@ pub struct SenderInfo {
     #[serde(with = "serde_bytes")]
     pub info: Vec<u8>,
     pub signer: CanisterId,
+}
+
+impl DeterministicHeapBytes for SenderInfo {
+    fn deterministic_heap_bytes(&self) -> usize {
+        self.info.len()
+    }
 }
 
 impl From<&SenderInfo> for pb_ingress::SenderInfo {

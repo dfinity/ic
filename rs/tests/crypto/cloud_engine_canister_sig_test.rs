@@ -155,10 +155,10 @@ fn test(env: TestEnv) {
             content: content.clone(),
             sender_delegation: Some(vec![ic_types::messages::SignedDelegation::new(
                 ic_types::messages::Delegation::new(
-                    signed_delegation.delegation.pubkey.clone().into_vec(),
+                    signed_delegation.delegation.pubkey.clone(),
                     Time::from_nanos_since_unix_epoch(signed_delegation.delegation.expiration),
                 ),
-                signed_delegation.signature.clone().into_vec(),
+                signed_delegation.signature.clone(),
             )]),
             sender_pubkey: Some(Blob(ii_derived_public_key.clone().into_vec())),
             sender_sig: Some(Blob(signature.signature.unwrap())),

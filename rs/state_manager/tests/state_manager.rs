@@ -3057,7 +3057,7 @@ fn can_state_sync_from_cache_alone() {
 #[test]
 fn copied_chunks_from_file_group_can_be_skipped_when_applying() {
     use std::os::unix::fs::MetadataExt;
-    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    #[derive(Copy, Clone, Eq, PartialEq, Debug)]
     /// Snapshot of file metadata fields that are useful for checking if a file has been touched.
     /// These fields include device and inode (to uniquely identify the file), size, and timestamps for modification and change.
     struct FileMetadataSnapshot {

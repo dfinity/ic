@@ -1,3 +1,8 @@
+//! Injects configuration into SetupOS disk images. The `setupos-inject-config`
+//! binary modifies the config and data partitions of an existing SetupOS image
+//! in-place, updating `config.ini`, `deployment.json`, SSH keys, and NNS
+//! public key without rebuilding the image.
+
 use std::{
     assert,
     fs::{self, File},

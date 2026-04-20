@@ -35,9 +35,9 @@ use ic_test_utilities_execution_environment::{
 use ic_test_utilities_metrics::{
     HistogramStats, fetch_histogram_vec_stats, fetch_int_counter, metric_vec,
 };
-use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
+use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_types::messages::{
-    CanisterMessage, CanisterTask, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE,
+    CanisterMessage, CanisterTask, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE, SenderInfo,
 };
 use ic_types::time::CoarseTime;
 use ic_types::{
@@ -2072,6 +2072,394 @@ fn ic0_msg_caller_size_and_copy_work_in_query_calls() {
         result,
         WasmResult::Reply(test.user_id().get().as_slice().to_vec())
     );
+}
+
+#[test]
+fn ic0_msg_caller_info_works_in_ingress() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let info = vec![1_u8, 2, 3, 4];
+    let signer = canister_test_id(42);
+    test.set_sender_info(SenderInfo {
+        info: info.clone(),
+        signer,
+    });
+
+    let result = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm().msg_caller_info_data().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(info));
+
+    let result = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm().msg_caller_info_signer().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(
+        result,
+        WasmResult::Reply(signer.get_ref().as_slice().to_vec())
+    );
+}
+
+#[test]
+fn ic0_msg_caller_info_empty_without_sender_info_in_ingress() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let result = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm().msg_caller_info_data().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
+
+    let result = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm().msg_caller_info_signer().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
+}
+
+#[test]
+fn ic0_msg_caller_info_empty_for_inter_canister_calls() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+
+    // Set sender_info so the caller (user → caller_id) sees it.
+    // The callee (caller_id → callee_id) must see empty values.
+    test.set_sender_info(SenderInfo {
+        info: vec![1_u8, 2, 3, 4],
+        signer: canister_test_id(42),
+    });
+
+    let result = test
+        .ingress(
+            caller_id,
+            "update",
+            wasm()
+                .inter_update(
+                    callee_id,
+                    call_args()
+                        .other_side(wasm().msg_caller_info_data().append_and_reply().build()),
+                )
+                .build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
+
+    let result = test
+        .ingress(
+            caller_id,
+            "update",
+            wasm()
+                .inter_update(
+                    callee_id,
+                    call_args()
+                        .other_side(wasm().msg_caller_info_signer().append_and_reply().build()),
+                )
+                .build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
+}
+
+#[test]
+fn ic0_msg_caller_info_works_in_reply_callback() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let info = vec![1_u8, 2, 3, 4];
+    let signer = canister_test_id(42);
+    test.set_sender_info(SenderInfo {
+        info: info.clone(),
+        signer,
+    });
+
+    // Make a dummy self-call; in the reply callback, read back sender_info.
+    let caller = wasm()
+        .inter_update(
+            canister_id,
+            call_args()
+                .other_side(wasm().reply())
+                .on_reply(wasm().msg_caller_info_data().append_and_reply()),
+        )
+        .build();
+    let result = test.ingress(canister_id, "update", caller).unwrap();
+    assert_eq!(result, WasmResult::Reply(info));
+
+    let caller = wasm()
+        .inter_update(
+            canister_id,
+            call_args()
+                .other_side(wasm().reply())
+                .on_reply(wasm().msg_caller_info_signer().append_and_reply()),
+        )
+        .build();
+    let result = test.ingress(canister_id, "update", caller).unwrap();
+    assert_eq!(
+        result,
+        WasmResult::Reply(signer.get_ref().as_slice().to_vec())
+    );
+}
+
+#[test]
+fn ic0_msg_caller_info_works_in_composite_query() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let info = vec![1_u8, 2, 3, 4];
+    let signer = canister_test_id(42);
+    test.set_sender_info(SenderInfo {
+        info: info.clone(),
+        signer,
+    });
+
+    let result = test
+        .non_replicated_query(
+            canister_id,
+            "composite_query",
+            wasm().msg_caller_info_data().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(info));
+
+    let result = test
+        .non_replicated_query(
+            canister_id,
+            "composite_query",
+            wasm().msg_caller_info_signer().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(
+        result,
+        WasmResult::Reply(signer.get_ref().as_slice().to_vec())
+    );
+}
+
+#[test]
+fn ic0_msg_caller_info_works_in_composite_query_reply_callback() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let info = vec![1_u8, 2, 3, 4];
+    let signer = canister_test_id(42);
+    test.set_sender_info(SenderInfo {
+        info: info.clone(),
+        signer,
+    });
+
+    // Make a dummy self-call via composite_query; check sender_info in the reply callback.
+    let caller = wasm()
+        .composite_query(
+            canister_id,
+            call_args()
+                .other_side(wasm().reply())
+                .on_reply(wasm().msg_caller_info_data().append_and_reply()),
+        )
+        .build();
+    let result = test
+        .non_replicated_query(canister_id, "composite_query", caller)
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(info));
+
+    let caller = wasm()
+        .composite_query(
+            canister_id,
+            call_args()
+                .other_side(wasm().reply())
+                .on_reply(wasm().msg_caller_info_signer().append_and_reply()),
+        )
+        .build();
+    let result = test
+        .non_replicated_query(canister_id, "composite_query", caller)
+        .unwrap();
+    assert_eq!(
+        result,
+        WasmResult::Reply(signer.get_ref().as_slice().to_vec())
+    );
+}
+
+#[test]
+fn ic0_msg_caller_info_empty_for_nested_composite_query_calls() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+
+    // Set sender_info so the top-level caller sees it; the callee (nested call)
+    // must see empty values because it is called by a canister, not a user.
+    test.set_sender_info(SenderInfo {
+        info: vec![1_u8, 2, 3, 4],
+        signer: canister_test_id(42),
+    });
+
+    let result = test
+        .non_replicated_query(
+            caller_id,
+            "composite_query",
+            wasm()
+                .composite_query(
+                    callee_id,
+                    call_args()
+                        .other_side(wasm().msg_caller_info_data().append_and_reply().build()),
+                )
+                .build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
+
+    let result = test
+        .non_replicated_query(
+            caller_id,
+            "composite_query",
+            wasm()
+                .composite_query(
+                    callee_id,
+                    call_args()
+                        .other_side(wasm().msg_caller_info_signer().append_and_reply().build()),
+                )
+                .build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
+}
+
+#[test]
+fn ic0_msg_caller_info_works_in_replicated_query() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let info = vec![1_u8, 2, 3, 4];
+    let signer = canister_test_id(42);
+    test.set_sender_info(SenderInfo {
+        info: info.clone(),
+        signer,
+    });
+
+    let result = test
+        .ingress(
+            canister_id,
+            "query",
+            wasm().msg_caller_info_data().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(info));
+
+    let result = test
+        .ingress(
+            canister_id,
+            "query",
+            wasm().msg_caller_info_signer().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(
+        result,
+        WasmResult::Reply(signer.get_ref().as_slice().to_vec())
+    );
+}
+
+#[test]
+fn ic0_msg_caller_info_works_in_non_replicated_query() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let info = vec![1_u8, 2, 3, 4];
+    let signer = canister_test_id(42);
+    test.set_sender_info(SenderInfo {
+        info: info.clone(),
+        signer,
+    });
+
+    let result = test
+        .non_replicated_query(
+            canister_id,
+            "query",
+            wasm().msg_caller_info_data().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(info));
+
+    let result = test
+        .non_replicated_query(
+            canister_id,
+            "query",
+            wasm().msg_caller_info_signer().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(
+        result,
+        WasmResult::Reply(signer.get_ref().as_slice().to_vec())
+    );
+}
+
+#[test]
+fn ic0_msg_caller_info_works_in_inspect_message() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let info = vec![1_u8, 2, 3, 4];
+    let signer = canister_test_id(42);
+    test.set_sender_info(SenderInfo {
+        info: info.clone(),
+        signer,
+    });
+
+    // Set inspect_message to trap iff msg_caller_info_data equals `info`.
+    // Since the correct value IS `info`, the handler will trap.
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .set_inspect_message(
+                wasm()
+                    .msg_caller_info_data()
+                    .trap_if_eq(&info, "info")
+                    .accept_message()
+                    .build(),
+            )
+            .reply()
+            .build(),
+    )
+    .unwrap();
+    let err = test
+        .should_accept_ingress_message(canister_id, "update", vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
+
+    // Set inspect_message to trap iff msg_caller_info_signer equals signer bytes.
+    // Since the correct value IS the signer, the handler will trap.
+    let signer_bytes = signer.get_ref().as_slice().to_vec();
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .set_inspect_message(
+                wasm()
+                    .msg_caller_info_signer()
+                    .trap_if_eq(&signer_bytes, "signer")
+                    .accept_message()
+                    .build(),
+            )
+            .reply()
+            .build(),
+    )
+    .unwrap();
+    let err = test
+        .should_accept_ingress_message(canister_id, "update", vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
 }
 
 #[test]
@@ -8911,6 +9299,7 @@ fn invoke_cost_call() {
     let res = test.ingress(canister_id, "update", payload);
     let expected_cost = test.cycles_account_manager().xnet_call_total_fee(
         (method_name.len() as u64 + argument.len() as u64).into(),
+        test.subnet_size(),
         WasmExecutionMode::Wasm32,
         CanisterCyclesCostSchedule::Normal,
     );
