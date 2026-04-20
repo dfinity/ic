@@ -68,12 +68,12 @@
     "sha256": "bce508df3db43b47b158c0aab9a7c9a3709a78e055a7ced76d5ff89832f9e778"
   },
   "governance": {
-    "rev": "021bf342f66296d5605b355a61b2430406a83783",
-    "sha256": "c66ff7d948ff79a826e61eab9e11714082d93a45e42f3b7deec1c2377341285f"
+    "rev": "0c93fe2f1cd20353916bbbf805e34d933effdd71",
+    "sha256": "b83be01cdae8d288f2c05860bf301c494bbabfa9aa20084a07fafbdf6a53ddd1"
   },
   "governance-canister_test": {
-    "rev": "021bf342f66296d5605b355a61b2430406a83783",
-    "sha256": "dfce35eed2811d7e2b303785868cf9d87e40e37a40fc7c4a76c50eefec57fd32"
+    "rev": "0c93fe2f1cd20353916bbbf805e34d933effdd71",
+    "sha256": "a080855e0a71f94c1a8a9af6a965b2c9bad3863ecb6961b655dbe59db6f6de46"
   },
   "index": {
     "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
@@ -100,8 +100,8 @@
     "sha256": "a7c87d163a0cc69f6a5e4ed11f9a99618bde8658d21e8d84207963bb2400347c"
   },
   "nns_dapp_test": {
-    "sha256": "fcabe56e58ddc5ea06f708913f897c2113675e56a9a105cfa23a3ea4886d7a00",
-    "tag": "proposal-141231"
+    "sha256": "5e9a6458895f620f6e46e482e984eb82c79814bbe834444448b05877adee89a0",
+    "tag": "proposal-141440"
   },
   "node-rewards": {
     "rev": "cafe032cdc97bc6eeb2cffd47222e830e9827646",
