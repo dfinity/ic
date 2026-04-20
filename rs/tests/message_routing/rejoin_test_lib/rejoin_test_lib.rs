@@ -325,9 +325,10 @@ async fn deploy_canisters_for_long_rounds(
     );
     let mut create_many_canisters_futs = vec![];
     for seed_canister_id in seed_canisters {
+        let seed_canister_id_str = seed_canister_id.to_string();
         info!(
             logger,
-            "Creating {num_canisters_per_seed_canister:?} canisters via seed canister {seed_canister_id:?} by calling create_many_canisters ...",
+            "Creating {num_canisters_per_seed_canister:?} canisters via seed canister {seed_canister_id_str:?} by calling create_many_canisters ...",
         );
         let agent = agent.clone();
         let fut = async move {
@@ -344,7 +345,7 @@ async fn deploy_canisters_for_long_rounds(
                     Err(err) => {
                         info!(
                             logger,
-                            "Creating {num_canisters_per_seed_canister:?} canisters via seed canister {seed_canister_id:?} failed because {err:?}. Retrying ...",
+                            "Creating {num_canisters_per_seed_canister:?} canisters via seed canister {seed_canister_id_str:?} failed because {err:?}. Retrying ...",
                         );
                     }
                 }
@@ -352,7 +353,7 @@ async fn deploy_canisters_for_long_rounds(
             }
             info!(
                 logger,
-                "Successfully called create_many_canisters on seed canister {seed_canister_id:?}. Now querying canister_creation_status ...",
+                "Successfully called create_many_canisters on seed canister {seed_canister_id_str:?}. Now querying canister_creation_status ...",
             );
             loop {
                 let bytes = Encode!(&()).expect("Failed to candid encode unit type");
@@ -369,13 +370,13 @@ async fn deploy_canisters_for_long_rounds(
                             CanisterCreationStatus::Idle => {
                                 info!(
                                     logger,
-                                    "Canister creation on seed canister {seed_canister_id:?} is idle. Retrying canister_creation_status query ...",
+                                    "Canister creation on seed canister {seed_canister_id_str:?} is idle. Retrying canister_creation_status query ...",
                                 );
                             }
                             CanisterCreationStatus::InProgress(n) => {
                                 info!(
                                     logger,
-                                    "Canister creation on seed canister {seed_canister_id:?} is in progress ({n}). Retrying canister_creation_status query ...",
+                                    "Canister creation on seed canister {seed_canister_id_str:?} is in progress ({n}). Retrying canister_creation_status query ...",
                                 );
                             }
                             CanisterCreationStatus::Done(_) => {
