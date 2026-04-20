@@ -387,7 +387,7 @@ async fn deploy_canisters_for_long_rounds(
                     Err(err) => {
                         info!(
                             logger,
-                            "Querying canister_creation_status on seed canister {seed_canister_id:?} failed because {err:?}. Retrying canister_creation_status query...",
+                            "Querying canister_creation_status on seed canister {seed_canister_id_str:?} failed because {err:?}. Retrying canister_creation_status query...",
                         );
                     }
                 }
