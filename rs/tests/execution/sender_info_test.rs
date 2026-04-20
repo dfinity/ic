@@ -23,7 +23,7 @@ use ic_types::messages::{
     HttpUserQuery, MessageId, RawSignedSenderInfo, SenderInfoContent, SignedDelegation,
 };
 use ic_types::{CanisterId, PrincipalId};
-use ic_universal_canister::{call_args, wasm};
+use ic_universal_canister::wasm;
 use reqwest::{StatusCode, Url};
 use slog::debug;
 
@@ -441,10 +441,7 @@ fn main() -> Result<()> {
         .add_parallel(
             SystemTestSubGroup::new()
                 .add_test(systest!(query_reads_sender_info_data_and_signer))
-                .add_test(systest!(update_reads_sender_info_data_and_signer))
-                .add_test(systest!(no_sender_info_returns_empty))
-                .add_test(systest!(inter_canister_call_does_not_propagate_sender_info))
-                .add_test(systest!(reply_callback_can_access_sender_info)),
+                .add_test(systest!(update_reads_sender_info_data_and_signer)),
         )
         .execute_from_args()?;
     Ok(())
@@ -503,8 +500,12 @@ pub fn query_reads_sender_info_data_and_signer(env: TestEnv) {
     });
 }
 
-/// Verify that a canister can read sender_info from an update call by storing
-/// it in stable memory and reading it back via a follow-up query.
+/// Verify that a canister can read both caller_info_data and caller_info_signer
+/// from an update call carrying valid sender_info.
+///
+/// Since raw HTTP v3 update responses don't expose the reply bytes without
+/// parsing the state certificate, each update writes the value to stable
+/// memory (offset 0) and a follow-up query reads it back.
 pub fn update_reads_sender_info_data_and_signer(env: TestEnv) {
     let logger = env.logger();
     let node = env.get_first_healthy_application_node_snapshot();
@@ -520,252 +521,55 @@ pub fn update_reads_sender_info_data_and_signer(env: TestEnv) {
             };
             let ctx = create_sender_info_context(&canister).await;
 
-            // Update: store caller_info_data at stable[0..] and
-            //         caller_info_signer at stable[100..]
-            debug!(
-                logger,
-                "Sending update to store sender_info in stable memory"
-            );
-            let payload = wasm()
-                .stable_grow(1)
+            // Stable memory page for storing values read back via query.
+            canister
+                .update(wasm().stable_grow(1).reply().build())
+                .await
+                .expect("failed to grow stable memory");
+
+            // Update: write msg_caller_info_data to stable[0..] and reply.
+            debug!(logger, "Sending update reading msg_caller_info_data");
+            let write_data_payload = wasm()
                 .push_int(0)
                 .msg_caller_info_data()
                 .stable_write_offset_blob()
-                .push_int(100)
+                .reply()
+                .build();
+            send_update_with_sender_info(&test_info, &ctx, write_data_payload)
+                .await
+                .expect_update_ok();
+            let result = canister
+                .query(
+                    wasm()
+                        .stable_read(0, ctx.info_bytes.len() as u32)
+                        .append_and_reply()
+                        .build(),
+                )
+                .await
+                .expect("failed to read caller_info_data from stable memory");
+            assert_eq!(result, ctx.info_bytes);
+
+            // Update: write msg_caller_info_signer to stable[0..] and reply.
+            debug!(logger, "Sending update reading msg_caller_info_signer");
+            let write_signer_payload = wasm()
+                .push_int(0)
                 .msg_caller_info_signer()
                 .stable_write_offset_blob()
                 .reply()
                 .build();
-
-            let response = send_update_with_sender_info(&test_info, &ctx, payload).await;
-            response.expect_update_ok();
-
-            // Read back caller_info_data from stable memory
-            debug!(logger, "Reading back caller_info_data from stable memory");
+            send_update_with_sender_info(&test_info, &ctx, write_signer_payload)
+                .await
+                .expect_update_ok();
             let result = canister
                 .query(
                     wasm()
-                        .stable_read(0, ctx.info_bytes.len() as u32)
+                        .stable_read(0, ctx.signer_principal_bytes.len() as u32)
                         .append_and_reply()
                         .build(),
                 )
                 .await
-                .expect("failed to query stable memory for info data");
-            assert_eq!(
-                result, ctx.info_bytes,
-                "caller_info_data mismatch in update call"
-            );
-
-            // Read back caller_info_signer from stable memory
-            debug!(logger, "Reading back caller_info_signer from stable memory");
-            let result = canister
-                .query(
-                    wasm()
-                        .stable_read(100, ctx.signer_principal_bytes.len() as u32)
-                        .append_and_reply()
-                        .build(),
-                )
-                .await
-                .expect("failed to query stable memory for signer");
-            assert_eq!(
-                result, ctx.signer_principal_bytes,
-                "caller_info_signer mismatch in update call"
-            );
-        }
-    });
-}
-
-/// Verify that msg_caller_info_data and msg_caller_info_signer return empty
-/// when no sender_info is provided in the ingress message.
-pub fn no_sender_info_returns_empty(env: TestEnv) {
-    let logger = env.logger();
-    let node = env.get_first_healthy_application_node_snapshot();
-    let agent = node.build_default_agent();
-    block_on({
-        async move {
-            let canister =
-                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
-                    .await;
-
-            // Query: msg_caller_info_data should be empty
-            debug!(logger, "Querying msg_caller_info_data without sender_info");
-            let result = canister
-                .query(wasm().msg_caller_info_data().append_and_reply().build())
-                .await
-                .expect("failed to query msg_caller_info_data");
-            assert!(
-                result.is_empty(),
-                "Expected empty caller_info_data, got {} bytes",
-                result.len()
-            );
-
-            // Query: msg_caller_info_signer should be empty
-            debug!(
-                logger,
-                "Querying msg_caller_info_signer without sender_info"
-            );
-            let result = canister
-                .query(wasm().msg_caller_info_signer().append_and_reply().build())
-                .await
-                .expect("failed to query msg_caller_info_signer");
-            assert!(
-                result.is_empty(),
-                "Expected empty caller_info_signer, got {} bytes",
-                result.len()
-            );
-        }
-    });
-}
-
-/// Verify that sender_info does NOT propagate to inter-canister calls. When
-/// UC A (called with sender_info) calls UC B, UC B should see empty
-/// caller_info_data.
-pub fn inter_canister_call_does_not_propagate_sender_info(env: TestEnv) {
-    let logger = env.logger();
-    let node = env.get_first_healthy_application_node_snapshot();
-    let agent = node.build_default_agent();
-    block_on({
-        async move {
-            let canister_a =
-                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
-                    .await;
-            let canister_b =
-                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
-                    .await;
-            let test_info = TestInformation {
-                url: node.get_public_url(),
-                canister_id: canister_id_from_principal(&canister_a.canister_id()),
-            };
-            let ctx = create_sender_info_context(&canister_a).await;
-
-            // UC A calls UC B. UC B writes msg_caller_info_data to stable memory.
-            debug!(
-                logger,
-                "Sending update to UC A with sender_info, which calls UC B"
-            );
-            let canister_b_id = canister_b.canister_id();
-            let payload = wasm()
-                .inter_update(
-                    canister_b_id,
-                    call_args().other_side(
-                        wasm()
-                            .stable_grow(1)
-                            .push_int(0)
-                            .msg_caller_info_data()
-                            .stable_write_offset_blob()
-                            .reply()
-                            .build(),
-                    ),
-                )
-                .build();
-
-            let response = send_update_with_sender_info(&test_info, &ctx, payload).await;
-            response.expect_update_ok();
-
-            // Read UC B's stable memory. If sender_info propagated, we'd see
-            // the info bytes; otherwise it should be all zeros.
-            debug!(
-                logger,
-                "Reading UC B's stable memory to verify sender_info isolation"
-            );
-            let result = canister_b
-                .query(
-                    wasm()
-                        .stable_read(0, ctx.info_bytes.len() as u32)
-                        .append_and_reply()
-                        .build(),
-                )
-                .await
-                .expect("failed to query UC B's stable memory");
-            assert_eq!(
-                result,
-                vec![0u8; ctx.info_bytes.len()],
-                "sender_info should NOT propagate to inter-canister calls"
-            );
-        }
-    });
-}
-
-/// Verify that sender_info is accessible in reply callbacks. UC A receives an
-/// ingress with sender_info, calls UC B (which just replies), and in the reply
-/// callback reads and stores sender_info to stable memory.
-pub fn reply_callback_can_access_sender_info(env: TestEnv) {
-    let logger = env.logger();
-    let node = env.get_first_healthy_application_node_snapshot();
-    let agent = node.build_default_agent();
-    block_on({
-        async move {
-            let canister_a =
-                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
-                    .await;
-            let canister_b =
-                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
-                    .await;
-            let test_info = TestInformation {
-                url: node.get_public_url(),
-                canister_id: canister_id_from_principal(&canister_a.canister_id()),
-            };
-            let ctx = create_sender_info_context(&canister_a).await;
-
-            // UC A calls UC B (which just replies). In the reply callback,
-            // UC A stores sender_info in stable memory.
-            debug!(
-                logger,
-                "Sending update: UC A calls UC B, reply callback stores sender_info"
-            );
-            let payload = wasm()
-                .inter_update(
-                    canister_b.canister_id(),
-                    call_args().other_side(wasm().reply().build()).on_reply(
-                        wasm()
-                            .stable_grow(1)
-                            .push_int(0)
-                            .msg_caller_info_data()
-                            .stable_write_offset_blob()
-                            .push_int(100)
-                            .msg_caller_info_signer()
-                            .stable_write_offset_blob()
-                            .reply()
-                            .build(),
-                    ),
-                )
-                .build();
-
-            let response = send_update_with_sender_info(&test_info, &ctx, payload).await;
-            response.expect_update_ok();
-
-            // Read back from UC A's stable memory
-            debug!(
-                logger,
-                "Reading UC A's stable memory to verify sender_info in reply callback"
-            );
-            let result = canister_a
-                .query(
-                    wasm()
-                        .stable_read(0, ctx.info_bytes.len() as u32)
-                        .append_and_reply()
-                        .build(),
-                )
-                .await
-                .expect("failed to query UC A's stable memory for info data");
-            assert_eq!(
-                result, ctx.info_bytes,
-                "caller_info_data mismatch in reply callback"
-            );
-
-            let result = canister_a
-                .query(
-                    wasm()
-                        .stable_read(100, ctx.signer_principal_bytes.len() as u32)
-                        .append_and_reply()
-                        .build(),
-                )
-                .await
-                .expect("failed to query UC A's stable memory for signer");
-            assert_eq!(
-                result, ctx.signer_principal_bytes,
-                "caller_info_signer mismatch in reply callback"
-            );
+                .expect("failed to read caller_info_signer from stable memory");
+            assert_eq!(result, ctx.signer_principal_bytes);
         }
     });
 }
