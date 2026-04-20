@@ -3101,6 +3101,7 @@ impl StateMachine {
         replicated_state.metadata.batch_time = time;
         self.state_manager
             .commit_and_certify(replicated_state, CertificationScope::Metadata, None);
+        self.state_manager.flush_hash_channel();
         self.set_time(time.into());
         *self.time_of_last_round.write().unwrap() = time;
     }
@@ -3301,6 +3302,7 @@ impl StateMachine {
 
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);
+        self.state_manager.flush_hash_channel();
     }
 
     /// Enables checkpoints and makes a tick to write a checkpoint.
@@ -3580,6 +3582,7 @@ impl StateMachine {
 
         self.state_manager
             .commit_and_certify(state, CertificationScope::Full, None);
+        self.state_manager.flush_hash_channel();
 
         // Perform the split on `env`, which requires preserving the `prev_state_hash`
         // (as opposed to MVP subnet splitting where it is adjusted manually).
