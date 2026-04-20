@@ -22,7 +22,10 @@ jobs:
   build-base-image:
     name: Build Base Container Image
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # The guestos-base images build a custom kernel from Ubuntu sources
+    # (see ic-os/guestos/context/Dockerfile.base), which on a 2-vCPU
+    # GitHub-hosted runner can take well over an hour.
+    timeout-minutes: 180
     permissions:
       packages: write
       contents: write
