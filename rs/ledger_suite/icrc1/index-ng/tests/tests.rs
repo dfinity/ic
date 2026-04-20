@@ -1588,7 +1588,7 @@ fn test_authorized_mint_and_burn_indexing() {
         .mint(account_1, Tokens::from(10_000_000_u64))
         .build();
     assert_eq!(
-        Nat::from(0u64),
+        Nat::from(0_u64),
         add_block(env, ledger_id, &block0).expect("failed to add block 0")
     );
 
@@ -1600,7 +1600,7 @@ fn test_authorized_mint_and_burn_indexing() {
         .with_created_at_time(1500)
         .build();
     assert_eq!(
-        Nat::from(1u64),
+        Nat::from(1_u64),
         add_block(env, ledger_id, &block1).expect("failed to add block 1")
     );
 
@@ -1613,7 +1613,7 @@ fn test_authorized_mint_and_burn_indexing() {
         .with_reason("compliance".to_string())
         .build();
     assert_eq!(
-        Nat::from(2u64),
+        Nat::from(2_u64),
         add_block(env, ledger_id, &block2).expect("failed to add block 2")
     );
 
@@ -1628,7 +1628,7 @@ fn test_authorized_mint_and_burn_indexing() {
     // Verify account_2 transactions (should have the authorized mint)
     let txs = get_account_transactions(env, index_id, account_2, None, u64::MAX);
     assert_eq!(txs.transactions.len(), 1);
-    assert_eq!(txs.transactions[0].id, Nat::from(1u64));
+    assert_eq!(txs.transactions[0].id, Nat::from(1_u64));
     let tx = &txs.transactions[0].transaction;
     assert_eq!(tx.kind, "122mint");
     assert!(tx.authorized_mint.is_some());
@@ -1637,10 +1637,10 @@ fn test_authorized_mint_and_burn_indexing() {
     let txs = get_account_transactions(env, index_id, account_1, None, u64::MAX);
     assert_eq!(txs.transactions.len(), 2);
     // Transactions are in descending order
-    assert_eq!(txs.transactions[0].id, Nat::from(2u64));
+    assert_eq!(txs.transactions[0].id, Nat::from(2_u64));
     assert_eq!(txs.transactions[0].transaction.kind, "122burn");
     assert!(txs.transactions[0].transaction.authorized_burn.is_some());
-    assert_eq!(txs.transactions[1].id, Nat::from(0u64));
+    assert_eq!(txs.transactions[1].id, Nat::from(0_u64));
     assert_eq!(txs.transactions[1].transaction.kind, "mint");
 }
 
@@ -1657,7 +1657,7 @@ fn test_authorized_mint_minimal_icrc122_block() {
         .authorized_mint(account_1, Tokens::from(1_000_000_u64))
         .build();
     assert_eq!(
-        Nat::from(0u64),
+        Nat::from(0_u64),
         add_block(env, ledger_id, &block0).expect("failed to add block 0")
     );
 

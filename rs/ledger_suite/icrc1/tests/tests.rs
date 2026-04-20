@@ -359,7 +359,7 @@ mod authorized_mint_burn_tests {
         let transaction = Transaction {
             operation: Operation::AuthorizedMint {
                 to: test_account(1),
-                amount: U64::from(1_000_000u64),
+                amount: U64::from(1_000_000_u64),
                 caller,
                 mthd,
                 reason,
@@ -371,7 +371,7 @@ mod authorized_mint_burn_tests {
             None,
             transaction,
             ic_ledger_core::timestamp::TimeStamp::from_nanos_since_unix_epoch(1_000_000_000),
-            U64::from(0u64),
+            U64::from(0_u64),
             None,
         )
     }
@@ -385,7 +385,7 @@ mod authorized_mint_burn_tests {
         let transaction = Transaction {
             operation: Operation::AuthorizedBurn {
                 from: test_account(1),
-                amount: U64::from(500_000u64),
+                amount: U64::from(500_000_u64),
                 caller,
                 mthd,
                 reason,
@@ -397,7 +397,7 @@ mod authorized_mint_burn_tests {
             None,
             transaction,
             ic_ledger_core::timestamp::TimeStamp::from_nanos_since_unix_epoch(1_000_000_000),
-            U64::from(0u64),
+            U64::from(0_u64),
             None,
         )
     }
@@ -496,7 +496,7 @@ mod authorized_mint_burn_tests {
 
         let am = tx.authorized_mint.unwrap();
         assert_eq!(am.to, test_account(1));
-        assert_eq!(am.amount, candid::Nat::from(1_000_000u64));
+        assert_eq!(am.amount, candid::Nat::from(1_000_000_u64));
         assert_eq!(am.created_at_time, Some(1_000_000_000));
         assert_eq!(am.caller, Some(Principal::anonymous()));
         assert_eq!(am.mthd, Some("152mint".to_string()));
@@ -520,7 +520,7 @@ mod authorized_mint_burn_tests {
 
         let ab = tx.authorized_burn.unwrap();
         assert_eq!(ab.from, test_account(1));
-        assert_eq!(ab.amount, candid::Nat::from(500_000u64));
+        assert_eq!(ab.amount, candid::Nat::from(500_000_u64));
         assert_eq!(ab.created_at_time, Some(1_000_000_000));
         assert_eq!(ab.caller, Some(Principal::anonymous()));
         assert_eq!(ab.mthd, Some("152burn".to_string()));
