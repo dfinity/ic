@@ -31,14 +31,10 @@
 
 use anyhow::Result;
 use ic_consensus_system_test_subnet_recovery::utils::{
-    BACKUP_USERNAME, SshKeys, break_nodes, get_ssh_keys_for_user,
-    node_with_highest_certification_share_height,
+    break_nodes, node_with_highest_certification_share_height,
 };
 use ic_limits::DKG_INTERVAL_HEIGHT;
-use ic_nested_nns_recovery_common::{
-    NNS_RECOVERY_VM_RESOURCE_OVERRIDES, SetupConfig, grant_backup_access_to_all_nns_nodes,
-    replace_nns_with_unassigned_nodes,
-};
+use ic_nested_nns_recovery_common::{NNS_RECOVERY_VM_RESOURCE_OVERRIDES, SetupConfig};
 use ic_system_test_driver::driver::nested::HasNestedVms;
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
@@ -55,7 +51,7 @@ fn setup(env: TestEnv) {
 
     let dkg_interval = std::env::var("DKG_INTERVAL")
         .ok()
-        .and_then(|s| s.parse::<u64>().ok())
+        .map(|s| s.parse::<u64>().expect("DKG_INTERVAL must be a valid u64"))
         .unwrap_or(DKG_INTERVAL_HEIGHT);
 
     ic_nested_nns_recovery_common::setup(
@@ -90,27 +86,6 @@ fn log_instructions(env: TestEnv) {
             "NUM_NODES_TO_BREAK is {nb} but needs to be at least {minimum_to_break_subnet} to break a subnet of size {subnet_size}."
         );
     }
-
-    let SshKeys {
-        ssh_priv_key_path: _,
-        auth: backup_auth,
-        ssh_pub_key: ssh_backup_pub_key,
-    } = get_ssh_keys_for_user(&env, BACKUP_USERNAME);
-
-    nested::registration(env.clone());
-    replace_nns_with_unassigned_nodes(&env);
-    grant_backup_access_to_all_nns_nodes(&env, &backup_auth, &ssh_backup_pub_key);
-
-    let upgrade_version = get_guestos_update_img_version();
-    let upgrade_image_url = get_guestos_update_img_url();
-    let upgrade_image_hash = get_guestos_update_img_sha256();
-    info!(
-        logger,
-        r#"Working GuestOS version:
-    --upgrade-version {upgrade_version}
-    --upgrade-image-url {upgrade_image_url}
-    --upgrade-image-hash {upgrade_image_hash}"#
-    );
 
     info!(logger, "Host <-> IPs mapping:");
     for vm in env.get_all_nested_vms().unwrap() {
