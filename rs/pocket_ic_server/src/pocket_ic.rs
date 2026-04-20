@@ -4919,7 +4919,7 @@ impl Operation for CanisterReadStateRequest {
                 let metrics = HttpHandlerMetrics::new(&MetricsRegistry::new());
                 let mainnet_root_of_trust =
                     IcRootOfTrust::from(icp_mainnet_root_public_key_for_testing());
-                let svc = ReadStateServiceBuilder::canister_builder(
+                let svc = ReadStateServiceBuilder::builder(
                     subnet.replica_logger.clone(),
                     metrics,
                     subnet.state_manager.clone(),
@@ -4928,6 +4928,7 @@ impl Operation for CanisterReadStateRequest {
                     NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     nns_subnet_id,
                     self.version,
+                    read_state::Target::Canister,
                 )
                 .with_malicious_flags(pic.malicious_flags.clone())
                 .with_time_source(subnet.time_source.clone())
@@ -5002,7 +5003,7 @@ impl Operation for SubnetReadStateRequest {
                         "The NNS subnet should already exist if we are already executing requests",
                     );
                 let metrics = HttpHandlerMetrics::new(&MetricsRegistry::new());
-                let svc = ReadStateServiceBuilder::subnet_builder(
+                let svc = ReadStateServiceBuilder::builder(
                     subnet.replica_logger.clone(),
                     metrics,
                     subnet.state_manager.clone(),
@@ -5011,6 +5012,7 @@ impl Operation for SubnetReadStateRequest {
                     NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     nns_subnet_id,
                     self.version,
+                    read_state::Target::Subnet,
                 )
                 .with_malicious_flags(pic.malicious_flags.clone())
                 .build_service();

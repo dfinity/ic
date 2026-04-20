@@ -110,7 +110,7 @@ impl ReadStateService {
 }
 
 impl ReadStateServiceBuilder {
-    pub fn canister_builder(
+    pub fn builder(
         log: ReplicaLogger,
         metrics: HttpHandlerMetrics,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -119,6 +119,7 @@ impl ReadStateServiceBuilder {
         nns_delegation_reader: NNSDelegationReader,
         nns_subnet_id: SubnetId,
         version: Version,
+        target: Target,
     ) -> Self {
         Self {
             log,
@@ -133,34 +134,7 @@ impl ReadStateServiceBuilder {
             additional_root_of_trust: None,
             nns_subnet_id,
             version,
-            target: Target::Canister,
-        }
-    }
-
-    pub fn subnet_builder(
-        log: ReplicaLogger,
-        metrics: HttpHandlerMetrics,
-        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-        registry_client: Arc<dyn RegistryClient>,
-        ingress_verifier: Arc<dyn IngressSigVerifier>,
-        nns_delegation_reader: NNSDelegationReader,
-        nns_subnet_id: SubnetId,
-        version: Version,
-    ) -> Self {
-        Self {
-            log,
-            health_status: None,
-            metrics,
-            malicious_flags: None,
-            nns_delegation_reader,
-            state_reader,
-            time_source: None,
-            ingress_verifier,
-            registry_client,
-            additional_root_of_trust: None,
-            nns_subnet_id,
-            version,
-            target: Target::Subnet,
+            target,
         }
     }
 
