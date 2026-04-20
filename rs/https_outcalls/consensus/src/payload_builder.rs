@@ -1134,10 +1134,10 @@ fn flexible_error_into_consensus_response(
                 .collect();
 
             let message = format!(
-                "Responses too large: need at least {min_known_ok_needed} \
-                 (= {min_responses} min_responses - {num_unseen} unseen) \
+                "Responses too large: need at least {min_responses} \
                  OK responses to fit within {MAX_CANISTER_HTTP_PAYLOAD_SIZE} bytes, \
-                 but even the smallest {min_known_ok_needed} of {num_ok} \
+                 but even the smallest {min_known_ok_needed} \
+                 (= {min_responses} min_responses - {num_unseen} unseen) of {num_ok} \
                  OK responses have sizes [{}] bytes \
                  ({num_ok} ok + {num_reject} reject + {num_unseen} unseen = {total_requests} total_requests)",
                 relevant_ok_sizes.join(", "),
