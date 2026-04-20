@@ -1,0 +1,56 @@
+From 03b75f017ffe6cf556fefbd44f44655bf4a9af48 Mon Sep 17 00:00:00 2001
+From: Zi Yan <ziy@nvidia.com>
+Date: Fri, 27 Feb 2026 14:11:36 -0500
+Subject: [PATCH] mm/huge_memory: fix folio_split() race condition with
+ folio_try_get()
+
+During a pagecache folio split, the values in the related xarray should not
+be changed from the original folio at xarray split time until all
+after-split folios are ready and stored in the xarray. Otherwise, a
+parallel folio_try_get() can see stale values in the xarray and a stale
+value can be a unfrozen after-split folio. This leads to a wrong folio
+returned to userspace.
+
+Backport of upstream commit 577a1f495fd78d8fb61b67ac3d3b595b01f6fcb0
+(merged in mainline v7.0-rc4, 2026-03; also applied to linux-6.18.y as
+08b2b65c63bb26dbb2a4e2adc2ce96e2929b8b60 on 2026-03-25).
+
+As of 2026-04-20, the fix has NOT yet reached Ubuntu's linux-hwe-6.17
+package on noble (24.04). Reported against the IC GuestOS by
+Bas van Dijk <bas@dfinity.org>; reproducer at
+https://github.com/dfinity/thp-madv-remove-test.
+
+Signed-off-by: Zi Yan <ziy@nvidia.com>
+---
+ mm/huge_memory.c | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/mm/huge_memory.c b/mm/huge_memory.c
+index d4ca8cfd7f9d..3d5bf3bb8a3e 100644
+--- a/mm/huge_memory.c
++++ b/mm/huge_memory.c
+@@ -3628,6 +3628,7 @@ static int __split_unmapped_folio(struct folio *folio, int new_order,
+ 	const bool is_anon = folio_test_anon(folio);
+ 	int old_order = folio_order(folio);
+ 	int start_order = split_type == SPLIT_TYPE_UNIFORM ? new_order : old_order - 1;
++	struct folio *origin_folio = folio;
+ 	int split_order;
+ 
+ 	/*
+@@ -3653,7 +3654,13 @@ static int __split_unmapped_folio(struct folio *folio, int new_order,
+ 				xas_split(xas, folio, old_order);
+ 			else {
+ 				xas_set_order(xas, folio->index, split_order);
+-				xas_try_split(xas, folio, old_order);
++				/*
++				 * use the original folio, so that a parallel
++				 * folio_try_get() waits on it until xarray is
++				 * updated with after-split folios and
++				 * the original one is unfreezed
++				 */
++				xas_try_split(xas, origin_folio, old_order);
+ 				if (xas_error(xas))
+ 					return xas_error(xas);
+ 			}
+-- 
+2.51.0

@@ -36,6 +36,95 @@ RUN cd /tmp/ && \
     sha256sum -c node_exporter.sha256
 
 #
+# Kernel build stage:
+# - Fetch Ubuntu's linux-hwe-6.17 source package
+# - Apply local patches from kernel-patches/ (lexicographic order)
+# - Build the "generic" flavor binary .deb packages
+#
+# The resulting .debs are consumed by the final image stage below, replacing
+# the stock kernel that would otherwise be pulled in via apt.
+#
+FROM ubuntu:24.04 as kernel-build
+
+USER root:root
+
+ENV TZ=UTC
+ENV DEBIAN_FRONTEND=noninteractive
+ENV SOURCE_DATE_EPOCH=0
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# Source package to patch and rebuild. Must match (or be ABI-compatible with)
+# the kernel metapackage installed in the final stage.
+ARG _KERNEL_SOURCE_PACKAGE=linux-hwe-6.17
+
+# Enable deb-src for Ubuntu's deb822 sources file and install build deps.
+RUN sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources && \
+    apt-get -y update && \
+    apt-get -y --no-install-recommends install \
+        ca-certificates \
+        build-essential \
+        fakeroot \
+        devscripts \
+        dpkg-dev \
+        kmod \
+        cpio \
+        rsync \
+        bc \
+        bison \
+        flex \
+        libelf-dev \
+        libssl-dev \
+        libncurses-dev \
+        dwarves \
+        zstd \
+        python3 \
+        python3-debian \
+        patch && \
+    apt-get -y build-dep ${_KERNEL_SOURCE_PACKAGE}
+
+WORKDIR /build
+RUN apt-get -y source ${_KERNEL_SOURCE_PACKAGE}
+
+COPY kernel-patches /tmp/kernel-patches
+
+# Apply all *.patch files in lexicographic order. Tolerate a missing/empty
+# directory so that removing the patches (once upstream ships the fix) only
+# requires deleting files under kernel-patches/.
+RUN set -eux; \
+    srcdir="$(find /build -maxdepth 1 -mindepth 1 -type d -name 'linux-*' | head -n1)"; \
+    test -n "$srcdir"; \
+    cd "$srcdir"; \
+    shopt -s nullglob; \
+    for p in /tmp/kernel-patches/*.patch; do \
+        echo "Applying $p"; \
+        patch -p1 --no-backup-if-mismatch < "$p"; \
+    done; \
+    # Bump the Debian changelog so the produced .debs have a distinguishable
+    # version string (e.g. "...+dfinity1"). Non-interactive.
+    EDITOR=true DEBFULLNAME="IC GuestOS build" DEBEMAIL="devnull@dfinity.org" \
+        debchange --local=+dfinity "Apply DFINITY custom kernel patches."
+
+# Build only the amd64 "generic" flavor, skipping debug and retpoline extras
+# to cut build time. Signed image packages are not produced (and not needed
+# for GuestOS, which signs kernels as part of the IC image build).
+RUN set -eux; \
+    srcdir="$(find /build -maxdepth 1 -mindepth 1 -type d -name 'linux-*' | head -n1)"; \
+    cd "$srcdir"; \
+    fakeroot debian/rules clean; \
+    fakeroot debian/rules binary-generic skipdbg=true skipretpoline=true
+
+# Collect exactly the .debs needed to boot the final image:
+#   linux-image-unsigned-<abi>-generic    (vmlinuz + core modules)
+#   linux-modules-<abi>-generic
+#   linux-modules-extra-<abi>-generic
+RUN set -eux; \
+    mkdir /debs; \
+    cp /build/linux-image-unsigned-*-generic_*_amd64.deb /debs/; \
+    cp /build/linux-modules-*-generic_*_amd64.deb        /debs/; \
+    cp /build/linux-modules-extra-*-generic_*_amd64.deb  /debs/; \
+    ls -la /debs
+
+#
 # Second build stage:
 # - Download and cache minimal Ubuntu Server 24.04 LTS Docker image
 # - Install and cache upstream packages from built-in Ubuntu repositories
@@ -53,18 +142,21 @@ ENV TZ=UTC
 # For the dev image, use both "packages.common" and "packages.dev" -- this can
 # be set via docker build args (see above).
 ARG PACKAGE_FILES=packages.common
-# The kernel is installed here to keep the extra modules in sync.
-# Unfortunately, there is no metapackage to track the extra modules that does
-# not also include firmware.
-ARG _KERNEL_PACKAGE=linux-image-virtual-hwe-24.04
+# The kernel is installed from locally built .deb packages produced by the
+# kernel-build stage above, so that we can carry patches on top of Ubuntu's
+# linux-hwe-6.17. The linux-image, linux-modules and linux-modules-extra
+# packages are installed together to keep the extra modules in sync with the
+# kernel ABI.
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 COPY packages.* /tmp/
+COPY --from=kernel-build /debs /tmp/kernel-debs
 RUN apt-get -y update && \
     apt-get -y upgrade && \
     apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) \
-        ${_KERNEL_PACKAGE} \
-        linux-modules-extra-$(apt-cache depends ${_KERNEL_PACKAGE} | sed -n -e 's/  Depends: linux-image-\(.*\)-generic/\1/p')-generic && \
-    rm /tmp/packages.*
+        /tmp/kernel-debs/linux-image-unsigned-*-generic_*_amd64.deb \
+        /tmp/kernel-debs/linux-modules-*-generic_*_amd64.deb \
+        /tmp/kernel-debs/linux-modules-extra-*-generic_*_amd64.deb && \
+    rm -rf /tmp/packages.* /tmp/kernel-debs
 
 # Install node_exporter
 COPY --from=download /tmp/node_exporter-1.10.2.linux-amd64.tar.gz /tmp/node_exporter-1.10.2.linux-amd64.tar.gz
