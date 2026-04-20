@@ -40,7 +40,7 @@ fn main() -> Result<()> {
                     use_mainnet_state: false,
                     subnet_size: SUBNET_SIZE,
                     dkg_interval: DKG_INTERVAL,
-                    nested_nodes_vm_resource_overrides: NNS_RECOVERY_VM_RESOURCE_OVERRIDES,
+                    nested_nodes_vm_resource_overrides: Default::default(),
                 },
             )
         })

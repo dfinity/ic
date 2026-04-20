@@ -53,7 +53,7 @@ fn main() -> Result<()> {
                         // In theory, these VMs should be able to run with 20
                         // or fewer vCPUs. (16 GuestOS + 4 HostOS)
                         vcpus: Some(NrOfVCPUs::new(64)),
-                        ..NNS_RECOVERY_VM_RESOURCE_OVERRIDES
+                        ..Default::default()
                     },
                 },
             )
