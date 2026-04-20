@@ -2972,7 +2972,8 @@ fn flexible_error_into_messages_responses_too_large() {
     assert!(err.message.contains("3 ok"));
     assert!(err.message.contains("1 reject"));
     assert!(err.message.contains("1 unseen"));
-    assert!(err.message.contains("[1200000, 1300000"));
+    assert!(err.message.contains("[1200000, 1300000]"));
+    assert!(!err.message.contains("1400000"));
 }
 
 #[test]
