@@ -33,7 +33,7 @@ use ic_logger::{error, warn};
 use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    CanisterId, SubnetId,
+    CanisterId, PrincipalId, SubnetId,
     consensus::certification::Certification,
     messages::{Blob, Certificate, HttpCallContent, HttpRequestEnvelope, MessageId},
 };
@@ -158,21 +158,12 @@ pub(crate) fn new_router(
         version,
     };
 
-    let layer = ServiceBuilder::new().layer(DefaultBodyLimit::disable());
-    match version {
-        Version::SubnetV4 => Router::new().route_service(
-            route(version),
-            axum::routing::post(call_sync_subnet)
-                .with_state(call_service)
-                .layer(layer),
-        ),
-        Version::V3 | Version::V4 => Router::new().route_service(
-            route(version),
-            axum::routing::post(call_sync)
-                .with_state(call_service)
-                .layer(layer),
-        ),
-    }
+    Router::new().route_service(
+        route(version),
+        axum::routing::post(call_sync)
+            .with_state(call_service)
+            .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
+    )
 }
 
 pub fn new_service(
@@ -196,55 +187,40 @@ pub fn new_service(
     BoxCloneService::new(router.into_service())
 }
 
-/// Handles a call to /api/{v3,v4}/canister/../call
+/// Handles a call to /api/{v3,v4}/canister/../call and /api/v4/subnet/../call
 async fn call_sync(
-    axum::extract::Path(effective_canister_id): axum::extract::Path<CanisterId>,
-    State(state): State<SynchronousCallHandlerState>,
-    WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpCallContent>>>,
-) -> SyncCallResponse {
-    let delegation_filter = match state.version {
-        Version::V3 => CanisterRangesFilter::Flat,
-        Version::V4 => CanisterRangesFilter::Tree(effective_canister_id),
-        Version::SubnetV4 => CanisterRangesFilter::None,
-    };
-    call_sync_impl(
-        EffectiveDestination::Canister(effective_canister_id),
-        delegation_filter,
-        state,
-        request,
-    )
-    .await
-}
-
-/// Handles a call to /api/v4/subnet/../call
-async fn call_sync_subnet(
-    axum::extract::Path(effective_subnet_id): axum::extract::Path<SubnetId>,
-    State(state): State<SynchronousCallHandlerState>,
-    WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpCallContent>>>,
-) -> SyncCallResponse {
-    call_sync_impl(
-        EffectiveDestination::Subnet(effective_subnet_id),
-        CanisterRangesFilter::None,
-        state,
-        request,
-    )
-    .await
-}
-
-async fn call_sync_impl(
-    effective_destination: EffectiveDestination,
-    delegation_filter: CanisterRangesFilter,
-    SynchronousCallHandlerState {
+    axum::extract::Path(id): axum::extract::Path<PrincipalId>,
+    State(SynchronousCallHandlerState {
         call_handler,
         ingress_watcher_handle,
         metrics,
         ingress_message_certificate_timeout_seconds,
         state_reader,
         nns_delegation_reader,
-        version: _,
-    }: SynchronousCallHandlerState,
-    request: HttpRequestEnvelope<HttpCallContent>,
+        version,
+    }): State<SynchronousCallHandlerState>,
+    WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpCallContent>>>,
 ) -> SyncCallResponse {
+    let (effective_destination, delegation_filter) = match version {
+        Version::V3 => {
+            let canister_id = CanisterId::unchecked_from_principal(id);
+            (
+                EffectiveDestination::Canister(canister_id),
+                CanisterRangesFilter::Flat,
+            )
+        }
+        Version::V4 => {
+            let canister_id = CanisterId::unchecked_from_principal(id);
+            (
+                EffectiveDestination::Canister(canister_id),
+                CanisterRangesFilter::Tree(canister_id),
+            )
+        }
+        Version::SubnetV4 => (
+            EffectiveDestination::Subnet(SubnetId::from(id)),
+            CanisterRangesFilter::None,
+        ),
+    };
     let log = call_handler.log.clone();
 
     let ingress_submitter = match call_handler
