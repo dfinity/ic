@@ -73,6 +73,7 @@ use prometheus::IntCounter;
 use std::collections::BTreeSet;
 use std::iter::zip;
 use std::path::PathBuf;
+use std::time::Instant;
 use std::{convert::TryFrom, str::FromStr, sync::Arc};
 
 use types::*;
@@ -646,6 +647,7 @@ impl CanisterManager {
 
     /// Tries to apply the requested settings on the canister identified by
     /// `canister_id`.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn update_settings(
         &self,
         timestamp_nanos: Time,
@@ -656,6 +658,7 @@ impl CanisterManager {
         subnet_memory_saturation: ResourceSaturation,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
+        metrics: &ExecutionEnvironmentMetrics,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         let sender = origin.origin();
 
@@ -694,7 +697,16 @@ impl CanisterManager {
         let old_compute_allocation = canister.compute_allocation().as_percent();
         let old_log_bytes_used = canister.system_state.log_memory_store.bytes_used() as u64;
 
+        // Observe the resize duration when the update actually triggers one.
+        // Other settings mutations inside `do_update_settings` are near-instant
+        // setters; the duration is dominated by the resize itself.
+        let resize_timer = log_resize_needed.then(Instant::now);
         self.do_update_settings(&validated_settings, canister);
+        if let Some(start) = resize_timer {
+            metrics
+                .canister_log_resize_duration
+                .observe(start.elapsed().as_secs_f64());
+        }
 
         let new_compute_allocation = canister.compute_allocation().as_percent();
         if old_compute_allocation < new_compute_allocation {

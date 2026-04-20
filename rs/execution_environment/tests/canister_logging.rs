@@ -1795,6 +1795,45 @@ fn test_metric_canister_log_delta_memory_usage_bytes() {
 }
 
 #[test]
+fn test_metric_canister_log_resize_duration_seconds() {
+    // Observed at the resize call site in `CanisterManager::update_settings`
+    // whenever `log_memory_limit` actually changes. The `would_resize` gate
+    // ensures no-op resizes (same limit) do not emit samples.
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    const METRIC: &str = "canister_log_resize_duration_seconds";
+    let controller = PrincipalId::new_anonymous();
+    let (env, canister_id) = setup_with_controller(controller, UNIVERSAL_CANISTER_WASM.to_vec());
+    let before = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
+
+    // Change the log memory limit — triggers a resize.
+    let new_limit = (TEST_DEFAULT_LOG_MEMORY_LIMIT + 1000) as u64;
+    env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(new_limit)
+            .build(),
+    )
+    .unwrap();
+
+    let after = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
+    assert_eq!(after.count, before.count + 1);
+    assert_gt!(after.sum, 0.0);
+
+    // Same limit again — the `would_resize` gate holds, no new sample.
+    env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(new_limit)
+            .build(),
+    )
+    .unwrap();
+    let after2 = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
+    assert_eq!(after2.count, after.count);
+}
+
+#[test]
 fn test_metric_fetch_canister_logs_via_update_call() {
     // Inter-canister update calls to `fetch_canister_logs` are captured by the
     // general subnet-message duration histogram with
