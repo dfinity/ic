@@ -7,6 +7,8 @@ set -e
 validate_argument() {
     local arg="$1"
     # Only allow known parameters with constrained formats
+    # so limited-console can trigger this recovery path without getting a
+    # general-purpose command execution surface on HostOS.
     # NOTE: version=RECOVERY_VERSION is allowed as a dummy value for testing purposes.
     if [[ "$arg" =~ ^mode=(prep|install|run)$ ]] \
         || [[ "$arg" =~ ^version=[a-f0-9]{40}$ ]] \
