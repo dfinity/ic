@@ -4985,6 +4985,12 @@ impl Operation for SubnetReadStateRequest {
             Err(e) => OpOut::Error(PocketIcError::SubnetRequestRoutingError(e)),
             Ok(subnet) => {
                 let subnet_id = subnet.get_subnet_id();
+                let nns_subnet_id = pic
+                    .nns_subnet()
+                    .map(|subnet| subnet.get_subnet_id())
+                    .expect(
+                        "The NNS subnet should already exist if we are already executing requests",
+                    );
                 let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
                 let builder = delegation.map(|delegation| {
                     NNSDelegationBuilder::try_new(
@@ -4996,13 +5002,9 @@ impl Operation for SubnetReadStateRequest {
                 });
                 let (_, delegation_rx) = watch::channel(builder);
                 subnet.certify_latest_state();
-                let nns_subnet_id = pic
-                    .nns_subnet()
-                    .map(|subnet| subnet.get_subnet_id())
-                    .expect(
-                        "The NNS subnet should already exist if we are already executing requests",
-                    );
                 let metrics = HttpHandlerMetrics::new(&MetricsRegistry::new());
+                let mainnet_root_of_trust =
+                    IcRootOfTrust::from(icp_mainnet_root_public_key_for_testing());
                 let svc = ReadStateServiceBuilder::builder(
                     subnet.replica_logger.clone(),
                     metrics,
@@ -5015,6 +5017,8 @@ impl Operation for SubnetReadStateRequest {
                     read_state::Target::Subnet,
                 )
                 .with_malicious_flags(pic.malicious_flags.clone())
+                .with_time_source(subnet.time_source.clone())
+                .with_additional_root_of_trust(mainnet_root_of_trust)
                 .build_service();
 
                 let version_str = match self.version {
