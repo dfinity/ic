@@ -165,11 +165,14 @@ impl LogMemoryStore {
 
     /// Update page_map, header_cache, first_timestamp_cache and persistent_next_idx.
     fn save_ring_buffer(&mut self, ring_buffer: RingBuffer) {
-        self.maybe_page_map = Some(ring_buffer.to_page_map());
-        self.header_cache = OnceLock::from(Some(ring_buffer.get_header()));
+        let header = ring_buffer.get_header();
         // Page at `data_head` is hot from the just-completed `append_log` —
-        // compute here rather than lazy-loading on observation.
-        self.first_timestamp_cache = OnceLock::from(ring_buffer.first_timestamp());
+        // compute here rather than lazy-loading on observation. Reuses the
+        // header just loaded above to avoid a redundant page-map read.
+        let first_timestamp = ring_buffer.first_timestamp(&header);
+        self.maybe_page_map = Some(ring_buffer.to_page_map());
+        self.header_cache = OnceLock::from(Some(header));
+        self.first_timestamp_cache = OnceLock::from(first_timestamp);
         // Must come after header_cache update, since next_idx() reads from it.
         self.persistent_next_idx = self.next_idx();
     }
@@ -208,9 +211,11 @@ impl LogMemoryStore {
     /// buffer is empty. O(1) via the cache; after checkpoint reload the cache
     /// lazy-initialises on first call via one record-header read.
     pub fn first_timestamp(&self) -> Option<u64> {
-        *self
-            .first_timestamp_cache
-            .get_or_init(|| self.load_ring_buffer().and_then(|rb| rb.first_timestamp()))
+        *self.first_timestamp_cache.get_or_init(|| {
+            let rb = self.load_ring_buffer()?;
+            let header = rb.get_header();
+            rb.first_timestamp(&header)
+        })
     }
 
     /// Returns the time span between the oldest and newest records, or
