@@ -78,7 +78,7 @@ use ic_metrics::MetricsRegistry;
 use ic_protobuf::{
     registry::{
         crypto::v1::{ChainKeyEnabledSubnetList, PublicKey as PublicKeyProto, X509PublicKeyCert},
-        node::v1::{ConnectionEndpoint, NodeRecord},
+        node::v1::{ConnectionEndpoint, NodeRecord, NodeRewardType},
         node_rewards::v2::NodeRewardsTable,
         provisional_whitelist::v1::ProvisionalWhitelist as PbProvisionalWhitelist,
         replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
@@ -398,7 +398,8 @@ fn add_subnet_local_registry_records(
             chip_id: None,
             public_ipv4_config: None,
             domain: None,
-            node_reward_type: None,
+            node_reward_type: (subnet_type == SubnetType::CloudEngine)
+                .then_some(NodeRewardType::Type4 as i32),
             ssh_node_state_write_access: vec![],
         };
         registry_data_provider
@@ -498,7 +499,29 @@ fn add_subnet_local_registry_records(
         .with_resource_limits(resource_limits)
         .build();
 
-    // Insert initial DKG transcripts
+    add_cup_contents_and_key_record(
+        subnet_id,
+        ni_dkg_transcript,
+        public_key,
+        &registry_data_provider,
+        registry_version,
+    );
+
+    add_single_subnet_record(
+        &registry_data_provider,
+        registry_version.get(),
+        subnet_id,
+        record,
+    );
+}
+
+fn add_cup_contents_and_key_record(
+    subnet_id: SubnetId,
+    ni_dkg_transcript: NiDkgTranscript,
+    public_key: ThresholdSigPublicKey,
+    registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+    registry_version: RegistryVersion,
+) {
     let mut high_threshold_transcript = ni_dkg_transcript.clone();
     high_threshold_transcript.dkg_id.dkg_tag = NiDkgTag::HighThreshold;
     let mut low_threshold_transcript = ni_dkg_transcript;
@@ -514,19 +537,54 @@ fn add_subnet_local_registry_records(
             registry_version,
             Some(cup_contents),
         )
-        .expect("Failed to add subnet record.");
-
-    add_single_subnet_record(
-        &registry_data_provider,
-        registry_version.get(),
-        subnet_id,
-        record,
-    );
+        .expect("Failed to add CUP contents record.");
     add_subnet_key_record(
-        &registry_data_provider,
+        registry_data_provider,
         registry_version.get(),
         subnet_id,
         public_key,
+    );
+}
+
+/// Register minimal registry records for a non-local subnet so that it
+/// appears in the `NetworkTopology` and its routing table entries are not
+/// filtered out. This is needed because `try_to_populate_network_topology`
+/// filters the routing table to only include entries for subnets with
+/// registry records.
+fn register_non_local_subnet(
+    subnet_id: SubnetId,
+    registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+) {
+    let principal_id = subnet_id.get();
+    let principal_bytes = principal_id.as_slice();
+    let mut seed = [0_u8; 32];
+    seed[..principal_bytes.len()].copy_from_slice(principal_bytes);
+    let (ni_dkg_transcript, _) =
+        dummy_initial_dkg_transcript_with_master_key(&mut StdRng::from_seed(seed));
+    let public_key: ThresholdSigPublicKey = (&ni_dkg_transcript).try_into().unwrap();
+
+    add_cup_contents_and_key_record(
+        subnet_id,
+        ni_dkg_transcript,
+        public_key,
+        registry_data_provider,
+        INITIAL_REGISTRY_VERSION,
+    );
+
+    // Assume Application as the type for this synthetic catch-all subnet:
+    // the only subnet type that gets filtered out is CloudEngine, and the
+    // real subnets whose canisters end up here should mainly be application
+    // subnets. Even if there are requests from canisters on System subnets,
+    // it shouldn't make a difference (at least, for the current callers of
+    // this function).
+    let record = SubnetRecordBuilder::from(&[])
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    add_single_subnet_record(
+        registry_data_provider,
+        INITIAL_REGISTRY_VERSION.get(),
+        subnet_id,
+        record,
     );
 }
 
@@ -974,6 +1032,10 @@ impl StateManager for StateMachineStateManager {
         batch_summary: Option<BatchSummary>,
     ) {
         self.deref().commit_and_certify(state, scope, batch_summary)
+    }
+
+    fn tip_height(&self) -> Height {
+        self.deref().tip_height()
     }
 
     fn take_tip(&self) -> (Height, ReplicatedState) {
@@ -1572,7 +1634,23 @@ impl StateMachineBuilder {
                 )
                 .expect("failed to assign a canister range");
         }
-        let subnet_list = vec![sm.get_subnet_id()];
+        // Register all subnet IDs referenced in the routing table (not just
+        // the local one) so that the routing table entries survive the
+        // filtering in `try_to_populate_network_topology`. Without this,
+        // entries for non-local subnets are silently dropped and any
+        // response destined for those subnets triggers a critical error
+        // in the stream builder.
+        let subnet_list: Vec<SubnetId> = routing_table
+            .iter()
+            .map(|(_, sid)| *sid)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        for &extra_subnet_id in &subnet_list {
+            if extra_subnet_id != subnet_id {
+                register_non_local_subnet(extra_subnet_id, &registry_data_provider);
+            }
+        }
         let chain_keys = chain_keys_enabled_status
             .into_iter()
             .filter_map(|(key_id, is_enabled)| {
@@ -2608,6 +2686,7 @@ impl StateMachine {
                 registry_version,
                 content_hash: ic_types::crypto::crypto_hash(&response),
                 content_size: content.count_bytes() as u32,
+                is_reject: content.is_reject(),
                 replica_version: ReplicaVersion::default(),
             };
             let signature = CryptoReturningOk::default()
@@ -2989,6 +3068,7 @@ impl StateMachine {
             .process_batch(batch)
             .expect("Could not process batch");
 
+        self.state_manager.flush_hash_channel();
         if self.remove_old_states {
             self.state_manager.remove_states_below(batch_number);
         }
@@ -3093,6 +3173,7 @@ impl StateMachine {
         replicated_state.metadata.batch_time = time;
         self.state_manager
             .commit_and_certify(replicated_state, CertificationScope::Metadata, None);
+        self.state_manager.flush_hash_channel();
         self.set_time(time.into());
         *self.time_of_last_round.write().unwrap() = time;
     }
@@ -3293,6 +3374,7 @@ impl StateMachine {
 
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);
+        self.state_manager.flush_hash_channel();
     }
 
     /// Enables checkpoints and makes a tick to write a checkpoint.
@@ -3332,6 +3414,7 @@ impl StateMachine {
         state.put_canister_state(source_state.canister_state(&canister_id).unwrap().clone());
         self.state_manager
             .commit_and_certify(state, CertificationScope::Full, None);
+        self.state_manager.flush_hash_channel();
         self.state_manager.remove_states_below(h.increment());
     }
 
@@ -3357,6 +3440,8 @@ impl StateMachine {
         if state.take_canister_state(&canister_id).is_some() {
             self.state_manager
                 .commit_and_certify(state, CertificationScope::Full, None);
+            self.state_manager.flush_hash_channel();
+
             self.state_manager.flush_tip_channel();
 
             other_env.import_canister_state(
@@ -3569,6 +3654,7 @@ impl StateMachine {
 
         self.state_manager
             .commit_and_certify(state, CertificationScope::Full, None);
+        self.state_manager.flush_hash_channel();
 
         // Perform the split on `env`, which requires preserving the `prev_state_hash`
         // (as opposed to MVP subnet splitting where it is adjusted manually).
@@ -3580,6 +3666,7 @@ impl StateMachine {
 
         env.state_manager
             .commit_and_certify(state, CertificationScope::Full, None);
+        self.state_manager.flush_hash_channel();
 
         Ok(env)
     }
@@ -4871,6 +4958,7 @@ impl StateMachine {
             .stable_memory = memory;
         self.state_manager
             .commit_and_certify(replicated_state, CertificationScope::Metadata, None);
+        self.state_manager.flush_hash_channel();
     }
 
     /// Returns the query stats of the specified canister.
@@ -4903,6 +4991,7 @@ impl StateMachine {
 
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);
+        self.state_manager.flush_hash_channel();
     }
 
     /// Returns the cycle balance of the specified canister.
@@ -4934,6 +5023,7 @@ impl StateMachine {
         let balance = canister_state.system_state.balance().get();
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);
+        self.state_manager.flush_hash_channel();
         balance
     }
 
@@ -5017,6 +5107,7 @@ impl StateMachine {
 
     /// Make sure the latest state is certified.
     pub fn certify_latest_state(&self) {
+        self.state_manager.flush_hash_channel();
         certify_latest_state_helper(self.state_manager.clone(), &self.secret_key, self.subnet_id)
     }
 
@@ -5153,6 +5244,7 @@ impl StateMachine {
         }
         self.state_manager
             .commit_and_certify(replicated_state, CertificationScope::Metadata, None);
+        self.state_manager.flush_hash_channel();
     }
 }
 
@@ -5165,6 +5257,7 @@ pub fn certify_latest_state_helper(
     if state_manager.latest_state_height() == Height::from(0) {
         let (_height, replicated_state) = state_manager.take_tip();
         state_manager.commit_and_certify(replicated_state, CertificationScope::Metadata, None);
+        state_manager.flush_hash_channel();
     }
     assert_ne!(state_manager.latest_state_height(), Height::from(0));
     if state_manager.latest_state_height() > state_manager.latest_certified_height() {

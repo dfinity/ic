@@ -129,6 +129,7 @@ use registry_canister::mutations::{
     do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
     do_add_node_operator::AddNodeOperatorPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
+    do_delete_subnet::DeleteSubnetPayload,
     do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
     do_migrate_node_operator_directly::MigrateNodeOperatorPayload,
@@ -435,6 +436,9 @@ enum SubCommand {
     /// Submits a proposal to create a new subnet.
     ProposeToCreateSubnet(ProposeToCreateSubnetCmd),
 
+    /// Submits a proposal to delete a subnet from the registry.
+    ProposeToDeleteSubnet(ProposeToDeleteSubnetCmd),
+
     /// Propose to deploy a priorly elected GuestOS version to all subnet nodes.
     ProposeToDeployGuestosToAllSubnetNodes(ProposeToDeployGuestosToAllSubnetNodesCmd),
 
@@ -509,7 +513,7 @@ enum SubCommand {
     ///
     /// This is the first step of subnet recovery. Previously the first step was
     /// done using propose-to-update-subnet. However, that does not support
-    /// changing ssn_node_state_write_access, which is needed when a subnet has
+    /// changing ssh_node_state_write_access, which is needed when a subnet has
     /// SEV enabled everywhere (or the subnet has no DFINITY node).
     ///
     /// At the end of subnet recovery, run propose-to-bring-subnet-back-online.
@@ -839,7 +843,7 @@ struct ProposeToTakeSubnetOfflineForRepairsCmd {
     /// This usually isn't a problem, because the list is typically empty when
     /// this proposal is used as part of subnet recovery.
     #[clap(long, num_args(1..))]
-    pub ssh_readonly_access: Vec<String>,
+    pub ssh_readonly_access: Option<Vec<String>>,
 
     /// Similar to the --ssh-readonly-access flag, but there are some important
     /// differences:
@@ -862,7 +866,7 @@ struct ProposeToTakeSubnetOfflineForRepairsCmd {
     /// clobber. However, in practice, it would probably be empty to begin with,
     /// so most likely, this won't be an issue.
     #[clap(long, value_parser, num_args(1..))]
-    pub ssh_node_state_write_access: Vec<NodeSshAccessFlagValue>,
+    pub ssh_node_state_write_access: Option<Vec<NodeSshAccessFlagValue>>,
 
     /// List of replica version IDs to recall. These versions will be marked as
     /// recalled for this subnet, preventing them from being upgraded to them. If the
@@ -899,15 +903,13 @@ impl ProposalPayload<SetSubnetOperationalLevelPayload> for ProposeToTakeSubnetOf
         let ssh_node_state_write_access = self
             .ssh_node_state_write_access
             .clone()
-            .into_iter()
-            .map(NodeSshAccess::from)
-            .collect();
+            .map(|keys| keys.into_iter().map(NodeSshAccess::from).collect());
 
         SetSubnetOperationalLevelPayload {
             subnet_id: Some(SubnetId::from(self.subnet)),
             operational_level: Some(operational_level::DOWN_FOR_REPAIRS),
-            ssh_readonly_access: Some(self.ssh_readonly_access.clone()),
-            ssh_node_state_write_access: Some(ssh_node_state_write_access),
+            ssh_readonly_access: self.ssh_readonly_access.clone(),
+            ssh_node_state_write_access,
             recalled_replica_version_ids,
         }
     }
@@ -928,14 +930,14 @@ impl FromStr for NodeSshAccessFlagValue {
         let node_id = parts.next().ok_or("Missing node ID.")?;
         let public_keys = parts
             .next()
-            .ok_or("Missing semicolon separating node ID and SSH public key.")?
+            .ok_or("Missing semicolon separating node ID and SSH public keys.")?
             .to_string();
 
         // Parse node_id.
         let node_id = PrincipalId::from_str(node_id).map_err(|err| format!("{err}"))?;
         let node_id = NodeId::from(node_id);
 
-        // Parse public_keys, by simply splitting on ','.<
+        // Parse public_keys, by simply splitting on ','.
         let public_keys = public_keys
             .split(',')
             .map(|public_key| public_key.to_string())
@@ -1021,6 +1023,33 @@ impl ProposalPayload<SetSubnetOperationalLevelPayload>
             ssh_readonly_access: Some(vec![]),
             ssh_node_state_write_access: Some(ssh_node_state_write_access),
             recalled_replica_version_ids: Some(vec![]),
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to delete a subnet.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToDeleteSubnetCmd {
+    /// The subnet to delete.
+    #[clap(long)]
+    pub subnet_id: PrincipalId,
+}
+
+impl ProposalTitle for ProposeToDeleteSubnetCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!("Delete subnet {}", shortened_pid_string(&self.subnet_id)),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<DeleteSubnetPayload> for ProposeToDeleteSubnetCmd {
+    async fn payload(&self, _: &Agent) -> DeleteSubnetPayload {
+        DeleteSubnetPayload {
+            subnet_id: Principal::from(self.subnet_id),
         }
     }
 }
@@ -4451,6 +4480,7 @@ async fn main() {
             SubCommand::ProposeToCompleteCanisterMigration(_) => (),
             SubCommand::ProposeToCreateServiceNervousSystem(_) => (),
             SubCommand::ProposeToCreateSubnet(_) => (),
+            SubCommand::ProposeToDeleteSubnet(_) => (),
             SubCommand::ProposeToDeployGuestosToAllSubnetNodes(_) => (),
             SubCommand::ProposeToDeployGuestosToAllUnassignedNodes(_) => (),
             SubCommand::ProposeToDeployGuestosToSomeApiBoundaryNodes(_) => (),
@@ -4804,6 +4834,21 @@ async fn main() {
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::CreateSubnet,
+                make_canister_client(
+                    reachable_nns_urls,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::ProposeToDeleteSubnet(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::DeleteSubnet,
                 make_canister_client(
                     reachable_nns_urls,
                     opts.verify_nns_responses,

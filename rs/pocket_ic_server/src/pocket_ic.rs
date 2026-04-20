@@ -2575,7 +2575,7 @@ impl PocketIcSubnets {
 
             // Install the canister migration orchestrator canister.
             // TODO: replace by public interface
-            #[derive(CandidType, Deserialize, Default)]
+            #[derive(Default, CandidType, Deserialize)]
             struct MigrationCanisterInitArgs {
                 allowlist: Option<Vec<Principal>>,
             }

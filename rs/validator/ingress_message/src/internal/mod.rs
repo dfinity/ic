@@ -205,8 +205,8 @@ fn to_validation_error(error: ic_validator::RequestValidationError) -> RequestVa
         ic_validator::RequestValidationError::NonceTooBig { num_bytes, maximum } => {
             RequestValidationError::NonceTooBigError { num_bytes, maximum }
         }
-        ic_validator::RequestValidationError::SenderInfoUnsupported => {
-            RequestValidationError::SenderInfoUnsupported
+        ic_validator::RequestValidationError::InvalidSenderInfo(msg) => {
+            RequestValidationError::InvalidSenderInfo(msg)
         }
     }
 }

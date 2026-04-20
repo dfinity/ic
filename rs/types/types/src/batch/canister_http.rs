@@ -45,7 +45,9 @@ pub enum FlexibleCanisterHttpError {
     },
     ResponsesTooLarge {
         callback_id: CallbackId,
-        metadata_shares: Vec<CanisterHttpResponseShare>,
+        all_seen_shares: Vec<CanisterHttpResponseShare>,
+        total_requests: u32,
+        min_responses: u32,
     },
     TooManyRequestErrors {
         callback_id: CallbackId,
@@ -115,13 +117,17 @@ impl CountBytes for FlexibleCanisterHttpError {
             Self::Timeout { callback_id } => callback_id.count_bytes(),
             Self::ResponsesTooLarge {
                 callback_id,
-                metadata_shares,
+                all_seen_shares,
+                total_requests,
+                min_responses,
             } => {
                 callback_id.count_bytes()
-                    + metadata_shares
+                    + all_seen_shares
                         .iter()
                         .map(|s| s.count_bytes())
                         .sum::<usize>()
+                    + std::mem::size_of_val(total_requests)
+                    + std::mem::size_of_val(min_responses)
             }
             Self::TooManyRequestErrors {
                 callback_id,
@@ -199,6 +205,7 @@ impl From<CanisterHttpResponseWithConsensus> for pb::CanisterHttpResponseWithCon
                 })
                 .collect(),
             content_size: payload.proof.content.content_size,
+            is_reject: payload.proof.content.is_reject,
         }
     }
 }
@@ -240,6 +247,7 @@ impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWith
                         payload.hash,
                     )),
                     content_size: payload.content_size,
+                    is_reject: payload.is_reject,
                     registry_version: RegistryVersion::new(payload.registry_version),
                     replica_version: ReplicaVersion::try_from(payload.replica_version)
                         .map_err(|err| ProxyDecodeError::ReplicaVersionParseError(Box::new(err)))?,
@@ -335,6 +343,7 @@ impl From<CanisterHttpResponseShare> for pb::CanisterHttpShare {
                 registry_version: share.content.registry_version.get(),
                 replica_version: share.content.replica_version.into(),
                 content_size: share.content.content_size,
+                is_reject: share.content.is_reject,
             }),
             signature: Some(pb::CanisterHttpResponseSignature {
                 signer: share.signature.signer.get().into_vec(),
@@ -363,6 +372,7 @@ impl TryFrom<pb::CanisterHttpShare> for CanisterHttpResponseShare {
                 id,
                 content_hash,
                 content_size: metadata.content_size,
+                is_reject: metadata.is_reject,
                 registry_version,
                 replica_version,
             },
@@ -433,12 +443,17 @@ impl From<FlexibleCanisterHttpError> for pb::FlexibleCanisterHttpError {
                 ErrorDetails::Timeout(pb::FlexibleCanisterHttpTimeout {})
             }
             FlexibleCanisterHttpError::ResponsesTooLarge {
-                metadata_shares, ..
+                all_seen_shares,
+                total_requests,
+                min_responses,
+                ..
             } => ErrorDetails::ResponsesTooLarge(pb::FlexibleCanisterHttpResponsesTooLarge {
-                metadata_shares: metadata_shares
+                all_seen_shares: all_seen_shares
                     .into_iter()
                     .map(pb::CanisterHttpShare::from)
                     .collect(),
+                total_requests,
+                min_responses,
             }),
             FlexibleCanisterHttpError::TooManyRequestErrors {
                 reject_responses, ..
@@ -467,14 +482,16 @@ impl TryFrom<pb::FlexibleCanisterHttpError> for FlexibleCanisterHttpError {
                 Ok(FlexibleCanisterHttpError::Timeout { callback_id })
             }
             Some(ErrorDetails::ResponsesTooLarge(details)) => {
-                let metadata_shares = details
-                    .metadata_shares
+                let all_seen_shares = details
+                    .all_seen_shares
                     .into_iter()
                     .map(CanisterHttpResponseShare::try_from)
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(FlexibleCanisterHttpError::ResponsesTooLarge {
                     callback_id,
-                    metadata_shares,
+                    all_seen_shares,
+                    total_requests: details.total_requests,
+                    min_responses: details.min_responses,
                 })
             }
             Some(ErrorDetails::TooManyRequestErrors(details)) => {
@@ -583,6 +600,7 @@ mod tests {
                     4, 5, 6, 7,
                 ])),
                 content_size: 42,
+                is_reject: false,
                 registry_version: RegistryVersion::new(2),
                 replica_version: ReplicaVersion::default(),
             },

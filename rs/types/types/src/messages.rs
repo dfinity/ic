@@ -15,7 +15,7 @@ pub use self::http::{
     HttpReadStateContent, HttpReadStateResponse, HttpReply, HttpRequest, HttpRequestContent,
     HttpRequestEnvelope, HttpRequestError, HttpSignedQueryResponse, HttpStatusResponse,
     HttpUserQuery, NodeSignature, QueryResponseHash, RawHttpRequestVal, RawSignedSenderInfo,
-    ReplicaHealthStatus, SignedDelegation, SignedSenderInfo,
+    ReplicaHealthStatus, SenderInfoContent, SignedDelegation, SignedSenderInfo,
 };
 use crate::methods::Callback;
 pub use crate::methods::SystemMethod;

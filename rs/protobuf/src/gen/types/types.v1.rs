@@ -554,6 +554,8 @@ pub struct CanisterHttpResponseMetadata {
     pub replica_version: ::prost::alloc::string::String,
     #[prost(uint32, tag = "6")]
     pub content_size: u32,
+    #[prost(bool, tag = "7")]
+    pub is_reject: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseContent {
@@ -598,6 +600,8 @@ pub struct CanisterHttpResponseWithConsensus {
     pub signatures: ::prost::alloc::vec::Vec<CanisterHttpResponseSignature>,
     #[prost(uint32, tag = "9")]
     pub content_size: u32,
+    #[prost(bool, tag = "10")]
+    pub is_reject: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpShare {
@@ -630,7 +634,11 @@ pub struct FlexibleCanisterHttpTimeout {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FlexibleCanisterHttpResponsesTooLarge {
     #[prost(message, repeated, tag = "1")]
-    pub metadata_shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
+    pub all_seen_shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
+    #[prost(uint32, tag = "2")]
+    pub total_requests: u32,
+    #[prost(uint32, tag = "3")]
+    pub min_responses: u32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FlexibleCanisterHttpTooManyRequestErrors {
