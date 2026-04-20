@@ -1798,10 +1798,9 @@ fn test_metric_canister_log_delta_memory_usage_bytes() {
 fn test_metric_canister_log_retention_seconds() {
     // Observed by the scheduler at round finalization for canisters that
     // appended log records this round. Retention is the wall-clock span
-    // between the oldest and newest records held in the buffer.
-    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
-        return;
-    }
+    // between the oldest and newest records held in the buffer. Both log
+    // stores (old `CanisterLog` and new `LogMemoryStore`) compute it the
+    // same way — the assertions hold regardless of the feature flag.
     const METRIC: &str = "canister_log_retention_seconds";
     const TIME_ADVANCE: Duration = Duration::from_secs(60);
     let env = setup_env();
