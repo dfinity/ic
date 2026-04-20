@@ -1488,7 +1488,7 @@ fn assert_multi_round_invariants(
     sims: &[CanisterSim],
     scheduler_cores: usize,
     num_rounds: usize,
-    free_compute_capacity: usize,
+    total_compute_allocation: usize,
 ) -> Result<(), TestCaseError> {
     println!(
         "executed rounds: {:?}",
@@ -1522,9 +1522,11 @@ fn assert_multi_round_invariants(
         );
     }
 
+    let usable_cores = scheduler_cores.min(sims.len());
+    let free_compute_per_canister = (usable_cores * 100 - total_compute_allocation) / sims.len();
+
     // Canisters must have either consumed all inputs; or executed proportionally to
     // their compute allocation and rate limiting.
-    let free_compute_per_canister = free_compute_capacity / sims.len();
     for (i, sim) in sims.iter().enumerate() {
         let canister_id = sim.canister_id;
         let canister_priority = fixture.state.metadata.subnet_schedule.get(&canister_id);
@@ -1551,19 +1553,19 @@ fn assert_multi_round_invariants(
                 // prioritized over new ones); combined with AP bounding, long executions are
                 // scheduled less efficiently.
                 expected_rounds = expected_rounds * 9 / 10;
-            } else {
-                // We have one core that is not part of the scheduler capacity. The combination
-                // of this extra capacity and the inefficiencies described above, gives us in
-                // practice the equivlent of another 20 compute capacity.
-                if sims.len() >= scheduler_cores {
-                    expected_rounds =
-                        expected_rounds * (scheduler_cores * 10 - 8) / (scheduler_cores * 10 - 10);
-                }
-                // The capacity resulting from the extra core only applies up to the rate limit.
-                // If a canister can only run 50% of the time due to rate limiting, it will do
-                // so regardless of extra compute capacity.
-                expected_rounds =
-                    expected_rounds.min(sim.archetype.max_rounds_from_rate_limiting(num_rounds));
+                // } else {
+                //     // We have one core that is not part of the scheduler capacity. The combination
+                //     // of this extra capacity and the inefficiencies described above, gives us in
+                //     // practice the equivlent of another 20 compute capacity.
+                //     if sims.len() >= scheduler_cores {
+                //         expected_rounds =
+                //             expected_rounds * (scheduler_cores * 10 - 8) / (scheduler_cores * 10 - 10);
+                //     }
+                //     // The capacity resulting from the extra core only applies up to the rate limit.
+                //     // If a canister can only run 50% of the time due to rate limiting, it will do
+                //     // so regardless of extra compute capacity.
+                //     expected_rounds =
+                //         expected_rounds.min(sim.archetype.max_rounds_from_rate_limiting(num_rounds));
             }
 
             prop_assert!(
@@ -1583,22 +1585,22 @@ fn multi_round_priority_invariants(
     #[strategy(proptest::collection::vec(arb_archetype_with_count(), 2..=5))]
     archetype_configs: Vec<(CanisterArchetype, usize)>,
 ) {
-    let total_compute: usize = archetype_configs
+    let total_compute_allocation: usize = archetype_configs
         .iter()
         .map(|(a, c)| a.compute_allocation as usize * *c)
         .sum();
     let capacity = (scheduler_cores - 1) * 100;
-    prop_assume!(total_compute < capacity);
+    prop_assume!(total_compute_allocation < capacity);
 
     let num_rounds = 1000;
     let (fixture, sims) =
-        run_multi_round_simulation(scheduler_cores, num_rounds, &archetype_configs, Some(7));
+        run_multi_round_simulation(scheduler_cores, num_rounds, &archetype_configs, Some(9));
     assert_multi_round_invariants(
         &fixture,
         &sims,
         scheduler_cores,
         num_rounds,
-        capacity - total_compute,
+        total_compute_allocation,
     )?;
 }
 
