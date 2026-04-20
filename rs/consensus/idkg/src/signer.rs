@@ -268,8 +268,8 @@ impl ThresholdSignerImpl {
             }
         }
 
-        let request_id = share.request_id();
         let signer = share.signer();
+        let request_id = share.request_id();
         let scheme = share.scheme();
         if self.signer_has_issued_share(idkg_pool, &signer, &request_id, scheme) {
             // The node already sent a valid share for this request
@@ -1810,7 +1810,6 @@ mod tests {
                 // One is considered duplicate
                 assert!(msg_1_valid || msg_2_valid);
                 assert!(is_moved_to_validated(&change_set, &msg_id_3));
-
                 assert_eq!(
                     signer.validated_sig_share_signers(),
                     BTreeMap::from([(id_1, BTreeSet::from([NODE_2, NODE_3]))])
