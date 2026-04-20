@@ -427,7 +427,10 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) ->
     );
     let own_subnet_id = state.metadata.own_subnet_id;
     let inverted_routing_table = Arc::new(invert_routing_table(
-        state.metadata.network_topology.routing_table(),
+        state
+            .metadata
+            .network_topology
+            .routing_table_for_certification(),
     ));
     let split_routing_table = Arc::new(split_inverted_routing_table(
         &inverted_routing_table,
@@ -457,7 +460,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) ->
             )
             .with("subnet", move || {
                 subnets_as_tree(
-                    state.metadata.network_topology.subnets(),
+                    state.metadata.network_topology.subnets_for_certification(),
                     own_subnet_id,
                     &state.metadata.node_public_keys,
                     inverted_routing_table.clone(),
@@ -474,7 +477,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) ->
                 "canister_ranges",
                 move || {
                     canister_ranges_as_tree(
-                        state.metadata.network_topology.subnets(),
+                        state.metadata.network_topology.subnets_for_certification(),
                         Arc::clone(&split_routing_table),
                         certification_version,
                     )
@@ -975,7 +978,7 @@ fn canister_metadata_as_tree(
 /// Helper function to turn a subnet type into a string.
 /// This is intentionally explicitly implemented here, so that the state tree representation cannot be changed outside this crate, as opposed
 /// to calling something like `subnet_type.to_string()`.
-fn subnet_type_as_string(subnet_type: SubnetType) -> &'static str {
+pub fn subnet_type_as_string(subnet_type: SubnetType) -> &'static str {
     match subnet_type {
         SubnetType::Application => "application",
         SubnetType::System => "system",

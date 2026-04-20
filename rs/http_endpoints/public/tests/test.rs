@@ -4,8 +4,8 @@
 pub mod common;
 
 use crate::common::{
-    HttpEndpointBuilder, create_conn_and_send_request, default_get_latest_state,
-    default_latest_certified_height, default_read_certified_state, get_free_localhost_socket_addr,
+    HttpEndpointBuilder, UpdateEndpoint, basic_state_manager_mock, create_conn_and_send_request,
+    default_get_latest_state, default_read_certified_state, get_free_localhost_socket_addr,
 };
 use axum::body::{Body, to_bytes};
 use bytes::Bytes;
@@ -28,12 +28,14 @@ use ic_crypto_tree_hash::{
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_http_endpoints_public::{query, read_state};
 use ic_http_endpoints_test_agent::{
-    self, APPLICATION_CBOR, Call, CanisterReadState, IngressMessage, Query, wait_for_status_healthy,
+    self, APPLICATION_CBOR, Call, CallSubnet, CanisterReadState, IngressMessage, Query,
+    wait_for_status_healthy,
 };
 use ic_interfaces::execution_environment::QueryExecutionError;
 use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager::CertifiedStateSnapshot;
+use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_protobuf::registry::crypto::v1::{
     AlgorithmId as AlgorithmIdProto, PublicKey as PublicKeyProto,
@@ -44,7 +46,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::ids::{NODE_1, canister_test_id, subnet_test_id, user_test_id};
 use ic_types::{
-    CryptoHashOfPartialState, Height, PrincipalId, RegistryVersion,
+    CanisterId, CryptoHashOfPartialState, Height, NumBytes, PrincipalId, RegistryVersion,
     artifact::UnvalidatedArtifactMutation,
     consensus::certification::{Certification, CertificationContent},
     crypto::{
@@ -521,7 +523,7 @@ fn test_request_too_slow() {
 }
 
 #[rstest]
-#[case(Call::V2, CBOR::Map(BTreeMap::from([
+#[case(UpdateEndpoint::Canister(Call::V2), CBOR::Map(BTreeMap::from([
             (
                 CBOR::Text("error_code".to_string()),
                 CBOR::Text("IC0204".to_string()),
@@ -535,7 +537,7 @@ fn test_request_too_slow() {
                 CBOR::Integer(RejectCode::SysTransient as i128),
             ),
         ])))]
-#[case(Call::V3, CBOR::Map(BTreeMap::from([
+#[case(UpdateEndpoint::Canister(Call::V3), CBOR::Map(BTreeMap::from([
             (
                 CBOR::Text("status".to_string()),
                 CBOR::Text("non_replicated_rejection".to_string()),
@@ -553,7 +555,25 @@ fn test_request_too_slow() {
                 CBOR::Integer(RejectCode::SysTransient as i128),
             ),
         ])))]
-#[case(Call::V4, CBOR::Map(BTreeMap::from([
+#[case(UpdateEndpoint::Canister(Call::V4), CBOR::Map(BTreeMap::from([
+    (
+        CBOR::Text("status".to_string()),
+        CBOR::Text("non_replicated_rejection".to_string()),
+    ),
+    (
+        CBOR::Text("error_code".to_string()),
+        CBOR::Text("IC0204".to_string()),
+    ),
+    (
+        CBOR::Text("reject_message".to_string()),
+        CBOR::Text("Test reject message".to_string()),
+    ),
+    (
+        CBOR::Text("reject_code".to_string()),
+        CBOR::Integer(RejectCode::SysTransient as i128),
+    ),
+])))]
+#[case(UpdateEndpoint::Subnet(CallSubnet::V4(subnet_test_id(1).get())), CBOR::Map(BTreeMap::from([
     (
         CBOR::Text("status".to_string()),
         CBOR::Text("non_replicated_rejection".to_string()),
@@ -572,7 +592,7 @@ fn test_request_too_slow() {
     ),
 ])))]
 fn test_status_code_when_ingress_filter_fails(
-    #[case] endpoint: Call,
+    #[case] endpoint: UpdateEndpoint,
     #[case] expected_response: CBOR,
 ) {
     let rt = Runtime::new().unwrap();
@@ -595,7 +615,7 @@ fn test_status_code_when_ingress_filter_fails(
 
     rt.block_on(async move {
         wait_for_status_healthy(&addr).await.unwrap();
-        let message = Default::default();
+        let message = endpoint.default_ingress_message();
         let call_response = endpoint.call(addr, message).await;
         assert_eq!(
             call_response.status(),
@@ -790,17 +810,23 @@ fn can_retrieve_subnet_metrics(
     };
 
     let mut mock_state_manager = MockStateManager::new();
+
+    let state = Arc::new(default_get_latest_state());
+
+    let state_clone = state.clone();
     mock_state_manager
         .expect_get_latest_state()
-        .returning(default_get_latest_state);
+        .returning(move || (*state_clone).clone());
 
     let cloned_certificate = certificate.clone();
     mock_state_manager
         .expect_read_certified_state()
         .returning(move |_| Some(mock_certified_state(cloned_certificate.clone())));
+
+    let state_clone = state.clone();
     mock_state_manager
         .expect_latest_certified_height()
-        .returning(default_latest_certified_height);
+        .returning(move || state_clone.height());
 
     let cloned_certificate = certificate.clone();
     mock_state_manager
@@ -1115,7 +1141,12 @@ fn test_http_1_requests_are_accepted() {
 /// return the certificate in the response with a 200 status code.
 #[rstest]
 fn test_call_handler_returns_early_for_ingress_message_already_in_certified_state(
-    #[values(Call::V3, Call::V4)] endpoint: Call,
+    #[values(
+        UpdateEndpoint::Canister(Call::V3),
+        UpdateEndpoint::Canister(Call::V4),
+        UpdateEndpoint::Subnet(CallSubnet::V4(subnet_test_id(1).get())),
+    )]
+    endpoint: UpdateEndpoint,
 ) {
     use ic_crypto_tree_hash::MatchPatternPath;
 
@@ -1127,17 +1158,25 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
     };
 
     let mut mock_state_manager = MockStateManager::new();
+
+    let state = Arc::new(default_get_latest_state());
+
+    let state_clone = state.clone();
     mock_state_manager
         .expect_get_latest_state()
-        .returning(default_get_latest_state);
+        .returning(move || (*state_clone).clone());
 
+    let state_clone = state.clone();
     mock_state_manager
         .expect_read_certified_state()
-        .returning(default_read_certified_state);
+        .returning(move |labeled_tree| {
+            default_read_certified_state(labeled_tree, (*state_clone).clone())
+        });
 
+    let state_clone = state.clone();
     mock_state_manager
         .expect_latest_certified_height()
-        .returning(default_latest_certified_height);
+        .returning(move || state_clone.height());
 
     // Inject the mock certified state snapshot
     mock_state_manager
@@ -1235,7 +1274,7 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
 
-        let message = IngressMessage::default();
+        let message = endpoint.default_ingress_message();
 
         let response = endpoint.call(addr, message).await;
 
@@ -1282,7 +1321,14 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
 /// Test that the sync call endpoints handle multiple requests with the same ingress message,
 /// by returning `202` for subsequent concurrent requests.
 #[rstest]
-fn test_duplicate_concurrent_requests_return_early(#[values(Call::V3, Call::V4)] endpoint: Call) {
+fn test_duplicate_concurrent_requests_return_early(
+    #[values(
+        UpdateEndpoint::Canister(Call::V3),
+        UpdateEndpoint::Canister(Call::V4),
+        UpdateEndpoint::Subnet(CallSubnet::V4(subnet_test_id(1).get())),
+    )]
+    endpoint: UpdateEndpoint,
+) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
@@ -1290,8 +1336,12 @@ fn test_duplicate_concurrent_requests_return_early(#[values(Call::V3, Call::V4)]
         ..Default::default()
     };
 
-    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
-    let message = IngressMessage::default();
+    let (state_manager, latest_state) = basic_state_manager_mock();
+
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
+        .with_state_manager(state_manager)
+        .run();
+    let message = endpoint.default_ingress_message();
 
     // Mock ingress filter to always accept the message.
     rt.spawn(async move {
@@ -1304,20 +1354,16 @@ fn test_duplicate_concurrent_requests_return_early(#[values(Call::V3, Call::V4)]
     let first_request_submitted_to_ingress = Arc::new(tokio::sync::Notify::new());
     let first_request_submitted_to_ingress_clone = first_request_submitted_to_ingress.clone();
 
+    let message_id = message.message_id();
     rt.spawn(async move {
         loop {
             let new_ingress = handlers.ingress_rx.recv().await.unwrap();
-            let UnvalidatedArtifactMutation::Insert((message, _)) = new_ingress else {
+            let UnvalidatedArtifactMutation::Insert((sent_message, _)) = new_ingress else {
                 panic!("Expected Insert");
             };
-
-            let message_id = message.id();
+            assert_eq!(sent_message.id(), message_id);
 
             first_request_submitted_to_ingress_clone.notify_one();
-            handlers
-                .terminal_state_ingress_messages
-                .try_send((message_id, Height::from(1)))
-                .unwrap();
         }
     });
 
@@ -1328,16 +1374,38 @@ fn test_duplicate_concurrent_requests_return_early(#[values(Call::V3, Call::V4)]
         first_request_submitted_to_ingress.notified().await;
 
         let second_request = endpoint.call(addr, message.clone()).await;
-        handlers
-            .certified_height_watcher
-            .send(Height::from(1))
-            .unwrap();
 
         assert_eq!(StatusCode::ACCEPTED, second_request.status());
         assert_eq!(
             second_request.text().await.unwrap(),
             "Duplicate request. Message is already being tracked and executed."
         );
+
+        let message_id = message.message_id();
+
+        // set the ingress to the terminal state in the certified state
+        // we can only do that now, otherwise the second call would get OK
+        // for a completed request
+        let (height, mut state) = {
+            let state_and_height = latest_state.lock().unwrap();
+            (
+                state_and_height.height(),
+                (**state_and_height.get_ref()).clone(),
+            )
+        };
+        state.set_ingress_status(
+            message_id.clone(),
+            message.known_ingress_status(),
+            NumBytes::new(4 << 30), // INGRESS_HISTORY_MEMORY_CAPACITY
+            |_| {},
+        );
+        let new_height = Height::new(height.get() + 1);
+        *latest_state.lock().unwrap() = Labeled::new(new_height, Arc::new(state));
+        handlers
+            .terminal_state_ingress_messages
+            .try_send((message_id, new_height))
+            .unwrap();
+        handlers.certified_height_watcher.send(new_height).unwrap();
 
         let first_request = first_request_join_handle.await.unwrap();
 
@@ -1372,7 +1440,12 @@ fn test_duplicate_concurrent_requests_return_early(#[values(Call::V3, Call::V4)]
 #[case(Height::from(1), None, Height::from(1))]
 #[case(Height::from(1), Some(Height::from(0)), Height::from(1))]
 fn test_sync_call_endpoint_responds_with_certificate(
-    #[values(Call::V3, Call::V4)] endpoint: Call,
+    #[values(
+        UpdateEndpoint::Canister(Call::V3),
+        UpdateEndpoint::Canister(Call::V4),
+        UpdateEndpoint::Subnet(CallSubnet::V4(subnet_test_id(1).get())),
+    )]
+    endpoint: UpdateEndpoint,
     #[case] initial_certified_height: Height,
     #[case] transitioned_certified_height: Option<Height>,
     #[case] message_finalization_height: Height,
@@ -1384,11 +1457,14 @@ fn test_sync_call_endpoint_responds_with_certificate(
         ..Default::default()
     };
 
+    let (state_manager, latest_state) = basic_state_manager_mock();
+
     let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
         .with_certified_height(initial_certified_height)
+        .with_state_manager(state_manager)
         .run();
 
-    let message = IngressMessage::default();
+    let message = endpoint.default_ingress_message();
 
     // Mock ingress filter to always accept the message.
     rt.spawn(async move {
@@ -1398,13 +1474,32 @@ fn test_sync_call_endpoint_responds_with_certificate(
         }
     });
 
+    let message_id = message.message_id();
+    let message_clone = message.clone();
     rt.spawn(async move {
         let new_ingress = handlers.ingress_rx.recv().await.unwrap();
-        let UnvalidatedArtifactMutation::Insert((message, _)) = new_ingress else {
+        let UnvalidatedArtifactMutation::Insert((sent_message, _)) = new_ingress else {
             panic!("Expected Insert");
         };
+        assert_eq!(sent_message.id(), message_clone.message_id());
 
-        let message_id = message.id();
+        // set the ingress to the terminal state in the certified state
+        // this is needed since the HTTP handler would return 202 otherwise
+        let (_height, mut state) = {
+            let state_and_height = latest_state.lock().unwrap();
+            (
+                state_and_height.height(),
+                (**state_and_height.get_ref()).clone(),
+            )
+        };
+        state.set_ingress_status(
+            message_clone.message_id(),
+            message_clone.known_ingress_status(),
+            NumBytes::new(4 << 30), // INGRESS_HISTORY_MEMORY_CAPACITY
+            |_| {},
+        );
+        *latest_state.lock().unwrap() = Labeled::new(message_finalization_height, Arc::new(state));
+
         handlers
             .terminal_state_ingress_messages
             .try_send((message_id, message_finalization_height))
@@ -1461,7 +1556,14 @@ fn test_sync_call_endpoint_responds_with_certificate(
 /// ingress messages that complete execution, but its height never
 /// gets certified.
 #[rstest]
-fn test_synchronous_call_endpoint_no_certification(#[values(Call::V3, Call::V4)] endpoint: Call) {
+fn test_synchronous_call_endpoint_no_certification(
+    #[values(
+        UpdateEndpoint::Canister(Call::V3),
+        UpdateEndpoint::Canister(Call::V4),
+        UpdateEndpoint::Subnet(CallSubnet::V4(subnet_test_id(1).get())),
+    )]
+    endpoint: UpdateEndpoint,
+) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
@@ -1474,7 +1576,7 @@ fn test_synchronous_call_endpoint_no_certification(#[values(Call::V3, Call::V4)]
         .with_certified_height(Height::from(0))
         .run();
 
-    let message = IngressMessage::default();
+    let message = endpoint.default_ingress_message();
 
     // Mock ingress filter to always accept the message.
     rt.spawn(async move {
@@ -1539,7 +1641,12 @@ impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
 #[case::certified_state_snapshot_unavailable(None)]
 #[case::reading_certified_state_fails(Some(Box::new(FakeCertifiedStateSnapshot) as _))]
 fn test_call_v3_response_when_state_reader_fails(
-    #[values(Call::V3, Call::V4)] endpoint: Call,
+    #[values(
+        UpdateEndpoint::Canister(Call::V3),
+        UpdateEndpoint::Canister(Call::V4),
+        UpdateEndpoint::Subnet(CallSubnet::V4(subnet_test_id(1).get())),
+    )]
+    endpoint: UpdateEndpoint,
     #[case] certified_state_snapshot: Option<
         Box<dyn CertifiedStateSnapshot<State = ReplicatedState>>,
     >,
@@ -1553,17 +1660,25 @@ fn test_call_v3_response_when_state_reader_fails(
     };
 
     let mut mock_state_manager = MockStateManager::new();
+
+    let state = Arc::new(default_get_latest_state());
+
+    let state_clone = state.clone();
     mock_state_manager
         .expect_get_latest_state()
-        .returning(default_get_latest_state);
+        .returning(move || (*state_clone).clone());
 
+    let state_clone = state.clone();
     mock_state_manager
         .expect_read_certified_state()
-        .returning(default_read_certified_state);
+        .returning(move |labeled_tree| {
+            default_read_certified_state(labeled_tree, (*state_clone).clone())
+        });
 
+    let state_clone = state.clone();
     mock_state_manager
         .expect_latest_certified_height()
-        .returning(default_latest_certified_height);
+        .returning(move || state_clone.height());
 
     // Inject the mock certified state snapshot
     mock_state_manager
@@ -1574,7 +1689,7 @@ fn test_call_v3_response_when_state_reader_fails(
         .with_state_manager(mock_state_manager)
         .run();
 
-    let message = IngressMessage::default();
+    let message = endpoint.default_ingress_message();
 
     // Mock ingress filter to always accept the message.
     rt.spawn(async move {
@@ -1621,7 +1736,13 @@ fn test_call_v3_response_when_state_reader_fails(
 /// P2P.
 #[rstest]
 fn test_call_response_when_p2p_not_running(
-    #[values(Call::V2, Call::V3, Call::V4)] call_agent: Call,
+    #[values(
+        UpdateEndpoint::Canister(Call::V2),
+        UpdateEndpoint::Canister(Call::V3),
+        UpdateEndpoint::Canister(Call::V4),
+        UpdateEndpoint::Subnet(CallSubnet::V4(subnet_test_id(1).get())),
+    )]
+    call_agent: UpdateEndpoint,
 ) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
@@ -1648,7 +1769,9 @@ fn test_call_response_when_p2p_not_running(
         // Drop the P2P receiver to simulate P2P not running.
         drop(handlers.ingress_rx);
 
-        let response = call_agent.call(addr, IngressMessage::default()).await;
+        let response = call_agent
+            .call(addr, call_agent.default_ingress_message())
+            .await;
 
         assert_eq!(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -1660,6 +1783,144 @@ fn test_call_response_when_p2p_not_running(
         assert_eq!(
             "P2P is not running on this node.",
             response.text().await.unwrap()
+        );
+    });
+}
+
+/// Tests that /api/v4/subnet/../call rejects a request whose URL subnet ID does not match
+/// the node's own subnet ID.
+#[test]
+fn test_call_v4_subnet_wrong_subnet_id() {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ingress_message_certificate_timeout_seconds: 0,
+        ..Default::default()
+    };
+
+    // HttpEndpointBuilder configures the node with subnet_test_id(1).
+    let node_subnet_id = subnet_test_id(1).get();
+    let wrong_subnet_id = subnet_test_id(2).get();
+
+    // Ingress filter is never reached; spawn a dummy handler so the loop doesn't hang.
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
+            resp.send_response(Ok(Ok(())))
+        }
+    });
+
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+        let response = CallSubnet::V4(wrong_subnet_id)
+            .call(addr, IngressMessage::default())
+            .await;
+
+        assert_eq!(StatusCode::BAD_REQUEST, response.status());
+        assert_eq!(
+            format!(
+                "Specified SubnetId {wrong_subnet_id} does not match the subnet id of this node {node_subnet_id}"
+            ),
+            response.text().await.unwrap()
+        );
+    });
+}
+
+/// Tests that /api/v4/subnet/../call accepts a request whose URL subnet ID matches
+/// the node's own subnet ID.
+#[test]
+fn test_call_v4_subnet_correct_subnet_id() {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ingress_message_certificate_timeout_seconds: 0,
+        ..Default::default()
+    };
+
+    let subnet_id = subnet_test_id(1).get();
+
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
+            resp.send_response(Ok(Ok(())))
+        }
+    });
+
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+        let response = CallSubnet::V4(subnet_id)
+            .call(
+                addr,
+                IngressMessage::default()
+                    .with_canister_id(
+                        ic_types::CanisterId::ic_00().get(),
+                        ic_types::CanisterId::ic_00().get(),
+                    )
+                    .with_method_name("create_canister".to_string()),
+            )
+            .await;
+
+        assert_eq!(
+            StatusCode::ACCEPTED,
+            response.status(),
+            "{:?}",
+            response.text().await
+        );
+    });
+}
+
+/// Tests that /api/v4/subnet/../call rejects calls to non-management canisters (even with
+/// method "create_canister") and calls to IC_00 methods other than "create_canister".
+#[rstest]
+#[case::wrong_canister_id(canister_test_id(1).get(), "create_canister")]
+#[case::wrong_method_name(CanisterId::ic_00().get(), "install_code")]
+fn test_call_v4_subnet_wrong_canister_or_method(
+    #[case] canister_id: PrincipalId,
+    #[case] method_name: &str,
+) {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ingress_message_certificate_timeout_seconds: 0,
+        ..Default::default()
+    };
+
+    let subnet_id = subnet_test_id(1).get();
+
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
+            resp.send_response(Ok(Ok(())))
+        }
+    });
+
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+        let response = CallSubnet::V4(subnet_id)
+            .call(
+                addr,
+                IngressMessage::default()
+                    .with_canister_id(canister_id, canister_id)
+                    .with_method_name(method_name.to_string()),
+            )
+            .await;
+
+        assert_eq!(StatusCode::BAD_REQUEST, response.status());
+        let body = response.text().await.unwrap();
+        assert_eq!(
+            body,
+            format!(
+                "Subnet call endpoint only accepts calls to the management canister ({}) 'create_canister' method, got canister_id={} method_name='{}'",
+                CanisterId::ic_00(),
+                CanisterId::unchecked_from_principal(canister_id),
+                method_name,
+            )
         );
     });
 }

@@ -41,6 +41,7 @@ pub struct StateManagerFixture {
     pub metrics: MetricsRegistry,
     pub temp_dir: TempDir,
     pub log: ReplicaLogger,
+    pub subnet_type: SubnetType,
 }
 
 impl StateManagerFixture {
@@ -78,6 +79,7 @@ impl StateManagerFixture {
             metrics,
             temp_dir,
             log,
+            subnet_type,
         }
     }
 
@@ -93,6 +95,7 @@ impl StateManagerFixture {
         height.inc_assign();
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);
+        self.state_manager.flush_hash_channel();
         certify_height(&self.state_manager, height);
         self.certified_height = height;
 

@@ -74,15 +74,16 @@ impl GetEventsFile {
     }
 
     fn path_to_events_file(&self) -> PathBuf {
-        let mut path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-        path.push(format!("test_resources/{}", self.file_name()));
-        path
+        PathBuf::from(
+            std::env::var(self.environment_variable())
+                .expect("Failed to get event path env variable"),
+        )
     }
 
-    fn file_name(&self) -> &str {
+    fn environment_variable(&self) -> &str {
         match self {
-            GetEventsFile::Mainnet => "mainnet_events.gz",
-            GetEventsFile::Sepolia => "sepolia_events.gz",
+            GetEventsFile::Mainnet => "MAINNET_EVENTS_PATH",
+            GetEventsFile::Sepolia => "SEPOLIA_EVENTS_PATH",
         }
     }
 

@@ -121,6 +121,9 @@ rust_test(
 
 rust_ic_test_suite_with_extra_srcs(
     name = "sns-wasm_integration_test",
+    # //rs/nns/sns-wasm:sns-wasm_integration_test_tests/upgrade_sns_instance
+    # frequently times out on CI so we give the test suite more time:
+    timeout = "long",
     srcs = glob(
         ["tests/**/*.rs"],
         exclude = [

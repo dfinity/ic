@@ -1229,12 +1229,10 @@ fn frozen_canisters_are_fully_executed() {
     // Bump the round number.
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // `canisters_per_core` pairs (we have 2 cores) of low cycle balance canisters:
-    // one with an input, one with a heartbeat.
+    // `2 * canisters_per_core` low cycle balance canisters with inputs.
     let mut canisters = vec![];
-    for _ in 0..canisters_per_core {
-        // Low balance canister with input. Lots of instructions, as they won't be
-        // executed anyway.
+    for _ in 0..2 * canisters_per_core {
+        // Lots of instructions, as they won't be executed anyway.
         let frozen_canister_id = test.create_canister_with(
             Cycles::new(1),
             ComputeAllocation::zero(),
@@ -1245,21 +1243,9 @@ fn frozen_canisters_are_fully_executed() {
         );
         test.send_ingress(frozen_canister_id, ingress(slice * 10));
         canisters.push(frozen_canister_id);
-
-        // Low balance canister with heartbeat.
-        let heartbeat_canister_id = test.create_canister_with(
-            Cycles::new(1_000_000),
-            ComputeAllocation::zero(),
-            MemoryAllocation::default(),
-            Some(SystemMethod::CanisterHeartbeat),
-            None,
-            None,
-        );
-        canisters.push(heartbeat_canister_id);
     }
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    assert_eq!(test.last_round(), 1.into());
 
     // All but 2 canisters were "executed".
     assert_eq!(
@@ -1293,5 +1279,78 @@ fn frozen_canisters_are_fully_executed() {
                 "Canister {i} should not have been charged"
             );
         }
+    }
+}
+
+/// Canisters with heartbeats or timers but without enough cycles to execute them
+/// do not get executed, but are charged as idle.
+#[test]
+fn frozen_canisters_with_heartbeats_or_timers_are_charged_as_idle() {
+    let scheduler_cores = 2;
+    let canisters_per_core = 2;
+    let slice = 100;
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores,
+            max_instructions_per_round: slice.into(),
+            max_instructions_per_message: slice.into(),
+            max_instructions_per_slice: slice.into(),
+            max_instructions_per_install_code_slice: slice.into(),
+            // Set the message execution overhead high enough to ensure that if even one
+            // heartbeat/timer were to be executed, it would exceed the round limit.
+            instruction_overhead_per_execution: slice.into(),
+            instruction_overhead_per_canister: 0.into(),
+            instruction_overhead_per_canister_for_finalization: 0.into(),
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
+
+    // Bump the round number.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // `canisters_per_core` pairs (we have 2 cores) of low cycle balance canisters:
+    // one with a heartbeat, one with a timer.
+    let mut canisters = vec![];
+    for _ in 0..canisters_per_core {
+        // Low balance canister with heartbeat.
+        let heartbeat_canister_id = test.create_canister_with(
+            Cycles::new(1_000_000),
+            ComputeAllocation::zero(),
+            MemoryAllocation::default(),
+            Some(SystemMethod::CanisterHeartbeat),
+            None,
+            None,
+        );
+        canisters.push(heartbeat_canister_id);
+
+        // Low balance canister with timer.
+        let timer_canister_id = test.create_canister_with(
+            Cycles::new(1_000_000),
+            ComputeAllocation::zero(),
+            MemoryAllocation::default(),
+            Some(SystemMethod::CanisterGlobalTimer),
+            None,
+            None,
+        );
+        canisters.push(timer_canister_id);
+    }
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // No canisters were executed.
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .instructions_consumed_per_message
+            .get_sample_count(),
+        0
+    );
+
+    // But all canisters were marked as fully executed, because they were idle.
+    for (i, canister) in canisters.iter().enumerate() {
+        assert!(
+            test.was_fully_executed(*canister),
+            "Canister {i} should have been charged as idle",
+        );
     }
 }

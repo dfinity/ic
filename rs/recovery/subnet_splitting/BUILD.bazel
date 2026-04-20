@@ -28,27 +28,14 @@ DEPENDENCIES = [
     "@crate_index//:url",
 ]
 
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/test_utilities/tmpdir",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:strum_macros",
-]
-
-ALIASES = {}
-
 rust_library(
     name = "subnet_splitting",
     srcs = glob(
         ["src/**/*.rs"],
         exclude = ["src/main.rs"],
     ),
-    aliases = ALIASES,
     crate_name = "ic_subnet_splitting",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = ["@crate_index//:strum_macros"],
     version = "0.1.0",
     visibility = ["//rs:system-tests-pkg"],
     deps = DEPENDENCIES,
@@ -57,8 +44,6 @@ rust_library(
 rust_binary(
     name = "subnet-splitting-tool",
     srcs = ["src/main.rs"],
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     visibility = ["//rs:release-pkg"],
     deps = DEPENDENCIES + [
         ":subnet_splitting",
@@ -68,11 +53,11 @@ rust_binary(
 
 rust_test(
     name = "subnet_splitting_tool_test",
-    compile_data = [
-        "test_data/fake_expected_manifests.data",
-    ],
+    compile_data = [":test_data"],
     crate = "subnet_splitting",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + [
+        "//rs/test_utilities/tmpdir",
+    ],
 )
 
 rust_ic_test(
@@ -81,22 +66,32 @@ rust_ic_test(
     size = "medium",
     srcs = glob(["tests/**"]),
     args = ["--nocapture"],
+    compile_data = [":test_data"],
     data = [
+        "//rs/recovery/subnet_splitting/split_finder",
         "//rs/rust_canisters/proxy_canister",
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+        "SPLIT_FINDER_PATH": "$(rootpath //rs/recovery/subnet_splitting/split_finder)",
     },
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+    deps = DEPENDENCIES + [
         ":subnet_splitting",
         "//rs/rust_canisters/proxy_canister:lib",
         "//rs/state_machine_tests",
         "//rs/test_utilities/logger",
+        "//rs/test_utilities/tmpdir",
         "//rs/test_utilities/types",
         "//rs/types/management_canister_types",
         "//rs/universal_canister/lib",
         "@crate_index//:candid",
     ],
+)
+
+filegroup(
+    name = "test_data",
+    srcs = glob(["test_data/*"]),
+    visibility = ["//rs/recovery/subnet_splitting:__subpackages__"],
 )

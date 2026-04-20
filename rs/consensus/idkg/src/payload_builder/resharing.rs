@@ -1,7 +1,12 @@
-use crate::{payload_builder::IDkgDealingContext, pre_signer::IDkgTranscriptBuilder};
+use crate::{
+    metrics::{IDkgPayloadMetrics, IDkgPayloadMetricsOptionExt},
+    payload_builder::IDkgDealingContext,
+    pre_signer::IDkgTranscriptBuilder,
+};
 use ic_logger::{ReplicaLogger, warn};
 use ic_management_canister_types_private::ReshareChainKeyResponse;
 use ic_types::{
+    RegistryVersion,
     batch::ConsensusResponse,
     consensus::idkg::{self, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgReshareRequest},
     crypto::canister_threshold_sig::{
@@ -16,6 +21,8 @@ use std::collections::{BTreeMap, BTreeSet};
 pub(crate) fn initiate_reshare_requests(
     payload: &mut idkg::IDkgPayload,
     reshare_requests: BTreeSet<idkg::IDkgReshareRequest>,
+    idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
+    log: &ReplicaLogger,
 ) {
     for request in reshare_requests {
         let Some(key_transcript) = payload
@@ -23,6 +30,13 @@ pub(crate) fn initiate_reshare_requests(
             .get(&request.key_id())
             .and_then(|key_transcript| key_transcript.current.as_ref())
         else {
+            warn!(
+                every_n_seconds => 10,
+                log,
+                "Cannot initiate reshare request because key transcript is unavailable: {:?}",
+                request
+            );
+            idkg_payload_metrics.payload_errors_inc("reshare_request_missing_key_transcript");
             continue;
         };
 
@@ -82,11 +96,18 @@ pub(crate) fn update_completed_reshare_requests(
     idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingContext<'_>>,
     resolver: &dyn IDkgBlockReader,
     transcript_builder: &dyn IDkgTranscriptBuilder,
+    idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
     log: &ReplicaLogger,
 ) {
     let mut completed_reshares = BTreeMap::new();
     for (request, reshare_param) in &payload.ongoing_xnet_reshares {
         if payload.current_key_transcript(&request.key_id()).is_none() {
+            warn!(
+                every_n_seconds => 10,
+                log,
+                "Skipping ongoing reshare request without a current key transcript: {:?}", request
+            );
+            idkg_payload_metrics.payload_errors_inc("ongoing_reshare_missing_key_transcript");
             continue;
         }
 
@@ -99,9 +120,11 @@ pub(crate) fn update_completed_reshare_requests(
             Ok(params) => params,
             Err(err) => {
                 warn!(
+                    every_n_seconds => 10,
                     log,
                     "Failed to resolve reshare transcript params: {:?}", err
                 );
+                idkg_payload_metrics.payload_errors_inc("reshare_transcript_params_resolution");
                 continue;
             }
         };
@@ -113,7 +136,12 @@ pub(crate) fn update_completed_reshare_requests(
             }
             Err(InitialIDkgDealingsValidationError::UnsatisfiedCollectionThreshold { .. }) => (),
             Err(err) => {
-                warn!(log, "Failed to create initial dealings: {:?}", err);
+                warn!(
+                    every_n_seconds => 10,
+                    log,
+                    "Failed to create initial dealings: {:?}", err
+                );
+                idkg_payload_metrics.payload_errors_inc("reshare_initial_dealings_creation");
             }
         };
     }
@@ -145,9 +173,11 @@ pub(crate) fn update_completed_reshare_requests(
                 .insert(request, idkg::CompletedReshareRequest::Unreported(response));
         } else {
             warn!(
+                every_n_seconds => 10,
                 log,
                 "Cannot find the request for the initial dealings created: {:?}", request
             );
+            idkg_payload_metrics.payload_errors_inc("reshare_request_context_missing");
         }
     }
 }
@@ -155,9 +185,12 @@ pub(crate) fn update_completed_reshare_requests(
 /// Translates the reshare requests in the replicated state to the internal format
 pub(super) fn get_reshare_requests(
     idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingContext<'_>>,
+    validation_context_registry_version: RegistryVersion,
 ) -> BTreeSet<idkg::IDkgReshareRequest> {
     idkg_dealings_contexts
         .values()
+        // Skip the context if we haven't reached the registry version yet.
+        .filter(|context| context.registry_version <= validation_context_registry_version)
         .map(reshare_request_from_dealings_context)
         .collect()
 }
@@ -295,7 +328,12 @@ mod tests {
             );
             let request = create_reshare_request(key_id, 1, 1);
 
-            initiate_reshare_requests(&mut payload, BTreeSet::from([request]));
+            initiate_reshare_requests(
+                &mut payload,
+                BTreeSet::from([request]),
+                None,
+                &no_op_logger(),
+            );
 
             assert!(payload.ongoing_xnet_reshares.is_empty());
             assert!(payload.xnet_reshare_agreements.is_empty());
@@ -312,7 +350,12 @@ mod tests {
             );
             let request = create_reshare_request(key_id.clone(), 1, 1);
 
-            initiate_reshare_requests(&mut payload, BTreeSet::from([request.clone()]));
+            initiate_reshare_requests(
+                &mut payload,
+                BTreeSet::from([request.clone()]),
+                None,
+                &no_op_logger(),
+            );
 
             let params = payload
                 .ongoing_xnet_reshares
@@ -338,8 +381,18 @@ mod tests {
             let request = create_reshare_request(key_id.clone(), 1, 1);
             let request_2 = create_reshare_request(key_id.clone(), 2, 2);
 
-            initiate_reshare_requests(&mut payload, BTreeSet::from([request.clone()]));
-            initiate_reshare_requests(&mut payload, BTreeSet::from([request_2.clone()]));
+            initiate_reshare_requests(
+                &mut payload,
+                BTreeSet::from([request.clone()]),
+                None,
+                &no_op_logger(),
+            );
+            initiate_reshare_requests(
+                &mut payload,
+                BTreeSet::from([request_2.clone()]),
+                None,
+                &no_op_logger(),
+            );
 
             let params = payload
                 .ongoing_xnet_reshares
@@ -375,7 +428,12 @@ mod tests {
                 idkg::CompletedReshareRequest::ReportedToExecution,
             );
 
-            initiate_reshare_requests(&mut payload, BTreeSet::from([request]));
+            initiate_reshare_requests(
+                &mut payload,
+                BTreeSet::from([request]),
+                None,
+                &no_op_logger(),
+            );
 
             assert!(payload.ongoing_xnet_reshares.is_empty());
             assert_eq!(payload.xnet_reshare_agreements.len(), 1);
@@ -402,6 +460,8 @@ mod tests {
         initiate_reshare_requests(
             &mut payload,
             BTreeSet::from([request_1.clone(), request_2.clone()]),
+            None,
+            &no_op_logger(),
         );
 
         let callback_1 = ic_types::messages::CallbackId::new(1);
@@ -437,6 +497,7 @@ mod tests {
             &contexts,
             &block_reader,
             &transcript_builder,
+            None,
             &no_op_logger(),
         );
         assert_eq!(payload.ongoing_xnet_reshares.len(), 1);
@@ -474,6 +535,7 @@ mod tests {
             &contexts,
             &block_reader,
             &transcript_builder,
+            None,
             &no_op_logger(),
         );
         assert!(payload.ongoing_xnet_reshares.is_empty());
@@ -502,6 +564,7 @@ mod tests {
             &contexts,
             &block_reader,
             &transcript_builder,
+            None,
             &no_op_logger(),
         );
         assert!(payload.ongoing_xnet_reshares.is_empty());
@@ -527,6 +590,7 @@ mod tests {
             &contexts,
             &block_reader,
             &transcript_builder,
+            None,
             &no_op_logger(),
         );
         assert!(payload.ongoing_xnet_reshares.is_empty());

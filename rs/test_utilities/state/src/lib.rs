@@ -42,7 +42,8 @@ use ic_types::{
     },
 };
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting,
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, NominalCycles,
+    NominalCyclesTesting,
 };
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
@@ -355,6 +356,7 @@ impl CanisterStateBuilder {
         system_state.compute_allocation = self.compute_allocation;
         system_state.certified_data = self.certified_data;
         system_state.time_of_last_allocation_charge = self.time_of_last_allocation_charge;
+        system_state.log_visibility = self.log_visibility;
         // Allocate log memory store according to log_memory_limit.
         system_state
             .log_memory_store
@@ -524,6 +526,11 @@ impl SystemStateBuilder {
         self
     }
 
+    pub fn log_memory_limit(mut self, limit: usize) -> Self {
+        self.system_state.log_memory_store.resize_for_testing(limit);
+        self
+    }
+
     pub fn build(self) -> SystemState {
         self.system_state
     }
@@ -563,6 +570,7 @@ impl CallContextBuilder {
             Cycles::zero(),
             self.time,
             Default::default(),
+            None,
         )
     }
 }
@@ -641,6 +649,7 @@ pub fn canister_from_exec_state(
             .memory_allocation(NumBytes::new(8 * 1024 * 1024 * 1024)) // 8GiB
             .canister_id(canister_id)
             .initial_cycles(INITIAL_CYCLES)
+            .log_memory_limit(TEST_DEFAULT_LOG_MEMORY_LIMIT)
             .build(),
         execution_state: Some(execution_state),
         scheduler_state: Default::default(),
@@ -856,6 +865,7 @@ pub fn register_callback(
             Cycles::zero(),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
 
@@ -865,8 +875,9 @@ pub fn register_callback(
             call_context_id,
             respondent,
             Cycles::zero(),
-            Cycles::new(42),
-            Cycles::new(84),
+            CompoundCycles::new(Cycles::new(42), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::new(84), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::new(168), CanisterCyclesCostSchedule::Normal),
             WasmClosure::new(0, 2),
             WasmClosure::new(0, 2),
             None,

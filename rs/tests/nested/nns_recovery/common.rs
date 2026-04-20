@@ -11,7 +11,7 @@ use ic_consensus_system_test_utils::{
     node::await_subnet_earliest_topology_version_with_retries,
     rw_message::store_message_with_retries,
     ssh_access::{
-        AuthMean, disable_ssh_access_to_node, get_updatesubnetpayload_with_keys,
+        AuthMean, disable_ssh_access_to_node, get_update_subnet_payload_with_keys,
         update_subnet_record, wait_until_authentication_is_granted,
     },
     subnet::assert_subnet_is_healthy,
@@ -44,7 +44,7 @@ use slog::{Logger, info};
 use tokio::task::JoinSet;
 
 pub const NNS_RECOVERY_VM_RESOURCE_OVERRIDES: VmResourceOverrides = VmResourceOverrides {
-    vcpus: Some(NrOfVCPUs::new(20)), // 16 GuestOS CPU + 4 HostOS
+    vcpus: Some(NrOfVCPUs::new(40)), // 36 GuestOS CPU + 4 HostOS
     memory_kibibytes: Some(AmountOfMemoryKiB::new(50331648)), // 48GiB
     ..VmResourceOverrides::const_default()
 };
@@ -80,7 +80,7 @@ pub struct TestConfig {
     pub local_recovery: bool,
     pub break_dfinity_owned_node: bool,
     pub num_broken_nodes: usize,
-    pub add_and_bless_upgrade_version: bool,
+    pub add_upgrade_version: bool,
     pub fix_dfinity_owned_node_like_np: bool,
     pub sequential_np_actions: bool,
 }
@@ -152,7 +152,7 @@ pub fn grant_backup_access_to_all_nns_nodes(
     let nns_node = nns_subnet.nodes().next().unwrap();
 
     info!(logger, "Update the registry with the backup key");
-    let payload = get_updatesubnetpayload_with_keys(
+    let payload = get_update_subnet_payload_with_keys(
         nns_subnet.subnet_id,
         None,
         Some(vec![ssh_backup_pub_key.to_string()]),
@@ -191,6 +191,16 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
     )
     .setup_and_start(&env)
     .unwrap();
+
+    nested::registration(env.clone());
+    replace_nns_with_unassigned_nodes(&env);
+
+    let SshKeys {
+        ssh_priv_key_path: _,
+        auth: backup_auth,
+        ssh_pub_key: ssh_backup_pub_key,
+    } = get_ssh_keys_for_user(&env, BACKUP_USERNAME);
+    grant_backup_access_to_all_nns_nodes(&env, &backup_auth, &ssh_backup_pub_key);
 }
 
 pub fn test(env: TestEnv, cfg: TestConfig) {
@@ -205,13 +215,9 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     } = get_ssh_keys_for_user(&env, SSH_USERNAME);
     let SshKeys {
         ssh_priv_key_path: ssh_backup_priv_key_path,
-        auth: backup_auth,
-        ssh_pub_key: ssh_backup_pub_key,
+        auth: _,
+        ssh_pub_key: _,
     } = get_ssh_keys_for_user(&env, BACKUP_USERNAME);
-
-    nested::registration(env.clone());
-    replace_nns_with_unassigned_nodes(&env);
-    grant_backup_access_to_all_nns_nodes(&env, &backup_auth, &ssh_backup_pub_key);
 
     let current_version = get_guestos_img_version();
     info!(logger, "Current GuestOS version: {:?}", current_version);
@@ -249,8 +255,8 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         serde_json::to_string(&guest_launch_measurements).unwrap(),
     )
     .expect("Could not write guest launch measurements to file");
-    if !cfg.add_and_bless_upgrade_version {
-        // If ic-recovery does not add/bless the new version to the registry, then we must bless it now.
+    if !cfg.add_upgrade_version {
+        // If ic-recovery does not add the new version to the registry, then we must elect it now.
         block_on(bless_replica_version(
             &nns_node,
             &upgrade_version,
@@ -433,7 +439,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         upgrade_image_url: Some(upgrade_image_url),
         upgrade_image_hash: Some(upgrade_image_hash),
         upgrade_image_launch_measurements_path: Some(env.get_path(GUEST_LAUNCH_MEASUREMENTS_PATH)),
-        add_and_bless_upgrade_version: Some(cfg.add_and_bless_upgrade_version),
+        add_and_bless_upgrade_version: Some(cfg.add_upgrade_version),
         replay_until_height: Some(highest_cert_share),
         download_pool_node: Some(download_pool_node.get_ip_addr()),
         admin_access_location: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),

@@ -4,7 +4,7 @@ use std::ops::{Add, Mul, Rem, Sub};
 ///
 /// It is used to read/write data from/to the memory store.
 #[repr(transparent)]
-#[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Debug)]
 pub(super) struct MemoryAddress(u64);
 const _: () = assert!(std::mem::size_of::<MemoryAddress>() == 8);
 
@@ -43,7 +43,7 @@ impl Add<MemorySize> for MemoryAddress {
 /// It is used to manage the head and tail positions of the circular buffer where log records are stored.
 /// Belongs in the range of [0, data_capacity), and wraps around when it reaches the end of the data region.
 #[repr(transparent)]
-#[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Debug)]
 pub(super) struct MemoryPosition(u64);
 const _: () = assert!(std::mem::size_of::<MemoryPosition>() == 8);
 
@@ -78,7 +78,7 @@ impl Rem<MemorySize> for MemoryPosition {
 /// It is used to manage the capacity and size of the data region in the memory store,
 /// where log records are stored in a circular buffer manner.
 #[repr(transparent)]
-#[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Debug)]
 pub(super) struct MemorySize(u64);
 const _: () = assert!(std::mem::size_of::<MemorySize>() == 8);
 
