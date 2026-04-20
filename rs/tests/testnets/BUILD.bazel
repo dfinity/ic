@@ -358,7 +358,6 @@ system_test_nns(
 system_test_nns(
     name = "nns_recovery",
     enable_metrics = True,
-    guestos_update = "test",
     setupos = True,
     tags = [
         "dynamic_testnet",
@@ -370,7 +369,6 @@ system_test_nns(
         "//rs/limits",
         "//rs/tests/consensus/subnet_recovery:lib",
         "//rs/tests/driver:ic-system-test-driver",
-        "//rs/tests/nested",
         "//rs/tests/nested/nns_recovery:common",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
@@ -378,7 +376,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "mainnet_nns",
+    name = "mainnet_nns_state",
     enable_metrics = True,
     env = MAINNET_ENV,
     env_inherit = ["SSH_AUTH_SOCK"],

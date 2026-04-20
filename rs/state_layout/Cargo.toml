@@ -16,8 +16,8 @@ ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-sys = { path = "../sys" }
-ic-types-cycles = { path = "../types/cycles" }
 ic-types = { path = "../types/types" }
+ic-types-cycles = { path = "../types/cycles" }
 ic-utils = { path = "../utils" }
 ic-utils-thread = { path = "../utils/thread" }
 ic-wasm-types = { path = "../types/wasm_types" }

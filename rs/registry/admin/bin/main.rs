@@ -129,6 +129,7 @@ use registry_canister::mutations::{
     do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
     do_add_node_operator::AddNodeOperatorPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
+    do_delete_subnet::DeleteSubnetPayload,
     do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
     do_migrate_node_operator_directly::MigrateNodeOperatorPayload,
@@ -434,6 +435,9 @@ enum SubCommand {
 
     /// Submits a proposal to create a new subnet.
     ProposeToCreateSubnet(ProposeToCreateSubnetCmd),
+
+    /// Submits a proposal to delete a subnet from the registry.
+    ProposeToDeleteSubnet(ProposeToDeleteSubnetCmd),
 
     /// Propose to deploy a priorly elected GuestOS version to all subnet nodes.
     ProposeToDeployGuestosToAllSubnetNodes(ProposeToDeployGuestosToAllSubnetNodesCmd),
@@ -1019,6 +1023,33 @@ impl ProposalPayload<SetSubnetOperationalLevelPayload>
             ssh_readonly_access: Some(vec![]),
             ssh_node_state_write_access: Some(ssh_node_state_write_access),
             recalled_replica_version_ids: Some(vec![]),
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to delete a subnet.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToDeleteSubnetCmd {
+    /// The subnet to delete.
+    #[clap(long)]
+    pub subnet_id: PrincipalId,
+}
+
+impl ProposalTitle for ProposeToDeleteSubnetCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!("Delete subnet {}", shortened_pid_string(&self.subnet_id)),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<DeleteSubnetPayload> for ProposeToDeleteSubnetCmd {
+    async fn payload(&self, _: &Agent) -> DeleteSubnetPayload {
+        DeleteSubnetPayload {
+            subnet_id: Principal::from(self.subnet_id),
         }
     }
 }
@@ -4449,6 +4480,7 @@ async fn main() {
             SubCommand::ProposeToCompleteCanisterMigration(_) => (),
             SubCommand::ProposeToCreateServiceNervousSystem(_) => (),
             SubCommand::ProposeToCreateSubnet(_) => (),
+            SubCommand::ProposeToDeleteSubnet(_) => (),
             SubCommand::ProposeToDeployGuestosToAllSubnetNodes(_) => (),
             SubCommand::ProposeToDeployGuestosToAllUnassignedNodes(_) => (),
             SubCommand::ProposeToDeployGuestosToSomeApiBoundaryNodes(_) => (),
@@ -4802,6 +4834,21 @@ async fn main() {
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::CreateSubnet,
+                make_canister_client(
+                    reachable_nns_urls,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::ProposeToDeleteSubnet(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::DeleteSubnet,
                 make_canister_client(
                     reachable_nns_urls,
                     opts.verify_nns_responses,

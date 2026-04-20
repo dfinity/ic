@@ -11,6 +11,19 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-04-10: Proposal 141332
+
+http://dashboard.internetcomputer.org/proposal/141332
+
+## Added
+
+* create_canister_and_install_code method. This is only callable by the Governance
+  canister though, so this is not really a "new feature" in the sense that others
+  can call this directly, but it is a new capability of this canister that will
+  nevertheless indirectly be of use to others (outside of NNS). That will happen
+  via an upcoming new proposal type (with the same name).
+
+
 # 2026-03-27: Proposal 141092
 
 http://dashboard.internetcomputer.org/proposal/141092
