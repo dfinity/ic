@@ -220,10 +220,10 @@ impl LogMemoryStore {
         let ring_buffer = self.load_ring_buffer();
         let actual_header = ring_buffer.as_ref().map(|rb| rb.get_header());
         // `header_cache` is lazy: if populated, must match; if empty, skip.
-        if let Some(cached) = self.header_cache.get() {
-            if *cached != actual_header {
-                return false;
-            }
+        if let Some(cached) = self.header_cache.get()
+            && *cached != actual_header
+        {
+            return false;
         }
         // `first_timestamp_cache` is kept eagerly in sync, so must always match.
         let actual_first_ts = ring_buffer
