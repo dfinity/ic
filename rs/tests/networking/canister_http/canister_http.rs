@@ -182,7 +182,7 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
             "if ip link show dev enp2s0 >/dev/null 2>&1; then echo yes; else echo no; fi",
         )
         .map(|s| s.trim() == "yes")
-        .unwrap_or(false);
+        .unwrap();
     let ipv4 = if has_ipv4_iface {
         deployed_universal_vm
             .block_on_ipv4_from_session(&session)
