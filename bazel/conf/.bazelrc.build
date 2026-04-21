@@ -28,6 +28,7 @@ common --flag_alias=release_build=//bazel:release_build
 common --flag_alias=s3_endpoint=//ci/src/artifacts:s3_endpoint
 common --flag_alias=timeout_value=//bazel:timeout_value
 common --flag_alias=hermetic_cc=//bazel:hermetic_cc
+common --jobs=60
 
 common:stamped --workspace_status_command='$(pwd)/bazel/workspace_status.sh --stamp'
 
