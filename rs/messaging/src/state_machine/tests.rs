@@ -92,8 +92,8 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
         .expect_process_payload()
         .times(1)
         .in_sequence(&mut seq)
-        .with(always(), eq(messages))
-        .returning(|state, _| state);
+        .with(always(), eq(round), eq(messages))
+        .returning(|state, _, _| state);
 
     let mut scheduler = Box::new(MockScheduler::new());
     scheduler

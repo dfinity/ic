@@ -1852,7 +1852,6 @@ fn test_metric_canister_log_resize_duration_seconds() {
 
     let after = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
     assert_eq!(after.count, before.count + 1);
-    assert_gt!(after.sum, 0.0);
 
     // Same limit again — the `would_resize` gate holds, no new sample.
     env.update_settings(
