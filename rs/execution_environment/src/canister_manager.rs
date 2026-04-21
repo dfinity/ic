@@ -73,7 +73,6 @@ use prometheus::IntCounter;
 use std::collections::BTreeSet;
 use std::iter::zip;
 use std::path::PathBuf;
-use std::time::Instant;
 use std::{convert::TryFrom, str::FromStr, sync::Arc};
 
 use types::*;
