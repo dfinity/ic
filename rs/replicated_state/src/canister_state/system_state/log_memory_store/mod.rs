@@ -72,14 +72,16 @@ pub struct LogMemoryStore {
     #[validate_eq(Ignore)]
     header_cache: OnceLock<Option<Header>>,
 
-    /// Caches the timestamp of the oldest live record. Populated alongside
-    /// `header_cache` inside `save_ring_buffer` (while the first-record page
-    /// is still hot from the preceding `append_log`), lazy-initialised after
-    /// checkpoint reload, and invalidated in `clear` / `deallocate`.
+    /// Cached timestamp of the oldest live record. Makes the retention
+    /// metric's per-round observation (`max_timestamp − first_timestamp`)
+    /// an O(1) field read instead of a cold page-map read at `data_head`.
     ///
-    /// Avoids a cold page read at observation time for the retention metric.
+    /// Plain `Option<u64>` (not `OnceLock` like `header_cache`) because we
+    /// populate eagerly from every mutation site; no lazy init under
+    /// `&self` needed. Not persisted across checkpoints; rebuilt in
+    /// `new_inner`.
     #[validate_eq(Ignore)]
-    first_timestamp_cache: OnceLock<Option<u64>>,
+    first_timestamp_cache: Option<u64>,
 
     /// (!) No need to preserve across checkpoints.
     /// Tracks the size of each delta log appended during a round.
@@ -114,22 +116,33 @@ impl LogMemoryStore {
         maybe_page_map: Option<PageMap>,
         persistent_next_idx: u64,
     ) -> Self {
-        Self {
+        let maybe_page_map = if feature_flag == FlagStatus::Enabled {
+            maybe_page_map
+        } else {
+            None
+        };
+        let persistent_next_idx = if feature_flag == FlagStatus::Enabled {
+            persistent_next_idx
+        } else {
+            0
+        };
+        // Rebuild the first-timestamp cache from the ring buffer so the
+        // invariant holds immediately after `from_checkpoint`, without
+        // waiting for the next mutation to populate it.
+        let first_timestamp_cache = maybe_page_map
+            .clone()
+            .and_then(RingBuffer::load_checked)
+            .and_then(|rb| rb.first_timestamp(&rb.get_header()));
+        let store = Self {
             feature_flag,
-            maybe_page_map: if feature_flag == FlagStatus::Enabled {
-                maybe_page_map
-            } else {
-                None
-            },
-            persistent_next_idx: if feature_flag == FlagStatus::Enabled {
-                persistent_next_idx
-            } else {
-                0
-            },
+            maybe_page_map,
+            persistent_next_idx,
             header_cache: OnceLock::new(),
-            first_timestamp_cache: OnceLock::new(),
+            first_timestamp_cache,
             delta_log_sizes: VecDeque::new(),
-        }
+        };
+        debug_assert!(store.stats_ok());
+        store
     }
 
     /// Provides access to the underlying `PageMap`.
@@ -159,7 +172,8 @@ impl LogMemoryStore {
             self.save_ring_buffer(ring_buffer);
         } else {
             self.header_cache = OnceLock::new();
-            self.first_timestamp_cache = OnceLock::new();
+            self.first_timestamp_cache = None;
+            debug_assert!(self.stats_ok());
         }
     }
 
@@ -172,9 +186,10 @@ impl LogMemoryStore {
         let first_timestamp = ring_buffer.first_timestamp(&header);
         self.maybe_page_map = Some(ring_buffer.to_page_map());
         self.header_cache = OnceLock::from(Some(header));
-        self.first_timestamp_cache = OnceLock::from(first_timestamp);
+        self.first_timestamp_cache = first_timestamp;
         // Must come after header_cache update, since next_idx() reads from it.
         self.persistent_next_idx = self.next_idx();
+        debug_assert!(self.stats_ok());
     }
 
     /// Deallocates underlying memory.
@@ -183,7 +198,8 @@ impl LogMemoryStore {
         self.persistent_next_idx = self.next_idx();
         self.maybe_page_map = None;
         self.header_cache = OnceLock::new();
-        self.first_timestamp_cache = OnceLock::new();
+        self.first_timestamp_cache = None;
+        debug_assert!(self.stats_ok());
     }
 
     /// Loads the ring buffer from the page map.
@@ -191,6 +207,30 @@ impl LogMemoryStore {
         self.maybe_page_map
             .clone()
             .and_then(RingBuffer::load_checked)
+    }
+
+    /// Invariant: populated caches must match what a fresh read of the ring
+    /// buffer would return. Intended to be called only via `debug_assert!`;
+    /// the `cfg!` guard keeps the body a no-op in release regardless of
+    /// caller, so it's fine for the check to be expensive.
+    fn stats_ok(&self) -> bool {
+        if !cfg!(debug_assertions) {
+            return true;
+        }
+        let ring_buffer = self.load_ring_buffer();
+        let actual_header = ring_buffer.as_ref().map(|rb| rb.get_header());
+        // `header_cache` is lazy: if populated, must match; if empty, skip.
+        if let Some(cached) = self.header_cache.get() {
+            if *cached != actual_header {
+                return false;
+            }
+        }
+        // `first_timestamp_cache` is kept eagerly in sync, so must always match.
+        let actual_first_ts = ring_buffer
+            .as_ref()
+            .zip(actual_header.as_ref())
+            .and_then(|(rb, h)| rb.first_timestamp(h));
+        self.first_timestamp_cache == actual_first_ts
     }
 
     /// Returns the ring buffer header.
@@ -208,14 +248,10 @@ impl LogMemoryStore {
     }
 
     /// Returns the timestamp of the oldest live record, or `None` if the
-    /// buffer is empty. O(1) via the cache; after checkpoint reload the cache
-    /// lazy-initialises on first call via one record-header read.
+    /// buffer is empty. O(1) field read — the cache is kept in sync with
+    /// the ring buffer by every mutation.
     pub fn first_timestamp(&self) -> Option<u64> {
-        *self.first_timestamp_cache.get_or_init(|| {
-            let rb = self.load_ring_buffer()?;
-            let header = rb.get_header();
-            rb.first_timestamp(&header)
-        })
+        self.first_timestamp_cache
     }
 
     /// Returns the time span between the oldest and newest records, or
@@ -420,10 +456,7 @@ impl Clone for LogMemoryStore {
                 Some(val) => OnceLock::from(*val),
                 None => OnceLock::new(),
             },
-            first_timestamp_cache: match self.first_timestamp_cache.get() {
-                Some(val) => OnceLock::from(*val),
-                None => OnceLock::new(),
-            },
+            first_timestamp_cache: self.first_timestamp_cache,
         }
     }
 }
