@@ -19,7 +19,7 @@ use anyhow;
 use anyhow::bail;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::Ipv6Addr;
 use url::Url;
 
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(6);
@@ -164,7 +164,6 @@ pub struct AllocatedVm {
     pub hostname: String,
     pub ipv6: Ipv6Addr,
     pub mac6: String,
-    pub ipv4: Option<Ipv4Addr>,
     pub bare_metal: bool,
 }
 
@@ -342,7 +341,6 @@ pub fn allocate_resources(
                     name: vm_name,
                     group_name: group_name.clone(),
                     hostname,
-                    ipv4: None,
                     ipv6,
                     mac6,
                     bare_metal: false,

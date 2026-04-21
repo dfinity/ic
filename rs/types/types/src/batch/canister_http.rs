@@ -49,7 +49,7 @@ pub enum FlexibleCanisterHttpError {
         total_requests: u32,
         min_responses: u32,
     },
-    TooManyRequestErrors {
+    TooManyRejects {
         callback_id: CallbackId,
         reject_responses: Vec<FlexibleCanisterHttpResponseWithProof>,
     },
@@ -60,7 +60,7 @@ impl FlexibleCanisterHttpError {
         match self {
             Self::Timeout { callback_id }
             | Self::ResponsesTooLarge { callback_id, .. }
-            | Self::TooManyRequestErrors { callback_id, .. } => *callback_id,
+            | Self::TooManyRejects { callback_id, .. } => *callback_id,
         }
     }
 }
@@ -129,7 +129,7 @@ impl CountBytes for FlexibleCanisterHttpError {
                     + std::mem::size_of_val(total_requests)
                     + std::mem::size_of_val(min_responses)
             }
-            Self::TooManyRequestErrors {
+            Self::TooManyRejects {
                 callback_id,
                 reject_responses,
             } => {
@@ -455,9 +455,9 @@ impl From<FlexibleCanisterHttpError> for pb::FlexibleCanisterHttpError {
                 total_requests,
                 min_responses,
             }),
-            FlexibleCanisterHttpError::TooManyRequestErrors {
+            FlexibleCanisterHttpError::TooManyRejects {
                 reject_responses, ..
-            } => ErrorDetails::TooManyRequestErrors(pb::FlexibleCanisterHttpTooManyRequestErrors {
+            } => ErrorDetails::TooManyRejects(pb::FlexibleCanisterHttpTooManyRejects {
                 reject_responses: reject_responses
                     .into_iter()
                     .map(pb::FlexibleCanisterHttpResponseWithProof::from)
@@ -494,13 +494,13 @@ impl TryFrom<pb::FlexibleCanisterHttpError> for FlexibleCanisterHttpError {
                     min_responses: details.min_responses,
                 })
             }
-            Some(ErrorDetails::TooManyRequestErrors(details)) => {
+            Some(ErrorDetails::TooManyRejects(details)) => {
                 let reject_responses = details
                     .reject_responses
                     .into_iter()
                     .map(FlexibleCanisterHttpResponseWithProof::try_from)
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok(FlexibleCanisterHttpError::TooManyRequestErrors {
+                Ok(FlexibleCanisterHttpError::TooManyRejects {
                     callback_id,
                     reject_responses,
                 })

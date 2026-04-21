@@ -196,6 +196,7 @@ impl SchedulerImpl {
         long_running_canisters: &[CanisterId],
         measurement_scope: &MeasurementScope,
         subnet_size: usize,
+        current_round: ExecutionRound,
     ) -> ReplicatedState {
         let mut ongoing_long_install_code = false;
         for canister_id in long_running_canisters.iter() {
@@ -217,6 +218,7 @@ impl SchedulerImpl {
                     instruction_limits,
                     round_limits,
                     subnet_size,
+                    current_round,
                 );
             state = new_state;
             ongoing_long_install_code |= state
@@ -616,9 +618,12 @@ impl SchedulerImpl {
         }
 
         for (message_id, status) in ingress_execution_results {
-            let old_status = self
-                .ingress_history_writer
-                .set_status(&mut state, message_id, status);
+            let old_status = self.ingress_history_writer.set_status(
+                &mut state,
+                message_id,
+                status,
+                current_round,
+            );
             canister_ingress_latencies.on_ingress_status_changed(&old_status);
         }
 
@@ -776,6 +781,7 @@ impl SchedulerImpl {
         &self,
         state: &mut ReplicatedState,
         canister_ingress_latencies: &mut CanisterIngressQueueLatencies,
+        current_round: ExecutionRound,
     ) {
         let current_time = state.time();
         let not_expired = |ingress: &Ingress| ingress.expiry_time >= current_time;
@@ -807,6 +813,7 @@ impl SchedulerImpl {
                     time: current_time,
                     state: IngressState::Failed(error),
                 },
+                current_round,
             );
             canister_ingress_latencies.on_ingress_status_changed(&old_status);
         }
@@ -819,6 +826,7 @@ impl SchedulerImpl {
         &self,
         state: &mut ReplicatedState,
         subnet_size: usize,
+        current_round: ExecutionRound,
     ) {
         let cost_schedule = state.get_own_cost_schedule();
         let state_time = state.time();
@@ -890,6 +898,7 @@ impl SchedulerImpl {
                 Arc::clone(&self.ingress_history_writer),
                 self.log.clone(),
                 self.exec_env.canister_not_found_error(),
+                current_round,
             );
         }
     }
@@ -1247,7 +1256,11 @@ impl Scheduler for SchedulerImpl {
 
             {
                 let _timer = self.metrics.round_preparation_ingress.start_timer();
-                self.purge_expired_ingress_messages(&mut state, &mut canister_ingress_latencies);
+                self.purge_expired_ingress_messages(
+                    &mut state,
+                    &mut canister_ingress_latencies,
+                    current_round,
+                );
             }
 
             // In the future, subnet messages might be executed in threads. In
@@ -1438,6 +1451,7 @@ impl Scheduler for SchedulerImpl {
                 &long_running_canisters,
                 &measurement_scope,
                 registry_settings.subnet_size,
+                current_round,
             );
 
             scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
@@ -1510,6 +1524,19 @@ impl Scheduler for SchedulerImpl {
                 } else {
                     old_log.delta_log_sizes()
                 };
+                // Observe retention from whichever log store is active,
+                // only for canisters that appended this round.
+                let retention = if LOG_MEMORY_STORE_FEATURE_ENABLED {
+                    new_log
+                        .has_delta_log_sizes()
+                        .then(|| new_log.retention())
+                        .flatten()
+                } else {
+                    old_log
+                        .has_delta_log_sizes()
+                        .then(|| old_log.retention())
+                        .flatten()
+                };
                 if new_log.has_delta_log_sizes() || old_log.has_delta_log_sizes() {
                     // Only clone state if delta log sizes are not empty.
                     let canister = Arc::make_mut(canister);
@@ -1525,6 +1552,11 @@ impl Scheduler for SchedulerImpl {
                     self.metrics
                         .canister_log_delta_memory_usage
                         .observe(size as f64);
+                }
+                if let Some(retention) = retention {
+                    self.metrics
+                        .canister_log_retention
+                        .observe(retention.as_secs_f64());
                 }
 
                 // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
@@ -1562,7 +1594,9 @@ impl Scheduler for SchedulerImpl {
             // beginning of the round), then canister deletion logic should be revised.
             {
                 let _timer = self.metrics.round_finalization_stop_canisters.start_timer();
-                final_state = self.exec_env.process_stopping_canisters(state);
+                final_state = self
+                    .exec_env
+                    .process_stopping_canisters(state, current_round);
             }
             {
                 let _timer = self.metrics.round_finalization_ingress.start_timer();
@@ -1573,6 +1607,7 @@ impl Scheduler for SchedulerImpl {
                 self.charge_canisters_for_resource_allocation_and_usage(
                     &mut final_state,
                     registry_settings.subnet_size,
+                    current_round,
                 );
             }
 

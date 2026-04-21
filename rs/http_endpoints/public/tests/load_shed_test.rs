@@ -1,7 +1,7 @@
 pub mod common;
 
 use crate::common::{
-    HttpEndpointBuilder, MockIngressPoolThrottler, default_certified_state_reader,
+    HttpEndpointBuilder, MockIngressPoolThrottler, UpdateEndpoint, default_certified_state_reader,
     default_get_latest_state, default_read_certified_state, get_free_localhost_socket_addr,
 };
 use async_trait::async_trait;
@@ -13,8 +13,10 @@ use ic_crypto_tree_hash::{Label, Path};
 use ic_http_endpoints_public::query;
 use ic_http_endpoints_public::read_state;
 use ic_http_endpoints_test_agent::{
-    self, Call, CanisterReadState, IngressMessage, Query, wait_for_status_healthy,
+    self, Call, CallSubnet, CanisterReadState, IngressMessage, Query, wait_for_status_healthy,
 };
+use ic_test_utilities_types::ids::subnet_test_id;
+
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_pprof::{Error, PprofCollector};
 use ic_types::PrincipalId;
@@ -407,10 +409,11 @@ fn test_load_shedding_update_call() {
 
 /// Test that the call endpoints load shed requests when the ingress pool is full.
 #[rstest]
-#[case::v2_endpoint(Call::V2)]
-#[case::v3_endpoint(Call::V3)]
-#[case::v4_endpoint(Call::V4)]
-fn test_load_shedding_update_call_when_ingress_pool_is_full(#[case] endpoint: Call) {
+#[case::v2_endpoint(UpdateEndpoint::Canister(Call::V2))]
+#[case::v3_endpoint(UpdateEndpoint::Canister(Call::V3))]
+#[case::v4_endpoint(UpdateEndpoint::Canister(Call::V4))]
+#[case::v4_subnet_endpoint(UpdateEndpoint::Subnet(CallSubnet::V4(subnet_test_id(1).get())))]
+fn test_load_shedding_update_call_when_ingress_pool_is_full(#[case] endpoint: UpdateEndpoint) {
     use std::sync::RwLock;
 
     let rt = Runtime::new().unwrap();
@@ -445,10 +448,11 @@ fn test_load_shedding_update_call_when_ingress_pool_is_full(#[case] endpoint: Ca
 
 /// Test that the call endpoints load shed requests when the ingress channel is full.
 #[rstest]
-#[case::v2_endpoint(Call::V2)]
-#[case::v3_endpoint(Call::V3)]
-#[case::v4_endpoint(Call::V4)]
-fn test_load_shedding_update_call_when_ingress_channel_is_full(#[case] endpoint: Call) {
+#[case::v2_endpoint(UpdateEndpoint::Canister(Call::V2))]
+#[case::v3_endpoint(UpdateEndpoint::Canister(Call::V3))]
+#[case::v4_endpoint(UpdateEndpoint::Canister(Call::V4))]
+#[case::v4_subnet_endpoint(UpdateEndpoint::Subnet(CallSubnet::V4(subnet_test_id(1).get())))]
+fn test_load_shedding_update_call_when_ingress_channel_is_full(#[case] endpoint: UpdateEndpoint) {
     let rt = Runtime::new().unwrap();
 
     let addr = get_free_localhost_socket_addr();
@@ -473,7 +477,7 @@ fn test_load_shedding_update_call_when_ingress_channel_is_full(#[case] endpoint:
     rt.block_on(async move {
         wait_for_status_healthy(&addr).await.unwrap();
         for _ in 0..capacity {
-            let message = Default::default();
+            let message = endpoint.default_ingress_message();
             let call_response = endpoint.call(addr, message).await;
             assert_eq!(
                 call_response.status(),
@@ -482,7 +486,7 @@ fn test_load_shedding_update_call_when_ingress_channel_is_full(#[case] endpoint:
                 call_response.text().await.unwrap()
             );
         }
-        let message = Default::default();
+        let message = endpoint.default_ingress_message();
         let call_response = endpoint.call(addr, message).await;
         assert_eq!(
             call_response.status(),
