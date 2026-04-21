@@ -44,8 +44,8 @@ use ic_types::registry::RegistryClientError;
 use ic_types::state_manager::StateManagerError;
 use ic_types::xnet::{StreamHeader, StreamIndex};
 use ic_types::{
-    Height, NodeId, NumBytes, PrincipalId, PrincipalIdBlobParseError, RegistryVersion, SubnetId,
-    Time,
+    ExecutionRound, Height, NodeId, NumBytes, PrincipalId, PrincipalIdBlobParseError,
+    RegistryVersion, SubnetId, Time,
 };
 use ic_types_cycles::CanisterCyclesCostSchedule;
 use ic_utils_thread::JoinOnDrop;
@@ -1618,9 +1618,10 @@ impl BatchProcessor for FakeBatchProcessorImpl {
             )
         });
 
+        let current_round = ExecutionRound::from(batch.batch_number.get());
         for (msg_id, status) in all_ingress_execution_results {
             self.ingress_history_writer
-                .set_status(&mut state, msg_id, status);
+                .set_status(&mut state, msg_id, status, current_round);
         }
 
         state.prune_ingress_history();
