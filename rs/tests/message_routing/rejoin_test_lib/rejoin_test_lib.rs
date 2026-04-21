@@ -97,7 +97,12 @@ pub fn rejoin_test(
 
     info!(logger, "Killing {} nodes ...", allowed_failures);
     for node_to_kill in nodes_to_kill {
-        info!(logger, "Killing node {} ({}) ...", node_to_kill.node_id, node_to_kill.get_public_url());
+        info!(
+            logger,
+            "Killing node {} ({}) ...",
+            node_to_kill.node_id,
+            node_to_kill.get_public_url()
+        );
         node_to_kill.vm().kill();
         node_to_kill
             .await_status_is_unavailable()
