@@ -143,7 +143,7 @@ use std::convert::TryFrom;
 
 use crate::WASM_PAGE_SIZE;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum WasmMemoryType {
     Wasm32,
     Wasm64,

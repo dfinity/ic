@@ -118,6 +118,7 @@ rust_test(
     data = [
         "//packages/pocket-ic/test_canister:test_canister.wasm.gz",
         "//rs/pocket_ic_server:pocket-ic-server",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
         "@mozilla_root_ca_store//file",
     ],
     env = {
@@ -125,6 +126,7 @@ rust_test(
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
         "TEST_WASM": "$(rootpath //packages/pocket-ic/test_canister:test_canister.wasm.gz)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
     tags = [
         "cpu:16",
@@ -147,6 +149,7 @@ rust_test(
         "//rs/registry/transport",
         "//rs/types/base_types",
         "//rs/types/types",
+        "//rs/universal_canister/lib",
         "@crate_index//:candid",
         "@crate_index//:hex",
         "@crate_index//:ic-management-canister-types",

@@ -131,6 +131,7 @@ struct HttpHandler {
     call_v2_router: Router,
     call_v3_router: Router,
     call_v4_router: Router,
+    subnet_call_v4_router: Router,
     query_v2_router: Router,
     query_v3_router: Router,
     catchup_router: Router,
@@ -328,6 +329,8 @@ pub fn start_server(
     let call_v3_router = call_sync_router(call_sync::Version::V3);
     let call_v4_router = call_sync_router(call_sync::Version::V4);
 
+    let subnet_call_v4_router = call_sync_router(call_sync::Version::SubnetV4);
+
     let query_router = |version| {
         QueryServiceBuilder::builder(
             log.clone(),
@@ -420,6 +423,7 @@ pub fn start_server(
         call_v2_router,
         call_v3_router,
         call_v4_router,
+        subnet_call_v4_router,
         query_v2_router,
         query_v3_router,
         status_router,
@@ -607,6 +611,7 @@ fn make_router(
             // TODO(CON-1574): see if there is any reasonable explicit concurrency limit we could use here.
             .merge(http_handler.call_v3_router)
             .merge(http_handler.call_v4_router)
+            .merge(http_handler.subnet_call_v4_router)
             .merge(http_handler.query_v2_router.layer(service_builder(
                 GlobalConcurrencyLimitLayer::new(config.max_query_concurrent_requests),
             )))
@@ -807,6 +812,10 @@ pub(crate) mod tests {
             ),
             call_v4_router: Router::new().route(
                 call_sync::route(call_sync::Version::V4),
+                axum::routing::post(dummy),
+            ),
+            subnet_call_v4_router: Router::new().route(
+                call_sync::route(call_sync::Version::SubnetV4),
                 axum::routing::post(dummy),
             ),
             query_v2_router: Router::new().route(

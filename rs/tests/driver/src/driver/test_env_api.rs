@@ -1881,11 +1881,20 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     }
 
     async fn await_status_is_healthy_async(&self) -> Result<()> {
+        self.await_status_is_healthy_with_retries_async(READY_WAIT_TIMEOUT, RETRY_BACKOFF)
+            .await
+    }
+
+    async fn await_status_is_healthy_with_retries_async(
+        &self,
+        timeout: Duration,
+        backoff: Duration,
+    ) -> Result<()> {
         retry_with_msg_async!(
             &format!("await_status_is_healthy of {}", self.get_public_url()),
             &self.test_env().logger(),
-            READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
+            timeout,
+            backoff,
             || async {
                 self.status_is_healthy_async()
                     .await

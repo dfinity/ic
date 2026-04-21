@@ -196,6 +196,10 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::MsgArgDataCopy => vec!["I", "U", "RQ", "NRQ", "CQ", "Ry", "CRy", "F"],
         SystemApiCallId::MsgCallerSize => vec!["*"],
         SystemApiCallId::MsgCallerCopy => vec!["*"],
+        SystemApiCallId::MsgCallerInfoDataSize => vec!["U", "RQ", "NRQ", "CQ", "Ry", "Rt", "CRy", "CRt", "C", "CC", "F"],
+        SystemApiCallId::MsgCallerInfoDataCopy => vec!["U", "RQ", "NRQ", "CQ", "Ry", "Rt", "CRy", "CRt", "C", "CC", "F"],
+        SystemApiCallId::MsgCallerInfoSignerSize => vec!["U", "RQ", "NRQ", "CQ", "Ry", "Rt", "CRy", "CRt", "C", "CC", "F"],
+        SystemApiCallId::MsgCallerInfoSignerCopy => vec!["U", "RQ", "NRQ", "CQ", "Ry", "Rt", "CRy", "CRt", "C", "CC", "F"],
         SystemApiCallId::MsgRejectCode => vec!["Ry", "Rt", "CRy", "CRt", "C"],
         SystemApiCallId::MsgRejectMsgSize => vec!["Rt", "CRt"],
         SystemApiCallId::MsgRejectMsgCopy => vec!["Rt", "CRt"],
@@ -291,6 +295,46 @@ fn api_availability_test(
         SystemApiCallId::MsgCallerCopy => {
             assert_api_availability(
                 |api| api.ic0_msg_caller_copy(0, 0, 0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::MsgCallerInfoDataSize => {
+            assert_api_availability(
+                |api| api.ic0_msg_caller_info_data_size(),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::MsgCallerInfoDataCopy => {
+            assert_api_availability(
+                |api| api.ic0_msg_caller_info_data_copy(0, 0, 0, &mut [42; 128]),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::MsgCallerInfoSignerSize => {
+            assert_api_availability(
+                |api| api.ic0_msg_caller_info_signer_size(),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::MsgCallerInfoSignerCopy => {
+            assert_api_availability(
+                |api| api.ic0_msg_caller_info_signer_copy(0, 0, 0, &mut [42; 128]),
                 api_type,
                 &system_state,
                 cycles_account_manager,
@@ -1445,6 +1489,61 @@ fn call_perform_not_enough_cycles_does_not_trap() {
     assert_eq!(call_context_manager.callbacks().len(), 0);
 }
 
+/// If the canister does not have the requested number of cycles to burn, then
+/// it clamps the amount to the available cycles minus freeze threshold.
+#[test]
+fn cycles_burn128_clamps_to_available_cycles() {
+    const INITIAL_CYCLES: Cycles = Cycles::new(1000);
+
+    let cycles_account_manager = CyclesAccountManagerBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    // Set a non-zero freeze threshold.
+    let mut system_state = SystemStateBuilder::new()
+        .initial_cycles(INITIAL_CYCLES)
+        .freeze_threshold(NumSeconds::from(10))
+        .build();
+    let mut api = get_system_api(
+        ApiTypeBuilder::build_update_api(),
+        &system_state,
+        cycles_account_manager,
+    );
+
+    // Make sure the memory usage is non-zero.
+    api.try_grow_wasm_memory(0, 1).unwrap();
+
+    // Get the actually available cycle balance (above the freeze limit).
+    let mut heap = vec![0; 16];
+    api.ic0_canister_liquid_cycle_balance128(0, &mut heap)
+        .unwrap();
+    let liquid_cycles = Cycles::from(&heap);
+    // Sanity check.
+    assert!(liquid_cycles < INITIAL_CYCLES);
+    let freeze_limit = INITIAL_CYCLES - liquid_cycles;
+
+    // Burn more cycles than the available balance.
+    let mut heap = vec![0; 16];
+    api.ic0_cycles_burn128(liquid_cycles + Cycles::new(10), 0, &mut heap)
+        .unwrap();
+
+    // Only the available cycle balance was burned.
+    assert_eq!(liquid_cycles, Cycles::from(&heap));
+
+    // The balance is equal to the freeze limit.
+    let system_state_modifications = api.take_system_state_modifications();
+    system_state_modifications
+        .apply_changes(
+            UNIX_EPOCH,
+            &mut system_state,
+            &default_network_topology(),
+            subnet_test_id(1),
+            false,
+            &no_op_logger(),
+        )
+        .unwrap();
+    assert_eq!(system_state.balance(), freeze_limit);
+}
+
 #[test]
 fn growing_wasm_memory_updates_subnet_available_memory() {
     let wasm_page_size = 64 << 10;
@@ -1738,6 +1837,7 @@ fn push_output_request_respects_memory_limits() {
             Cycles::zero(),
             CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
             CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
             WasmClosure::new(0, 0),
             WasmClosure::new(0, 0),
             None,
@@ -1855,6 +1955,7 @@ fn push_output_request_oversized_request_memory_limits() {
             call_context_test_id(0),
             canister_test_id(0),
             Cycles::zero(),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
             CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
             CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
             WasmClosure::new(0, 0),

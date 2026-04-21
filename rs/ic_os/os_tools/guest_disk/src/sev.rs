@@ -14,6 +14,7 @@ pub struct SevDiskEncryption<'a> {
     pub sev_firmware: Box<dyn SevGuestFirmware>,
     pub previous_key_path: &'a Path,
     pub guest_vm_type: GuestVMType,
+    pub metrics_file: &'a Path,
 }
 
 impl SevDiskEncryption<'_> {
@@ -35,6 +36,8 @@ impl SevDiskEncryption<'_> {
             crypt_name,
             &previous_key,
             activate_flags(Partition::Store),
+            /*verify_luks_params=*/ true,
+            Some(self.metrics_file),
         )
         .context("Failed to unlock store partition with previous key")?;
 
@@ -89,6 +92,8 @@ impl DiskEncryption for SevDiskEncryption<'_> {
                     crypt_name,
                     key.as_bytes(),
                     activate_flags(partition),
+                    /*verify_luks_params=*/ true,
+                    Some(self.metrics_file),
                 )
                 .context("Failed to open crypt device for var partition")?;
             }
@@ -123,6 +128,8 @@ impl DiskEncryption for SevDiskEncryption<'_> {
                     crypt_name,
                     key.as_bytes(),
                     activate_flags(partition),
+                    /*verify_luks_params=*/ true,
+                    Some(self.metrics_file),
                 )
                 .context("Failed to initialize crypt device for store partition")?;
             }

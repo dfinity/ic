@@ -307,11 +307,8 @@ impl SubnetSplitting {
     }
 
     fn unhalt(&self, target_subnet: TargetSubnet) -> impl Step + use<> {
-        self.recovery.halt_subnet(
-            self.subnet_id(target_subnet),
-            /*is_halted=*/ false,
-            /*keys=*/ &[],
-        )
+        self.recovery
+            .bring_subnet_back_online_after_repairs(self.subnet_id(target_subnet))
     }
 
     fn propose_cup(&self, target_subnet: TargetSubnet) -> RecoveryResult<impl Step + use<>> {

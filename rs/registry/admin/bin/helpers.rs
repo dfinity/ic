@@ -15,6 +15,8 @@ use ic_registry_transport::Error;
 use ic_types::{NodeId, PrincipalId, SubnetId};
 use indexmap::IndexMap;
 use prost::Message;
+use std::fs::File;
+use std::path::Path;
 use std::{convert::TryFrom, fs::read_to_string, path::PathBuf};
 use url::Url;
 
@@ -183,4 +185,29 @@ pub(crate) fn shortened_pids_string(pids: &[PrincipalId]) -> String {
     );
     pids_string.push(']');
     pids_string
+}
+
+/// Shortens a long hash so it is easier to display in titles.
+pub(crate) fn shortened_hash_string(hash: &str) -> &str {
+    const SHORT_HASH_LEN: usize = 7;
+
+    // Get first SHORT_HASH_LEN chars or the whole string if it's shorter
+    hash.char_indices()
+        .nth(SHORT_HASH_LEN)
+        .map_or(hash, |(i, _)| &hash[..i])
+}
+
+pub(crate) fn read_from_json_file<R>(path: &Path) -> R
+where
+    R: serde::de::DeserializeOwned,
+{
+    let file = File::open(path)
+        .unwrap_or_else(|err| panic!("Failed to open file '{}': {}", path.display(), err));
+    serde_json::from_reader(file).unwrap_or_else(|err| {
+        panic!(
+            "Failed to parse JSON from file '{}': {}",
+            path.display(),
+            err
+        )
+    })
 }

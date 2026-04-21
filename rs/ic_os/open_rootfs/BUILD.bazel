@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "//rs/ic_os/config/types:config_types",
     "//rs/ic_os/device",
     "//rs/ic_os/linux_kernel_command_line",
+    "//rs/ic_os/logging",
     "//rs/ic_os/sev/attestation",
     "//rs/ic_os/sev/guest",
     "//rs/nns/common",
@@ -22,6 +23,7 @@ DEPENDENCIES = [
     "@crate_index//:rand",
     "@crate_index//:serde_cbor",
     "@crate_index//:sev",
+    "@crate_index//:tracing",
     "@crate_index//:uuid",
 ]
 

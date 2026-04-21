@@ -58,7 +58,7 @@
 
 use std::cell::RefCell;
 use std::ops::Range;
-use std::sync::{Arc, Mutex, atomic::Ordering};
+use std::sync::{Arc, atomic::Ordering};
 
 use bit_vec::BitVec;
 use ic_logger::{ReplicaLogger, debug};
@@ -71,7 +71,7 @@ use nix::sys::mman::{ProtFlags, mprotect};
 use crate::{
     AccessKind, DirtyPageTracking, MemoryArea, MemoryLimits, MemoryTracker, MemoryTrackerMetrics,
     PageBitmap, apply_memory_instructions, map_unaccessed_pages, print_enomem_help,
-    range_size_in_bytes,
+    range_size_in_bytes, signal_mutex::SignalMutex,
 };
 
 use crate::conversions::{
@@ -330,7 +330,7 @@ pub(crate) struct DeterministicMemoryTracker {
     checksum: RefCell<checksum::SigsegChecksum>,
     pub metrics: MemoryTrackerMetrics,
     state: RefCell<DeterministicState>,
-    subtract_instruction_counter: Arc<Mutex<dyn FnMut(u64) + Send>>,
+    subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
 }
 
 impl DeterministicMemoryTracker {
@@ -353,9 +353,7 @@ impl DeterministicMemoryTracker {
         }
 
         // Charge 1 instruction per OS page accessed.
-        if let Ok(mut counter) = self.subtract_instruction_counter.lock() {
-            counter(num_os_pages);
-        }
+        (self.subtract_instruction_counter.lock())(num_os_pages);
     }
 
     /// Marks a Wasm page as dirty.
@@ -366,9 +364,7 @@ impl DeterministicMemoryTracker {
         // Charge 1 instruction per OS page dirtied.
         let os_page_range = Range::from_wasm_page_idx(wasm_page_idx);
         let num_os_pages = os_page_range.end.get() - os_page_range.start.get();
-        if let Ok(mut counter) = self.subtract_instruction_counter.lock() {
-            counter(num_os_pages);
-        }
+        (self.subtract_instruction_counter.lock())(num_os_pages);
     }
 
     /// A missing OS page handler that provides deterministic prefetching behavior
@@ -477,7 +473,7 @@ impl MemoryTracker for DeterministicMemoryTracker {
         dirty_page_tracking: DirtyPageTracking,
         page_map: PageMap,
         memory_limits: MemoryLimits,
-        subtract_instruction_counter: Arc<Mutex<dyn FnMut(u64) + Send>>,
+        subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
     ) -> nix::Result<Self>
     where
         Self: Sized,

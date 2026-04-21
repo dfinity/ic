@@ -255,21 +255,6 @@ impl Recovery {
         Ok(max_height)
     }
 
-    /// Return a recovery [AdminStep] to halt or unhalt the given subnet
-    pub fn halt_subnet(
-        &self,
-        subnet_id: SubnetId,
-        is_halted: bool,
-        keys: &[String],
-    ) -> impl Step + use<> {
-        AdminStep {
-            logger: self.logger.clone(),
-            ic_admin_cmd: self
-                .admin_helper
-                .get_halt_subnet_command(subnet_id, is_halted, keys),
-        }
-    }
-
     /// Return a recovery [AdminStep] to take the given subnet offline for repairs
     pub fn take_subnet_offline_for_repairs(
         &self,

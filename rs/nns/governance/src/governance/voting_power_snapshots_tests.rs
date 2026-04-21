@@ -113,3 +113,32 @@ fn test_record_voting_power_snapshot() {
         None,
     );
 }
+
+// TODO(NNS1-4323): Remove this test after Mission 70 is fully deployed.
+#[test]
+fn test_clear() {
+    let memory_manager = MemoryManager::init(DefaultMemoryImpl::default());
+    let mut snapshots = VotingPowerSnapshots::new(
+        memory_manager.get(MemoryId::new(0)),
+        memory_manager.get(MemoryId::new(1)),
+    );
+
+    // Record a few snapshots.
+    for i in 1..=3 {
+        snapshots.record_voting_power_snapshot(i, voting_power_snapshot(vec![90, 10], 100 + i));
+    }
+
+    // Verify that snapshots are present.
+    assert_eq!(snapshots.latest_snapshot_timestamp_seconds(), Some(3));
+
+    // Clear the snapshots.
+    snapshots.clear();
+
+    // Verify that everything is empty.
+    assert_eq!(snapshots.latest_snapshot_timestamp_seconds(), None);
+    assert_eq!(
+        snapshots.previous_ballots_if_voting_power_spike_detected(u64::MAX, 10),
+        None
+    );
+    assert!(!snapshots.is_latest_snapshot_a_spike(10));
+}
