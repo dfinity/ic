@@ -14,7 +14,7 @@ use ic_protobuf::registry::subnet::v1::SubnetFeatures as SubnetFeaturesPb;
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{NodeId, PrincipalId, ReplicaVersion};
+use ic_types::{NodeId, PrincipalId, ReplicaVersion, SubnetId};
 use registry_canister::mutations::do_create_subnet;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -307,7 +307,7 @@ impl ProposeToCreateSubnetCmd {
         do_create_subnet::CreateSubnetPayload {
             node_ids,
             subnet_id_override: self.subnet_id_override,
-            initial_dkg_subnet_id: self.initial_dkg_subnet_id.map(Into::into),
+            initial_dkg_subnet_id: self.initial_dkg_subnet_id.map(SubnetId::from),
             max_ingress_bytes_per_message: self.max_ingress_bytes_per_message.unwrap_or_default(),
             max_ingress_messages_per_block: self.max_ingress_messages_per_block.unwrap_or_default(),
             max_ingress_bytes_per_block: self.max_ingress_bytes_per_block,
@@ -522,7 +522,7 @@ mod tests {
         cmd.apply_defaults_for_unset_fields();
         assert_eq!(
             cmd.new_payload().initial_dkg_subnet_id,
-            Some(initial_dkg_subnet_id.into())
+            Some(SubnetId::from(initial_dkg_subnet_id))
         );
     }
 

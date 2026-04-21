@@ -225,7 +225,7 @@ impl ProposeToUpdateRecoveryCupCmd {
         };
 
         do_recover_subnet::RecoverSubnetPayload {
-            initial_dkg_subnet_id: self.initial_dkg_subnet_id.map(Into::into),
+            initial_dkg_subnet_id: self.initial_dkg_subnet_id.map(SubnetId::from),
             height: self.height,
             time_ns: self.time_ns,
             subnet_id: subnet_id.get(),
@@ -416,7 +416,7 @@ mod tests {
 
         assert_eq!(
             cmd.new_payload_for_subnet(subnet_id).initial_dkg_subnet_id,
-            Some(initial_dkg_subnet_id.into())
+            Some(SubnetId::from(initial_dkg_subnet_id))
         );
     }
 
