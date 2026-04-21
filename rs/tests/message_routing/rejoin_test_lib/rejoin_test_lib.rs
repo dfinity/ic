@@ -54,7 +54,8 @@ pub fn rejoin_test(
     let logger = env.logger();
     info!(
         logger,
-        "Installing universal canister on a node {} ...",
+        "Installing universal canister on a node {} ({}) ...",
+        agent_node.node_id,
         agent_node.get_public_url()
     );
 
@@ -74,7 +75,8 @@ pub fn rejoin_test(
 
     info!(
         logger,
-        "Killing a node: {} ...",
+        "Killing a node: {} ({}) ...",
+        rejoin_node.node_id,
         rejoin_node.get_public_url()
     );
     rejoin_node.vm().kill();
@@ -95,7 +97,7 @@ pub fn rejoin_test(
 
     info!(logger, "Killing {} nodes ...", allowed_failures);
     for node_to_kill in nodes_to_kill {
-        info!(logger, "Killing node {} ...", node_to_kill.get_public_url());
+        info!(logger, "Killing node {} ({}) ...", node_to_kill.node_id, node_to_kill.get_public_url());
         node_to_kill.vm().kill();
         node_to_kill
             .await_status_is_unavailable()
@@ -326,8 +328,9 @@ async fn deploy_canisters_for_long_rounds(
     let num_seed_canisters = 4;
     info!(
         logger,
-        "Deploying {} seed canisters on a node {} ...",
+        "Deploying {} seed canisters on a node {} ({}) ...",
         num_seed_canisters,
+        init_node.node_id,
         init_node.get_public_url()
     );
     let mut create_seed_canisters_futs = vec![];
@@ -426,8 +429,9 @@ async fn deploy_canisters_for_long_rounds(
     let num_busy_canisters = 8;
     info!(
         logger,
-        "Deploying {} busy canisters on a node {} ...",
+        "Deploying {} busy canisters on a node {} ({}) ...",
         num_busy_canisters,
+        init_node.node_id,
         init_node.get_public_url()
     );
     let mut create_busy_canisters_futs = vec![];
@@ -498,7 +502,8 @@ pub fn rejoin_test_long_rounds(
 
     info!(
         logger,
-        "Killing a node: {} ...",
+        "Killing a node: {} ({}) ...",
+        rejoin_node.node_id,
         rejoin_node.get_public_url()
     );
     rejoin_node.vm().kill();
