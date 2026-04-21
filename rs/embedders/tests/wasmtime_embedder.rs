@@ -71,6 +71,7 @@ fn cannot_execute_wasm_without_memory() {
 fn correctly_count_instructions() {
     let data_size = 1024;
     let mut instance = WasmtimeInstanceBuilder::new()
+        .with_deterministic_memory_tracker_enabled(false)
         .with_wat(
             format!(
                 r#"
@@ -215,6 +216,7 @@ fn correctly_report_performance_counter() {
         + system_api_complexity::overhead::PERFORMANCE_COUNTER.get();
     let expected_instructions = expected_instructions_counter2;
     let mut instance = WasmtimeInstanceBuilder::new()
+        .with_deterministic_memory_tracker_enabled(false)
         .with_wat(
             format!(
                 r#"
@@ -1805,6 +1807,7 @@ fn wasm_debug_print_instructions_charging() {
     for (rate_limiting, subnet_type, expected_instructions) in test_cases.clone() {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = rate_limiting;
+        config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(subnet_type)
@@ -1826,6 +1829,7 @@ fn wasm_debug_print_instructions_charging() {
     for (rate_limiting, subnet_type, expected_instructions) in test_cases {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = rate_limiting;
+        config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(subnet_type)
@@ -1859,6 +1863,7 @@ fn wasm_canister_logging_instructions_charging() {
     for (message_len, expected_instructions) in test_cases.clone() {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
+        config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(SubnetType::Application)
@@ -1877,6 +1882,7 @@ fn wasm_canister_logging_instructions_charging() {
     for (message_len, expected_instructions) in test_cases {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
+        config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(SubnetType::Application)
@@ -1935,6 +1941,7 @@ fn wasm_logging_new_records_after_exceeding_log_size_limit() {
 
     let mut config = Config::default();
     config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
+    config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
     let instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_subnet_type(SubnetType::Application)
@@ -1946,6 +1953,7 @@ fn wasm_logging_new_records_after_exceeding_log_size_limit() {
     // same for wasm64
     let mut config = Config::default();
     config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
+    config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
     let instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_subnet_type(SubnetType::Application)

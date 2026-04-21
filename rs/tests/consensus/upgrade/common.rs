@@ -13,7 +13,6 @@ Success:: Upgrades work into both directions for all subnet types.
 end::catalog[] */
 
 use candid::Principal;
-use futures::future::try_join_all;
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg, cert_state_makes_progress_with_retries, store_message_with_retries,
@@ -292,24 +291,19 @@ async fn upgrade_to(
     );
     deploy_guestos_to_all_subnet_nodes(nns_node, target_version, subnet_id).await;
 
+    for node in &healthy_nodes {
+        assert_assigned_replica_version(node, target_version, logger.clone());
+    }
+
     info!(
         logger,
         "Checking that all nodes produced a log indicating that the orchestrator has gracefully shut \
         down the tasks",
     );
-
-    // Concurrently assert that all orchestrators shut down gracefully
-    #[allow(clippy::redundant_iter_cloned)] // Need to clone to move the nodes into async tasks
-    try_join_all(healthy_nodes.iter().cloned().map(|node| {
-        tokio::task::spawn_blocking(move || assert_orchestrator_stopped_gracefully(&node))
-    }))
-    .await
-    .unwrap();
-    info!(logger, "All orchestrators shut down the tasks gracefully");
-
     for node in &healthy_nodes {
-        assert_assigned_replica_version(node, target_version, logger.clone());
+        assert_orchestrator_stopped_gracefully(node);
     }
+    info!(logger, "All orchestrators shut down the tasks gracefully");
 
     info!(
         logger,
@@ -417,22 +411,16 @@ fn find_latest_computed_root_hashes_from_logs(
     latest_root_hash_per_node
 }
 
-/// Asserts that the orchestrator has shut down gracefully by searching for a specific log entry.
-/// Panics if the log entry is not found but the log stream ends (which indicates the node
-/// rebooted).
+/// Asserts that the orchestrator has shut down gracefully by searching the previous boot's
+/// journal for a specific log entry.
 ///
-/// We use a bash script instead of connecting to the log stream endpoint because as the
-/// orchestrator is shutting down, the endpoint might close right away without letting us the
-/// chance to read the relevant log entry. In constrast, the SSH connection remains open longer.
-///
-/// This function will never return if an upgrade is not scheduled.
+/// This must only be called once the node has rebooted, so that `--boot=-1` refers to the boot
+/// cycle during which the orchestrator was shutting down.
 fn assert_orchestrator_stopped_gracefully(node: &IcNodeSnapshot) {
     let session = node.block_on_ssh_session().unwrap();
-    session.set_timeout(5 * 60 * 1000);
     assert!(
         JournalStreamer::new(session)
-            .follow()
-            .max_lines(1)
+            .previous_boot()
             .contains("Orchestrator shut down gracefully")
             .unwrap_or_default(),
         "Orchestrator of node {} did not shut down gracefully",

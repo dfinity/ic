@@ -69,6 +69,56 @@ fn initialization_defaults() {
 }
 
 #[test]
+fn test_retention_across_lifecycle() {
+    use std::time::Duration;
+
+    // Empty store: no header, no retention.
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
+    assert_eq!(s.first_timestamp(), None);
+    assert_eq!(s.max_timestamp(), None);
+    assert_eq!(s.retention(), None);
+
+    // Allocated but still empty: both timestamps report None.
+    s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
+    assert_eq!(s.first_timestamp(), None);
+    assert_eq!(s.max_timestamp(), None);
+    assert_eq!(s.retention(), None);
+
+    // Single record: retention is zero.
+    let mut delta = CanisterLog::default_delta();
+    delta.add_record(1_000_000_000, b"a".to_vec());
+    s.append_delta_log(&mut delta);
+    assert_eq!(s.first_timestamp(), Some(1_000_000_000));
+    assert_eq!(s.max_timestamp(), Some(1_000_000_000));
+    assert_eq!(s.retention(), Some(Duration::ZERO));
+
+    // Multiple records: retention spans first..last.
+    let mut delta = CanisterLog::new_delta_with_next_index(s.next_idx(), TEST_LOG_MEMORY_LIMIT);
+    delta.add_record(1_500_000_000, b"b".to_vec()); // t = 1.5 s
+    delta.add_record(61_000_000_000, b"c".to_vec()); // t = 61 s
+    s.append_delta_log(&mut delta);
+    assert_eq!(s.first_timestamp(), Some(1_000_000_000));
+    assert_eq!(s.max_timestamp(), Some(61_000_000_000));
+    assert_eq!(s.retention(), Some(Duration::from_secs(60)));
+
+    // Clear empties the buffer — both timestamps report None.
+    s.clear();
+    assert_eq!(s.first_timestamp(), None);
+    assert_eq!(s.max_timestamp(), None);
+    assert_eq!(s.retention(), None);
+
+    // Reappend, then deallocate — both caches go empty.
+    let mut delta = CanisterLog::new_delta_with_next_index(s.next_idx(), TEST_LOG_MEMORY_LIMIT);
+    delta.add_record(2_000_000_000, b"d".to_vec());
+    s.append_delta_log(&mut delta);
+    assert!(s.retention().is_some());
+    s.deallocate();
+    assert_eq!(s.first_timestamp(), None);
+    assert_eq!(s.max_timestamp(), None);
+    assert_eq!(s.retention(), None);
+}
+
+#[test]
 fn test_appending_to_uninitialized_store_is_no_op() {
     let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     let mut delta = CanisterLog::default_delta();
