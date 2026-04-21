@@ -54,7 +54,8 @@ pub fn rejoin_test(
     let logger = env.logger();
     info!(
         logger,
-        "Installing universal canister on a node {} ...",
+        "Installing universal canister on a node {} ({}) ...",
+        agent_node.node_id,
         agent_node.get_public_url()
     );
 
@@ -74,7 +75,8 @@ pub fn rejoin_test(
 
     info!(
         logger,
-        "Killing a node: {} ...",
+        "Killing a node: {} ({}) ...",
+        rejoin_node.node_id,
         rejoin_node.get_public_url()
     );
     rejoin_node.vm().kill();
@@ -95,7 +97,12 @@ pub fn rejoin_test(
 
     info!(logger, "Killing {} nodes ...", allowed_failures);
     for node_to_kill in nodes_to_kill {
-        info!(logger, "Killing node {} ...", node_to_kill.get_public_url());
+        info!(
+            logger,
+            "Killing node {} ({}) ...",
+            node_to_kill.node_id,
+            node_to_kill.get_public_url()
+        );
         node_to_kill.vm().kill();
         node_to_kill
             .await_status_is_unavailable()
@@ -132,7 +139,8 @@ pub fn rejoin_test_large_state(
     let logger = env.logger();
     info!(
         logger,
-        "Installing universal canister on a node {} ...",
+        "Installing universal canister on a node {} ({}) ...",
+        agent_node.node_id,
         agent_node.get_public_url()
     );
     let agent = agent_node.build_default_agent();
@@ -168,7 +176,12 @@ pub fn rejoin_test_large_state(
     ));
 
     // Kill the rejoin node after it has a checkpoint so that we can test both `copy_chunks` and `fetch_chunks` in the state sync.
-    info!(logger, "Waiting for the rejoin_node to have a checkpoint");
+    info!(
+        logger,
+        "Waiting for the rejoin_node {} ({}) to have a checkpoint",
+        rejoin_node.node_id,
+        rejoin_node.get_public_url()
+    );
     block_on(wait_for_manifest(
         &logger,
         dkg_interval + 1,
@@ -184,7 +197,8 @@ pub fn rejoin_test_large_state(
 
     info!(
         logger,
-        "Killing a node: {} ...",
+        "Killing a node: {} ({}) ...",
+        rejoin_node.node_id,
         rejoin_node.get_public_url()
     );
     rejoin_node.vm().kill();
@@ -209,7 +223,12 @@ pub fn rejoin_test_large_state(
         1,
     ));
 
-    info!(logger, "Get the latest certified height of an active node");
+    info!(
+        logger,
+        "Get the latest certified height of an active node {} ({}) ...",
+        agent_node.node_id,
+        agent_node.get_public_url()
+    );
     let message = b"Are you actively making progress?";
     block_on(store_and_read_stable(&logger, message, &universal_canister));
     let res = block_on(fetch_metrics::<u64>(
@@ -229,14 +248,24 @@ pub fn rejoin_test_large_state(
 
     info!(logger, "Killing {} nodes ...", allowed_failures);
     for node_to_kill in nodes_to_kill {
-        info!(logger, "Killing node {} ...", node_to_kill.get_public_url());
+        info!(
+            logger,
+            "Killing node {} ({}) ...",
+            node_to_kill.node_id,
+            node_to_kill.get_public_url()
+        );
         node_to_kill.vm().kill();
         node_to_kill
             .await_status_is_unavailable()
             .expect("Node still healthy");
     }
 
-    info!(logger, "Start the first killed node again...");
+    info!(
+        logger,
+        "Start the first killed node {} ({}) again ...",
+        rejoin_node.node_id,
+        rejoin_node.get_public_url()
+    );
     rejoin_node.vm().start();
     rejoin_node
         .await_status_is_healthy()
@@ -304,8 +333,9 @@ async fn deploy_canisters_for_long_rounds(
     let num_seed_canisters = 4;
     info!(
         logger,
-        "Deploying {} seed canisters on a node {} ...",
+        "Deploying {} seed canisters on a node {} ({}) ...",
         num_seed_canisters,
+        init_node.node_id,
         init_node.get_public_url()
     );
     let mut create_seed_canisters_futs = vec![];
@@ -404,8 +434,9 @@ async fn deploy_canisters_for_long_rounds(
     let num_busy_canisters = 8;
     info!(
         logger,
-        "Deploying {} busy canisters on a node {} ...",
+        "Deploying {} busy canisters on a node {} ({}) ...",
         num_busy_canisters,
+        init_node.node_id,
         init_node.get_public_url()
     );
     let mut create_busy_canisters_futs = vec![];
@@ -476,7 +507,8 @@ pub fn rejoin_test_long_rounds(
 
     info!(
         logger,
-        "Killing a node: {} ...",
+        "Killing a node: {} ({}) ...",
+        rejoin_node.node_id,
         rejoin_node.get_public_url()
     );
     rejoin_node.vm().kill();
@@ -675,7 +707,7 @@ where
     T: Copy + Debug + FromStr,
 {
     const NUM_RETRIES: u32 = 500;
-
+    let node_str = format!("{} ({})", node.node_id, node.get_public_url());
     let metrics = MetricsFetcher::new(
         std::iter::once(node),
         labels.iter().map(|&label| label.to_string()).collect(),
@@ -685,14 +717,23 @@ where
         match metrics_result {
             Ok(result) => {
                 if labels.iter().all(|&label| result.contains_key(label)) {
-                    info!(log, "Metrics successfully scraped {:?}.", result);
+                    info!(
+                        log,
+                        "Successfully scraped metrics from node {node_str}: {:?}.", result
+                    );
                     return result;
                 } else {
-                    info!(log, "Metrics not available yet, attempt {i}.");
+                    info!(
+                        log,
+                        "Metrics not available yet from node {node_str}, attempt {i}."
+                    );
                 }
             }
             Err(e) => {
-                info!(log, "Could not scrape metrics: {e}, attempt {i}.");
+                info!(
+                    log,
+                    "Could not scrape metrics from node {node_str}: {e}, attempt {i}."
+                );
             }
         }
         tokio::time::sleep(Duration::from_millis(BACKOFF_TIME_MILLIS)).await;
@@ -837,16 +878,23 @@ async fn wait_for_manifest(log: &slog::Logger, height: u64, node: IcNodeSnapshot
 async fn wait_for_cup(log: &slog::Logger, height: u64, node: IcNodeSnapshot) -> u64 {
     let num_retries = height + 1;
     const BACKOFF_TIME_SECONDS: u64 = 5;
-
+    let node_str = format!("{} ({})", node.node_id, node.get_public_url());
+    info!(
+        log,
+        "Waiting for node {node_str} to get a CUP at height {height} or above ..."
+    );
     for _ in 0..num_retries {
         let res =
             fetch_metrics::<u64>(log, node.clone(), vec![REPLICATED_STATE_PURGE_HEIGHT_DISK]).await;
         let last_cup_height = res[REPLICATED_STATE_PURGE_HEIGHT_DISK][0];
         if last_cup_height >= height {
-            info!(log, "CUP height {} reached.", last_cup_height);
+            info!(
+                log,
+                "Node {node_str} reached a CUP at height {last_cup_height}."
+            );
             return last_cup_height;
         }
         tokio::time::sleep(Duration::from_secs(BACKOFF_TIME_SECONDS)).await;
     }
-    panic!("Couldn't get a CUP at height {height}.");
+    panic!("Node {node_str} couldn't get a CUP at height {height}.");
 }

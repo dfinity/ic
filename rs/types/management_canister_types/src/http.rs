@@ -435,8 +435,8 @@ pub enum FlexibleHttpGlobalError {
     OutOfCycles(candid::Reserved),
     #[serde(rename = "responses_too_large")]
     ResponsesTooLarge(candid::Reserved),
-    #[serde(rename = "too_many_request_errors")]
-    TooManyRequestErrors(candid::Reserved),
+    #[serde(rename = "too_many_rejects")]
+    TooManyRejects(candid::Reserved),
 }
 
 /// Per-node detail in a flexible HTTP outcall error.

@@ -93,7 +93,7 @@ message FlexibleCanisterHttpResponsesTooLarge {
   uint32 min_responses = 3;
 }
 
-message FlexibleCanisterHttpTooManyRequestErrors {
+message FlexibleCanisterHttpTooManyRejects {
   repeated FlexibleCanisterHttpResponseWithProof reject_responses = 1;
 }
 
@@ -102,7 +102,7 @@ message FlexibleCanisterHttpError {
   oneof error_details {
     FlexibleCanisterHttpTimeout timeout = 2;
     FlexibleCanisterHttpResponsesTooLarge responses_too_large = 3;
-    FlexibleCanisterHttpTooManyRequestErrors too_many_request_errors = 4;
+    FlexibleCanisterHttpTooManyRejects too_many_rejects = 4;
   }
 }
 
