@@ -180,9 +180,6 @@ impl LogMemoryStore {
     /// Update page_map, header_cache, first_timestamp_cache and persistent_next_idx.
     fn save_ring_buffer(&mut self, ring_buffer: RingBuffer) {
         let header = ring_buffer.get_header();
-        // Page at `data_head` is hot from the just-completed `append_log` —
-        // compute here rather than lazy-loading on observation. Reuses the
-        // header just loaded above to avoid a redundant page-map read.
         let first_timestamp = ring_buffer.first_timestamp(&header);
         self.maybe_page_map = Some(ring_buffer.to_page_map());
         self.header_cache = OnceLock::from(Some(header));
