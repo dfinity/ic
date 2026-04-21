@@ -697,7 +697,7 @@ where
     T: Copy + Debug + FromStr,
 {
     const NUM_RETRIES: u32 = 500;
-    let node_str = format!("{} ({})", node.node_id.to_string(), node.get_public_url());
+    let node_str = format!("{} ({})", node.node_id, node.get_public_url());
     let metrics = MetricsFetcher::new(
         std::iter::once(node),
         labels.iter().map(|&label| label.to_string()).collect(),
@@ -868,10 +868,10 @@ async fn wait_for_manifest(log: &slog::Logger, height: u64, node: IcNodeSnapshot
 async fn wait_for_cup(log: &slog::Logger, height: u64, node: IcNodeSnapshot) -> u64 {
     let num_retries = height + 1;
     const BACKOFF_TIME_SECONDS: u64 = 5;
-    let node_id_str = node.node_id.to_string();
+    let node_str = format!("{} ({})", node.node_id, node.get_public_url());
     info!(
         log,
-        "Waiting for node {node_id_str} to get a CUP at height {height} or above ..."
+        "Waiting for node {node_str} to get a CUP at height {height} or above ..."
     );
     for _ in 0..num_retries {
         let res =
@@ -880,11 +880,11 @@ async fn wait_for_cup(log: &slog::Logger, height: u64, node: IcNodeSnapshot) -> 
         if last_cup_height >= height {
             info!(
                 log,
-                "Node {node_id_str} reached a CUP at height {last_cup_height}."
+                "Node {node_str} reached a CUP at height {last_cup_height}."
             );
             return last_cup_height;
         }
         tokio::time::sleep(Duration::from_secs(BACKOFF_TIME_SECONDS)).await;
     }
-    panic!("Node {node_id_str} couldn't get a CUP at height {height}.");
+    panic!("Node {node_str} couldn't get a CUP at height {height}.");
 }
