@@ -1,5 +1,5 @@
 use self::api::CspVault;
-use self::local_csp_vault::ProdLocalCspVault;
+use self::local_csp_vault::{ProdLocalCspVault, new_nidkg_thread_pool};
 use self::remote_csp_vault::RemoteCspVault;
 use crate::vault::api::{
     CspBasicSignatureError, CspMultiSignatureError, CspSecretKeyStoreContainsError,
@@ -58,7 +58,9 @@ fn in_replica_vault(
         logger,
         "Proceeding with an in-replica csp_vault, CryptoConfig: {:?}", config
     );
-    let vault = ProdLocalCspVault::new_in_dir(&config.crypto_root, metrics, logger);
+    let vault = ProdLocalCspVault::builder_in_dir(&config.crypto_root, metrics, logger)
+        .with_nidkg_thread_pool(new_nidkg_thread_pool())
+        .build();
     Arc::new(vault)
 }
 
