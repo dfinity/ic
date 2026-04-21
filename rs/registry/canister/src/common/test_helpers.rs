@@ -122,20 +122,6 @@ pub fn prepare_registry_with_nodes_and_node_operator_id(
     )
 }
 
-/// Same as above, just with the possibility to have a chip_id.
-pub fn prepare_registry_with_nodes_and_chip_id(
-    start_mutation_id: u8,
-    nodes: u64,
-) -> (RegistryAtomicMutateRequest, BTreeMap<NodeId, PublicKey>) {
-    prepare_registry_raw(
-        start_mutation_id,
-        nodes,
-        PrincipalId::new_user_test_id(999),
-        true,
-        NodeRewardType::Type1,
-    )
-}
-
 /// Same as above, just with the possibility to have a node reward type.
 pub fn prepare_registry_with_nodes_and_reward_type(
     start_mutation_id: u8,

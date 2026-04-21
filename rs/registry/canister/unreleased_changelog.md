@@ -14,6 +14,8 @@ on the process that this file is part of, see
 
 ## Changed
 
+* **SEV on existing subnets:** Reverted — `sev_enabled` can once again only be set at subnet creation and cannot be changed afterward.
+
 ## Deprecated
 
 ## Removed
