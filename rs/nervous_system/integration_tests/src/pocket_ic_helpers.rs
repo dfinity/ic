@@ -1098,6 +1098,36 @@ pub async fn upgrade_nns_canister_to_tip_of_master_or_panic(
     );
 }
 
+pub mod management {
+    use super::*;
+    use ic_management_canister_types_private::ListCanisterSnapshotArgs;
+    use pocket_ic::common::rest::RawEffectivePrincipal;
+
+    pub async fn list_canister_snapshots(
+        pocket_ic: &PocketIc,
+        canister_id: CanisterId,
+        sender: PrincipalId,
+    ) -> Vec<ic_management_canister_types_private::CanisterSnapshotResponse> {
+        let reply = pocket_ic
+            .update_call_with_effective_principal(
+                Principal::management_canister(),
+                RawEffectivePrincipal::CanisterId(
+                    PrincipalId::from(canister_id).as_slice().to_vec(),
+                ),
+                Principal::from(sender),
+                "list_canister_snapshots",
+                Encode!(&ListCanisterSnapshotArgs::new(canister_id)).unwrap(),
+            )
+            .await
+            .expect("Failed to list canister snapshots");
+        Decode!(
+            &reply,
+            Vec<ic_management_canister_types_private::CanisterSnapshotResponse>
+        )
+        .unwrap()
+    }
+}
+
 pub mod nns {
     use super::*;
     use ic_nervous_system_agent::{helpers::nns as nns_agent_helpers, nns as nns_agent};
@@ -1160,6 +1190,18 @@ pub mod nns {
                 ProposalId { id: proposal_id },
             )
             .await
+        }
+
+        pub async fn get_proposal_info(
+            pocket_ic: &PocketIc,
+            proposal_id: u64,
+        ) -> Option<ProposalInfo> {
+            nns_agent::governance::get_proposal_info(
+                &PocketIcAgent::new(pocket_ic, Principal::anonymous()),
+                ProposalId { id: proposal_id },
+            )
+            .await
+            .unwrap()
         }
 
         pub async fn nns_get_proposal_info(
@@ -1293,6 +1335,19 @@ pub mod nns {
         use super::*;
         use ic_nervous_system_agent::nns::ledger as nns_agent_ledger;
         use icp_ledger::{Memo, TransferArgs};
+
+        pub async fn icrc1_balance_of(pocket_ic: &PocketIc, account: Account) -> Nat {
+            let reply = pocket_ic
+                .query_call(
+                    Principal::from(PrincipalId::from(LEDGER_CANISTER_ID)),
+                    Principal::anonymous(),
+                    "icrc1_balance_of",
+                    Encode!(&account).unwrap(),
+                )
+                .await
+                .unwrap();
+            Decode!(&reply, Nat).unwrap()
+        }
 
         pub async fn icrc1_transfer(
             pocket_ic: &PocketIc,
