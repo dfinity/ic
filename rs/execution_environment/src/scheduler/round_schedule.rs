@@ -9,7 +9,6 @@ use ic_logger::{ReplicaLogger, error};
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::{CanisterPriority, CanisterState, ReplicatedState};
 use ic_types::{AccumulatedPriority, ComputeAllocation, ExecutionRound, NumInstructions};
-use more_asserts::debug_assert_ge;
 use num_traits::SaturatingSub;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
@@ -69,6 +68,7 @@ impl CanisterRoundState {
         //     canister_priority.long_execution_start_round.is_some()
         // );
         // Ensure that `long_execution_progress` matches the canister state.
+        // FIXME: Drop this.
         if canister.has_long_execution() {
             canister_priority
                 .long_execution_start_round
@@ -164,37 +164,25 @@ impl IterationSchedule {
         BTreeMap<CanisterId, Arc<CanisterState>>,
     ) {
         let mut canisters_partitioned_by_cores = vec![vec![]; self.scheduler_cores];
-        let long_execution_cores = self.long_execution_cores.min(self.long_executions_count);
-        let mut idx = 0;
 
-        // for canister_id in self.schedule.iter().take(long_execution_cores) {
-        //     let canister_state = canisters.remove(canister_id).unwrap();
-        //     canisters_partitioned_by_cores[idx].push(canister_state);
-        //     idx += 1;
-        // }
-        for canister_id in self.schedule.iter().take(self.long_executions_count) {
+        // Completely segregate long and new executions across cores. Opportunistically
+        // scheduling long executions on new execution cores results in inversion of
+        // priority and potential starvation (lower priority long executions may execute
+        // a second slice before higher priority ones and become higher priority).
+        let long_executions = self.schedule.iter().take(self.long_executions_count);
+        let long_execution_cores = self.long_execution_cores.min(self.long_executions_count);
+        for (idx, canister_id) in long_executions.enumerate() {
             let canister_state = canisters.remove(canister_id).unwrap();
-            canisters_partitioned_by_cores[idx].push(canister_state);
-            idx = (idx + 1) % self.long_execution_cores;
+            canisters_partitioned_by_cores[idx % long_execution_cores].push(canister_state);
         }
-        debug_assert_ge!(self.scheduler_cores, long_execution_cores);
+
+        let new_executions = self.schedule.iter().skip(self.long_executions_count);
         let new_execution_cores = (self.scheduler_cores - long_execution_cores).max(1);
-        let mut idx = long_execution_cores;
-        for canister_id in self.schedule.iter().skip(self.long_executions_count) {
+        for (idx, canister_id) in new_executions.enumerate() {
             let canister_state = canisters.remove(canister_id).unwrap();
-            canisters_partitioned_by_cores[idx].push(canister_state);
-            idx = long_execution_cores + (idx - long_execution_cores + 1) % new_execution_cores;
+            canisters_partitioned_by_cores[long_execution_cores + idx % new_execution_cores]
+                .push(canister_state);
         }
-        // for canister_id in self
-        //     .schedule
-        //     .iter()
-        //     .take(self.long_executions_count)
-        //     .skip(long_execution_cores)
-        // {
-        //     let canister_state = canisters.remove(canister_id).unwrap();
-        //     canisters_partitioned_by_cores[idx].push(canister_state);
-        //     idx = (idx + 1) % self.scheduler_cores;
-        // }
 
         (canisters_partitioned_by_cores, canisters)
     }
@@ -265,8 +253,7 @@ impl RoundSchedule {
     /// Computes and returns an iteration schedule covering active canisters only.
     ///
     /// Updates round accumulators (scheduled, rate limited, long execution
-    /// canisters). Updates the `long_execution_mode` of scheduled ifrst long
-    /// cabusters to `Prioritized`.
+    /// canisters).
     pub fn start_iteration(
         &mut self,
         state: &mut ReplicatedState,
@@ -343,8 +330,8 @@ impl RoundSchedule {
             .collect();
         schedule.sort();
 
-        // Compute the number of long execution cores by dividing
-        // `long_executions_compute_allocation` by `100%` and rounding up (so that both
+        // Compute the number of long execution cores by dividing long executions'
+        // compute allocation plus free compute by `100%` and rounding up (so that both
         // long and new executions get enough cores to cover their respective cumulative
         // compute allocations).
         let compute_capacity = self.compute_capacity();
@@ -352,7 +339,7 @@ impl RoundSchedule {
             // No long executions.
             0
         } else if long_executions_count == schedule.len() {
-            // All long executions.
+            // Only long executions.
             std::cmp::min(long_executions_count, self.config.scheduler_cores)
         } else {
             // Mix of long and short executions.
@@ -397,8 +384,6 @@ impl RoundSchedule {
             self.config.scheduler_cores
         );
 
-        let new_execution_cores = self.config.scheduler_cores - long_execution_cores;
-
         let schedule: Vec<CanisterId> = schedule.into_iter().map(|rs| rs.canister_id).collect();
         if is_first_iteration {
             // First iteration: mark the first canister on each core as fully executed.
@@ -419,7 +404,7 @@ impl RoundSchedule {
             schedule
                 .iter()
                 .skip(long_executions_count)
-                .take(new_execution_cores)
+                .take(self.config.scheduler_cores - long_execution_cores)
                 .for_each(|canister| {
                     observe_scheduled_as_first(canister);
                 });
@@ -447,6 +432,7 @@ impl RoundSchedule {
         self.canisters_with_completed_messages
             .extend(canisters_with_completed_messages);
 
+        // If a canister has completed a long execution, clear its start round.
         for canister_id in canisters_with_completed_messages {
             state
                 .canister_priority_mut(*canister_id)
@@ -486,7 +472,7 @@ impl RoundSchedule {
     /// Updates canister priorities at the end of the round.
     ///
     /// * Grants canisters their compute allocations; charges for full executions;
-    ///   then calculates the subnet-wide free allocation and distributes it.
+    ///   then calculates the subnet-wide free compute and distributes it.
     /// * Applies the priority credit where possible (no long execution).
     /// * Observes round-level metrics.
     pub fn finish_round(
@@ -497,7 +483,7 @@ impl RoundSchedule {
     ) {
         let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
 
-        // Charge fully executed canisters.
+        // Update fully executed canisters' priorities.
         for canister_id in self.fully_executed_canisters.iter() {
             let canister_priority = subnet_schedule.get_mut(*canister_id);
             canister_priority.executed_slices += 1;
@@ -524,20 +510,18 @@ impl RoundSchedule {
             // Add the canister to the subnet schedule, if not already there.
             let canister_priority = subnet_schedule.get_mut(*canister_id);
 
-            // Charge for the first slice of any execution immediately, so that
-            // the AP reflects the cost of the current round's compute even
-            // while a long execution is still in progress.
+            // Charge for the first slice of every execution immediately, to properly
+            // account for newly started long executions (scheduled as new executions).
             if canister_priority.executed_slices == 1
                 && canister_priority.long_execution_start_round == Some(current_round)
             {
                 canister_priority.accumulated_priority -= ONE_HUNDRED_PERCENT;
             }
 
-            // On message completion (or short execution), charge for the
-            // remaining deferred slices.
+            // On message completion (or short execution), charge for the remaining slices.
             if canister_priority.executed_slices > 0
                 && (!canister.has_long_execution()
-                    // FIXME: Rescheduling long execution canisters will likely not work.
+                    // FIXME: This will break if we continue executing long execution canisters.
                     || self.canisters_with_completed_messages.contains(canister_id))
             {
                 canister_priority.accumulated_priority -=
@@ -557,49 +541,78 @@ impl RoundSchedule {
         }
 
         self.grant_heap_delta_and_install_code_credits(state, metrics);
+        let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
 
         // Grant all canisters in the subnet schedule their compute allocation.
-        let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
+        // And collect all canisters' compute allocations; plus global AP and CA sums.
+        let mut total_ap = ZERO;
+        let mut total_ca = ZERO;
+        let mut compute_allocations = Vec::with_capacity(subnet_schedule.len());
         for (canister_id, canister_priority) in subnet_schedule.iter_mut() {
             let canister = canister_states.get_mut(canister_id).unwrap();
+            let compute_allocation = from_ca(canister.compute_allocation());
+            canister_priority.accumulated_priority += compute_allocation;
+
             // Treat idle canisters with positive AP as fully executed (which is technically
             // true). The goal is to gradually burn their AP down to zero, so that if they
-            // get new inputs soon, they don't lose all their previous AP.
+            // get new inputs soon, they will not have instantly lost all their previous AP.
             if canister_priority.accumulated_priority > ZERO
                 && !self.scheduled_canisters.contains(canister_id)
                 && !self.rate_limited_canisters.contains(canister_id)
             {
-                let charge = ONE_HUNDRED_PERCENT - from_ca(canister.compute_allocation());
+                // FIXME: Can we avoid granting free compute to AP=0 idle canisters below?
+                // Maybe drop idle canisters with 0-100 AP in start_iteration instead?
                 canister_priority.accumulated_priority -=
-                    charge.min(canister_priority.accumulated_priority);
+                    ONE_HUNDRED_PERCENT.min(canister_priority.accumulated_priority);
+            }
+
+            total_ap += canister_priority.accumulated_priority;
+            total_ca += compute_allocation;
+            compute_allocations.push((*canister_id, compute_allocation));
+        }
+
+        // Distribute the "free compute" (negative of total AP) to all canisters.
+        //
+        // Only ever apply positive free compute. If the sum of all canisters'
+        // accumulated priorities (including priority credit) is somehow positive, then
+        // there is simply no free compute to distribute.
+        let mut free_compute = -total_ap;
+        if free_compute > ZERO {
+            // Cap canister grants (including any compute allocation) to 100%, to prevent
+            // systematic accumulation of more AP than can be spent.
+            //
+            // However, if there is more than 100 priority per canister to distribute (e.g.
+            // because we have applied a lot of priority credit this round), then simply
+            // grant every canister an equal share of that (including the CA we already
+            // granted above).
+            let canister_count = compute_allocations.len() as i64;
+            let per_canister_cap = if free_compute + total_ca > ONE_HUNDRED_PERCENT * canister_count
+            {
+                (free_compute + total_ca) / canister_count
             } else {
-                canister_priority.accumulated_priority += from_ca(canister.compute_allocation());
+                ONE_HUNDRED_PERCENT
+            };
+
+            // Start with the highest compute allocation canisters, as they require the
+            // smallest "top-ups" to reach the per-canister cap, leaving higher shares for
+            // lower compute allocation canisters.
+            compute_allocations.sort_by_key(|(c, p)| (std::cmp::Reverse(*p), *c));
+            let mut remaining = compute_allocations.len() as i64;
+            for (canister_id, ca) in compute_allocations {
+                let mut share = free_compute / remaining;
+                share = std::cmp::min(share, per_canister_cap - ca);
+
+                let canister_priority = subnet_schedule.get_mut(canister_id);
+                canister_priority.accumulated_priority += share;
+
+                free_compute -= share;
+                remaining -= 1;
             }
         }
 
-        // Compute the global free allocation (negative of the total AP sum).
-        let total_ap_sum: AccumulatedPriority = subnet_schedule
-            .iter()
-            .map(|(_, p)| p.accumulated_priority)
-            .fold(ZERO, |a, b| a + b);
-        let free_allocation = -total_ap_sum;
-
-        // First pass: per-canister share capped at `100% - CA`.
-        let free_allocation = Self::distribute_free_allocation(
-            free_allocation,
-            Some(ONE_HUNDRED_PERCENT),
-            canister_states,
-            subnet_schedule,
-        );
-
-        // Second pass: distribute any remainder without the per-CA cap.
-        let _ = Self::distribute_free_allocation(
-            free_allocation,
-            None,
-            canister_states,
-            subnet_schedule,
-        );
-
+        // Apply an exponential decay to AP values outside the [AP_ROUNDS_MIN,
+        // AP_ROUNDS_MAX] range to limit any runaway AP.
+        let mut accumulated_priority_deviation = 0.0;
         for (_, canister_priority) in subnet_schedule.iter_mut() {
             const AP_MAX: AccumulatedPriority =
                 AccumulatedPriority::new(AP_ROUNDS_MAX * 100 * MULTIPLIER);
@@ -612,16 +625,11 @@ impl RoundSchedule {
                 canister_priority.accumulated_priority =
                     AP_MIN + (canister_priority.accumulated_priority - AP_MIN) * 80 / 100;
             }
-        }
 
-        // Compute the deviation metric from final AP values.
-        let accumulated_priority_deviation: f64 = subnet_schedule
-            .iter()
-            .map(|(_, p)| {
-                let ap = p.accumulated_priority.get() as f64 / MULTIPLIER as f64;
-                ap * ap
-            })
-            .sum();
+            let accumulated_priority =
+                canister_priority.accumulated_priority.get() as f64 / MULTIPLIER as f64;
+            accumulated_priority_deviation += accumulated_priority * accumulated_priority;
+        }
         metrics
             .scheduler_accumulated_priority_deviation
             .set((accumulated_priority_deviation / subnet_schedule.len().max(1) as f64).sqrt());
@@ -629,68 +637,6 @@ impl RoundSchedule {
         self.observe_round_metrics(state, current_round, metrics);
 
         // TODO(DSM-103): `debug_assert` that all active canisters are in the subnet schedule.
-    }
-
-    /// Distributes `free_allocation` equally among all canisters in the subnet
-    /// schedule, sorted by current AP (highest first). Each canister's share is
-    /// capped at `per_canister_cap - CA` and `AP_ROUNDS_MAX * 100%`. Idle
-    /// canisters with small negative AP are zeroed out and possibly removed.
-    ///
-    /// Returns the remaining undistributed free allocation.
-    fn distribute_free_allocation(
-        mut free_allocation: AccumulatedPriority,
-        per_canister_cap: Option<AccumulatedPriority>,
-        canister_states: &BTreeMap<CanisterId, Arc<CanisterState>>,
-        subnet_schedule: &mut ic_replicated_state::SubnetSchedule,
-    ) -> AccumulatedPriority {
-        if free_allocation <= ZERO {
-            free_allocation = ZERO;
-        }
-
-        let mut canisters: Vec<(CanisterId, AccumulatedPriority)> = subnet_schedule
-            .iter()
-            .map(|(id, p)| (*id, p.accumulated_priority))
-            .collect();
-        canisters.sort_by_key(|(c, p)| (std::cmp::Reverse(*p), *c));
-
-        let mut remaining = canisters.len() as i64;
-        for &(canister_id, _) in canisters.iter() {
-            if remaining == 0 {
-                break;
-            }
-            let mut share = free_allocation / remaining;
-
-            if let Some(per_canister_cap) = per_canister_cap {
-                let canister_state = canister_states.get(&canister_id).unwrap();
-                let ca = from_ca(canister_state.compute_allocation());
-                share = std::cmp::min(share, per_canister_cap - ca);
-            }
-
-            let canister_priority = subnet_schedule.get_mut(canister_id);
-            // share = std::cmp::min(
-            //     share,
-            //     ONE_HUNDRED_PERCENT * AP_ROUNDS_MAX - canister_priority.accumulated_priority,
-            // );
-            // share = std::cmp::max(
-            //     share,
-            //     ONE_HUNDRED_PERCENT * AP_ROUNDS_MIN - canister_priority.accumulated_priority,
-            // );
-
-            // let priority = canister_priority.accumulated_priority;
-            // let next_execution = canister_state.next_execution();
-            // if next_execution == NextExecution::None && priority <= ZERO && priority >= -share {
-            //     subnet_schedule.get_mut(canister_id).accumulated_priority = ZERO;
-            //     free_allocation += priority;
-            //     if !canister_state.must_be_in_schedule() {
-            //         subnet_schedule.remove(&canister_id);
-            //     }
-            // } else if next_execution != NextExecution::None || priority < ZERO {
-            canister_priority.accumulated_priority += share;
-            free_allocation -= share;
-            // }
-            remaining -= 1;
-        }
-        free_allocation
     }
 
     /// Deducts the heap delta and install code rate limits from the canisters'
@@ -740,7 +686,7 @@ impl RoundSchedule {
         metrics: &SchedulerMetrics,
     ) {
         // Export the age of all scheduled canisters.
-        for canister_id in self.scheduled_canisters() {
+        for canister_id in &self.scheduled_canisters {
             let last_full_execution_round = if self.fully_executed_canisters.contains(canister_id) {
                 // `CanisterPriority` might have been dropped, don't look it up.
                 current_round

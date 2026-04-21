@@ -391,7 +391,6 @@ impl SchedulerImpl {
                 )
                 .is_err()
             {
-                // FIXME: Drop the canister from the schedule (unless it has heap delta or install code debits).
                 continue;
             }
 
@@ -2198,9 +2197,10 @@ fn abort_canister(
     log: &ReplicaLogger,
 ) {
     if exec_env.abort_canister(canister, log, cost_schedule) {
-        // Reset the priority credit to zero.
+        // Reset `executed_slices` to zero.
         let canister_priority = subnet_schedule.get_mut(canister.canister_id());
         canister_priority.executed_slices = 0;
+        // FIXME: This should be a debug_assert.
         canister_priority
             .long_execution_start_round
             .get_or_insert(current_round);

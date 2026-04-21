@@ -930,8 +930,8 @@ fn finish_round_free_allocation_zero_sum() {
     );
 }
 
-/// finish_round drops an idle canister with zero accumulated priority from the
-/// subnet schedule when it has no inputs or heap delta / install code debits.
+/// start_iteration drops an idle canister (no inputs or heap delta / install
+/// code debits) with zero accumulated priority from the subnet schedule.
 #[test]
 fn finish_round_idle_at_zero_dropped_from_schedule() {
     let mut fixture = RoundScheduleFixture::new();
@@ -948,24 +948,19 @@ fn finish_round_idle_at_zero_dropped_from_schedule() {
 
     assert!(fixture.fully_executed_canisters().contains(&canister_id));
     assert!(
-        fixture
-            .state
-            .metadata
-            .subnet_schedule
-            .iter()
-            .any(|(id, _)| *id == canister_id),
+        fixture.has_canister_priority(&canister_id),
         "canister should be in schedule before finish_round"
     );
 
     fixture.finish_round(ExecutionRound::new(1));
-
     assert!(
-        !fixture
-            .state
-            .metadata
-            .subnet_schedule
-            .iter()
-            .any(|(id, _)| *id == canister_id),
+        fixture.has_canister_priority(&canister_id),
+        "idle canister with zero priority should be retained in the schedule"
+    );
+
+    fixture.start_iteration(true);
+    assert!(
+        !fixture.has_canister_priority(&canister_id),
         "idle canister with zero priority should be dropped from schedule"
     );
 }
@@ -1029,9 +1024,9 @@ fn finish_round_grant_heap_delta_and_install_code_credits() {
         100.0
     );
 
-    // `canister_b` is no longer in the subnet schedule, it has no install code
-    // debit.
-    assert!(!fixture.has_canister_priority(&canister_b));
+    // `canister_b` is also still in the subnet schedule, even though it no longer
+    // has any install code debit.
+    assert!(fixture.has_canister_priority(&canister_b));
     assert_eq!(
         fixture
             .canister_state(&canister_b)
@@ -1048,6 +1043,11 @@ fn finish_round_grant_heap_delta_and_install_code_credits() {
             .get_sample_sum(),
         200.0
     );
+
+    // The next round / iteration drops `canister_b` from the schedule.
+    fixture.start_iteration(true);
+    assert!(fixture.has_canister_priority(&canister_a));
+    assert!(!fixture.has_canister_priority(&canister_b));
 }
 
 /// After `finish_round`, a canister with a pending heartbeat task receives
@@ -1506,12 +1506,10 @@ fn assert_multi_round_invariants(
             .collect::<Vec<_>>()
     );
 
-    // The positive side of accumulated_priority is capped at AP_ROUNDS_MAX *
-    // 100% = 500% by finish_round (via the free allocation cap). Negative AP can
-    // grow arbitrarily: it simply means the canister got to execute more than its
-    // share (because spare compute was available) and will be deprioritized later.
-    const AP_UPPER_BOUND: i64 = 10 * 100 * MULTIPLIER;
-    const AP_LOWER_BOUND: i64 = -30 * 100 * MULTIPLIER;
+    // Accumulated priority decays exponentially outside the `[AP_ROUNDS_MIN,
+    // AP_ROUNDS_MAX]` range. Expect at most 5 extra rounds at either end.
+    const AP_UPPER_BOUND: i64 = (AP_ROUNDS_MAX + 5) * 100 * MULTIPLIER;
+    const AP_LOWER_BOUND: i64 = (AP_ROUNDS_MIN - 5) * 100 * MULTIPLIER;
     for (i, sim) in sims.iter().enumerate() {
         let canister_priority = fixture.state.metadata.subnet_schedule.get(&sim.canister_id);
         assert!(
@@ -1522,8 +1520,12 @@ fn assert_multi_round_invariants(
         );
     }
 
-    let usable_cores = scheduler_cores.min(sims.len());
-    let free_compute_per_canister = (usable_cores * 100 - total_compute_allocation) / sims.len();
+    // In most cases, the scheduler will actually fairly share all scheduler cores.
+    // There are, however edge cases where the interaction between long and short
+    // executions results in contention, so we must be conservative and only account
+    // for "guaranteed" free compute.
+    let compute_capacity = (scheduler_cores - 1) * 100;
+    let free_compute_per_canister = (compute_capacity - total_compute_allocation) / sims.len();
 
     // Canisters must have either consumed all inputs; or executed proportionally to
     // their compute allocation and rate limiting.
@@ -1533,13 +1535,6 @@ fn assert_multi_round_invariants(
 
         // If (and only if) the canister has a backlog, check that it got executed as
         // much as its compute allocation and rate limiting allow.
-        //
-        // Because long executions are prioritized for throughput (in-progress ones are
-        // prioritized over new ones); combined with AP bounding, long executions are
-        // scheduled less efficiently.
-        //
-        // And single short execution canisters that have inputs every round and always
-        // consume them may end up with negative AP that they may never recover from.
         if sim.inputs.len() > 1 {
             let executed_rounds = sim.full_rounds;
             let credit_rounds = canister_priority.accumulated_priority.get() / MULTIPLIER / 100;
@@ -1594,7 +1589,7 @@ fn multi_round_priority_invariants(
 
     let num_rounds = 1000;
     let (fixture, sims) =
-        run_multi_round_simulation(scheduler_cores, num_rounds, &archetype_configs, Some(9));
+        run_multi_round_simulation(scheduler_cores, num_rounds, &archetype_configs, None);
     assert_multi_round_invariants(
         &fixture,
         &sims,

@@ -369,23 +369,19 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                 )
                 .collect(),
             blockmaker_metrics_time_series: Some((&item.blockmaker_metrics_time_series).into()),
-            subnet_schedule: Some(pb_metadata::SubnetSchedule {
-                entries: item
-                    .subnet_schedule
-                    .iter()
-                    .map(
-                        |(canister_id, priority)| pb_metadata::CanisterSchedulingState {
-                            canister_id: Some(pb_types::CanisterId::from(*canister_id)),
-                            accumulated_priority: priority.accumulated_priority.get(),
-                            executed_slices: priority.executed_slices,
-                            long_execution_start_round: priority
-                                .long_execution_start_round
-                                .map(|round| round.get()),
-                            last_full_execution_round: priority.last_full_execution_round.get(),
-                        },
-                    )
-                    .collect(),
-            }),
+            subnet_schedule: item
+                .subnet_schedule
+                .iter()
+                .map(|(canister_id, priority)| pb_metadata::CanisterPriority {
+                    canister_id: Some(pb_types::CanisterId::from(*canister_id)),
+                    accumulated_priority: priority.accumulated_priority.get(),
+                    executed_slices: priority.executed_slices,
+                    long_execution_start_round: priority
+                        .long_execution_start_round
+                        .map(|round| round.get()),
+                    last_full_execution_round: priority.last_full_execution_round.get(),
+                })
+                .collect(),
         }
     }
 }
@@ -411,11 +407,11 @@ impl
             &dyn CheckpointLoadingMetrics,
         ),
     ) -> Result<Self, Self::Error> {
-        let subnet_schedule = if let Some(pb_schedule) = &item.subnet_schedule {
+        let subnet_schedule = if !item.subnet_schedule.is_empty() {
             let mut priorities = BTreeMap::new();
-            for entry in &pb_schedule.entries {
+            for entry in &item.subnet_schedule {
                 let canister_id = CanisterId::try_from(entry.canister_id.clone().ok_or(
-                    ProxyDecodeError::MissingField("CanisterSchedulingState::canister_id"),
+                    ProxyDecodeError::MissingField("CanisterPriority::canister_id"),
                 )?)?;
                 priorities.insert(
                     canister_id,
