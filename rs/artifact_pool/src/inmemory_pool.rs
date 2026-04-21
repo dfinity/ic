@@ -98,9 +98,11 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
         purged
     }
 
-    fn get_by_hashes<S: ConsensusMessageHashable>(&self, hashes: Vec<&CryptoHashOf<S>>) -> Vec<S> {
+    fn get_by_hashes<'a, S: ConsensusMessageHashable + 'a>(
+        &self,
+        hashes: impl Iterator<Item = &'a CryptoHashOf<S>>,
+    ) -> Vec<S> {
         hashes
-            .iter()
             .map(|hash| {
                 let artifact_opt = self.get_by_hash(hash.get_ref());
                 match artifact_opt {
@@ -138,13 +140,13 @@ where
 {
     fn get_all(&self) -> Box<dyn Iterator<Item = T>> {
         Box::new(
-            self.get_by_hashes(self.select_index().get_all().collect())
+            self.get_by_hashes(self.select_index().get_all())
                 .into_iter(),
         )
     }
 
     fn get_by_height(&self, h: Height) -> Box<dyn Iterator<Item = T>> {
-        let hashes = self.select_index().lookup(h).collect();
+        let hashes = self.select_index().lookup(h);
 
         Box::new(self.get_by_hashes(hashes).into_iter())
     }

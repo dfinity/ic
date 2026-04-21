@@ -751,7 +751,7 @@ mod tests {
                 &dkg_pool,
                 &dkg_summary.configs,
                 start_height,
-                vec![dealing],
+                &[dealing],
             );
             let first = result.first().unwrap();
             let ChangeAction::MoveToValidated(dealing_validated) = first else {
