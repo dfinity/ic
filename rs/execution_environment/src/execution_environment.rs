@@ -1554,7 +1554,6 @@ impl ExecutionEnvironment {
                         payload,
                         chain_key_data,
                         &mut state,
-                        rng,
                         registry_settings,
                         current_round,
                     ) {
@@ -3631,7 +3630,6 @@ impl ExecutionEnvironment {
         payload: &[u8],
         chain_key_data: &ChainKeyData,
         state: &mut ReplicatedState,
-        rng: &mut dyn RngCore,
         registry_settings: &RegistryExecutionSettings,
         current_round: ExecutionRound,
     ) -> Result<(), UserError> {
