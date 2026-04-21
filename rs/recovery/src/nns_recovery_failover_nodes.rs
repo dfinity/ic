@@ -412,6 +412,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                         &[],
                         Some(registry_params),
                         None,
+                        None,
                     )?))
                 } else {
                     Err(RecoveryError::StepSkipped)

@@ -197,6 +197,7 @@ mod tests {
                 upload_method: None,
                 wait_for_cup_node: None,
                 chain_key_subnet_id: Some(fake_subnet_id()),
+                initial_dkg_subnet_id: None,
                 next_step: None,
                 upgrade_image_url: None,
                 upgrade_image_hash: None,

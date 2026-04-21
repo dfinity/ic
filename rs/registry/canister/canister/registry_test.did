@@ -310,6 +310,7 @@ type RecoverSubnetPayload = record {
   height : nat64;
   replacement_nodes : opt vec principal;
   subnet_id : principal;
+  initial_dkg_subnet_id : opt principal;
   registry_store_uri : opt record { text; text; nat64 };
   chain_key_config : opt InitialChainKeyConfig;
   state_hash : blob;
