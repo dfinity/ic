@@ -640,17 +640,12 @@ impl CanisterManager {
         if let Some(log_memory_limit) = settings.log_memory_limit() {
             let limit = log_memory_limit.get() as usize;
             let log_memory_store = &mut canister.system_state.log_memory_store;
-            // Only measure when both asked to (`metrics` present) and the
-            // resize would actually do work (`would_resize`); avoids no-op
-            // samples and keeps the histogram scoped to real resizes.
-            // Dropping the timer records the elapsed duration into the
-            // histogram, so drop it right after the resize to avoid timing
-            // any unrelated work that might be added below.
-            let resize_timer = metrics
-                .filter(|_| log_memory_store.would_resize(limit))
-                .map(|m| m.canister_log_resize_duration.start_timer());
-            log_memory_store.resize(limit, self.fd_factory.clone());
-            drop(resize_timer);
+            {
+                let _maybe_timer = metrics
+                    .filter(|_| log_memory_store.would_resize(limit))
+                    .map(|m| m.canister_log_resize_duration.start_timer());
+                log_memory_store.resize(limit, self.fd_factory.clone());
+            }
         }
         if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
             canister.system_state.wasm_memory_limit = Some(wasm_memory_limit);
