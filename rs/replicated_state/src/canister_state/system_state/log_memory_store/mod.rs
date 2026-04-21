@@ -227,7 +227,10 @@ impl LogMemoryStore {
             .as_ref()
             .zip(actual_header.as_ref())
             .and_then(|(rb, h)| rb.first_timestamp(h));
-        self.first_timestamp_cache == actual_first_ts
+        if self.first_timestamp_cache != actual_first_ts {
+            return false;
+        }
+        true
     }
 
     /// Returns the ring buffer header.
