@@ -879,7 +879,6 @@ impl ExecutionEnvironment {
                                         .map(|setting| setting.max_queue_size)
                                         .unwrap_or_default(),
                                     &mut state,
-                                    rng,
                                     registry_settings.subnet_size,
                                 ) {
                                     Err(err) => ExecuteSubnetMessageResult::Finished {
@@ -1451,7 +1450,6 @@ impl ExecutionEnvironment {
                                         .map(|setting| setting.max_queue_size)
                                         .unwrap_or_default(),
                                     &mut state,
-                                    rng,
                                     registry_settings.subnet_size,
                                 ) {
                                     Err(err) => ExecuteSubnetMessageResult::Finished {
@@ -3679,7 +3677,6 @@ impl ExecutionEnvironment {
                 .map(|setting| setting.max_queue_size)
                 .unwrap_or_default(),
             state,
-            rng,
             registry_settings.subnet_size,
         )
     }
@@ -3712,7 +3709,6 @@ impl ExecutionEnvironment {
         derivation_path: Vec<Vec<u8>>,
         max_queue_size_registry: u32,
         state: &mut ReplicatedState,
-        rng: &mut dyn RngCore,
         subnet_size: usize,
     ) -> Result<(), UserError> {
         if let ThresholdArguments::Schnorr(schnorr) = &args {
@@ -3813,15 +3809,12 @@ impl ExecutionEnvironment {
             ));
         }
 
-        let mut deprecated_pseudo_random_id = [0_u8; 32];
-        rng.fill_bytes(&mut deprecated_pseudo_random_id);
-
         state.metadata.subnet_call_context_manager.push_context(
             SubnetCallContext::SignWithThreshold(SignWithThresholdContext {
                 request,
                 args,
                 derivation_path: Arc::new(derivation_path),
-                deprecated_pseudo_random_id: Some(deprecated_pseudo_random_id),
+                deprecated_pseudo_random_id: None,
                 batch_time: state.metadata.batch_time,
                 nonce: None,
             }),
