@@ -2506,6 +2506,7 @@ impl ExecutionEnvironment {
                     saturation,
                     subnet_size,
                     cost_schedule,
+                    &self.metrics,
                 )
             },
             state,

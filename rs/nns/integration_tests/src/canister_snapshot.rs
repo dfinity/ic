@@ -1,35 +1,66 @@
 use candid::{Nat, Principal};
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::PrincipalId;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
-use ic_management_canister_types_private::{CanisterSnapshotResponse, ListCanisterSnapshotArgs};
+use ic_management_canister_types_private::CanisterSnapshotResponse;
 use ic_nervous_system_common::E8;
-use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
-use ic_nns_common::pb::v1::NeuronId;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
+use ic_nervous_system_integration_tests::pocket_ic_helpers::{
+    NnsInstaller, management,
+    nns::{self, ledger::icrc1_balance_of},
+};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance_api::{
-    LoadCanisterSnapshot, MakeProposalRequest, Motion, ProposalActionRequest, TakeCanisterSnapshot,
-};
-use ic_nns_test_utils::{
-    common::NnsInitPayloadsBuilder,
-    state_test_helpers::{
-        icrc1_balance, icrc1_transfer, nns_execute_proposal, nns_get_proposal_info,
-        nns_governance_make_proposal, setup_nns_canisters, state_machine_builder_for_nns_tests,
-        update_with_sender,
-    },
-};
-use ic_state_machine_tests::StateMachine;
+use ic_nns_governance::pb::v1::ProposalStatus;
+use ic_nns_governance_api::{MakeProposalRequest, Motion, ProposalActionRequest};
 use icp_ledger::{AccountIdentifier, DEFAULT_TRANSFER_FEE, Tokens};
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
-use std::time::{Duration, SystemTime};
+use pocket_ic::{PocketIcBuilder, nonblocking::PocketIc};
+use std::{
+    env,
+    io::Write,
+    process::Command,
+    str::FromStr,
+    time::{Duration, SystemTime},
+};
+use tempfile::NamedTempFile;
 
 fn default_account_identifier(principal_id: PrincipalId) -> AccountIdentifier {
     AccountIdentifier::new(principal_id, None)
 }
 
-#[test]
-fn test_canister_snapshot() {
+fn create_neuron_1_pem_file() -> NamedTempFile {
+    let contents: String = TEST_NEURON_1_OWNER_KEYPAIR.to_pem();
+    let mut pem_file = NamedTempFile::new().unwrap();
+    pem_file.write_all(contents.as_bytes()).unwrap();
+    pem_file
+}
+
+fn run_ic_admin(nns_url: &str, extra_args: Vec<String>) -> String {
+    let ic_admin_path = env::var("IC_ADMIN_PATH").expect("IC_ADMIN_PATH not set");
+    let pem_file = create_neuron_1_pem_file();
+    let pem_file_path = pem_file.path().to_str().unwrap().to_string();
+    let output = Command::new(ic_admin_path)
+        .args(["--nns-url", nns_url, "--secret-key-pem", &pem_file_path])
+        .args(&extra_args)
+        .output()
+        .expect("Failed to run ic-admin");
+    let mut all_output = String::from_utf8(output.stdout).unwrap();
+    all_output.push_str(&String::from_utf8(output.stderr).unwrap());
+    assert_eq!(
+        output.status.code().unwrap(),
+        0,
+        "ic-admin exited with non-zero status:\n{all_output}",
+    );
+    all_output
+}
+
+#[tokio::test]
+async fn test_canister_snapshot() {
     // Step 1: Prepare the world: Set up the NNS canisters with a super powerful neuron.
-    let state_machine = state_machine_builder_for_nns_tests().build();
+    let mut pocket_ic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_sns_subnet()
+        .build_async()
+        .await;
 
     let icp_token_sender = PrincipalId::new_user_test_id(298_993_015);
     let icp_token_receiver = PrincipalId::new_user_test_id(836_602_313);
@@ -37,50 +68,74 @@ fn test_canister_snapshot() {
 
     let initial_balance = Tokens::from_e8s(10 * E8);
 
-    let nns_init_payloads = NnsInitPayloadsBuilder::new()
-        .with_test_neurons()
-        .with_ledger_account(
-            default_account_identifier(icp_token_sender),
-            initial_balance,
-        )
-        .with_ledger_account(
-            default_account_identifier(icp_token_receiver),
-            initial_balance,
-        )
-        .with_ledger_account(
-            default_account_identifier(stable_balance_principal),
-            initial_balance,
-        )
-        .build();
+    let mut nns_installer = NnsInstaller::default();
+    nns_installer
+        .with_current_nns_canister_versions()
+        .with_ledger_balances(vec![
+            (
+                default_account_identifier(icp_token_sender),
+                initial_balance,
+            ),
+            (
+                default_account_identifier(icp_token_receiver),
+                initial_balance,
+            ),
+            (
+                default_account_identifier(stable_balance_principal),
+                initial_balance,
+            ),
+        ]);
+    nns_installer.install(&pocket_ic).await;
 
-    setup_nns_canisters(&state_machine, nns_init_payloads);
+    let endpoint = pocket_ic.make_live(None).await;
+    let nns_url = endpoint.as_ref();
+    let neuron_id = TEST_NEURON_1_ID.to_string();
 
     let target_canister_id = LEDGER_CANISTER_ID;
 
     // Scenario A: The most basic thing: take a snapshot.
 
     // Step 2(A): Run the code under test: Take a snapshot via proposal.
-    let first_proposal_id = nns_execute_proposal(
-        &state_machine,
-        ProposalActionRequest::TakeCanisterSnapshot(TakeCanisterSnapshot {
-            canister_id: Some(target_canister_id.get()),
-            replace_snapshot: None,
-        }),
+
+    // Step 2(A).1: Submit proposal (via ic-admin).
+    let ic_admin_output = run_ic_admin(
+        nns_url,
+        vec![
+            "propose-to-take-canister-snapshot".to_string(),
+            "--proposer".to_string(),
+            neuron_id.clone(),
+            "--canister-id".to_string(),
+            target_canister_id.to_string(),
+            "--summary".to_string(),
+            "Take a snapshot of the Ledger canister.".to_string(),
+        ],
+    );
+    let first_proposal_id = extract_proposal_id(&ic_admin_output);
+
+    // Step 2A.2: Wait for execution.
+    let first_proposal_info =
+        nns::governance::wait_for_proposal_execution(&pocket_ic, first_proposal_id)
+            .await
+            .unwrap();
+
+    // Step 3A. Verify results.
+
+    // Step 3A.1: Proposal marked success.
+    assert_eq!(
+        ProposalStatus::try_from(first_proposal_info.status),
+        Ok(ProposalStatus::Executed),
+        "{first_proposal_info:#?}",
     );
 
     // Step 3A: Verify that a snapshot was created, by calling
     // list_canister_snapshots.
-    let list_canister_snapshots_response: Vec<CanisterSnapshotResponse> = update_with_sender(
-        &state_machine,
-        CanisterId::ic_00(),
-        "list_canister_snapshots",
-        ListCanisterSnapshotArgs::new(target_canister_id),
-        // Must call as the Root canister, because only controllers are allowed
-        // to list snapshots (and Root is a controller of Ledger, the target
-        // canister, the canister being snapshotted).
-        ROOT_CANISTER_ID.get(),
-    )
-    .expect("Failed to list snapshots");
+    let list_canister_snapshots_response: Vec<CanisterSnapshotResponse> =
+        management::list_canister_snapshots(
+            &pocket_ic,
+            target_canister_id,
+            PrincipalId::from(ROOT_CANISTER_ID),
+        )
+        .await;
 
     assert_eq!(
         list_canister_snapshots_response.len(),
@@ -132,31 +187,45 @@ fn test_canister_snapshot() {
 
     // Make a proposal, like in scenario A, but this time, set the
     // replace_snapshot field to the ID of the first snapshot (from scenario A).
-    let replace_proposal_id = nns_execute_proposal(
-        &state_machine,
-        ProposalActionRequest::TakeCanisterSnapshot(TakeCanisterSnapshot {
-            canister_id: Some(target_canister_id.get()),
-            replace_snapshot: Some(first_snapshot.snapshot_id().to_vec()),
-        }),
+    let stderr = run_ic_admin(
+        nns_url,
+        vec![
+            "propose-to-take-canister-snapshot".to_string(),
+            "--proposer".to_string(),
+            neuron_id.clone(),
+            "--canister-id".to_string(),
+            target_canister_id.to_string(),
+            "--replace-snapshot".to_string(),
+            hex::encode(first_snapshot.snapshot_id().as_slice()),
+            "--summary".to_string(),
+            "Take another snapshot and replace the first.".to_string(),
+        ],
     );
+    let replace_proposal_id = extract_proposal_id(&stderr);
 
     assert_ne!(replace_proposal_id, first_proposal_id);
+    let replace_proposal_info =
+        nns::governance::wait_for_proposal_execution(&pocket_ic, replace_proposal_id)
+            .await
+            .unwrap();
 
     // Step 3(B): Verify results.
 
-    // Fetch (new) snapshots.
-    let list_canister_snapshots_response: Vec<CanisterSnapshotResponse> = update_with_sender(
-        &state_machine,
-        CanisterId::ic_00(),
-        "list_canister_snapshots",
-        ListCanisterSnapshotArgs::new(target_canister_id),
-        ROOT_CANISTER_ID.get(),
-    )
-    .expect("Failed to list snapshots after replace");
+    assert_eq!(
+        ProposalStatus::try_from(replace_proposal_info.status),
+        Ok(ProposalStatus::Executed),
+        "{replace_proposal_info:#?}",
+    );
 
-    // There should only be 1 snapshot, because even though we have a new
-    // (second) snapshot, the existing (first) one is supposed to be replaced by
-    // the new one.
+    // List snapshots (again). Again, there should be 1, because the first
+    // one got kicked out by the new one.
+    let list_canister_snapshots_response: Vec<CanisterSnapshotResponse> =
+        management::list_canister_snapshots(
+            &pocket_ic,
+            target_canister_id,
+            PrincipalId::from(ROOT_CANISTER_ID),
+        )
+        .await;
     assert_eq!(
         list_canister_snapshots_response.len(),
         1,
@@ -166,11 +235,7 @@ fn test_canister_snapshot() {
     // More interestingly, the one snapshot should NOT be the first one. The
     // first one should be CLOBBERED, blown away, replaced by the new one.
     let second_snapshot = &list_canister_snapshots_response[0];
-    assert_ne!(
-        second_snapshot.snapshot_id(),
-        first_snapshot.snapshot_id(),
-        "Snapshot ID should have changed"
-    );
+    assert_ne!(second_snapshot.snapshot_id(), first_snapshot.snapshot_id());
 
     // Generic checks of the second snapshot.
     assert_snapshot_seems_reasonable(second_snapshot);
@@ -182,32 +247,42 @@ fn test_canister_snapshot() {
 
     // Step 1(C): Prepare the world for LoadCanisterSnapshot.
 
-    #[track_caller]
-    fn assert_balance(state_machine: &StateMachine, owner: PrincipalId, expected_balance: Tokens) {
-        let owner = Principal::from(owner);
-
+    async fn assert_balance(
+        pocket_ic: &PocketIc,
+        owner: PrincipalId,
+        expected_balance: Tokens,
+        phase: &str,
+    ) {
         let account = Account {
-            owner,
+            owner: Principal::from(owner),
             subaccount: None,
         };
-
-        let observed_balance = icrc1_balance(state_machine, LEDGER_CANISTER_ID, account);
-
-        assert_eq!(observed_balance, expected_balance);
+        let observed_balance = icrc1_balance_of(pocket_ic, account).await;
+        assert_eq!(
+            Tokens::from_e8s(u64::try_from(observed_balance.0).unwrap()),
+            expected_balance,
+            "Balance mismatch for {owner} during phase: {phase}",
+        );
     }
 
-    // Verify initial balances. This just makes sure that we configured this
-    // test correctly; this is not to confirm that the code under test itself is
-    // correct.
-    assert_balance(&state_machine, icp_token_sender, initial_balance);
-    assert_balance(&state_machine, icp_token_receiver, initial_balance);
-    assert_balance(&state_machine, stable_balance_principal, initial_balance);
+    // The initial balances have not changed, but the code that set the initial
+    // balances is a little bitfar away, so this is just to remind the reader
+    // what the starting point is: everyone has the same initial_balance
+    //(10 ICP).
+    assert_balance(&pocket_ic, icp_token_sender, initial_balance, "initial").await;
+    assert_balance(&pocket_ic, icp_token_receiver, initial_balance, "initial").await;
+    assert_balance(
+        &pocket_ic,
+        stable_balance_principal,
+        initial_balance,
+        "initial",
+    )
+    .await;
 
-    // Tranfer ICP (from icp_token_sender to icp_token_receiver).
+    // Sender sends ICP to receiver.
     let transfer_amount = Tokens::from_tokens(1).unwrap();
-    icrc1_transfer(
-        &state_machine,
-        LEDGER_CANISTER_ID,
+    nns::ledger::icrc1_transfer(
+        &pocket_ic,
         icp_token_sender,
         TransferArg {
             to: Account {
@@ -222,44 +297,93 @@ fn test_canister_snapshot() {
             created_at_time: None,
         },
     )
+    .await
     .unwrap();
 
-    // Verify balances AFTER transfer
+    // Verify balances AFTER ICP is sent.
     assert_balance(
-        &state_machine,
+        &pocket_ic,
         icp_token_sender,
         initial_balance
             .checked_sub(&transfer_amount)
             .unwrap()
             .checked_sub(&DEFAULT_TRANSFER_FEE)
             .unwrap(),
-    );
+        "after transfer",
+    )
+    .await;
     assert_balance(
-        &state_machine,
+        &pocket_ic,
         icp_token_receiver,
         initial_balance.checked_add(&transfer_amount).unwrap(),
-    );
-    assert_balance(&state_machine, stable_balance_principal, initial_balance);
+        "after transfer",
+    )
+    .await;
+    assert_balance(
+        &pocket_ic,
+        stable_balance_principal,
+        initial_balance,
+        "after transfer",
+    )
+    .await;
 
-    // Step 2(C): Run the code under test by making, adopting, and executing a
+    // Step 2(C): Run the code under test by (making, adopting, and) executing a
     // LoadCanisterSnapshot proposal. This should revert the Ledger canister to
     // `second_snapshot`, which was taken BEFORE the transfer (which took place
     // in Step 1(C)).
 
-    nns_execute_proposal(
-        &state_machine,
-        ProposalActionRequest::LoadCanisterSnapshot(LoadCanisterSnapshot {
-            canister_id: Some(target_canister_id.get()),
-            snapshot_id: Some(second_snapshot.snapshot_id().to_vec()),
-        }),
+    let stderr = run_ic_admin(
+        nns_url,
+        vec![
+            "propose-to-load-canister-snapshot".to_string(),
+            "--proposer".to_string(),
+            neuron_id,
+            "--canister-id".to_string(),
+            target_canister_id.to_string(),
+            "--snapshot-id".to_string(),
+            hex::encode(second_snapshot.snapshot_id().as_slice()),
+            "--summary".to_string(),
+            "Restore the Ledger canister to snapshot 2, rolling back the ICP transfer.".to_string(),
+        ],
+    );
+    let load_canister_snapshot_proposal_id = extract_proposal_id(&stderr);
+
+    // Step 3C: Verify LoadCanisterSnapshot execution.
+
+    let load_proposal_info = nns::governance::wait_for_proposal_execution(
+        &pocket_ic,
+        load_canister_snapshot_proposal_id,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        ProposalStatus::try_from(load_proposal_info.status),
+        Ok(ProposalStatus::Executed),
+        "{load_proposal_info:#?}",
     );
 
-    // Step 3(C): Verify results.
-
     // Balanaces are back to what they were.
-    assert_balance(&state_machine, icp_token_sender, initial_balance);
-    assert_balance(&state_machine, icp_token_receiver, initial_balance);
-    assert_balance(&state_machine, stable_balance_principal, initial_balance);
+    assert_balance(
+        &pocket_ic,
+        icp_token_sender,
+        initial_balance,
+        "after load snapshot",
+    )
+    .await;
+    assert_balance(
+        &pocket_ic,
+        icp_token_receiver,
+        initial_balance,
+        "after load snapshot",
+    )
+    .await;
+    assert_balance(
+        &pocket_ic,
+        stable_balance_principal,
+        initial_balance,
+        "after load snapshot",
+    )
+    .await;
 }
 
 /// Similar to previous test with the main difference being that Governance
@@ -267,127 +391,143 @@ fn test_canister_snapshot() {
 ///
 /// The reason for this additional test is that when the target canister is
 /// Governance, there is special behavior: Root is supposed to do the operation
-/// in the background. Without this, proposal execution would deadlock.
+/// in the background. Without this special background behavior, proposal
+/// execution would deadlock.
 ///
 /// Minor difference: To verify that LoadCanisterSnapshot actually rolled
 /// back Governance's state, we create a Motion proposal after the snapshot
-/// and confirm it disappears after loading the snapshot.
-#[test]
-fn test_governance_canister_snapshot() {
+/// (instead of sending ICP) and confirm it disappears after loading the
+/// snapshot.
+#[tokio::test]
+async fn test_governance_canister_snapshot() {
     // Step 1: Prepare the world.
 
-    let state_machine = state_machine_builder_for_nns_tests().build();
-    let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
-    setup_nns_canisters(&state_machine, nns_init_payloads);
+    // Create IC.
+    let mut pocket_ic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_sns_subnet()
+        .build_async()
+        .await;
+
+    // Install NNS.
+    let mut nns_installer = NnsInstaller::default();
+    nns_installer.with_current_nns_canister_versions();
+    nns_installer.install(&pocket_ic).await;
+
+    let endpoint = pocket_ic.make_live(None).await;
+    let nns_url = endpoint.as_ref();
+    let neuron_id = TEST_NEURON_1_ID.to_string();
 
     let target_canister_id = GOVERNANCE_CANISTER_ID;
 
-    // Create a Motion proposal BEFORE taking a snapshot. This one should survive
-    // loading the snapshot near the end.
-    let pre_snapshot_motion_proposal_id = nns_execute_proposal(
-        &state_machine,
-        ProposalActionRequest::Motion(Motion {
-            motion_text: "This one survives.".to_string(),
-        }),
-    );
-
-    // Take a snapshot of Governance (via proposal).
-    //
-    // Cannot use nns_execute_proposal for the same reason as LoadCanisterSnapshot
-    // below: Root stops/restarts Governance in the background, racing with the poll.
-    nns_governance_make_proposal(
-        &state_machine,
-        *TEST_NEURON_1_OWNER_PRINCIPAL,
-        NeuronId {
-            id: TEST_NEURON_1_ID,
-        },
-        &MakeProposalRequest {
-            title: Some("TakeCanisterSnapshot".to_string()),
+    // Create a Motion proposal BEFORE taking a snapshot. This one should
+    // survive loading the snapshot near the end.
+    let pre_snapshot_motion_info = nns::governance::propose_and_wait(
+        &pocket_ic,
+        MakeProposalRequest {
+            title: Some("Pre-snapshot Motion".to_string()),
             summary: String::new(),
             url: String::new(),
-            action: Some(ProposalActionRequest::TakeCanisterSnapshot(
-                TakeCanisterSnapshot {
-                    canister_id: Some(target_canister_id.get()),
-                    replace_snapshot: None,
-                },
-            )),
+            action: Some(ProposalActionRequest::Motion(Motion {
+                motion_text: "This one survives.".to_string(),
+            })),
         },
+    )
+    .await
+    .unwrap();
+    let pre_snapshot_motion_proposal_id = pre_snapshot_motion_info.id.unwrap().id;
+
+    // Take a snapshot of Governance (via ic-admin).
+    let output = run_ic_admin(
+        nns_url,
+        vec![
+            "propose-to-take-canister-snapshot".to_string(),
+            "--proposer".to_string(),
+            neuron_id.clone(),
+            "--canister-id".to_string(),
+            target_canister_id.to_string(),
+            "--summary".to_string(),
+            "Take a snapshot of the Governance canister.".to_string(),
+        ],
     );
-    // Let the background work (stop → take snapshot → start Governance) complete.
+    let _take_snapshot_proposal_id = extract_proposal_id(&output);
+
+    // Wait for the effect of the proposal happen. This cannot be done in
+    // the normal way (i.e. wait for the proposal status to become Executed,
+    // as is done in the previous test), because when the target of a
+    // snapshot proposal is Governance itself, it gets marked as successful
+    // early. Instead, we just let pocket_ic advance by a "reasonable"
+    // amount.
     for _ in 0..50 {
-        state_machine.tick();
+        pocket_ic.tick().await;
     }
 
     // Verify that the proposal had the desired effect: a new snapshot of
     // the Governance canister.
-    let snapshots: Vec<CanisterSnapshotResponse> = update_with_sender(
-        &state_machine,
-        CanisterId::ic_00(),
-        "list_canister_snapshots",
-        ListCanisterSnapshotArgs::new(target_canister_id),
-        ROOT_CANISTER_ID.get(),
+    let snapshots: Vec<CanisterSnapshotResponse> = management::list_canister_snapshots(
+        &pocket_ic,
+        target_canister_id,
+        PrincipalId::from(ROOT_CANISTER_ID),
     )
-    .unwrap();
+    .await;
     assert_eq!(snapshots.len(), 1, "{snapshots:#?}");
     let snapshot = &snapshots[0];
-    assert_eq!(snapshot.id.get_canister_id(), GOVERNANCE_CANISTER_ID,);
+    assert_eq!(snapshot.id.get_canister_id(), GOVERNANCE_CANISTER_ID);
 
     // Change Governance's state by creating ANOTHER (Motion) proposal.
     // This will get blown away at the end when we load the snapshot,
     // because the snapshot was taken before this proposal.
-    let doomed_motion_proposal_id = nns_execute_proposal(
-        &state_machine,
-        ProposalActionRequest::Motion(Motion {
-            motion_text: "This one gets rolled back.".to_string(),
-        }),
-    );
-    // Verify the second/doommed Motion proposal exists. This is so that
-    // when we find it absent after loading the canister snapshot, we are
-    // seeing a CHANGE, not just the final state.
-    let doomed_motion_proposal_info_before_load =
-        nns_get_proposal_info(&state_machine, doomed_motion_proposal_id.id);
-    assert_ne!(doomed_motion_proposal_info_before_load, None,);
-
-    // Step 2: Execute the code under test: Load the snapshot (via proposal).
-    //
-    // We cannot use nns_execute_proposal here: when targeting Governance,
-    // the proposal is marked Executed immediately (to avoid deadlock), then
-    // Root stops/restores/starts Governance in the background, at which point
-    // the proposal itself is gone (rolled back with the snapshot). Polling for
-    // Executed status would race with the stop or never find the proposal.
-    nns_governance_make_proposal(
-        &state_machine,
-        *TEST_NEURON_1_OWNER_PRINCIPAL,
-        NeuronId {
-            id: TEST_NEURON_1_ID,
-        },
-        &MakeProposalRequest {
-            title: Some("LoadCanisterSnapshot".to_string()),
+    let doomed_motion_info = nns::governance::propose_and_wait(
+        &pocket_ic,
+        MakeProposalRequest {
+            title: Some("Doomed Motion".to_string()),
             summary: String::new(),
             url: String::new(),
-            action: Some(ProposalActionRequest::LoadCanisterSnapshot(
-                LoadCanisterSnapshot {
-                    canister_id: Some(target_canister_id.get()),
-                    snapshot_id: Some(snapshot.snapshot_id().to_vec()),
-                },
-            )),
+            action: Some(ProposalActionRequest::Motion(Motion {
+                motion_text: "This one gets rolled back.".to_string(),
+            })),
         },
+    )
+    .await
+    .unwrap();
+    let doomed_motion_proposal_id = doomed_motion_info.id.unwrap().id;
+
+    // Verify the doomed proposal exists before loading the snapshot, so that
+    // its absence afterward is a meaningful signal of change.
+    assert_ne!(
+        nns::governance::get_proposal_info(&pocket_ic, doomed_motion_proposal_id).await,
+        None,
     );
 
-    // Let the background work (stop → load snapshot → start Governance) complete.
+    // Step 2: Execute the code under test: Load the snapshot (via ic-admin).
+    let output = run_ic_admin(
+        nns_url,
+        vec![
+            "propose-to-load-canister-snapshot".to_string(),
+            "--proposer".to_string(),
+            neuron_id,
+            "--canister-id".to_string(),
+            target_canister_id.to_string(),
+            "--snapshot-id".to_string(),
+            hex::encode(snapshot.snapshot_id().as_slice()),
+            "--summary".to_string(),
+            "Load the Governance snapshot, rolling back state.".to_string(),
+        ],
+    );
+    let _load_proposal_id = extract_proposal_id(&output);
+    // As with taking the snapshot, we cannot use Executed status to know
+    // that the effect of the proposal has taken place.
     for _ in 0..50 {
-        state_machine.tick();
+        pocket_ic.tick().await;
     }
 
     // Step 3: Verify results.
 
-    // The pre-snapshot Motion proposal should still exist (it was part of the
-    // snapshot).
-    let pre_snapshot_motion_info_after =
-        nns_get_proposal_info(&state_machine, pre_snapshot_motion_proposal_id.id);
+    // The pre-snapshot Motion proposal should still exist (it was part of
+    // the snapshot).
     assert_ne!(
-        pre_snapshot_motion_info_after, None,
-        "Pre-snapshot Motion proposal should still exist: {pre_snapshot_motion_info_after:#?}",
+        nns::governance::get_proposal_info(&pocket_ic, pre_snapshot_motion_proposal_id).await,
+        None,
     );
 
     // The post-snapshot Motion proposal should be gone, because it was not in
@@ -395,7 +535,18 @@ fn test_governance_canister_snapshot() {
     //
     // (As a side effect, the load proposal itself also disappears, but we use
     // this Motion proposal as the primary indicator since it is less confusing.)
-    let doomed_motion_info_after_load =
-        nns_get_proposal_info(&state_machine, doomed_motion_proposal_id.id);
-    assert_eq!(doomed_motion_info_after_load, None,);
+    assert_eq!(
+        nns::governance::get_proposal_info(&pocket_ic, doomed_motion_proposal_id).await,
+        None,
+    );
+}
+
+/// Parses the proposal ID from ic-admin's stderr output, which looks like
+/// "response: Ok(proposal 3)".
+fn extract_proposal_id(ic_admin_output: &str) -> u64 {
+    let re = regex::Regex::new(r"proposal (\d+)").unwrap();
+    let captures = re.captures(ic_admin_output).unwrap_or_else(|| {
+        panic!("Expected proposal response in ic-admin output:\n{ic_admin_output}")
+    });
+    u64::from_str(&captures[1]).unwrap()
 }

@@ -641,7 +641,7 @@ pub struct FlexibleCanisterHttpResponsesTooLarge {
     pub min_responses: u32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct FlexibleCanisterHttpTooManyRequestErrors {
+pub struct FlexibleCanisterHttpTooManyRejects {
     #[prost(message, repeated, tag = "1")]
     pub reject_responses: ::prost::alloc::vec::Vec<FlexibleCanisterHttpResponseWithProof>,
 }
@@ -661,7 +661,7 @@ pub mod flexible_canister_http_error {
         #[prost(message, tag = "3")]
         ResponsesTooLarge(super::FlexibleCanisterHttpResponsesTooLarge),
         #[prost(message, tag = "4")]
-        TooManyRequestErrors(super::FlexibleCanisterHttpTooManyRequestErrors),
+        TooManyRejects(super::FlexibleCanisterHttpTooManyRejects),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]

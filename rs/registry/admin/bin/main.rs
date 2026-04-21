@@ -41,9 +41,9 @@ use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePaylo
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::{
     AddOrRemoveNodeProvider, CanisterSettings, CreateServiceNervousSystem, GovernanceError,
-    InstallCodeRequest, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
-    NnsFunction, NodeProvider, ProposalActionRequest, RewardNodeProviders, StopOrStartCanister,
-    UpdateCanisterSettings,
+    InstallCodeRequest, LoadCanisterSnapshot, MakeProposalRequest, ManageNeuronCommandRequest,
+    ManageNeuronRequest, NnsFunction, NodeProvider, ProposalActionRequest, RewardNodeProviders,
+    StopOrStartCanister, TakeCanisterSnapshot, UpdateCanisterSettings,
     add_or_remove_node_provider::Change,
     bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
     canister_settings::{
@@ -504,6 +504,12 @@ enum SubCommand {
 
     /// Propose to stop a canister managed by the governance.
     ProposeToStopCanister(StopCanisterCmd),
+
+    /// Propose to take a snapshot of a canister managed by the governance.
+    ProposeToTakeCanisterSnapshot(ProposeToTakeCanisterSnapshotCmd),
+
+    /// Propose to load a snapshot into a canister managed by the governance.
+    ProposeToLoadCanisterSnapshot(ProposeToLoadCanisterSnapshotCmd),
 
     /// Sets three things:
     ///
@@ -1206,6 +1212,77 @@ impl ProposalAction for StopCanisterCmd {
             action,
         };
         ProposalActionRequest::StopOrStartCanister(stop_canister)
+    }
+}
+
+/// Sub-command to submit a proposal to take a snapshot of a canister.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToTakeCanisterSnapshotCmd {
+    /// The canister to snapshot.
+    #[clap(long)]
+    pub canister_id: CanisterId,
+    /// If set, replace the existing snapshot with this hex-encoded snapshot ID.
+    #[clap(long)]
+    pub replace_snapshot: Option<String>,
+}
+
+impl ProposalTitle for ProposeToTakeCanisterSnapshotCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!("Take snapshot of canister {}", self.canister_id),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalAction for ProposeToTakeCanisterSnapshotCmd {
+    async fn action(&self, _agent: &Agent) -> ProposalActionRequest {
+        let replace_snapshot = self
+            .replace_snapshot
+            .as_deref()
+            .map(|s| hex::decode(s).expect("replace_snapshot is not valid hex"));
+        ProposalActionRequest::TakeCanisterSnapshot(TakeCanisterSnapshot {
+            canister_id: Some(PrincipalId::from(self.canister_id)),
+            replace_snapshot,
+        })
+    }
+}
+
+/// Sub-command to submit a proposal to load a snapshot into a canister.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToLoadCanisterSnapshotCmd {
+    /// The canister to load the snapshot into.
+    #[clap(long)]
+    pub canister_id: CanisterId,
+    /// The hex-encoded ID of the snapshot to load.
+    #[clap(long)]
+    pub snapshot_id: String,
+}
+
+impl ProposalTitle for ProposeToLoadCanisterSnapshotCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Load snapshot {} into canister {}",
+                self.snapshot_id, self.canister_id
+            ),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalAction for ProposeToLoadCanisterSnapshotCmd {
+    async fn action(&self, _agent: &Agent) -> ProposalActionRequest {
+        let snapshot_id =
+            Some(hex::decode(&self.snapshot_id).expect("snapshot_id is not valid hex"));
+        ProposalActionRequest::LoadCanisterSnapshot(LoadCanisterSnapshot {
+            canister_id: Some(PrincipalId::from(self.canister_id)),
+            snapshot_id,
+        })
     }
 }
 
@@ -4502,6 +4579,8 @@ async fn main() {
             SubCommand::ProposeToSetFirewallConfig(_) => (),
             SubCommand::ProposeToStartCanister(_) => (),
             SubCommand::ProposeToStopCanister(_) => (),
+            SubCommand::ProposeToTakeCanisterSnapshot(_) => (),
+            SubCommand::ProposeToLoadCanisterSnapshot(_) => (),
             SubCommand::ProposeToTakeSubnetOfflineForRepairs(_) => (),
             SubCommand::ProposeToUninstallCode(_) => (),
             SubCommand::ProposeToUpdateCanisterSettings(_) => (),
@@ -5010,6 +5089,26 @@ async fn main() {
             propose_action_from_command(cmd, canister_client, proposer).await;
         }
         SubCommand::ProposeToStopCanister(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            propose_action_from_command(cmd, canister_client, proposer).await;
+        }
+        SubCommand::ProposeToTakeCanisterSnapshot(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            propose_action_from_command(cmd, canister_client, proposer).await;
+        }
+        SubCommand::ProposeToLoadCanisterSnapshot(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             let canister_client = make_canister_client(
                 reachable_nns_urls,
