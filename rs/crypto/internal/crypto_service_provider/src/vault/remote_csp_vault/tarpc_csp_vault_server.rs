@@ -12,7 +12,7 @@ use crate::vault::api::{
 use crate::vault::api::{
     CspPublicKeyStoreError, CspVault, IDkgDealingInternalBytes, IDkgTranscriptInternalBytes,
 };
-use crate::vault::local_csp_vault::{LocalCspVault, ProdLocalCspVault};
+use crate::vault::local_csp_vault::ProdLocalCspVault;
 use crate::vault::remote_csp_vault::ThresholdSchnorrCreateSigShareVaultError;
 use crate::vault::remote_csp_vault::{FOUR_GIGA_BYTES, PksAndSksContainsErrors};
 use crate::vault::remote_csp_vault::{TarpcCspVault, remote_vault_codec_builder};
@@ -578,7 +578,8 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     }
 }
 
-type VaultFactory<C> = dyn Fn(&ReplicaLogger, Arc<CryptoMetrics>) -> Arc<C> + Send + Sync;
+type VaultFactory<C> =
+    dyn Fn(&ReplicaLogger, Arc<CryptoMetrics>, Arc<ThreadPool>) -> Arc<C> + Send + Sync;
 
 pub struct TarpcCspVaultServerImplBuilder<C> {
     local_csp_vault_factory: Box<VaultFactory<C>>,
@@ -590,21 +591,29 @@ pub struct TarpcCspVaultServerImplBuilder<C> {
 impl TarpcCspVaultServerImplBuilder<ProdLocalCspVault> {
     pub fn new(key_store_dir: &Path) -> Self {
         let key_store_path = key_store_dir.to_path_buf();
-        let local_csp_vault_factory = Box::new(move |logger: &ReplicaLogger, metrics| {
-            Arc::new(LocalCspVault::new_in_dir(
-                &key_store_path,
-                metrics,
-                new_logger!(logger),
-            ))
-        });
+        let local_csp_vault_factory =
+            Box::new(move |logger: &ReplicaLogger, metrics, thread_pool_nidkg| {
+                Arc::new(
+                    ProdLocalCspVault::builder_in_dir(
+                        &key_store_path,
+                        metrics,
+                        new_logger!(logger),
+                    )
+                    .with_nidkg_thread_pool(thread_pool_nidkg)
+                    .build(),
+                )
+            });
         Self::new_internal(local_csp_vault_factory)
     }
 }
 
 impl<C: 'static + Send + Sync> TarpcCspVaultServerImplBuilder<C> {
     pub fn new_with_local_csp_vault(local_csp_vault: Arc<C>) -> Self {
-        let local_csp_vault_factory =
-            Box::new(move |_logger: &ReplicaLogger, _metrics| Arc::clone(&local_csp_vault));
+        let local_csp_vault_factory = Box::new(
+            move |_logger: &ReplicaLogger, _metrics, _thread_pool_nidkg| {
+                Arc::clone(&local_csp_vault)
+            },
+        );
         Self::new_internal(local_csp_vault_factory)
     }
 }
@@ -662,13 +671,24 @@ fn create_thread_pool(ident: &'static str) -> Arc<ThreadPool> {
 impl<C: CspVault> TarpcCspVaultServerImplBuilder<C> {
     pub fn build(&self, listener: UnixListener) -> TarpcCspVaultServerImpl<C> {
         info!(&self.logger, "Starting new RPC CSP vault server");
-        let local_csp_vault: Arc<C> =
-            (self.local_csp_vault_factory)(&self.logger, Arc::clone(&self.metrics));
+        // Created before the local vault so that the same pool can be shared:
+        // it bounds both the RPC-dispatch concurrency (see
+        // `execute_on_thread_pool`) and the inner `par_iter` calls inside
+        // `LocalCspVault`. With one shared pool, the vault's
+        // `ThreadPool::install` inside a job already running on this pool is
+        // effectively a no-op, avoiding the double-pool downsize that would
+        // otherwise occur.
+        let thread_pool_nidkg = create_thread_pool("nidkg");
+        let local_csp_vault: Arc<C> = (self.local_csp_vault_factory)(
+            &self.logger,
+            Arc::clone(&self.metrics),
+            Arc::clone(&thread_pool_nidkg),
+        );
         TarpcCspVaultServerImpl {
             local_csp_vault,
             listener,
             thread_pool_general: create_thread_pool("general"),
-            thread_pool_nidkg: create_thread_pool("nidkg"),
+            thread_pool_nidkg,
             max_frame_length: self.max_frame_length,
             metrics: Arc::clone(&self.metrics),
             logger: new_logger!(&self.logger),

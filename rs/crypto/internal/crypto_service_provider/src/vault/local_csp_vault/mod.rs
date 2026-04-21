@@ -40,14 +40,19 @@ use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;
 
-/// Number of threads in the per-vault rayon pool used for NIDKG work.
+/// Default size of the per-vault rayon pool used for NIDKG work when no
+/// externally-managed pool is injected via
+/// [`builder::LocalCspVaultBuilder::with_nidkg_thread_pool`].
 ///
-/// The `InReplica` CSP vault is only used in tests. A small fixed size
-/// prevents oversubscription when many `LocalCspVault` instances share a
-/// single test process (e.g., registry integration tests that run several
-/// local ICs in parallel): without this bound, each vault's `par_iter`
-/// calls would fan out to the global rayon pool, which defaults to the
-/// number of logical cores.
+/// A small fixed size prevents oversubscription when many `LocalCspVault`
+/// instances share a single process (e.g., registry integration tests that
+/// run several local ICs in parallel, or the in-replica vault path): without
+/// this bound, each vault's `par_iter` calls would fan out to the global
+/// rayon pool, which defaults to the number of logical cores.
+///
+/// The remote vault server injects its own NIDKG pool so that the outer RPC
+/// dispatch pool and the inner `par_iter` pool are the same pool; in that
+/// case this constant is unused.
 const NIDKG_THREAD_POOL_SIZE: usize = 3;
 
 pub(crate) fn new_nidkg_thread_pool() -> Arc<ThreadPool> {
