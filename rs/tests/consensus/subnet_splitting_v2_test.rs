@@ -76,6 +76,11 @@ fn main() -> Result<()> {
         .with_timeout_per_test(Duration::from_secs(30 * 60))
         .with_overall_timeout(Duration::from_secs(35 * 60))
         .add_test(systest!(subnet_splitting_test))
+        // The replica is restarted when the orchestrator observes the recovery CUP in the registry
+        .update_orchestrator_metrics_to_check(
+            "orchestrator_replica_process_start_attempts_total",
+            2,
+        )
         .execute_from_args()
 }
 
