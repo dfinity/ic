@@ -36,12 +36,8 @@ use std::collections::{BTreeMap, BTreeSet};
 #[cfg(test)]
 mod tests;
 
-impl<
-    R: Rng + CryptoRng + Send + Sync,
-    S: SecretKeyStore + Send + Sync,
-    C: SecretKeyStore + Send + Sync,
-    P: PublicKeyStore + Send + Sync,
-> NiDkgCspVault for LocalCspVault<R, S, C, P>
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore> NiDkgCspVault
+    for LocalCspVault<R, S, C, P>
 {
     fn gen_dealing_encryption_key_pair(
         &self,
@@ -49,8 +45,7 @@ impl<
     ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), CspDkgCreateFsKeyError> {
         debug!(self.logger; crypto.method_name => "gen_dealing_encryption_key_pair");
         let start_time = self.metrics.now();
-        let result = self
-            .run_on_nidkg_thread_pool(|| self.gen_dealing_encryption_key_pair_internal(node_id));
+        let result = self.gen_dealing_encryption_key_pair_internal(node_id);
         self.metrics.observe_duration_seconds(
             MetricsDomain::NiDkgAlgorithm,
             MetricsScope::Local,
@@ -70,9 +65,7 @@ impl<
         debug!(self.logger; crypto.method_name => "update_forward_secure_epoch", crypto.dkg_epoch => epoch.get());
         let start_time = self.metrics.now();
 
-        let result = self.run_on_nidkg_thread_pool(|| {
-            self.update_forward_secure_epoch_internal(algorithm_id, key_id, epoch)
-        });
+        let result = self.update_forward_secure_epoch_internal(algorithm_id, key_id, epoch);
         self.metrics.observe_duration_seconds(
             MetricsDomain::NiDkgAlgorithm,
             MetricsScope::Local,
@@ -93,15 +86,13 @@ impl<
     ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateDealingError> {
         debug!(self.logger; crypto.method_name => "create_dealing", crypto.dkg_epoch => epoch.get());
         let start_time = self.metrics.now();
-        let result = self.run_on_nidkg_thread_pool(|| {
-            self.create_dealing_internal(
-                algorithm_id,
-                dealer_index,
-                threshold,
-                epoch,
-                &receiver_keys,
-            )
-        });
+        let result = self.create_dealing_internal(
+            algorithm_id,
+            dealer_index,
+            threshold,
+            epoch,
+            &receiver_keys,
+        );
         self.metrics.observe_duration_seconds(
             MetricsDomain::NiDkgAlgorithm,
             MetricsScope::Local,
@@ -123,16 +114,14 @@ impl<
     ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateReshareDealingError> {
         debug!(self.logger; crypto.method_name => "create_resharing_dealing", crypto.dkg_epoch => epoch.get());
         let start_time = self.metrics.now();
-        let result = self.run_on_nidkg_thread_pool(|| {
-            self.create_resharing_dealing_internal(
-                algorithm_id,
-                dealer_index,
-                threshold,
-                epoch,
-                &receiver_keys,
-                resharing_secret,
-            )
-        });
+        let result = self.create_resharing_dealing_internal(
+            algorithm_id,
+            dealer_index,
+            threshold,
+            epoch,
+            &receiver_keys,
+            resharing_secret,
+        );
         self.metrics.observe_duration_seconds(
             MetricsDomain::NiDkgAlgorithm,
             MetricsScope::Local,
@@ -153,15 +142,13 @@ impl<
     ) -> Result<(), ni_dkg_errors::CspDkgLoadPrivateKeyError> {
         debug!(self.logger; crypto.method_name => "load_threshold_signing_key", crypto.dkg_epoch => epoch.get());
         let start_time = self.metrics.now();
-        let result = self.run_on_nidkg_thread_pool(|| {
-            self.load_threshold_signing_key_internal(
-                algorithm_id,
-                epoch,
-                csp_transcript,
-                fs_key_id,
-                receiver_index,
-            )
-        });
+        let result = self.load_threshold_signing_key_internal(
+            algorithm_id,
+            epoch,
+            csp_transcript,
+            fs_key_id,
+            receiver_index,
+        );
         self.metrics.observe_duration_seconds(
             MetricsDomain::NiDkgAlgorithm,
             MetricsScope::Local,

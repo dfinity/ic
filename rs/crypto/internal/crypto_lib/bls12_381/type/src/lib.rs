@@ -37,8 +37,6 @@ use itertools::multiunzip;
 use pairing::group::{Group, ff::Field};
 use paste::paste;
 use rand::{CryptoRng, Rng, RngCore};
-#[cfg(feature = "rayon")]
-use rayon::prelude::*;
 use std::sync::{Arc, LazyLock};
 use std::{collections::HashMap, fmt};
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -502,28 +500,21 @@ impl Scalar {
     ///
     /// This function returns Ok only if all of the provided inputs
     /// represent a valid scalar.
-    pub fn batch_deserialize<B: AsRef<[u8]> + Sync>(
+    pub fn batch_deserialize<B: AsRef<[u8]>>(
         inputs: &[B],
     ) -> Result<Vec<Self>, PairingInvalidScalar> {
-        #[cfg(feature = "rayon")]
-        {
-            inputs.par_iter().map(Self::deserialize).collect()
+        let mut r = Vec::with_capacity(inputs.len());
+        for input in inputs {
+            r.push(Self::deserialize(input)?);
         }
-        #[cfg(not(feature = "rayon"))]
-        {
-            let mut r = Vec::with_capacity(inputs.len());
-            for input in inputs {
-                r.push(Self::deserialize(input)?);
-            }
-            Ok(r)
-        }
+        Ok(r)
     }
 
     /// Deserialize multiple scalars
     ///
     /// This function returns Ok only if all of the provided inputs
     /// represent a valid scalar.
-    pub fn batch_deserialize_array<B: AsRef<[u8]> + Sync, const N: usize>(
+    pub fn batch_deserialize_array<B: AsRef<[u8]>, const N: usize>(
         inputs: &[B; N],
     ) -> Result<[Self; N], PairingInvalidScalar> {
         // This could be made nicer, and avoid the heap allocation, by
@@ -1199,19 +1190,12 @@ macro_rules! define_affine_and_projective_types {
             /// This version verifies that the decoded point is within the prime order
             /// subgroup, and is safe to call on untrusted inputs. It returns Ok only
             /// if all of the provided bytes represent a valid point.
-            pub fn batch_deserialize<B: AsRef<[u8]> + Sync>(inputs: &[B]) -> Result<Vec<Self>, PairingInvalidPoint> {
-                #[cfg(feature = "rayon")]
-                {
-                    inputs.par_iter().map(Self::deserialize).collect()
+            pub fn batch_deserialize<B: AsRef<[u8]>>(inputs: &[B]) -> Result<Vec<Self>, PairingInvalidPoint> {
+                let mut r = Vec::with_capacity(inputs.len());
+                for input in inputs {
+                    r.push(Self::deserialize(input)?);
                 }
-                #[cfg(not(feature = "rayon"))]
-                {
-                    let mut r = Vec::with_capacity(inputs.len());
-                    for input in inputs {
-                        r.push(Self::deserialize(input)?);
-                    }
-                    Ok(r)
-                }
+                Ok(r)
             }
 
             /// Deserialize multiple points (compressed format only)
@@ -1219,7 +1203,7 @@ macro_rules! define_affine_and_projective_types {
             /// This version verifies that the decoded point is within the prime order
             /// subgroup, and is safe to call on untrusted inputs. It returns Ok only
             /// if all of the provided bytes represent a valid point.
-            pub fn batch_deserialize_array<B: AsRef<[u8]> + Sync, const N: usize>(inputs: &[B; N]) -> Result<[Self; N], PairingInvalidPoint> {
+            pub fn batch_deserialize_array<B: AsRef<[u8]>, const N: usize>(inputs: &[B; N]) -> Result<[Self; N], PairingInvalidPoint> {
 
                 // This could be made nicer, and avoid the heap allocation, by
                 // using array::try_map (currently only available in nightly)
@@ -1296,16 +1280,10 @@ macro_rules! define_affine_and_projective_types {
                 // the fact that we are using the same point for several multiplications,
                 // for example by using larger precomputed tables
 
-                #[cfg(feature = "rayon")]
-                let result: Vec<$projective> = scalars.par_iter().map(|s| self * s).collect();
-                #[cfg(not(feature = "rayon"))]
-                let result: Vec<$projective> = {
-                    let mut result = Vec::with_capacity(scalars.len());
-                    for scalar in scalars {
-                        result.push(self * scalar);
-                    }
-                    result
-                };
+                let mut result = Vec::with_capacity(scalars.len());
+                for scalar in scalars {
+                    result.push(self * scalar);
+                }
                 $projective::batch_normalize(&result)
             }
 
@@ -1319,32 +1297,17 @@ macro_rules! define_affine_and_projective_types {
                 // the fact that we are using the same point for several multiplications,
                 // for example by using larger precomputed tables
 
-                #[cfg(feature = "rayon")]
-                let result: Vec<$projective> = scalars.par_iter().map(|s| self.mul_vartime(s)).collect();
-                #[cfg(not(feature = "rayon"))]
-                let result: Vec<$projective> = {
-                    let mut result = Vec::with_capacity(scalars.len());
-                    for scalar in scalars {
-                        result.push(self.mul_vartime(scalar));
-                    }
-                    result
-                };
+                let mut result = Vec::with_capacity(scalars.len());
+                for scalar in scalars {
+                    result.push(self.mul_vartime(scalar));
+                }
                 $projective::batch_normalize(&result)
             }
 
             /// Batch multiplication
             pub fn batch_mul_array<const N: usize>(&self, scalars: &[Scalar; N]) -> [Self; N] {
-                #[cfg(feature = "rayon")]
-                {
-                    let results: Vec<$projective> = scalars.par_iter().map(|s| self * s).collect();
-                    let results: [$projective; N] = results.try_into().expect("Length preserved");
-                    $projective::batch_normalize_array(&results)
-                }
-                #[cfg(not(feature = "rayon"))]
-                {
-                    let v = scalars.clone().map(|s| self * s);
-                    $projective::batch_normalize_array(&v)
-                }
+                let v = scalars.clone().map(|s| self * s);
+                $projective::batch_normalize_array(&v)
             }
 
             /// Sum some points
@@ -1698,19 +1661,8 @@ macro_rules! declare_mul2_table_impl {
                 a: &[Scalar; N],
                 b: &[Scalar; N],
             ) -> [$projective; N] {
-                #[cfg(feature = "rayon")]
-                {
-                    let results: Vec<$projective> = (0..N)
-                        .into_par_iter()
-                        .map(|i| self.mul2(&a[i], &b[i]))
-                        .collect();
-                    results.try_into().ok().expect("Length preserved")
-                }
-                #[cfg(not(feature = "rayon"))]
-                {
-                    let iota: [usize; N] = std::array::from_fn(|i| i);
-                    iota.map(|i| self.mul2(&a[i], &b[i]))
-                }
+                let iota: [usize; N] = std::array::from_fn(|i| i);
+                iota.map(|i| self.mul2(&a[i], &b[i]))
             }
         }
     };
@@ -2815,26 +2767,13 @@ pub fn verify_bls_signature_batch_distinct<R: RngCore + CryptoRng>(
     let aggregate_sig = G1Projective::muln_affine_sparse_vartime(&sigs_scalars[..]).to_affine();
     let inv_g2_gen = G2Prepared::neg_generator();
 
-    #[cfg(feature = "rayon")]
-    let (msgs, pks_prepared): (Vec<G1Affine>, Vec<G2Prepared>) = {
-        let msgs: Vec<_> = msgs
-            .par_iter()
-            .zip(random_scalars.par_iter())
-            .map(|(&msg, s)| (msg * s).to_affine())
-            .collect();
-        let pks_prepared: Vec<_> = pks.into_par_iter().map(G2Prepared::from).collect();
-        (msgs, pks_prepared)
-    };
-    #[cfg(not(feature = "rayon"))]
-    let (msgs, pks_prepared): (Vec<G1Affine>, Vec<G2Prepared>) = {
-        let msgs: Vec<_> = msgs
-            .iter()
-            .zip(random_scalars.iter())
-            .map(|(&msg, s)| (msg * s).to_affine())
-            .collect();
-        let pks_prepared: Vec<_> = pks.into_iter().map(G2Prepared::from).collect();
-        (msgs, pks_prepared)
-    };
+    let msgs: Vec<_> = msgs
+        .iter()
+        .zip(random_scalars.iter())
+        .map(|(&msg, s)| (msg * s).to_affine())
+        .collect();
+
+    let pks_prepared: Vec<_> = pks.into_iter().map(G2Prepared::from).collect();
 
     let mut multipairing_inputs = Vec::with_capacity(sigs_pks_msgs.len() + 1);
     multipairing_inputs.push((&aggregate_sig, inv_g2_gen));
