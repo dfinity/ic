@@ -1314,7 +1314,7 @@ mod test {
         #[case] effective_principal_id: PrincipalId,
     ) {
         let metrics = test_metrics();
-        let message_id = MessageId::from([0u8; 32]);
+        let message_id = MessageId::from([0_u8; 32]);
         let state =
             state_with_ingress_status(message_id.clone(), user_test_id(1), canister_test_id(1));
 
@@ -1346,7 +1346,7 @@ mod test {
         #[case] effective_principal_id: PrincipalId,
     ) {
         let metrics = test_metrics();
-        let message_id = MessageId::from([0u8; 32]);
+        let message_id = MessageId::from([0_u8; 32]);
         let receiver = canister_test_id(1);
         let state = state_with_ingress_status(message_id.clone(), user_test_id(1), receiver);
         let other_canister = canister_test_id(2);
