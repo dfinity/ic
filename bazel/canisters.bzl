@@ -11,16 +11,12 @@ def _wasm_rust_transition_impl(_settings, attr):
     #   - "thin":          `-C lto=thin`, parallelizable LTO, faster build, slightly
     #                      larger/slower wasm. Intended for test-only canisters where
     #                      runtime perf is not critical.
-    #   - "off":           `-C lto=off`, no LTO.
-    # `-C embed-bitcode=yes` is required whenever LTO is enabled (see comment below).
     if attr.lto == "fat":
-        lto_flags = ["-C", "lto", "-C", "embed-bitcode=yes"]
+        lto_flag = "lto"
     elif attr.lto == "thin":
-        lto_flags = ["-C", "lto=thin", "-C", "embed-bitcode=yes"]
-    elif attr.lto == "off":
-        lto_flags = ["-C", "lto=off"]
+        lto_flag = "lto=thin"
     else:
-        fail("rust_canister: unknown lto value '{}', expected one of 'fat', 'thin', 'off'".format(attr.lto))
+        fail("wasm_rust_transition: unknown lto value '{}', expected one of 'fat', 'thin'".format(attr.lto))
 
     flags = [
         # rustc allocates a default stack size of 1MiB for Wasm, which causes stack overflow on certain
@@ -35,12 +31,15 @@ def _wasm_rust_transition_impl(_settings, attr):
         "debug-assertions=no",
         "-C",
         "debuginfo=0",
-    ] + lto_flags + [
+        "-C",
+        lto_flag,
         # If combined with -C lto, -C embed-bitcode=no will cause rustc to abort at start-up,
         # because the combination is invalid.
         # See: https://doc.rust-lang.org/rustc/codegen-options/index.html#embed-bitcode
         #
         # embed-bitcode is disabled by default by rules_rust.
+        "-C",
+        "embed-bitcode=yes",
         "-C",
         "target-feature=+bulk-memory",
     ] + list(attr.extra_rustc_flags)
@@ -94,8 +93,8 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
       visibility: visibility of the Wasm target
       opt: opt-level for the Wasm target
       lto: LTO flavor for the Wasm target. One of "fat" (default, best runtime
-        perf, slowest build), "thin" (parallelizable, faster build, slightly
-        larger/slower wasm; intended for test-only canisters), or "off".
+        perf, slowest build) or "thin" (parallelizable, faster build, slightly
+        larger/slower wasm; intended for test-only canisters).
       extra_rustc_flags: additional rustc flags to pass during the Wasm build
         (in addition to the canister defaults). Intended for tuning build
         parallelism/opt knobs on individual canisters (e.g. `-C codegen-units=16`).
