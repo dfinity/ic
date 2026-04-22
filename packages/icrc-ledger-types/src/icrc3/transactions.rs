@@ -22,6 +22,10 @@ pub const TRANSACTION_TRANSFER: &str = "transfer";
 pub const TRANSACTION_FEE_COLLECTOR: &str = "107feecol";
 pub const TRANSACTION_AUTHORIZED_MINT: &str = "122mint";
 pub const TRANSACTION_AUTHORIZED_BURN: &str = "122burn";
+pub const TRANSACTION_FREEZE_ACCOUNT: &str = "123freezeaccount";
+pub const TRANSACTION_UNFREEZE_ACCOUNT: &str = "123unfreezeaccount";
+pub const TRANSACTION_FREEZE_PRINCIPAL: &str = "123freezeprincipal";
+pub const TRANSACTION_UNFREEZE_PRINCIPAL: &str = "123unfreezeprincipal";
 
 pub type GenericTransaction = Value;
 
@@ -95,6 +99,38 @@ pub struct AuthorizedBurn {
     pub reason: Option<String>,
 }
 
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct FreezeAccount {
+    pub account: Account,
+    pub caller: Option<Principal>,
+    pub mthd: Option<String>,
+    pub reason: Option<String>,
+}
+
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct UnfreezeAccount {
+    pub account: Account,
+    pub caller: Option<Principal>,
+    pub mthd: Option<String>,
+    pub reason: Option<String>,
+}
+
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct FreezePrincipal {
+    pub principal: Principal,
+    pub caller: Option<Principal>,
+    pub mthd: Option<String>,
+    pub reason: Option<String>,
+}
+
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct UnfreezePrincipal {
+    pub principal: Principal,
+    pub caller: Option<Principal>,
+    pub mthd: Option<String>,
+    pub reason: Option<String>,
+}
+
 // Representation of a Transaction which supports the Icrc1 Standard functionalities
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Transaction {
@@ -106,6 +142,10 @@ pub struct Transaction {
     pub fee_collector: Option<FeeCollector>,
     pub authorized_mint: Option<AuthorizedMint>,
     pub authorized_burn: Option<AuthorizedBurn>,
+    pub freeze_account: Option<FreezeAccount>,
+    pub unfreeze_account: Option<UnfreezeAccount>,
+    pub freeze_principal: Option<FreezePrincipal>,
+    pub unfreeze_principal: Option<UnfreezePrincipal>,
     pub timestamp: u64,
 }
 
@@ -121,6 +161,10 @@ impl Transaction {
             fee_collector: None,
             authorized_mint: None,
             authorized_burn: None,
+            freeze_account: None,
+            unfreeze_account: None,
+            freeze_principal: None,
+            unfreeze_principal: None,
         }
     }
 
@@ -135,6 +179,10 @@ impl Transaction {
             fee_collector: None,
             authorized_mint: None,
             authorized_burn: None,
+            freeze_account: None,
+            unfreeze_account: None,
+            freeze_principal: None,
+            unfreeze_principal: None,
         }
     }
 
@@ -149,6 +197,10 @@ impl Transaction {
             fee_collector: None,
             authorized_mint: None,
             authorized_burn: None,
+            freeze_account: None,
+            unfreeze_account: None,
+            freeze_principal: None,
+            unfreeze_principal: None,
         }
     }
 
@@ -163,6 +215,10 @@ impl Transaction {
             fee_collector: None,
             authorized_mint: None,
             authorized_burn: None,
+            freeze_account: None,
+            unfreeze_account: None,
+            freeze_principal: None,
+            unfreeze_principal: None,
         }
     }
 
@@ -177,6 +233,10 @@ impl Transaction {
             fee_collector: Some(fee_collector),
             authorized_mint: None,
             authorized_burn: None,
+            freeze_account: None,
+            unfreeze_account: None,
+            freeze_principal: None,
+            unfreeze_principal: None,
         }
     }
 
@@ -191,6 +251,10 @@ impl Transaction {
             fee_collector: None,
             authorized_mint: Some(authorized_mint),
             authorized_burn: None,
+            freeze_account: None,
+            unfreeze_account: None,
+            freeze_principal: None,
+            unfreeze_principal: None,
         }
     }
 
@@ -205,6 +269,82 @@ impl Transaction {
             fee_collector: None,
             authorized_mint: None,
             authorized_burn: Some(authorized_burn),
+            freeze_account: None,
+            unfreeze_account: None,
+            freeze_principal: None,
+            unfreeze_principal: None,
+        }
+    }
+
+    pub fn freeze_account(freeze_account: FreezeAccount, timestamp: u64) -> Self {
+        Self {
+            kind: TRANSACTION_FREEZE_ACCOUNT.into(),
+            timestamp,
+            mint: None,
+            burn: None,
+            transfer: None,
+            approve: None,
+            fee_collector: None,
+            authorized_mint: None,
+            authorized_burn: None,
+            freeze_account: Some(freeze_account),
+            unfreeze_account: None,
+            freeze_principal: None,
+            unfreeze_principal: None,
+        }
+    }
+
+    pub fn unfreeze_account(unfreeze_account: UnfreezeAccount, timestamp: u64) -> Self {
+        Self {
+            kind: TRANSACTION_UNFREEZE_ACCOUNT.into(),
+            timestamp,
+            mint: None,
+            burn: None,
+            transfer: None,
+            approve: None,
+            fee_collector: None,
+            authorized_mint: None,
+            authorized_burn: None,
+            freeze_account: None,
+            unfreeze_account: Some(unfreeze_account),
+            freeze_principal: None,
+            unfreeze_principal: None,
+        }
+    }
+
+    pub fn freeze_principal(freeze_principal: FreezePrincipal, timestamp: u64) -> Self {
+        Self {
+            kind: TRANSACTION_FREEZE_PRINCIPAL.into(),
+            timestamp,
+            mint: None,
+            burn: None,
+            transfer: None,
+            approve: None,
+            fee_collector: None,
+            authorized_mint: None,
+            authorized_burn: None,
+            freeze_account: None,
+            unfreeze_account: None,
+            freeze_principal: Some(freeze_principal),
+            unfreeze_principal: None,
+        }
+    }
+
+    pub fn unfreeze_principal(unfreeze_principal: UnfreezePrincipal, timestamp: u64) -> Self {
+        Self {
+            kind: TRANSACTION_UNFREEZE_PRINCIPAL.into(),
+            timestamp,
+            mint: None,
+            burn: None,
+            transfer: None,
+            approve: None,
+            fee_collector: None,
+            authorized_mint: None,
+            authorized_burn: None,
+            freeze_account: None,
+            unfreeze_account: None,
+            freeze_principal: None,
+            unfreeze_principal: Some(unfreeze_principal),
         }
     }
 }
