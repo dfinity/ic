@@ -1,11 +1,12 @@
-# This unit is overridden to remove the BindsTo on the underlying crypt device.
-# Otherwise, it is the same as the systemd generated default. We suspect the
-# device flapping in udev can lead to the mount locking up.
+# This unit is overridden to replace the BindsTo on the underlying crypt device
+# with Requires. Otherwise, it is the same as the systemd generated default. We
+# suspect the device flapping in udev can lead to the mount locking up.
 
 [Unit]
 Description=File System Check on /dev/mapper/var_crypt
 Documentation=man:systemd-fsck@.service(8)
 DefaultDependencies=no
+Requires=dev-mapper-var_crypt.device
 Conflicts=shutdown.target
 Wants=systemd-fsckd.socket
 After=dev-mapper-var_crypt.device systemd-fsck-root.service local-fs-pre.target systemd-fsckd.socket
