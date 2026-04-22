@@ -146,7 +146,7 @@ impl<'a> RemoteDkgContext<'a> {
 /// Builds a map from callback ids to config results for all remote DKG contexts
 /// found in the given replicated state.
 pub(crate) fn build_callback_id_config_map(
-    this_subnet_id: SubnetId,
+    dealer_subnet: SubnetId,
     registry_client: &dyn RegistryClient,
     state: &ReplicatedState,
     registry_version: RegistryVersion,
@@ -190,7 +190,7 @@ pub(crate) fn build_callback_id_config_map(
                 // Add timeout errors for contexts that have been attempted too many times
                 callback_id_config_map.insert(
                     callback_id,
-                    Err(context.generate_timeout_errors(dkg_summary.height, this_subnet_id)),
+                    Err(context.generate_timeout_errors(dkg_summary.height, dealer_subnet)),
                 );
                 continue;
             }
@@ -199,7 +199,7 @@ pub(crate) fn build_callback_id_config_map(
         // Create configs for the context and insert them into the map
         callback_id_config_map.insert(
             callback_id,
-            context.create_configs(dkg_summary, this_subnet_id, registry_client, logger)?,
+            context.create_configs(dkg_summary, dealer_subnet, registry_client, logger)?,
         );
     }
 
@@ -294,10 +294,10 @@ mod tests {
 
     #[test]
     fn test_build_callback_id_config_map_setup_initial_dkg() {
-        let this_subnet_id = subnet_test_id(10);
+        let dealer_subnet = subnet_test_id(10);
         let dealers: Vec<_> = (0..4).map(node_test_id).collect();
         let registry = setup_registry(
-            this_subnet_id,
+            dealer_subnet,
             vec![(1, SubnetRecordBuilder::from(&dealers).build())],
         );
 
@@ -306,7 +306,7 @@ mod tests {
         let target_id3 = NiDkgTargetId::new([3_u8; 32]);
         let callback_id = CallbackId::from(1);
         let mut state = ReplicatedStateBuilder::new()
-            .with_subnet_id(this_subnet_id)
+            .with_subnet_id(dealer_subnet)
             .build();
         state
             .metadata
@@ -356,7 +356,7 @@ mod tests {
             BTreeMap::new(),
         );
         let map = build_callback_id_config_map(
-            this_subnet_id,
+            dealer_subnet,
             registry.as_ref(),
             &state,
             RegistryVersion::from(1),
@@ -381,7 +381,7 @@ mod tests {
             BTreeSet::from([NiDkgTag::LowThreshold, NiDkgTag::HighThreshold])
         );
         assert!(configs.iter().all(|config| {
-            config.dkg_id().dealer_subnet == this_subnet_id
+            config.dkg_id().dealer_subnet == dealer_subnet
                 && config.dkg_id().target_subnet == NiDkgTargetSubnet::Remote(target_id)
         }));
 
@@ -393,7 +393,7 @@ mod tests {
             BTreeMap::from([(target_id, 0), (target_id2, 0), (target_id3, 0)]),
         );
         let zero_attempts_map = build_callback_id_config_map(
-            this_subnet_id,
+            dealer_subnet,
             registry.as_ref(),
             &state,
             RegistryVersion::from(1),
@@ -415,7 +415,7 @@ mod tests {
             ]),
         );
         let max_attempts_map = build_callback_id_config_map(
-            this_subnet_id,
+            dealer_subnet,
             registry.as_ref(),
             &state,
             RegistryVersion::from(1),
@@ -463,7 +463,7 @@ mod tests {
             BTreeMap::new(),
         );
         let result = build_callback_id_config_map(
-            this_subnet_id,
+            dealer_subnet,
             registry.as_ref(),
             &state,
             RegistryVersion::from(2),
@@ -478,10 +478,10 @@ mod tests {
 
     #[test]
     fn test_build_callback_id_config_map_reshare_chain_key() {
-        let this_subnet_id = subnet_test_id(20);
+        let dealer_subnet = subnet_test_id(20);
         let dealers: Vec<_> = (0..4).map(node_test_id).collect();
         let registry = setup_registry(
-            this_subnet_id,
+            dealer_subnet,
             vec![(1, SubnetRecordBuilder::from(&dealers).build())],
         );
 
@@ -509,7 +509,7 @@ mod tests {
         let target_id = NiDkgTargetId::new([2_u8; 32]);
         let callback_id = CallbackId::from(2);
         let mut state = ReplicatedStateBuilder::new()
-            .with_subnet_id(this_subnet_id)
+            .with_subnet_id(dealer_subnet)
             .build();
         state
             .metadata
@@ -532,7 +532,7 @@ mod tests {
             BTreeMap::new(),
         );
         let map = build_callback_id_config_map(
-            this_subnet_id,
+            dealer_subnet,
             registry.as_ref(),
             &state,
             RegistryVersion::from(1),
@@ -563,7 +563,7 @@ mod tests {
             BTreeMap::new(),
         );
         let missing_transcript_map = build_callback_id_config_map(
-            this_subnet_id,
+            dealer_subnet,
             registry.as_ref(),
             &state,
             RegistryVersion::from(1),
