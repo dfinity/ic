@@ -114,12 +114,29 @@ def is_git_commit_sha(s: str) -> bool:
     return bool(re.match(r"^[0-9a-fA-F]{7,40}$", s))
 
 
+def commit_sha_arg(s: str) -> str:
+    """argparse `type` validator: accept only strings that look like a git commit SHA."""
+    if not is_git_commit_sha(s):
+        raise argparse.ArgumentTypeError(
+            f"Invalid git commit SHA '{s}': expected 7-40 hexadecimal characters."
+        )
+    return s
+
+
 def resolve_full_commit_sha(sha: str) -> str:
-    """Resolve a (possibly short) git commit SHA to its full 40-character form using `git rev-parse`."""
+    """Resolve a (possibly short) git commit SHA to its full 40-character form using `git rev-parse`.
+
+    Only accepts inputs that look like a git commit SHA (hex 7-40 chars) to avoid
+    accepting arbitrary revision expressions or option injection via `git rev-parse`.
+    The `--` separator and `^{commit}` suffix ensure git treats the input as a commit
+    object reference rather than an option or another kind of object (tag, tree, ...).
+    """
+    if not is_git_commit_sha(sha):
+        die(f"Invalid git commit SHA '{sha}': expected 7-40 hexadecimal characters.")
     repo_root = THIS_SCRIPT_DIR.parent.parent
     try:
         result = subprocess.run(
-            ["git", "rev-parse", sha],
+            ["git", "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}", "--"],
             cwd=repo_root,
             check=True,
             capture_output=True,
@@ -150,9 +167,10 @@ def get_commit_timestamp(sha: str) -> datetime:
         die(f"Failed to fetch git commit '{sha}': {e.stderr.strip()}\nMake sure the commit exists in the repository.")
 
     try:
-        # Get the commit timestamp in ISO 8601 format
+        # Get the commit timestamp in ISO 8601 format. Use the fully-resolved SHA
+        # to avoid ambiguity issues after fetching.
         result = subprocess.run(
-            ["git", "log", "-1", "--format=%cI", sha],
+            ["git", "log", "-1", "--format=%cI", full_sha],
             cwd=repo_root,
             check=True,
             capture_output=True,
@@ -1378,7 +1396,7 @@ Mutually exclusive with --day/--week/--month""",
     filter_parser.add_argument(
         "--exclude-commit",
         metavar="COMMIT_SHA",
-        type=str,
+        type=commit_sha_arg,
         action="append",
         default=[],
         help="Exclude test runs with this head commit SHA (can be repeated)",
