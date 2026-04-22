@@ -633,7 +633,11 @@ mod test {
         SUBNET_0, SUBNET_1, canister_test_id, subnet_test_id, user_test_id,
     };
     use ic_types::{
-        SubnetId, batch::RawQueryStats, consensus::certification::Certification, time::UNIX_EPOCH,
+        NumBytes, SubnetId,
+        batch::RawQueryStats,
+        consensus::certification::Certification,
+        ingress::{IngressState, IngressStatus},
+        time::UNIX_EPOCH,
     };
     use ic_validator::CanisterIdSet;
     use rstest::rstest;
@@ -1278,5 +1282,90 @@ mod test {
                 .get(),
             1
         );
+    }
+
+    fn state_with_ingress_status(
+        message_id: MessageId,
+        user_id: UserId,
+        receiver: CanisterId,
+    ) -> ReplicatedState {
+        let mut state = fake_replicated_state();
+        state.set_ingress_status(
+            message_id,
+            IngressStatus::Known {
+                receiver: receiver.get(),
+                user_id,
+                time: UNIX_EPOCH,
+                state: IngressState::Processing,
+            },
+            NumBytes::from(u64::MAX),
+            |_| {},
+        );
+        state
+    }
+
+    #[rstest]
+    #[case(Target::Canister, Version::V2, canister_test_id(1).get())]
+    #[case(Target::Canister, Version::V3, canister_test_id(1).get())]
+    #[case(Target::Subnet, Version::V3, APP_SUBNET_ID.get())]
+    fn test_request_status_wrong_user_is_rejected(
+        #[case] target: Target,
+        #[case] version: Version,
+        #[case] effective_principal_id: PrincipalId,
+    ) {
+        let metrics = test_metrics();
+        let message_id = MessageId::from([0u8; 32]);
+        let state =
+            state_with_ingress_status(message_id.clone(), user_test_id(1), canister_test_id(1));
+
+        let err = verify_paths(
+            &metrics,
+            target,
+            version,
+            &state,
+            &user_test_id(2),
+            &[Path::new(vec![
+                Label::from("request_status"),
+                message_id.as_bytes().to_vec().into(),
+            ])],
+            &CanisterIdSet::all(),
+            effective_principal_id,
+            NNS_SUBNET_ID,
+        )
+        .expect_err("Should fail");
+        assert_eq!(err.status, StatusCode::FORBIDDEN);
+    }
+
+    #[rstest]
+    #[case(Target::Canister, Version::V2, canister_test_id(1).get())]
+    #[case(Target::Canister, Version::V3, canister_test_id(1).get())]
+    #[case(Target::Subnet, Version::V3, APP_SUBNET_ID.get())]
+    fn test_request_status_receiver_not_in_targets_is_rejected(
+        #[case] target: Target,
+        #[case] version: Version,
+        #[case] effective_principal_id: PrincipalId,
+    ) {
+        let metrics = test_metrics();
+        let message_id = MessageId::from([0u8; 32]);
+        let receiver = canister_test_id(1);
+        let state = state_with_ingress_status(message_id.clone(), user_test_id(1), receiver);
+        let other_canister = canister_test_id(2);
+
+        let err = verify_paths(
+            &metrics,
+            target,
+            version,
+            &state,
+            &user_test_id(1),
+            &[Path::new(vec![
+                Label::from("request_status"),
+                message_id.as_bytes().to_vec().into(),
+            ])],
+            &CanisterIdSet::try_from_iter(vec![other_canister]).unwrap(),
+            effective_principal_id,
+            NNS_SUBNET_ID,
+        )
+        .expect_err("Should fail");
+        assert_eq!(err.status, StatusCode::FORBIDDEN);
     }
 }
