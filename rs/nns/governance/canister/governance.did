@@ -25,6 +25,7 @@ type Action = variant {
   TakeCanisterSnapshot : TakeCanisterSnapshot;
   LoadCanisterSnapshot : LoadCanisterSnapshot;
   CreateCanisterAndInstallCode : CreateCanisterAndInstallCode;
+  Batch : Batch;
 };
 
 type AddHotKey = record {
@@ -1083,6 +1084,15 @@ type ProposalActionRequest = variant {
   TakeCanisterSnapshot : TakeCanisterSnapshot;
   LoadCanisterSnapshot : LoadCanisterSnapshot;
   CreateCanisterAndInstallCode : CreateCanisterAndInstallCodeRequest;
+  Batch : BatchRequest;
+};
+
+type Batch = record {
+  actions : opt vec Action;
+};
+
+type BatchRequest = record {
+  actions : opt vec ProposalActionRequest;
 };
 
 // Creates a rented subnet from a rental request (in the Subnet Rental

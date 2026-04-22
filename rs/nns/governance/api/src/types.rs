@@ -690,6 +690,8 @@ pub mod proposal {
         LoadCanisterSnapshot(super::LoadCanisterSnapshot),
         /// Create a canister in a (possibly non-NNS) subnet and install code into it.
         CreateCanisterAndInstallCode(super::CreateCanisterAndInstallCode),
+        /// Multiple actions. Executed sequentially. Stops on first failure.
+        Batch(super::Batch),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -1451,6 +1453,7 @@ pub enum ProposalActionRequest {
     TakeCanisterSnapshot(TakeCanisterSnapshot),
     LoadCanisterSnapshot(LoadCanisterSnapshot),
     CreateCanisterAndInstallCode(CreateCanisterAndInstallCodeRequest),
+    Batch(BatchRequest),
 }
 
 #[derive(
@@ -2917,6 +2920,34 @@ pub struct CreateCanisterAndInstallCodeRequest {
     /// The argument to pass to the canister's install handler.
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub install_arg: Option<Vec<u8>>,
+}
+
+/// Analogous to BatchRequest, but used in responses.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct Batch {
+    pub actions: Option<Vec<proposal::Action>>,
+}
+
+/// Take multiple actions, sequentially, and stop if any step fails.
+/// 
+/// Topic: All actions must have the same topic. This has the same topic
+/// as the constituents.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug)]
+pub struct BatchRequest {
+    pub actions: Option<Vec<ProposalActionRequest>>,
+
+    // A couple of ideas for possible future enhancements (no promises though):
+    //
+    //   1. Let user choose a different behavior on error. Currently,
+    //      we support "just stop", but you can imagine people might
+    //      want "keep going".
+    //
+    //   2. Let user choose parallel execution. Currently, we only
+    //      support sequential.
+    //
+    // Each of these would probably be involve adding an variant/enum field.
 }
 
 /// This represents the whole NNS governance system. It contains all
