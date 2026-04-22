@@ -69,8 +69,8 @@ pub struct QueryService {
     registry_client: Arc<dyn RegistryClient>,
     additional_root_of_trust: Option<IcRootOfTrust>,
     query_execution_service: Arc<Mutex<QueryExecutionService>>,
-    version: Version,
     subnet_id: SubnetId,
+    version: Version,
 }
 
 pub struct QueryServiceBuilder {
@@ -169,8 +169,8 @@ impl QueryServiceBuilder {
             registry_client: self.registry_client,
             additional_root_of_trust: self.additional_root_of_trust,
             query_execution_service: Arc::new(Mutex::new(self.query_execution_service)),
-            version: self.version,
             subnet_id: self.subnet_id,
+            version: self.version,
         };
         Router::new().route_service(
             QueryService::route(self.version),
@@ -199,8 +199,8 @@ pub(crate) async fn query(
         nns_delegation_reader,
         additional_root_of_trust,
         query_execution_service,
-        version,
         subnet_id,
+        version,
     }): State<QueryService>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpQueryContent>>>,
 ) -> impl IntoResponse {

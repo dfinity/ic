@@ -204,8 +204,8 @@ pub struct Query {
     canister_id: PrincipalId,
     effective_canister_id: PrincipalId,
     method_name: String,
-    version: query::Version,
     subnet_id: Option<PrincipalId>,
+    version: query::Version,
 }
 
 impl Query {
@@ -218,8 +218,8 @@ impl Query {
             canister_id,
             effective_canister_id,
             method_name: METHOD_NAME.to_string(),
-            version,
             subnet_id: None,
+            version,
         }
     }
 
@@ -228,8 +228,8 @@ impl Query {
             canister_id: CanisterId::ic_00().get(),
             effective_canister_id: PrincipalId::default(),
             method_name: "list_canisters".to_string(),
-            version: query::Version::SubnetV3,
             subnet_id: Some(subnet_id),
+            version: query::Version::SubnetV3,
         }
     }
 
