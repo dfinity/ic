@@ -125,6 +125,10 @@ def resolve_full_commit_sha(sha: str) -> str:
     """
     Resolve a (possibly short) git commit SHA to its full 40-character form using `git rev-parse`.
 
+    If the commit is not yet available locally, `git fetch origin` is run once and the
+    resolution is retried. This allows callers to pass commits that have not been fetched
+    yet (e.g. commits from recent PRs on a freshly-cloned repository).
+
     Only accepts inputs that look like a git commit SHA (hex 7-40 chars) to avoid
     accepting arbitrary revision expressions or option injection via `git rev-parse`.
     The `^{commit}` suffix ensures git treats the input as a commit object reference
@@ -133,38 +137,47 @@ def resolve_full_commit_sha(sha: str) -> str:
     if not is_git_commit_sha(sha):
         die(f"Invalid git commit SHA '{sha}': expected 7-40 hexadecimal characters.")
     repo_root = THIS_SCRIPT_DIR.parent.parent
-    try:
+
+    def rev_parse() -> Optional[str]:
         result = subprocess.run(
             ["git", "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}"],
             cwd=repo_root,
-            check=True,
             capture_output=True,
             text=True,
         )
+        if result.returncode != 0:
+            return None
         # Defensively take the first non-empty line of output.
         return result.stdout.splitlines()[0].strip()
-    except subprocess.CalledProcessError as e:
-        die(f"Failed to resolve git commit '{sha}': {e.stderr.strip()}\nMake sure the commit exists in the repository.")
 
+    full_sha = rev_parse()
+    if full_sha is not None:
+        return full_sha
 
-def get_commit_timestamp(sha: str) -> datetime:
-    """Fetch a git commit and return its commit timestamp as a timezone-aware datetime object (UTC)."""
-    repo_root = THIS_SCRIPT_DIR.parent.parent
-
-    # First, resolve the full commit SHA
-    full_sha = resolve_full_commit_sha(sha)
-
+    # Commit not found locally; fetch from origin and retry.
     try:
-        # Then, fetch the commit to ensure it's available locally
         subprocess.run(
-            ["git", "fetch", "origin", full_sha],
+            ["git", "fetch", "origin"],
             cwd=repo_root,
             check=True,
             capture_output=True,
             text=True,
         )
     except subprocess.CalledProcessError as e:
-        die(f"Failed to fetch git commit '{sha}': {e.stderr.strip()}\nMake sure the commit exists in the repository.")
+        die(f"Failed to fetch from origin while resolving git commit '{sha}': {e.stderr.strip()}")
+
+    full_sha = rev_parse()
+    if full_sha is None:
+        die(f"Failed to resolve git commit '{sha}' even after fetching from origin.\nMake sure the commit exists in the repository.")
+    return full_sha
+
+
+def get_commit_timestamp(sha: str) -> datetime:
+    """Return the commit timestamp of the given git commit as a timezone-aware datetime object (UTC)."""
+    repo_root = THIS_SCRIPT_DIR.parent.parent
+
+    # Resolve the full commit SHA, fetching from origin if necessary.
+    full_sha = resolve_full_commit_sha(sha)
 
     try:
         # Get the commit timestamp in ISO 8601 format. Use the fully-resolved SHA
