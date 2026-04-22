@@ -114,12 +114,10 @@ def is_git_commit_sha(s: str) -> bool:
     return bool(re.match(r"^[0-9a-fA-F]{7,40}$", s))
 
 
-def get_commit_timestamp(sha: str) -> datetime:
-    """Fetch a git commit and return its commit timestamp as a timezone-aware datetime object (UTC)."""
+def resolve_full_commit_sha(sha: str) -> str:
+    """Resolve a (possibly short) git commit SHA to its full 40-character form using `git rev-parse`."""
     repo_root = THIS_SCRIPT_DIR.parent.parent
-
     try:
-        # First, resolve the full commit SHA
         result = subprocess.run(
             ["git", "rev-parse", sha],
             cwd=repo_root,
@@ -127,8 +125,19 @@ def get_commit_timestamp(sha: str) -> datetime:
             capture_output=True,
             text=True,
         )
-        full_sha = result.stdout.strip()
+        return result.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        die(f"Failed to resolve git commit '{sha}': {e.stderr.strip()}\nMake sure the commit exists in the repository.")
 
+
+def get_commit_timestamp(sha: str) -> datetime:
+    """Fetch a git commit and return its commit timestamp as a timezone-aware datetime object (UTC)."""
+    repo_root = THIS_SCRIPT_DIR.parent.parent
+
+    # First, resolve the full commit SHA
+    full_sha = resolve_full_commit_sha(sha)
+
+    try:
         # Then, fetch the commit to ensure it's available locally
         subprocess.run(
             ["git", "fetch", "origin", full_sha],
@@ -1121,6 +1130,9 @@ def top(args):
         only_prs=sql.Literal(args.prs),
         branch=sql.Literal(args.branch if args.branch else ""),
         exclude_prs=sql.SQL("{}::int[]").format(sql.Literal(args.exclude_pr)),
+        exclude_commits=sql.SQL("{}::text[]").format(
+            sql.Literal([resolve_full_commit_sha(c) for c in args.exclude_commit])
+        ),
         order_by=order_by,
         N=sql.Literal(args.N),
         condition=sql.Literal(True)
@@ -1221,6 +1233,9 @@ def last(args):
         only_prs=sql.Literal(args.prs),
         branch=sql.Literal(args.branch if args.branch else ""),
         exclude_prs=sql.SQL("{}::int[]").format(sql.Literal(args.exclude_pr)),
+        exclude_commits=sql.SQL("{}::text[]").format(
+            sql.Literal([resolve_full_commit_sha(c) for c in args.exclude_commit])
+        ),
     )
 
     log_psql_query(args.verbose, query.as_string(), args.conninfo)
@@ -1359,6 +1374,14 @@ Mutually exclusive with --day/--week/--month""",
         action="append",
         default=[],
         help="Exclude workflow runs on this PR number (can be repeated)",
+    )
+    filter_parser.add_argument(
+        "--exclude-commit",
+        metavar="COMMIT_SHA",
+        type=str,
+        action="append",
+        default=[],
+        help="Exclude test runs with this head commit SHA (can be repeated)",
     )
 
     subparsers = parser.add_subparsers(required=True)
