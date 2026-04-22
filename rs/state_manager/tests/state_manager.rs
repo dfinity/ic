@@ -992,6 +992,7 @@ fn state_manager_crash_test<Test>(
                     &config,
                     None,
                     ic_types::malicious_flags::MaliciousFlags::default(),
+                    tokio::sync::watch::channel(Height::from(0)).0,
                 ));
             })
             .expect_err(&format!("Crash test fixture {i} did not crash"));
@@ -1010,6 +1011,7 @@ fn state_manager_crash_test<Test>(
                 &config,
                 None,
                 ic_types::malicious_flags::MaliciousFlags::default(),
+                tokio::sync::watch::channel(Height::from(0)).0,
             ),
         );
     });
@@ -1145,6 +1147,7 @@ fn checkpoints_outlive_state_manager() {
                 &config,
                 None,
                 ic_types::malicious_flags::MaliciousFlags::default(),
+                tokio::sync::watch::channel(Height::from(0)).0,
             );
             let (_height, mut state) = state_manager.take_tip();
             insert_dummy_canister(&mut state, canister_id);
@@ -1179,6 +1182,7 @@ fn checkpoints_outlive_state_manager() {
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
+            tokio::sync::watch::channel(Height::from(0)).0,
         );
 
         assert_eq!(
@@ -1212,6 +1216,7 @@ fn certifications_are_not_persisted() {
                 &config,
                 None,
                 ic_types::malicious_flags::MaliciousFlags::default(),
+                tokio::sync::watch::channel(Height::from(0)).0,
             );
             let (_height, state) = state_manager.take_tip();
             state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -1230,6 +1235,7 @@ fn certifications_are_not_persisted() {
                 &config,
                 None,
                 ic_types::malicious_flags::MaliciousFlags::default(),
+                tokio::sync::watch::channel(Height::from(0)).0,
             );
             assert_eq!(vec![Height(1)], heights_to_certify(&state_manager));
         }
@@ -6102,6 +6108,7 @@ fn diverged_checkpoint_is_complete() {
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
+            tokio::sync::watch::channel(Height::from(0)).0,
         );
 
         let (_, state) = state_manager.take_tip();
@@ -6124,6 +6131,7 @@ fn diverged_checkpoint_is_complete() {
                 &config,
                 None,
                 ic_types::malicious_flags::MaliciousFlags::default(),
+                tokio::sync::watch::channel(Height::from(0)).0,
             );
             // If the Tip thread is active while we report diverged checkpoint, it may crash
             // which is OK in production but confuses debug assertions.
@@ -6142,6 +6150,7 @@ fn diverged_checkpoint_is_complete() {
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
+            tokio::sync::watch::channel(Height::from(0)).0,
         );
 
         // check that the diverged checkpoint has the same manifest as before
@@ -9203,6 +9212,116 @@ fn deliver_state_certification_for_future_heights() {
             vec![opt_height]
         );
         assert_eq!(sm.certifications().get(&opt_height), Some(&certification));
+    });
+}
+
+/// Test that `max_certified_height_tx` is updated when `deliver_state_certification`
+/// certifies a height whose state is already committed (the common case), and that
+/// it is NOT updated again for the same or a lower height.
+#[test]
+fn max_certified_height_fires_when_state_already_committed() {
+    with_test_replica_logger(|log| {
+        let tmp = ic_test_utilities_tmpdir::tmpdir("sm");
+        let config = Config::new(tmp.path().into());
+        let metrics = MetricsRegistry::new();
+        let (max_certified_height_tx, mut max_certified_height_rx) =
+            tokio::sync::watch::channel(Height::from(0));
+        let sm = StateManagerImpl::new(
+            std::sync::Arc::new(FakeVerifier::new()),
+            subnet_test_id(42),
+            SubnetType::Application,
+            log,
+            &metrics,
+            &config,
+            None,
+            ic_types::malicious_flags::MaliciousFlags::default(),
+            max_certified_height_tx,
+        );
+
+        // Commit heights 1 and 2 so they are in certifications_metadata.
+        let (_, state) = sm.take_tip();
+        sm.commit_and_certify(state, CertificationScope::Full, None);
+        let (_, state) = sm.take_tip();
+        sm.commit_and_certify(state, CertificationScope::Full, None);
+
+        // No certification delivered yet — receiver should not have changed.
+        assert!(!max_certified_height_rx.has_changed().unwrap());
+
+        // Deliver certification for height 1: state is in certifications_metadata,
+        // so the height is certified immediately.
+        let cert1 = certify_height(&sm, Height(1));
+        assert!(
+            max_certified_height_rx.has_changed().unwrap(),
+            "receiver should fire when a committed state is certified"
+        );
+        assert_eq!(*max_certified_height_rx.borrow_and_update(), Height(1));
+
+        // Deliver certification for height 2: new higher height — receiver fires again.
+        certify_height(&sm, Height(2));
+        assert!(max_certified_height_rx.has_changed().unwrap());
+        assert_eq!(*max_certified_height_rx.borrow_and_update(), Height(2));
+
+        // Re-deliver certification for height 1 (lower than current max of 2): receiver must NOT fire.
+        // We call deliver_state_certification directly because list_state_hashes_to_certify()
+        // no longer returns already-certified heights.
+        sm.deliver_state_certification(cert1);
+        assert!(
+            !max_certified_height_rx.has_changed().unwrap(),
+            "receiver must not fire for a height lower than the already-transmitted maximum"
+        );
+    });
+}
+
+/// Test that `max_certified_height_tx` is NOT updated when `deliver_state_certification`
+/// receives a certification for a height whose state has not been committed yet
+/// (the certification is deferred into `states.certifications`).
+#[test]
+fn max_certified_height_deferred_when_cert_arrives_before_state() {
+    with_test_replica_logger(|log| {
+        let tmp = ic_test_utilities_tmpdir::tmpdir("sm");
+        let config = Config::new(tmp.path().into());
+        let metrics = MetricsRegistry::new();
+        let (max_certified_height_tx, max_certified_height_rx) =
+            tokio::sync::watch::channel(Height::from(0));
+        let sm = StateManagerImpl::new(
+            std::sync::Arc::new(FakeVerifier::new()),
+            subnet_test_id(42),
+            SubnetType::Application,
+            log,
+            &metrics,
+            &config,
+            None,
+            ic_types::malicious_flags::MaliciousFlags::default(),
+            max_certified_height_tx,
+        );
+
+        // Set fast_forward_height so that height 1 is in the range of heights to certify.
+        sm.update_fast_forward_height(Height::new(2));
+
+        // Deliver a certification for height 1 before the state at height 1 is committed.
+        // This stores the certification in `states.certifications` (deferred path).
+        // The hash is fake so this cert will never match a real committed state,
+        // but it is sufficient to verify that the receiver does not fire prematurely.
+        let fake_cert = fake_certification_for_height(Height::new(1));
+        sm.deliver_state_certification(fake_cert.clone());
+
+        // The certification is stored in `states.certifications` but the height is not yet
+        // certified — the receiver must not fire.
+        assert_eq!(sm.certifications_metadata_heights(), vec![]);
+        assert_eq!(
+            sm.certifications().keys().cloned().collect::<Vec<_>>(),
+            vec![Height::new(1)]
+        );
+        assert_eq!(sm.certifications().get(&Height::new(1)), Some(&fake_cert));
+        assert!(
+            !max_certified_height_rx.has_changed().unwrap(),
+            "receiver must not fire when the state has not been committed yet"
+        );
+        assert_eq!(
+            *max_certified_height_rx.borrow(),
+            Height::from(0),
+            "max certified height must remain 0 until a state is truly certified"
+        );
     });
 }
 
