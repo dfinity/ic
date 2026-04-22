@@ -168,7 +168,9 @@ def resolve_full_commit_sha(sha: str) -> str:
 
     full_sha = rev_parse()
     if full_sha is None:
-        die(f"Failed to resolve git commit '{sha}' even after fetching from origin.\nMake sure the commit exists in the repository.")
+        die(
+            f"Failed to resolve git commit '{sha}' even after fetching from origin.\nMake sure the commit exists in the repository."
+        )
     return full_sha
 
 
