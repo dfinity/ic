@@ -723,7 +723,26 @@ message Proposal {
     LoadCanisterSnapshot load_canister_snapshot = 33;
     // Create a canister in a (possibly non-NNS) subnet and install code into it.
     CreateCanisterAndInstallCode create_canister_and_install_code = 34;
+    // Execute multiple proposal actions sequentially. Stops at first failure.
+    Batch batch = 35;
   }
+}
+
+// Multiple actions to execute sequentially. Stop on first failure.
+//
+// No recursion, i.e. Batch cannot contain batch.
+//
+// # Topic
+//
+// All constituent actions must have the same topic.
+//
+// This has the topic of its constituents.
+message Batch {
+  // The steps to take.
+  // Proposal includes some fields that are superfluous in this context
+  // (title, summary, etc). The only part we use here is the `action` oneof.
+  // The others will be left blank.
+  repeated Proposal actions = 1;
 }
 
 // Take a canister snapshot.
