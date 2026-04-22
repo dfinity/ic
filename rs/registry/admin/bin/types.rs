@@ -9,7 +9,7 @@ use ic_nns_governance_api::ProposalActionRequest;
 use ic_protobuf::registry::{
     node::v1::{IPv4InterfaceConfig, NodeRewardType},
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
-    subnet::v1::SubnetRecord as SubnetRecordProto,
+    subnet::v1::{CanisterCyclesCostSchedule, SubnetRecord as SubnetRecordProto},
 };
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -63,6 +63,7 @@ pub(crate) struct SubnetRecord {
     pub nodes: IndexMap<PrincipalId, NodeDetails>,
     pub max_ingress_bytes_per_message: u64,
     pub max_ingress_messages_per_block: u64,
+    pub max_ingress_bytes_per_block: u64,
     pub max_block_payload_size: u64,
     pub unit_delay_millis: u64,
     pub initial_notary_delay_millis: u64,
@@ -71,12 +72,17 @@ pub(crate) struct SubnetRecord {
     pub dkg_dealings_per_block: u64,
     pub start_as_nns: bool,
     pub subnet_type: SubnetType,
+    pub is_halted: bool,
+    pub halt_at_cup_height: bool,
     pub features: SubnetFeatures,
     pub resource_limits: ResourceLimits,
     pub max_number_of_canisters: u64,
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
     pub chain_key_config: Option<ChainKeyConfig>,
+    pub canister_cycles_cost_schedule: CanisterCyclesCostSchedule,
+    pub subnet_admins: Vec<String>,
+    pub recalled_replica_version_ids: Vec<String>,
 }
 
 impl SubnetRecord {
@@ -113,6 +119,7 @@ impl From<&SubnetRecordProto> for SubnetRecord {
             nodes: IndexMap::default(),
             max_ingress_bytes_per_message: value.max_ingress_bytes_per_message,
             max_ingress_messages_per_block: value.max_ingress_messages_per_block,
+            max_ingress_bytes_per_block: value.max_ingress_bytes_per_block,
             max_block_payload_size: value.max_block_payload_size,
             unit_delay_millis: value.unit_delay_millis,
             initial_notary_delay_millis: value.initial_notary_delay_millis,
@@ -121,6 +128,8 @@ impl From<&SubnetRecordProto> for SubnetRecord {
             dkg_dealings_per_block: value.dkg_dealings_per_block,
             start_as_nns: value.start_as_nns,
             subnet_type: SubnetType::try_from(value.subnet_type).unwrap(),
+            is_halted: value.is_halted,
+            halt_at_cup_height: value.halt_at_cup_height,
             features: value.features.unwrap_or_default().into(),
             resource_limits: value.resource_limits.unwrap_or_default().into(),
             max_number_of_canisters: value.max_number_of_canisters,
@@ -130,6 +139,20 @@ impl From<&SubnetRecordProto> for SubnetRecord {
                 .chain_key_config
                 .as_ref()
                 .map(|c| c.clone().try_into().unwrap()),
+            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::try_from(
+                value.canister_cycles_cost_schedule,
+            )
+            .unwrap(),
+            subnet_admins: value
+                .subnet_admins
+                .iter()
+                .map(|p| {
+                    PrincipalId::try_from(&p.raw[..])
+                        .expect("could not create PrincipalId from subnet_admins entry")
+                        .to_string()
+                })
+                .collect(),
+            recalled_replica_version_ids: value.recalled_replica_version_ids.clone(),
         }
     }
 }
