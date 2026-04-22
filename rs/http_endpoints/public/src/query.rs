@@ -1,4 +1,4 @@
-//! Module that deals with requests to /api/v2/canister/.../query and /api/v3/subnet/.../query
+//! Module that deals with requests to /api/v{2,3}/canister/.../query and /api/v3/subnet/.../query
 
 use crate::{
     ReplicaHealthStatus,
