@@ -1,6 +1,6 @@
 # ICRC Token Standards
 
-The ICRC ledger suite implements the ICRC-1, ICRC-2, ICRC-3, and ICRC-21 token standards for fungible tokens on the Internet Computer. The implementation supports both u64 and u256 token types, uses ICRC-1 `Account` (principal + optional 32-byte subaccount), and encodes blocks in CBOR with self-described tag 55799.
+The ICRC ledger suite implements the ICRC-1, ICRC-2, ICRC-3, ICRC-21, ICRC-103, ICRC-122, and ICRC-152 token standards for fungible tokens on the Internet Computer. The implementation supports both u64 and u256 token types, uses ICRC-1 `Account` (principal + optional 32-byte subaccount), and encodes blocks in CBOR with self-described tag 55799.
 
 ## Requirements
 
@@ -308,3 +308,47 @@ The ICRC-1 ledger supports upgrades with parameter changes.
 - **THEN** all balances, allowances, and blockchain data are preserved
 - **AND** the state is serialized to stable memory during pre_upgrade
 - **AND** the state is deserialized from stable memory during post_upgrade
+
+### Requirement: ICRC-122 Mint/Burn Block Schema
+
+ICRC-122 defines a permissive block-type schema for mint and burn operations recorded in the ICRC-3 transaction log. Blocks carry `btype` `"122mint"` or `"122burn"` with optional `caller`, `mthd`, and `reason` fields.
+
+#### Scenario: 122mint block validation
+- **WHEN** a block with `btype: "122mint"` appears in the log
+- **THEN** the `tx` map MUST contain `to` (Account) and `amt` (Nat ≥ 1)
+- **AND** `mthd`, `caller`, `ts`, and `reason` are permitted but optional
+- **AND** the block-level `ts` and 32-byte `phash` (when present) are validated
+
+#### Scenario: 122burn block validation
+- **WHEN** a block with `btype: "122burn"` appears in the log
+- **THEN** the `tx` map MUST contain `from` (Account) and `amt` (Nat ≥ 1)
+- **AND** the same optionality rules as `122mint` apply to remaining fields
+
+### Requirement: ICRC-152 Mint/Burn Endpoint Standard
+
+ICRC-152 defines standardized `icrc152_mint` and `icrc152_burn` endpoints whose emitted blocks are a strict subset of ICRC-122 — `caller`, `mthd`, and `ts` are REQUIRED so downstream consumers can rely on them being present.
+
+#### Scenario: icrc152_mint success
+- **WHEN** an authorized principal calls `icrc152_mint` with `Icrc152MintArgs { to, amount, created_at_time, reason? }`
+- **THEN** a `122mint` block is appended with `mthd`, `caller`, `ts` all set
+- **AND** the ledger returns the block index as `Nat`
+
+#### Scenario: icrc152_mint unauthorized
+- **WHEN** a non-minter principal calls `icrc152_mint`
+- **THEN** the call returns `Icrc152MintError::Unauthorized`
+
+#### Scenario: icrc152_mint duplicate
+- **WHEN** an `icrc152_mint` call has the same `(to, amount, created_at_time)` as a recent successful call
+- **THEN** the call returns `Icrc152MintError::Duplicate { duplicate_of: <index> }`
+
+#### Scenario: icrc152_burn success
+- **WHEN** an authorized principal calls `icrc152_burn` with `Icrc152BurnArgs { from, amount, created_at_time, reason? }`
+- **THEN** a `122burn` block is appended with `mthd`, `caller`, `ts` all set
+- **AND** the ledger returns the block index as `Nat`
+
+#### Scenario: icrc152 validation stricter than icrc122
+- **WHEN** an ICRC-152 endpoint emits a block
+- **THEN** the block passes both `validate_152_mint`/`validate_152_burn` AND the permissive `validate_mint`/`validate_burn`
+- **AND** a block emitted by a non-152 path may pass `validate_mint`/`validate_burn` without passing the 152 validator
+
+**Crates**: icrc-ledger-types (`packages/icrc-ledger-types/src/icrc122/`, `packages/icrc-ledger-types/src/icrc152/`)
