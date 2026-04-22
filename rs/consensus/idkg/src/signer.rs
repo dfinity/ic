@@ -1433,7 +1433,7 @@ mod tests {
             });
         }
 
-        // In the single threaded case only 2f + 1 shares should be accepted, the rest dropped
+        // In the single threaded case only f + 1 shares should be accepted, the rest dropped
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, signer) =
@@ -1467,7 +1467,7 @@ mod tests {
             })
         });
 
-        // In the multi threaded case at least 2f + 1 shares should be accepted, the rest dropped
+        // In the multi threaded case at least f + 1 shares should be accepted, the rest dropped
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
