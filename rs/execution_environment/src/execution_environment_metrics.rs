@@ -7,7 +7,6 @@ use ic_management_canister_types_private as ic00;
 use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
-use ic_replicated_state::metrics::duration_histogram;
 use ic_types::CanisterId;
 use ic_types::canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES};
 use ic_types::messages::Response;
@@ -95,10 +94,11 @@ impl ExecutionEnvironmentMetrics {
                 // The `outcome` label is deprecated and should be replaced by `status` eventually.
                 &["method_name", "outcome", "status", "speed"],
             ),
-            canister_log_resize_duration: duration_histogram(
+            canister_log_resize_duration: metrics_registry.histogram(
                 "canister_log_resize_duration_seconds",
                 "Duration of `log_memory_limit` resize operations on the canister log memory store, in seconds.",
-                metrics_registry,
+                // Buckets: 1ms, 2ms, 5ms, ..., 10s, 20s, 50s.
+                decimal_buckets(-3, 1),
             ),
             executions_aborted: metrics_registry
                 .int_counter("executions_aborted", "Total number of aborted executions"),
