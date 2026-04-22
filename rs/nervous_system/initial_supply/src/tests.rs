@@ -79,6 +79,10 @@ async fn test_initial_supply() {
                     fee_collector: None,
                     authorized_mint: None,
                     authorized_burn: None,
+                    freeze_account: None,
+                    unfreeze_account: None,
+                    freeze_principal: None,
+                    unfreeze_principal: None,
                 }
             };
 

@@ -158,6 +158,50 @@ impl<Tokens: TokensType> BlockBuilder<Tokens> {
         }
     }
 
+    /// Create a freeze account operation (ICRC-123)
+    pub fn freeze_account(self, account: Account) -> FreezeAccountBuilder<Tokens> {
+        FreezeAccountBuilder {
+            builder: self,
+            account,
+            caller: None,
+            mthd: None,
+            reason: None,
+        }
+    }
+
+    /// Create an unfreeze account operation (ICRC-123)
+    pub fn unfreeze_account(self, account: Account) -> UnfreezeAccountBuilder<Tokens> {
+        UnfreezeAccountBuilder {
+            builder: self,
+            account,
+            caller: None,
+            mthd: None,
+            reason: None,
+        }
+    }
+
+    /// Create a freeze principal operation (ICRC-123)
+    pub fn freeze_principal(self, principal: Principal) -> FreezePrincipalBuilder<Tokens> {
+        FreezePrincipalBuilder {
+            builder: self,
+            principal,
+            caller: None,
+            mthd: None,
+            reason: None,
+        }
+    }
+
+    /// Create an unfreeze principal operation (ICRC-123)
+    pub fn unfreeze_principal(self, principal: Principal) -> UnfreezePrincipalBuilder<Tokens> {
+        UnfreezePrincipalBuilder {
+            builder: self,
+            principal,
+            caller: None,
+            mthd: None,
+            reason: None,
+        }
+    }
+
     /// Create a fee collector block
     pub fn fee_collector(
         self,
@@ -476,6 +520,180 @@ impl<Tokens: TokensType> AuthorizedBurnBuilder<Tokens> {
         }
         if let Some(ts) = self.created_at_time {
             tx_fields.insert("ts".to_string(), ICRC3Value::Nat(Nat::from(ts)));
+        }
+        self.builder.build_with_operation(None, tx_fields)
+    }
+}
+
+/// Builder for freeze account operations (ICRC-123)
+pub struct FreezeAccountBuilder<Tokens: TokensType> {
+    builder: BlockBuilder<Tokens>,
+    account: Account,
+    caller: Option<Principal>,
+    mthd: Option<String>,
+    reason: Option<String>,
+}
+
+impl<Tokens: TokensType> FreezeAccountBuilder<Tokens> {
+    pub fn with_caller(mut self, caller: Principal) -> Self {
+        self.caller = Some(caller);
+        self
+    }
+
+    pub fn with_mthd(mut self, mthd: String) -> Self {
+        self.mthd = Some(mthd);
+        self
+    }
+
+    pub fn with_reason(mut self, reason: String) -> Self {
+        self.reason = Some(reason);
+        self
+    }
+
+    pub fn build(mut self) -> ICRC3Value {
+        self.builder.btype = Some("123freezeaccount".to_string());
+        let mut tx_fields = BTreeMap::new();
+        tx_fields.insert("account".to_string(), account_to_icrc3_value(&self.account));
+        if let Some(caller) = &self.caller {
+            tx_fields.insert("caller".to_string(), ICRC3Value::from(Value::from(*caller)));
+        }
+        if let Some(mthd) = self.mthd {
+            tx_fields.insert("mthd".to_string(), ICRC3Value::Text(mthd));
+        }
+        if let Some(reason) = self.reason {
+            tx_fields.insert("reason".to_string(), ICRC3Value::Text(reason));
+        }
+        self.builder.build_with_operation(None, tx_fields)
+    }
+}
+
+/// Builder for unfreeze account operations (ICRC-123)
+pub struct UnfreezeAccountBuilder<Tokens: TokensType> {
+    builder: BlockBuilder<Tokens>,
+    account: Account,
+    caller: Option<Principal>,
+    mthd: Option<String>,
+    reason: Option<String>,
+}
+
+impl<Tokens: TokensType> UnfreezeAccountBuilder<Tokens> {
+    pub fn with_caller(mut self, caller: Principal) -> Self {
+        self.caller = Some(caller);
+        self
+    }
+
+    pub fn with_mthd(mut self, mthd: String) -> Self {
+        self.mthd = Some(mthd);
+        self
+    }
+
+    pub fn with_reason(mut self, reason: String) -> Self {
+        self.reason = Some(reason);
+        self
+    }
+
+    pub fn build(mut self) -> ICRC3Value {
+        self.builder.btype = Some("123unfreezeaccount".to_string());
+        let mut tx_fields = BTreeMap::new();
+        tx_fields.insert("account".to_string(), account_to_icrc3_value(&self.account));
+        if let Some(caller) = &self.caller {
+            tx_fields.insert("caller".to_string(), ICRC3Value::from(Value::from(*caller)));
+        }
+        if let Some(mthd) = self.mthd {
+            tx_fields.insert("mthd".to_string(), ICRC3Value::Text(mthd));
+        }
+        if let Some(reason) = self.reason {
+            tx_fields.insert("reason".to_string(), ICRC3Value::Text(reason));
+        }
+        self.builder.build_with_operation(None, tx_fields)
+    }
+}
+
+/// Builder for freeze principal operations (ICRC-123)
+pub struct FreezePrincipalBuilder<Tokens: TokensType> {
+    builder: BlockBuilder<Tokens>,
+    principal: Principal,
+    caller: Option<Principal>,
+    mthd: Option<String>,
+    reason: Option<String>,
+}
+
+impl<Tokens: TokensType> FreezePrincipalBuilder<Tokens> {
+    pub fn with_caller(mut self, caller: Principal) -> Self {
+        self.caller = Some(caller);
+        self
+    }
+
+    pub fn with_mthd(mut self, mthd: String) -> Self {
+        self.mthd = Some(mthd);
+        self
+    }
+
+    pub fn with_reason(mut self, reason: String) -> Self {
+        self.reason = Some(reason);
+        self
+    }
+
+    pub fn build(mut self) -> ICRC3Value {
+        self.builder.btype = Some("123freezeprincipal".to_string());
+        let mut tx_fields = BTreeMap::new();
+        tx_fields.insert(
+            "principal".to_string(),
+            ICRC3Value::from(Value::from(self.principal)),
+        );
+        if let Some(caller) = &self.caller {
+            tx_fields.insert("caller".to_string(), ICRC3Value::from(Value::from(*caller)));
+        }
+        if let Some(mthd) = self.mthd {
+            tx_fields.insert("mthd".to_string(), ICRC3Value::Text(mthd));
+        }
+        if let Some(reason) = self.reason {
+            tx_fields.insert("reason".to_string(), ICRC3Value::Text(reason));
+        }
+        self.builder.build_with_operation(None, tx_fields)
+    }
+}
+
+/// Builder for unfreeze principal operations (ICRC-123)
+pub struct UnfreezePrincipalBuilder<Tokens: TokensType> {
+    builder: BlockBuilder<Tokens>,
+    principal: Principal,
+    caller: Option<Principal>,
+    mthd: Option<String>,
+    reason: Option<String>,
+}
+
+impl<Tokens: TokensType> UnfreezePrincipalBuilder<Tokens> {
+    pub fn with_caller(mut self, caller: Principal) -> Self {
+        self.caller = Some(caller);
+        self
+    }
+
+    pub fn with_mthd(mut self, mthd: String) -> Self {
+        self.mthd = Some(mthd);
+        self
+    }
+
+    pub fn with_reason(mut self, reason: String) -> Self {
+        self.reason = Some(reason);
+        self
+    }
+
+    pub fn build(mut self) -> ICRC3Value {
+        self.builder.btype = Some("123unfreezeprincipal".to_string());
+        let mut tx_fields = BTreeMap::new();
+        tx_fields.insert(
+            "principal".to_string(),
+            ICRC3Value::from(Value::from(self.principal)),
+        );
+        if let Some(caller) = &self.caller {
+            tx_fields.insert("caller".to_string(), ICRC3Value::from(Value::from(*caller)));
+        }
+        if let Some(mthd) = self.mthd {
+            tx_fields.insert("mthd".to_string(), ICRC3Value::Text(mthd));
+        }
+        if let Some(reason) = self.reason {
+            tx_fields.insert("reason".to_string(), ICRC3Value::Text(reason));
         }
         self.builder.build_with_operation(None, tx_fields)
     }

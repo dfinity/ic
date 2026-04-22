@@ -9,6 +9,10 @@ type Transaction = record {
   fee_collector : opt FeeCollector;
   authorized_mint : opt AuthorizedMint;
   authorized_burn : opt AuthorizedBurn;
+  freeze_account : opt FreezeAccount;
+  unfreeze_account : opt UnfreezeAccount;
+  freeze_principal : opt FreezePrincipal;
+  unfreeze_principal : opt UnfreezePrincipal;
   timestamp : nat64;
   transfer : opt Transfer
 };
@@ -26,6 +30,34 @@ type AuthorizedBurn = record {
   from : Account;
   amount : nat;
   created_at_time : opt nat64;
+  caller : opt principal;
+  mthd : opt text;
+  reason : opt text
+};
+
+type FreezeAccount = record {
+  account : Account;
+  caller : opt principal;
+  mthd : opt text;
+  reason : opt text
+};
+
+type UnfreezeAccount = record {
+  account : Account;
+  caller : opt principal;
+  mthd : opt text;
+  reason : opt text
+};
+
+type FreezePrincipal = record {
+  principal : principal;
+  caller : opt principal;
+  mthd : opt text;
+  reason : opt text
+};
+
+type UnfreezePrincipal = record {
+  principal : principal;
   caller : opt principal;
   mthd : opt text;
   reason : opt text

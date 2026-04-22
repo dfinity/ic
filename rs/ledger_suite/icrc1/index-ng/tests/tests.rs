@@ -971,6 +971,10 @@ fn test_get_account_transactions_pagination() {
                     fee_collector: None,
                     authorized_mint: None,
                     authorized_burn: None,
+                    freeze_account: None,
+                    unfreeze_account: None,
+                    freeze_principal: None,
+                    unfreeze_principal: None,
                 },
                 transaction,
             );
@@ -2031,4 +2035,117 @@ mod fees_in_burn_and_mint_blocks {
             actual_fee_collector_balance, BURN_FEE
         );
     }
+}
+
+#[test]
+fn test_freeze_unfreeze_account_indexing() {
+    let env = &StateMachine::new();
+    let ledger_id = install_icrc3_test_ledger(env);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+
+    let account_1 = account(1, 0);
+    let caller = PrincipalId::new_user_test_id(99);
+
+    // Block 0: regular mint to give account_1 initial balance
+    let block0 = BlockBuilder::new(0, 1000)
+        .mint(account_1, Tokens::from(10_000_000_u64))
+        .build();
+    assert_eq!(
+        Nat::from(0_u64),
+        add_block(env, ledger_id, &block0).expect("failed to add block 0")
+    );
+
+    // Block 1: freeze account_1
+    let block1 = BlockBuilder::<Tokens>::new(1, 2000)
+        .freeze_account(account_1)
+        .with_caller(caller.0)
+        .with_mthd("153freeze_account".to_string())
+        .with_reason("compliance".to_string())
+        .build();
+    assert_eq!(
+        Nat::from(1_u64),
+        add_block(env, ledger_id, &block1).expect("failed to add block 1")
+    );
+
+    // Block 2: unfreeze account_1
+    let block2 = BlockBuilder::<Tokens>::new(2, 3000)
+        .unfreeze_account(account_1)
+        .with_caller(caller.0)
+        .with_mthd("153unfreeze_account".to_string())
+        .build();
+    assert_eq!(
+        Nat::from(2_u64),
+        add_block(env, ledger_id, &block2).expect("failed to add block 2")
+    );
+
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    // Verify balance is unchanged (freeze/unfreeze do not affect balances)
+    assert_eq!(icrc1_balance_of(env, index_id, account_1), 10_000_000);
+
+    // Verify account_1 transactions include all 3 blocks
+    let txs = get_account_transactions(env, index_id, account_1, None, u64::MAX);
+    assert_eq!(txs.transactions.len(), 3);
+    // Transactions are in descending order
+    assert_eq!(txs.transactions[0].id, Nat::from(2_u64));
+    assert_eq!(txs.transactions[0].transaction.kind, "123unfreezeaccount");
+    assert!(txs.transactions[0].transaction.unfreeze_account.is_some());
+    assert_eq!(txs.transactions[1].id, Nat::from(1_u64));
+    assert_eq!(txs.transactions[1].transaction.kind, "123freezeaccount");
+    assert!(txs.transactions[1].transaction.freeze_account.is_some());
+    assert_eq!(txs.transactions[2].id, Nat::from(0_u64));
+    assert_eq!(txs.transactions[2].transaction.kind, "mint");
+}
+
+#[test]
+fn test_freeze_unfreeze_principal_indexing() {
+    let env = &StateMachine::new();
+    let ledger_id = install_icrc3_test_ledger(env);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+
+    let account_1 = account(1, 0);
+    let target_principal = PrincipalId::new_user_test_id(42);
+    let caller = PrincipalId::new_user_test_id(99);
+
+    // Block 0: regular mint to give account_1 initial balance
+    let block0 = BlockBuilder::new(0, 1000)
+        .mint(account_1, Tokens::from(10_000_000_u64))
+        .build();
+    assert_eq!(
+        Nat::from(0_u64),
+        add_block(env, ledger_id, &block0).expect("failed to add block 0")
+    );
+
+    // Block 1: freeze principal
+    let block1 = BlockBuilder::<Tokens>::new(1, 2000)
+        .freeze_principal(target_principal.0)
+        .with_caller(caller.0)
+        .with_mthd("153freeze_principal".to_string())
+        .with_reason("sanctions".to_string())
+        .build();
+    assert_eq!(
+        Nat::from(1_u64),
+        add_block(env, ledger_id, &block1).expect("failed to add block 1")
+    );
+
+    // Block 2: unfreeze principal
+    let block2 = BlockBuilder::<Tokens>::new(2, 3000)
+        .unfreeze_principal(target_principal.0)
+        .with_caller(caller.0)
+        .build();
+    assert_eq!(
+        Nat::from(2_u64),
+        add_block(env, ledger_id, &block2).expect("failed to add block 2")
+    );
+
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    // Verify balance of account_1 is unchanged
+    assert_eq!(icrc1_balance_of(env, index_id, account_1), 10_000_000);
+
+    // Principal freeze/unfreeze ops have no specific account, so they should NOT
+    // appear in any account's transactions
+    let txs = get_account_transactions(env, index_id, account_1, None, u64::MAX);
+    assert_eq!(txs.transactions.len(), 1); // only the mint
+    assert_eq!(txs.transactions[0].transaction.kind, "mint");
 }
