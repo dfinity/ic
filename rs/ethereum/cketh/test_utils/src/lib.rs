@@ -141,7 +141,8 @@ impl CkEthSetup {
                     .with_decimals(18)
                     .with_feature_flags(ic_icrc1_ledger::FeatureFlags {
                         icrc2: true,
-                        icrc152: false
+                        icrc152: false,
+                        icrc153: false,
                     })
                     .build(),
             ))

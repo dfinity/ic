@@ -137,6 +137,7 @@ pub fn test(env: TestEnv) {
             .with_feature_flags(FeatureFlags {
                 icrc2: true,
                 icrc152: false,
+                icrc153: false,
             })
             .with_archive_options(ArchiveOptions {
                 trigger_threshold: 2,

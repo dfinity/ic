@@ -140,6 +140,7 @@ fn install_ledger(
         .with_feature_flags(FeatureFlags {
             icrc2: true,
             icrc152: false,
+            icrc153: false,
         });
     if let Some(fee_collector_account) = fee_collector_account {
         builder = builder.with_fee_collector_account(fee_collector_account);
