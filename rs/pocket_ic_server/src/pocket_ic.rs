@@ -3042,6 +3042,7 @@ impl PocketIc {
                             ),
                             None,
                             MaliciousFlags::default(),
+                            tokio::sync::watch::channel(ic_types::Height::from(0)).0,
                         );
                         let metadata = state_manager.get_latest_state().take().metadata.clone();
                         // Shut down the temporary state manager to avoid race conditions.

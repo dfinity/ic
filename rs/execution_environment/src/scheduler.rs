@@ -1495,6 +1495,19 @@ impl Scheduler for SchedulerImpl {
                 } else {
                     old_log.delta_log_sizes()
                 };
+                // Observe retention from whichever log store is active,
+                // only for canisters that appended this round.
+                let retention = if LOG_MEMORY_STORE_FEATURE_ENABLED {
+                    new_log
+                        .has_delta_log_sizes()
+                        .then(|| new_log.retention())
+                        .flatten()
+                } else {
+                    old_log
+                        .has_delta_log_sizes()
+                        .then(|| old_log.retention())
+                        .flatten()
+                };
                 if new_log.has_delta_log_sizes() || old_log.has_delta_log_sizes() {
                     // Only clone state if delta log sizes are not empty.
                     let canister = Arc::make_mut(canister);
@@ -1510,6 +1523,11 @@ impl Scheduler for SchedulerImpl {
                     self.metrics
                         .canister_log_delta_memory_usage
                         .observe(size as f64);
+                }
+                if let Some(retention) = retention {
+                    self.metrics
+                        .canister_log_retention
+                        .observe(retention.as_secs_f64());
                 }
 
                 // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
