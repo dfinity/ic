@@ -813,6 +813,12 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                 ),
             ));
         }
+        crate::common::storage::types::IcrcOperation::FreezeAccount { .. }
+        | crate::common::storage::types::IcrcOperation::UnfreezeAccount { .. }
+        | crate::common::storage::types::IcrcOperation::FreezePrincipal { .. }
+        | crate::common::storage::types::IcrcOperation::UnfreezePrincipal { .. } => {
+            panic!("freeze/unfreeze not yet supported in Rosetta")
+        }
     };
 
     Ok(operations)

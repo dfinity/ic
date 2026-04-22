@@ -495,6 +495,12 @@ pub fn update_account_balances(
                 } => {
                     current_fee_collector_107 = Some(fee_collector);
                 }
+                crate::common::storage::types::IcrcOperation::FreezeAccount { .. }
+                | crate::common::storage::types::IcrcOperation::UnfreezeAccount { .. }
+                | crate::common::storage::types::IcrcOperation::FreezePrincipal { .. }
+                | crate::common::storage::types::IcrcOperation::UnfreezePrincipal { .. } => {
+                    panic!("freeze/unfreeze not yet supported in Rosetta")
+                }
             }
         }
 
@@ -671,6 +677,12 @@ pub fn store_blocks(
                 None,
                 None,
             ),
+            crate::common::storage::types::IcrcOperation::FreezeAccount { .. }
+            | crate::common::storage::types::IcrcOperation::UnfreezeAccount { .. }
+            | crate::common::storage::types::IcrcOperation::FreezePrincipal { .. }
+            | crate::common::storage::types::IcrcOperation::UnfreezePrincipal { .. } => {
+                panic!("freeze/unfreeze not yet supported in Rosetta")
+            }
         };
 
         // SQLite doesn't support unsigned 64-bit integers. We need to convert the timestamps to signed

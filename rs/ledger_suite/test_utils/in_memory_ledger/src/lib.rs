@@ -547,6 +547,12 @@ where
                 Operation::AuthorizedBurn { from, amount, .. } => {
                     self.process_burn(from, &None, amount, index);
                 }
+                Operation::FreezeAccount { .. }
+                | Operation::UnfreezeAccount { .. }
+                | Operation::FreezePrincipal { .. }
+                | Operation::UnfreezePrincipal { .. } => {
+                    // Freeze/unfreeze operations do not affect balances
+                }
             }
         }
         self.post_process_ledger_blocks(blocks);

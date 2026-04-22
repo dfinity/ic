@@ -571,3 +571,253 @@ mod authorized_mint_burn_tests {
         assert!(validate_152_burn(&generic_block).is_err());
     }
 }
+
+mod freeze_operation_tests {
+    use super::*;
+    use candid::Principal;
+    use ic_icrc1::Operation;
+    use ic_ledger_core::block::BlockType;
+    use icrc_ledger_types::icrc1::account::Account;
+    use icrc_ledger_types::icrc123::schema::{
+        BTYPE_123_FREEZE_ACCOUNT, BTYPE_123_FREEZE_PRINCIPAL, BTYPE_123_UNFREEZE_ACCOUNT,
+        BTYPE_123_UNFREEZE_PRINCIPAL,
+    };
+
+    fn test_account(n: u64) -> Account {
+        Account {
+            owner: Principal::from_slice(&n.to_be_bytes()),
+            subaccount: None,
+        }
+    }
+
+    fn test_principal(n: u64) -> Principal {
+        Principal::from_slice(&n.to_be_bytes())
+    }
+
+    fn make_freeze_account_block(
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+        created_at_time: Option<u64>,
+    ) -> Block<U64> {
+        let transaction = Transaction {
+            operation: Operation::FreezeAccount {
+                account: test_account(1),
+                caller,
+                mthd,
+                reason,
+            },
+            created_at_time,
+            memo: None,
+        };
+        Block::from_transaction(
+            None,
+            transaction,
+            ic_ledger_core::timestamp::TimeStamp::from_nanos_since_unix_epoch(1_000_000_000),
+            U64::from(0_u64),
+            None,
+        )
+    }
+
+    fn make_unfreeze_account_block(
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+        created_at_time: Option<u64>,
+    ) -> Block<U64> {
+        let transaction = Transaction {
+            operation: Operation::UnfreezeAccount {
+                account: test_account(1),
+                caller,
+                mthd,
+                reason,
+            },
+            created_at_time,
+            memo: None,
+        };
+        Block::from_transaction(
+            None,
+            transaction,
+            ic_ledger_core::timestamp::TimeStamp::from_nanos_since_unix_epoch(1_000_000_000),
+            U64::from(0_u64),
+            None,
+        )
+    }
+
+    fn make_freeze_principal_block(
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+        created_at_time: Option<u64>,
+    ) -> Block<U64> {
+        let transaction = Transaction {
+            operation: Operation::FreezePrincipal {
+                principal: test_principal(2),
+                caller,
+                mthd,
+                reason,
+            },
+            created_at_time,
+            memo: None,
+        };
+        Block::from_transaction(
+            None,
+            transaction,
+            ic_ledger_core::timestamp::TimeStamp::from_nanos_since_unix_epoch(1_000_000_000),
+            U64::from(0_u64),
+            None,
+        )
+    }
+
+    fn make_unfreeze_principal_block(
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+        created_at_time: Option<u64>,
+    ) -> Block<U64> {
+        let transaction = Transaction {
+            operation: Operation::UnfreezePrincipal {
+                principal: test_principal(2),
+                caller,
+                mthd,
+                reason,
+            },
+            created_at_time,
+            memo: None,
+        };
+        Block::from_transaction(
+            None,
+            transaction,
+            ic_ledger_core::timestamp::TimeStamp::from_nanos_since_unix_epoch(1_000_000_000),
+            U64::from(0_u64),
+            None,
+        )
+    }
+
+    // --- CBOR round-trip tests ---
+
+    #[test]
+    fn test_freeze_account_cbor_round_trip() {
+        let block = make_freeze_account_block(
+            Some(Principal::anonymous()),
+            Some("153freeze_account".to_string()),
+            Some("test reason".to_string()),
+            Some(1_000_000_000),
+        );
+        let encoded = block.clone().encode();
+        let decoded = Block::<U64>::decode(encoded).unwrap();
+        assert_eq!(block, decoded);
+    }
+
+    #[test]
+    fn test_unfreeze_account_cbor_round_trip() {
+        let block = make_unfreeze_account_block(
+            Some(Principal::anonymous()),
+            Some("153unfreeze_account".to_string()),
+            None,
+            Some(1_000_000_000),
+        );
+        let encoded = block.clone().encode();
+        let decoded = Block::<U64>::decode(encoded).unwrap();
+        assert_eq!(block, decoded);
+    }
+
+    #[test]
+    fn test_freeze_principal_cbor_round_trip() {
+        let block = make_freeze_principal_block(
+            Some(Principal::anonymous()),
+            Some("153freeze_principal".to_string()),
+            Some("suspicious activity".to_string()),
+            Some(1_000_000_000),
+        );
+        let encoded = block.clone().encode();
+        let decoded = Block::<U64>::decode(encoded).unwrap();
+        assert_eq!(block, decoded);
+    }
+
+    #[test]
+    fn test_unfreeze_principal_cbor_round_trip() {
+        let block = make_unfreeze_principal_block(
+            Some(Principal::anonymous()),
+            Some("153unfreeze_principal".to_string()),
+            None,
+            Some(1_000_000_000),
+        );
+        let encoded = block.clone().encode();
+        let decoded = Block::<U64>::decode(encoded).unwrap();
+        assert_eq!(block, decoded);
+    }
+
+    // --- btype tests ---
+
+    #[test]
+    fn test_freeze_account_btype_set_correctly() {
+        let block = make_freeze_account_block(None, None, None, None);
+        assert_eq!(block.btype.as_deref(), Some(BTYPE_123_FREEZE_ACCOUNT));
+    }
+
+    #[test]
+    fn test_unfreeze_account_btype_set_correctly() {
+        let block = make_unfreeze_account_block(None, None, None, None);
+        assert_eq!(block.btype.as_deref(), Some(BTYPE_123_UNFREEZE_ACCOUNT));
+    }
+
+    #[test]
+    fn test_freeze_principal_btype_set_correctly() {
+        let block = make_freeze_principal_block(None, None, None, None);
+        assert_eq!(block.btype.as_deref(), Some(BTYPE_123_FREEZE_PRINCIPAL));
+    }
+
+    #[test]
+    fn test_unfreeze_principal_btype_set_correctly() {
+        let block = make_unfreeze_principal_block(None, None, None, None);
+        assert_eq!(block.btype.as_deref(), Some(BTYPE_123_UNFREEZE_PRINCIPAL));
+    }
+
+    // --- FlattenedTransaction / generic block round-trip tests ---
+
+    #[test]
+    fn test_freeze_account_generic_block_round_trip() {
+        let block = make_freeze_account_block(
+            Some(Principal::anonymous()),
+            Some("153freeze_account".to_string()),
+            None,
+            Some(1_000_000_000),
+        );
+        let generic_block = encoded_block_to_generic_block(&block.clone().encode());
+        let encoded_block = generic_block_to_encoded_block(generic_block.clone()).unwrap();
+        let round_tripped = Block::<U64>::decode(encoded_block).unwrap();
+        assert_eq!(block, round_tripped);
+    }
+
+    #[test]
+    fn test_freeze_principal_generic_block_round_trip() {
+        let block = make_freeze_principal_block(
+            Some(Principal::anonymous()),
+            Some("153freeze_principal".to_string()),
+            Some("reason".to_string()),
+            Some(1_000_000_000),
+        );
+        let generic_block = encoded_block_to_generic_block(&block.clone().encode());
+        let encoded_block = generic_block_to_encoded_block(generic_block.clone()).unwrap();
+        let round_tripped = Block::<U64>::decode(encoded_block).unwrap();
+        assert_eq!(block, round_tripped);
+    }
+
+    #[test]
+    fn test_freeze_account_hash_stability() {
+        let block = make_freeze_account_block(
+            Some(Principal::anonymous()),
+            Some("153freeze_account".to_string()),
+            None,
+            Some(1_000_000_000),
+        );
+        let generic_block = encoded_block_to_generic_block(&block.clone().encode());
+        assert_eq!(
+            generic_block.hash().to_vec(),
+            Block::<U64>::block_hash(&block.encode())
+                .as_slice()
+                .to_vec()
+        );
+    }
+}

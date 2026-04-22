@@ -1119,6 +1119,12 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
             Operation::AuthorizedBurn { from, amount, .. } => {
                 debit(block_index, from, amount);
             }
+            Operation::FreezeAccount { .. }
+            | Operation::UnfreezeAccount { .. }
+            | Operation::FreezePrincipal { .. }
+            | Operation::UnfreezePrincipal { .. } => {
+                // Freeze/unfreeze operations do not affect balances
+            }
         },
     );
 }
@@ -1164,6 +1170,10 @@ fn get_accounts(block: &Block<Tokens>) -> Vec<Account> {
         Operation::FeeCollector { .. } => vec![],
         Operation::AuthorizedMint { to, .. } => vec![to],
         Operation::AuthorizedBurn { from, .. } => vec![from],
+        Operation::FreezeAccount { account, .. } | Operation::UnfreezeAccount { account, .. } => {
+            vec![account]
+        }
+        Operation::FreezePrincipal { .. } | Operation::UnfreezePrincipal { .. } => vec![],
     }
 }
 
