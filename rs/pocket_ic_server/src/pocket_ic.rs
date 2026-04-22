@@ -4853,8 +4853,8 @@ impl Operation for QueryRequest {
                 let version_str = match self.version {
                     query::Version::V2 => "v2",
                     query::Version::V3 => "v3",
-                    query::Version::SubnetV4 => {
-                        unreachable!("SubnetV4 query not supported in PocketIC")
+                    query::Version::SubnetV3 => {
+                        unreachable!("SubnetV3 query not supported in PocketIC")
                     }
                 };
 

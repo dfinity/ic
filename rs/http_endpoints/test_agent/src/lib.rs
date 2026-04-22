@@ -248,7 +248,7 @@ impl QuerySubnet {
         };
 
         let body = serde_cbor::to_vec(&envelope).unwrap();
-        let url = format!("http://{}/api/v4/subnet/{}/query", addr, self.subnet_id);
+        let url = format!("http://{}/api/v3/subnet/{}/query", addr, self.subnet_id);
 
         reqwest::Client::new()
             .post(url)
@@ -305,7 +305,7 @@ impl Query {
         let version_str = match self.version {
             query::Version::V2 => "v2",
             query::Version::V3 => "v3",
-            query::Version::SubnetV4 => {
+            query::Version::SubnetV3 => {
                 unreachable!("Use QuerySubnet for the subnet query endpoint")
             }
         };

@@ -1,4 +1,4 @@
-//! Module that deals with requests to /api/v2/canister/.../query and /api/v4/subnet/.../query
+//! Module that deals with requests to /api/v2/canister/.../query and /api/v3/subnet/.../query
 
 use crate::{
     ReplicaHealthStatus,
@@ -54,7 +54,7 @@ pub enum Version {
     // Endpoint with the NNS delegation using the tree format of the canister ranges.
     V3,
     // Subnet endpoint with no canister ranges in the NNS delegation.
-    SubnetV4,
+    SubnetV3,
 }
 
 #[derive(Clone)]
@@ -94,7 +94,7 @@ impl QueryService {
         match version {
             Version::V2 => "/api/v2/canister/{effective_canister_id}/query",
             Version::V3 => "/api/v3/canister/{effective_canister_id}/query",
-            Version::SubnetV4 => "/api/v4/subnet/{effective_subnet_id}/query",
+            Version::SubnetV3 => "/api/v3/subnet/{effective_subnet_id}/query",
         }
     }
 }
@@ -239,7 +239,7 @@ pub(crate) async fn query(
                 return (status, text).into_response();
             }
         }
-        Version::SubnetV4 => {
+        Version::SubnetV3 => {
             let effective_subnet_id = SubnetId::from(id);
             if effective_subnet_id != subnet_id {
                 let status = StatusCode::BAD_REQUEST;
@@ -304,7 +304,7 @@ pub(crate) async fn query(
         Version::V3 => nns_delegation_reader.get_delegation_with_metadata(
             CanisterRangesFilter::Tree(CanisterId::unchecked_from_principal(id)),
         ),
-        Version::SubnetV4 => {
+        Version::SubnetV3 => {
             nns_delegation_reader.get_delegation_with_metadata(CanisterRangesFilter::None)
         }
     };

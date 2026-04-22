@@ -1944,11 +1944,10 @@ fn test_call_v4_subnet_correct_subnet_id() {
     });
 }
 
-/// Tests that /api/v4/subnet/../call rejects calls to non-management canisters (even with
-/// Tests that /api/v4/subnet/../query rejects a request whose URL subnet ID does not match
+/// Tests that /api/v3/subnet/../query rejects a request whose URL subnet ID does not match
 /// the node's own subnet ID.
 #[test]
-fn test_query_v4_subnet_wrong_subnet_id() {
+fn test_query_v3_subnet_wrong_subnet_id() {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
@@ -1976,10 +1975,10 @@ fn test_query_v4_subnet_wrong_subnet_id() {
     });
 }
 
-/// Tests that /api/v4/subnet/../query accepts a valid list_canisters query to the management
+/// Tests that /api/v3/subnet/../query accepts a valid list_canisters query to the management
 /// canister when the URL subnet ID matches the node's own subnet ID.
 #[test]
-fn test_query_v4_subnet_correct_subnet_id() {
+fn test_query_v3_subnet_correct_subnet_id() {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
@@ -2010,12 +2009,12 @@ fn test_query_v4_subnet_correct_subnet_id() {
     });
 }
 
-/// Tests that /api/v4/subnet/../query rejects calls to non-management canisters (even with
+/// Tests that /api/v3/subnet/../query rejects calls to non-management canisters (even with
 /// method "list_canisters") and calls to IC_00 methods other than "list_canisters".
 #[rstest]
 #[case::wrong_canister_id(canister_test_id(1).get(), "list_canisters")]
 #[case::wrong_method_name(CanisterId::ic_00().get(), "install_code")]
-fn test_query_v4_subnet_wrong_canister_or_method(
+fn test_query_v3_subnet_wrong_canister_or_method(
     #[case] canister_id: PrincipalId,
     #[case] method_name: &str,
 ) {
