@@ -4,9 +4,9 @@
 pub mod common;
 
 use crate::common::{
-    HttpEndpointBuilder, QueryEndpoint, UpdateEndpoint, basic_state_manager_mock,
-    create_conn_and_send_request, default_get_latest_state, default_read_certified_state,
-    get_free_localhost_socket_addr,
+    HttpEndpointBuilder, UpdateEndpoint, basic_state_manager_mock, create_conn_and_send_request,
+    default_get_latest_state, default_read_certified_state, get_free_localhost_socket_addr,
+    query_endpoint,
 };
 use axum::body::{Body, to_bytes};
 use bytes::Bytes;
@@ -417,12 +417,8 @@ async fn test_connection_read_timeout() {
 /// If the downstream service is stuck return 504.
 #[rstest]
 fn test_request_timeout(
-    #[values(
-        QueryEndpoint::Canister(query::Version::V2),
-        QueryEndpoint::Canister(query::Version::V3),
-        QueryEndpoint::Subnet
-    )]
-    endpoint: QueryEndpoint,
+    #[values(query::Version::V2, query::Version::V3, query::Version::SubnetV3)]
+    version: query::Version,
 ) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
@@ -448,7 +444,7 @@ fn test_request_timeout(
 
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
-        let response = endpoint.query(addr).await;
+        let response = query_endpoint(version, addr).await;
         assert_eq!(StatusCode::GATEWAY_TIMEOUT, response.status());
     });
 }
@@ -714,12 +710,8 @@ fn test_too_long_paths_are_rejected(
 /// returns [QueryExecutionError::CertifiedStateUnavailable`].
 #[rstest]
 fn test_query_endpoint_returns_service_unavailable_on_missing_state(
-    #[values(
-        QueryEndpoint::Canister(query::Version::V2),
-        QueryEndpoint::Canister(query::Version::V3),
-        QueryEndpoint::Subnet
-    )]
-    endpoint: QueryEndpoint,
+    #[values(query::Version::V2, query::Version::V3, query::Version::SubnetV3)]
+    version: query::Version,
 ) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
@@ -741,7 +733,7 @@ fn test_query_endpoint_returns_service_unavailable_on_missing_state(
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
 
-        let response = endpoint.query(addr).await;
+        let response = query_endpoint(version, addr).await;
         let expected_status_code = StatusCode::SERVICE_UNAVAILABLE;
 
         assert_eq!(expected_status_code, response.status());

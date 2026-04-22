@@ -117,31 +117,21 @@ impl UpdateEndpoint {
     }
 }
 
-/// Unified endpoint type used to parameterise tests that cover both the canister and subnet
-/// query paths.
-#[derive(Copy, Clone, Debug)]
-pub enum QueryEndpoint {
-    Canister(query::Version),
-    Subnet,
-}
-
-impl QueryEndpoint {
-    pub async fn query(self, addr: SocketAddr) -> reqwest::Response {
-        match self {
-            QueryEndpoint::Canister(version) => {
-                ic_http_endpoints_test_agent::Query::new(
-                    PrincipalId::default(),
-                    PrincipalId::default(),
-                    version,
-                )
+pub async fn query_endpoint(version: query::Version, addr: SocketAddr) -> reqwest::Response {
+    match version {
+        query::Version::V2 | query::Version::V3 => {
+            ic_http_endpoints_test_agent::Query::new(
+                PrincipalId::default(),
+                PrincipalId::default(),
+                version,
+            )
+            .query(addr)
+            .await
+        }
+        query::Version::SubnetV3 => {
+            ic_http_endpoints_test_agent::Query::new_subnet(subnet_test_id(1).get())
                 .query(addr)
                 .await
-            }
-            QueryEndpoint::Subnet => {
-                ic_http_endpoints_test_agent::Query::new_subnet(subnet_test_id(1).get())
-                    .query(addr)
-                    .await
-            }
         }
     }
 }
