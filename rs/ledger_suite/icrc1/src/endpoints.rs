@@ -285,6 +285,12 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                     reason,
                 });
             }
+            Operation::FreezeAccount { .. }
+            | Operation::UnfreezeAccount { .. }
+            | Operation::FreezePrincipal { .. }
+            | Operation::UnfreezePrincipal { .. } => {
+                panic!("freeze/unfreeze not yet supported in candid conversion")
+            }
         }
 
         tx

@@ -1238,6 +1238,12 @@ mod test {
                                         IcrcOperation::AuthorizedBurn { from, .. } => {
                                             Some(from.into())
                                         }
+                                        IcrcOperation::FreezeAccount { account, .. }
+                                        | IcrcOperation::UnfreezeAccount { account, .. } => {
+                                            Some(account.into())
+                                        }
+                                        IcrcOperation::FreezePrincipal { .. }
+                                        | IcrcOperation::UnfreezePrincipal { .. } => None,
                                     };
                                 if search_transactions_request.account_identifier.is_some() {
                                     break;
@@ -1312,6 +1318,10 @@ mod test {
                                             .try_into()
                                             .unwrap()
                                     }
+                                    IcrcOperation::FreezeAccount { .. }
+                                    | IcrcOperation::UnfreezeAccount { .. }
+                                    | IcrcOperation::FreezePrincipal { .. }
+                                    | IcrcOperation::UnfreezePrincipal { .. } => false,
                                 })
                                 .count();
 

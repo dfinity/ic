@@ -17,6 +17,10 @@ use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use icrc_ledger_types::icrc107::schema::BTYPE_107;
 use icrc_ledger_types::icrc122::schema::{BTYPE_122_BURN, BTYPE_122_MINT};
+use icrc_ledger_types::icrc123::schema::{
+    BTYPE_123_FREEZE_ACCOUNT, BTYPE_123_FREEZE_PRINCIPAL, BTYPE_123_UNFREEZE_ACCOUNT,
+    BTYPE_123_UNFREEZE_PRINCIPAL,
+};
 use num_traits::cast::ToPrimitive;
 use proptest::prelude::*;
 use proptest::sample::select;
@@ -298,12 +302,22 @@ pub fn blocks_strategy<Tokens: TokensType>(
                 Operation::Mint { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
                 Operation::FeeCollector { .. }
                 | Operation::AuthorizedMint { .. }
-                | Operation::AuthorizedBurn { .. } => None,
+                | Operation::AuthorizedBurn { .. }
+                | Operation::FreezeAccount { .. }
+                | Operation::UnfreezeAccount { .. }
+                | Operation::FreezePrincipal { .. }
+                | Operation::UnfreezePrincipal { .. } => None,
             };
             let btype = match transaction.operation {
                 Operation::FeeCollector { .. } => Some(BTYPE_107.to_string()),
                 Operation::AuthorizedMint { .. } => Some(BTYPE_122_MINT.to_string()),
                 Operation::AuthorizedBurn { .. } => Some(BTYPE_122_BURN.to_string()),
+                Operation::FreezeAccount { .. } => Some(BTYPE_123_FREEZE_ACCOUNT.to_string()),
+                Operation::UnfreezeAccount { .. } => Some(BTYPE_123_UNFREEZE_ACCOUNT.to_string()),
+                Operation::FreezePrincipal { .. } => Some(BTYPE_123_FREEZE_PRINCIPAL.to_string()),
+                Operation::UnfreezePrincipal { .. } => {
+                    Some(BTYPE_123_UNFREEZE_PRINCIPAL.to_string())
+                }
                 _ => None,
             };
 
@@ -672,6 +686,12 @@ impl TransactionsAndBalances {
             Operation::AuthorizedBurn { from, amount, .. } => {
                 self.debit(from, amount.get_e8s());
             }
+            Operation::FreezeAccount { .. }
+            | Operation::UnfreezeAccount { .. }
+            | Operation::FreezePrincipal { .. }
+            | Operation::UnfreezePrincipal { .. } => {
+                // Freeze/unfreeze operations do not affect balances
+            }
         };
         self.transactions.push(tx);
 
@@ -707,6 +727,12 @@ impl TransactionsAndBalances {
             }
             Operation::AuthorizedBurn { from, .. } => {
                 self.check_and_update_account_validity(*from, default_fee);
+            }
+            Operation::FreezeAccount { .. }
+            | Operation::UnfreezeAccount { .. }
+            | Operation::FreezePrincipal { .. }
+            | Operation::UnfreezePrincipal { .. } => {
+                // Freeze/unfreeze operations do not affect balances or allowances
             }
         }
     }
