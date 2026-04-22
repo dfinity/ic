@@ -871,7 +871,8 @@ fn test_icrc2_feature_flag_doesnt_disable_icrc2_endpoints() {
         max_memo_length: None,
         feature_flags: Some(FeatureFlags {
             icrc2: false,
-            icrc152: false
+            icrc152: false,
+            icrc153: false,
         }),
         index_principal: None,
     }))
@@ -1910,6 +1911,7 @@ mod verify_written_blocks {
                 feature_flags: Some(FeatureFlags {
                     icrc2: true,
                     icrc152: false,
+                    icrc153: false,
                 }),
                 index_principal: None,
             });
@@ -2144,4 +2146,119 @@ fn test_icrc152_supported_standards() {
 #[test]
 fn test_icrc152_total_volume() {
     ic_ledger_suite_state_machine_tests::test_icrc152_total_volume(ledger_wasm(), encode_init_args);
+}
+
+// ---------------------------------------------------------------------------
+// ICRC-153 tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_icrc153_feature_flag_disabled() {
+    ic_ledger_suite_state_machine_tests::test_icrc153_feature_flag_disabled(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc153_unauthorized() {
+    ic_ledger_suite_state_machine_tests::test_icrc153_unauthorized(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_icrc153_validation() {
+    ic_ledger_suite_state_machine_tests::test_icrc153_validation(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_icrc153_freeze_account_happy_path() {
+    ic_ledger_suite_state_machine_tests::test_icrc153_freeze_account_happy_path(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc153_unfreeze_account_happy_path() {
+    ic_ledger_suite_state_machine_tests::test_icrc153_unfreeze_account_happy_path(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc153_freeze_principal_happy_path() {
+    ic_ledger_suite_state_machine_tests::test_icrc153_freeze_principal_happy_path(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc153_unfreeze_principal_clears_account_freezes() {
+    ic_ledger_suite_state_machine_tests::test_icrc153_unfreeze_principal_clears_account_freezes(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc153_already_frozen() {
+    ic_ledger_suite_state_machine_tests::test_icrc153_already_frozen(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc153_freeze_guard_blocks_transfer() {
+    ic_ledger_suite_state_machine_tests::test_icrc153_freeze_guard_blocks_transfer(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc153_freeze_guard_blocks_approve() {
+    ic_ledger_suite_state_machine_tests::test_icrc153_freeze_guard_blocks_approve(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc153_freeze_guard_allows_transfer_to_frozen() {
+    ic_ledger_suite_state_machine_tests::test_icrc153_freeze_guard_allows_transfer_to_frozen(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc153_freeze_guard_allows_privileged_ops() {
+    ic_ledger_suite_state_machine_tests::test_icrc153_freeze_guard_allows_privileged_ops(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc153_deduplication() {
+    ic_ledger_suite_state_machine_tests::test_icrc153_deduplication(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc153_pagination() {
+    ic_ledger_suite_state_machine_tests::test_icrc153_pagination(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_icrc153_supported_standards() {
+    ic_ledger_suite_state_machine_tests::test_icrc153_supported_standards(
+        ledger_wasm(),
+        encode_init_args,
+    );
 }

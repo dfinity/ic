@@ -15,8 +15,9 @@ use ic_icrc1::{
     endpoints::{StandardRecord, convert_transfer_error},
 };
 use ic_icrc1_ledger::{
-    InitArgs, LEDGER_VERSION, Ledger, LedgerArgument, UPGRADES_MEMORY, balances_len,
-    get_allowances, read_first_balance, wasm_token_type,
+    FROZEN_ACCOUNTS, FROZEN_PRINCIPALS, InitArgs, LEDGER_VERSION, Ledger, LedgerArgument,
+    StorablePrincipal, UPGRADES_MEMORY, balances_len, get_allowances, is_frozen_account,
+    read_first_balance, wasm_token_type,
 };
 use ic_ledger_canister_core::ledger::{
     LedgerAccess, LedgerContext, LedgerData, TransferError as CoreTransferError, apply_transaction,
@@ -42,8 +43,18 @@ use icrc_ledger_types::icrc103::get_allowances::{
 };
 use icrc_ledger_types::icrc106::errors::Icrc106Error;
 use icrc_ledger_types::icrc122::schema::{MTHD_152_BURN, MTHD_152_MINT};
+use icrc_ledger_types::icrc123::schema::{
+    MTHD_153_FREEZE_ACCOUNT, MTHD_153_FREEZE_PRINCIPAL, MTHD_153_UNFREEZE_ACCOUNT,
+    MTHD_153_UNFREEZE_PRINCIPAL,
+};
 use icrc_ledger_types::icrc152::{
     Icrc152BurnArgs, Icrc152BurnError, Icrc152MintArgs, Icrc152MintError,
+};
+use icrc_ledger_types::icrc153::{
+    FrozenAccountsRequest, FrozenAccountsResponse, FrozenPrincipalsRequest,
+    FrozenPrincipalsResponse, Icrc153FreezeAccountArgs, Icrc153FreezeAccountError,
+    Icrc153FreezePrincipalArgs, Icrc153FreezePrincipalError, Icrc153UnfreezeAccountArgs,
+    Icrc153UnfreezeAccountError, Icrc153UnfreezePrincipalArgs, Icrc153UnfreezePrincipalError,
 };
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
@@ -591,6 +602,15 @@ fn execute_transfer_not_async(
             }
             _ => {}
         };
+        if ledger.feature_flags().icrc153 && is_frozen_account(&from_account) {
+            ic_cdk::trap("account is frozen");
+        }
+        if ledger.feature_flags().icrc153
+            && let Some(ref spender_acc) = spender
+            && is_frozen_account(spender_acc)
+        {
+            ic_cdk::trap("spender account is frozen");
+        }
         let amount = match Tokens::try_from(amount.clone()) {
             Ok(n) => n,
             Err(_) => {
@@ -787,6 +807,12 @@ fn supported_standards() -> Vec<StandardRecord> {
             url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-152.md".to_string(),
         });
     }
+    if Access::with_ledger(|ledger| ledger.feature_flags().icrc153) {
+        standards.push(StandardRecord {
+            name: "ICRC-153".to_string(),
+            url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-153/ICRC-153.md".to_string(),
+        });
+    }
     standards
 }
 
@@ -828,6 +854,9 @@ fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<u64, A
         };
         if from_account.owner == arg.spender.owner {
             ic_cdk::trap("self approval is not allowed")
+        }
+        if ledger.feature_flags().icrc153 && is_frozen_account(&from_account) {
+            ic_cdk::trap("account is frozen");
         }
         if &from_account == ledger.minting_account() {
             ic_cdk::trap("the minting account cannot delegate mints")
@@ -1094,6 +1123,461 @@ async fn icrc152_burn(args: Icrc152BurnArgs) -> Result<Nat, Icrc152BurnError> {
     Ok(Nat::from(block_idx))
 }
 
+// ---------------------------------------------------------------------------
+// ICRC-153: Freeze / Unfreeze
+// ---------------------------------------------------------------------------
+
+fn icrc153_freeze_account_not_async(
+    caller: Principal,
+    args: Icrc153FreezeAccountArgs,
+) -> Result<u64, Icrc153FreezeAccountError> {
+    let block_idx = Access::with_ledger_mut(|ledger| {
+        if !ledger.feature_flags().icrc153 {
+            return Err(Icrc153FreezeAccountError::GenericError {
+                error_code: Nat::from(0_u64),
+                message: "ICRC-153 is not enabled".to_string(),
+            });
+        }
+        if !ic_cdk::api::is_controller(&caller) {
+            return Err(Icrc153FreezeAccountError::Unauthorized(
+                "caller is not a controller".to_string(),
+            ));
+        }
+        if args.account.owner == Principal::anonymous() {
+            return Err(Icrc153FreezeAccountError::InvalidAccount(
+                "anonymous principal is not allowed".to_string(),
+            ));
+        }
+        if &args.account == ledger.minting_account() {
+            return Err(Icrc153FreezeAccountError::InvalidAccount(
+                "cannot freeze the minting account".to_string(),
+            ));
+        }
+        if let Some(ref reason) = args.reason
+            && reason.len() > MAX_REASON_LENGTH
+        {
+            return Err(Icrc153FreezeAccountError::GenericError {
+                error_code: Nat::from(0_u64),
+                message: format!("reason must be at most {} bytes", MAX_REASON_LENGTH),
+            });
+        }
+        if FROZEN_ACCOUNTS.with(|fa| fa.borrow().contains_key(&args.account))
+            || FROZEN_PRINCIPALS.with(|fp| {
+                fp.borrow()
+                    .contains_key(&StorablePrincipal(args.account.owner))
+            })
+        {
+            return Err(Icrc153FreezeAccountError::AlreadyFrozen(
+                "account is already frozen".to_string(),
+            ));
+        }
+        let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+        let tx = Transaction {
+            operation: Operation::FreezeAccount {
+                account: args.account,
+                caller: Some(caller),
+                mthd: Some(MTHD_153_FREEZE_ACCOUNT.to_string()),
+                reason: args.reason,
+            },
+            created_at_time: Some(args.created_at_time),
+            memo: None,
+        };
+        let (block_idx, _) =
+            apply_transaction(ledger, tx, now, Tokens::zero()).map_err(|err| match err {
+                CoreTransferError::TxDuplicate { duplicate_of } => {
+                    Icrc153FreezeAccountError::Duplicate {
+                        duplicate_of: Nat::from(duplicate_of),
+                    }
+                }
+                CoreTransferError::TxTooOld { .. } => Icrc153FreezeAccountError::TooOld,
+                CoreTransferError::TxCreatedInFuture { ledger_time } => {
+                    Icrc153FreezeAccountError::CreatedInFuture {
+                        ledger_time: ledger_time.as_nanos_since_unix_epoch(),
+                    }
+                }
+                CoreTransferError::TxThrottled => Icrc153FreezeAccountError::GenericError {
+                    error_code: Nat::from(0_u64),
+                    message: "temporarily unavailable".to_string(),
+                },
+                other => Icrc153FreezeAccountError::GenericError {
+                    error_code: Nat::from(0_u64),
+                    message: format!("unexpected error: {:?}", other),
+                },
+            })?;
+        FROZEN_ACCOUNTS.with(|fa| fa.borrow_mut().insert(args.account, ()));
+        update_total_volume(Tokens::zero(), false);
+        Ok(block_idx)
+    })?;
+    Ok(block_idx)
+}
+
+#[update]
+async fn icrc153_freeze_account(
+    args: Icrc153FreezeAccountArgs,
+) -> Result<Nat, Icrc153FreezeAccountError> {
+    let block_idx = icrc153_freeze_account_not_async(ic_cdk::api::caller(), args)?;
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    Ok(Nat::from(block_idx))
+}
+
+fn icrc153_unfreeze_account_not_async(
+    caller: Principal,
+    args: Icrc153UnfreezeAccountArgs,
+) -> Result<u64, Icrc153UnfreezeAccountError> {
+    let block_idx = Access::with_ledger_mut(|ledger| {
+        if !ledger.feature_flags().icrc153 {
+            return Err(Icrc153UnfreezeAccountError::GenericError {
+                error_code: Nat::from(0_u64),
+                message: "ICRC-153 is not enabled".to_string(),
+            });
+        }
+        if !ic_cdk::api::is_controller(&caller) {
+            return Err(Icrc153UnfreezeAccountError::Unauthorized(
+                "caller is not a controller".to_string(),
+            ));
+        }
+        if args.account.owner == Principal::anonymous() {
+            return Err(Icrc153UnfreezeAccountError::InvalidAccount(
+                "anonymous principal is not allowed".to_string(),
+            ));
+        }
+        if &args.account == ledger.minting_account() {
+            return Err(Icrc153UnfreezeAccountError::InvalidAccount(
+                "cannot unfreeze the minting account".to_string(),
+            ));
+        }
+        if let Some(ref reason) = args.reason
+            && reason.len() > MAX_REASON_LENGTH
+        {
+            return Err(Icrc153UnfreezeAccountError::GenericError {
+                error_code: Nat::from(0_u64),
+                message: format!("reason must be at most {} bytes", MAX_REASON_LENGTH),
+            });
+        }
+        let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+        let tx = Transaction {
+            operation: Operation::UnfreezeAccount {
+                account: args.account,
+                caller: Some(caller),
+                mthd: Some(MTHD_153_UNFREEZE_ACCOUNT.to_string()),
+                reason: args.reason,
+            },
+            created_at_time: Some(args.created_at_time),
+            memo: None,
+        };
+        let (block_idx, _) =
+            apply_transaction(ledger, tx, now, Tokens::zero()).map_err(|err| match err {
+                CoreTransferError::TxDuplicate { duplicate_of } => {
+                    Icrc153UnfreezeAccountError::Duplicate {
+                        duplicate_of: Nat::from(duplicate_of),
+                    }
+                }
+                CoreTransferError::TxTooOld { .. } => Icrc153UnfreezeAccountError::TooOld,
+                CoreTransferError::TxCreatedInFuture { ledger_time } => {
+                    Icrc153UnfreezeAccountError::CreatedInFuture {
+                        ledger_time: ledger_time.as_nanos_since_unix_epoch(),
+                    }
+                }
+                CoreTransferError::TxThrottled => Icrc153UnfreezeAccountError::GenericError {
+                    error_code: Nat::from(0_u64),
+                    message: "temporarily unavailable".to_string(),
+                },
+                other => Icrc153UnfreezeAccountError::GenericError {
+                    error_code: Nat::from(0_u64),
+                    message: format!("unexpected error: {:?}", other),
+                },
+            })?;
+        FROZEN_ACCOUNTS.with(|fa| fa.borrow_mut().remove(&args.account));
+        update_total_volume(Tokens::zero(), false);
+        Ok(block_idx)
+    })?;
+    Ok(block_idx)
+}
+
+#[update]
+async fn icrc153_unfreeze_account(
+    args: Icrc153UnfreezeAccountArgs,
+) -> Result<Nat, Icrc153UnfreezeAccountError> {
+    let block_idx = icrc153_unfreeze_account_not_async(ic_cdk::api::caller(), args)?;
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    Ok(Nat::from(block_idx))
+}
+
+fn icrc153_freeze_principal_not_async(
+    caller: Principal,
+    args: Icrc153FreezePrincipalArgs,
+) -> Result<u64, Icrc153FreezePrincipalError> {
+    let block_idx = Access::with_ledger_mut(|ledger| {
+        if !ledger.feature_flags().icrc153 {
+            return Err(Icrc153FreezePrincipalError::GenericError {
+                error_code: Nat::from(0_u64),
+                message: "ICRC-153 is not enabled".to_string(),
+            });
+        }
+        if !ic_cdk::api::is_controller(&caller) {
+            return Err(Icrc153FreezePrincipalError::Unauthorized(
+                "caller is not a controller".to_string(),
+            ));
+        }
+        if args.principal == Principal::anonymous() {
+            return Err(Icrc153FreezePrincipalError::InvalidPrincipal(
+                "anonymous principal is not allowed".to_string(),
+            ));
+        }
+        if let Some(ref reason) = args.reason
+            && reason.len() > MAX_REASON_LENGTH
+        {
+            return Err(Icrc153FreezePrincipalError::GenericError {
+                error_code: Nat::from(0_u64),
+                message: format!("reason must be at most {} bytes", MAX_REASON_LENGTH),
+            });
+        }
+        if FROZEN_PRINCIPALS.with(|fp| fp.borrow().contains_key(&StorablePrincipal(args.principal)))
+        {
+            return Err(Icrc153FreezePrincipalError::AlreadyFrozen(
+                "principal is already frozen".to_string(),
+            ));
+        }
+        let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+        let tx = Transaction {
+            operation: Operation::FreezePrincipal {
+                principal: args.principal,
+                caller: Some(caller),
+                mthd: Some(MTHD_153_FREEZE_PRINCIPAL.to_string()),
+                reason: args.reason,
+            },
+            created_at_time: Some(args.created_at_time),
+            memo: None,
+        };
+        let (block_idx, _) =
+            apply_transaction(ledger, tx, now, Tokens::zero()).map_err(|err| match err {
+                CoreTransferError::TxDuplicate { duplicate_of } => {
+                    Icrc153FreezePrincipalError::Duplicate {
+                        duplicate_of: Nat::from(duplicate_of),
+                    }
+                }
+                CoreTransferError::TxTooOld { .. } => Icrc153FreezePrincipalError::TooOld,
+                CoreTransferError::TxCreatedInFuture { ledger_time } => {
+                    Icrc153FreezePrincipalError::CreatedInFuture {
+                        ledger_time: ledger_time.as_nanos_since_unix_epoch(),
+                    }
+                }
+                CoreTransferError::TxThrottled => Icrc153FreezePrincipalError::GenericError {
+                    error_code: Nat::from(0_u64),
+                    message: "temporarily unavailable".to_string(),
+                },
+                other => Icrc153FreezePrincipalError::GenericError {
+                    error_code: Nat::from(0_u64),
+                    message: format!("unexpected error: {:?}", other),
+                },
+            })?;
+        FROZEN_PRINCIPALS.with(|fp| {
+            fp.borrow_mut()
+                .insert(StorablePrincipal(args.principal), ())
+        });
+        update_total_volume(Tokens::zero(), false);
+        Ok(block_idx)
+    })?;
+    Ok(block_idx)
+}
+
+#[update]
+async fn icrc153_freeze_principal(
+    args: Icrc153FreezePrincipalArgs,
+) -> Result<Nat, Icrc153FreezePrincipalError> {
+    let block_idx = icrc153_freeze_principal_not_async(ic_cdk::api::caller(), args)?;
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    Ok(Nat::from(block_idx))
+}
+
+fn icrc153_unfreeze_principal_not_async(
+    caller: Principal,
+    args: Icrc153UnfreezePrincipalArgs,
+) -> Result<u64, Icrc153UnfreezePrincipalError> {
+    let block_idx = Access::with_ledger_mut(|ledger| {
+        if !ledger.feature_flags().icrc153 {
+            return Err(Icrc153UnfreezePrincipalError::GenericError {
+                error_code: Nat::from(0_u64),
+                message: "ICRC-153 is not enabled".to_string(),
+            });
+        }
+        if !ic_cdk::api::is_controller(&caller) {
+            return Err(Icrc153UnfreezePrincipalError::Unauthorized(
+                "caller is not a controller".to_string(),
+            ));
+        }
+        if args.principal == Principal::anonymous() {
+            return Err(Icrc153UnfreezePrincipalError::InvalidPrincipal(
+                "anonymous principal is not allowed".to_string(),
+            ));
+        }
+        if let Some(ref reason) = args.reason
+            && reason.len() > MAX_REASON_LENGTH
+        {
+            return Err(Icrc153UnfreezePrincipalError::GenericError {
+                error_code: Nat::from(0_u64),
+                message: format!("reason must be at most {} bytes", MAX_REASON_LENGTH),
+            });
+        }
+        let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+        let tx = Transaction {
+            operation: Operation::UnfreezePrincipal {
+                principal: args.principal,
+                caller: Some(caller),
+                mthd: Some(MTHD_153_UNFREEZE_PRINCIPAL.to_string()),
+                reason: args.reason,
+            },
+            created_at_time: Some(args.created_at_time),
+            memo: None,
+        };
+        let (block_idx, _) =
+            apply_transaction(ledger, tx, now, Tokens::zero()).map_err(|err| match err {
+                CoreTransferError::TxDuplicate { duplicate_of } => {
+                    Icrc153UnfreezePrincipalError::Duplicate {
+                        duplicate_of: Nat::from(duplicate_of),
+                    }
+                }
+                CoreTransferError::TxTooOld { .. } => Icrc153UnfreezePrincipalError::TooOld,
+                CoreTransferError::TxCreatedInFuture { ledger_time } => {
+                    Icrc153UnfreezePrincipalError::CreatedInFuture {
+                        ledger_time: ledger_time.as_nanos_since_unix_epoch(),
+                    }
+                }
+                CoreTransferError::TxThrottled => Icrc153UnfreezePrincipalError::GenericError {
+                    error_code: Nat::from(0_u64),
+                    message: "temporarily unavailable".to_string(),
+                },
+                other => Icrc153UnfreezePrincipalError::GenericError {
+                    error_code: Nat::from(0_u64),
+                    message: format!("unexpected error: {:?}", other),
+                },
+            })?;
+        FROZEN_PRINCIPALS.with(|fp| fp.borrow_mut().remove(&StorablePrincipal(args.principal)));
+        // Also remove all account-level freezes for this principal
+        FROZEN_ACCOUNTS.with(|fa| {
+            let map = fa.borrow();
+            let to_remove: Vec<Account> = map
+                .iter()
+                .filter(|(account, _)| account.owner == args.principal)
+                .map(|(account, _)| account)
+                .collect();
+            drop(map);
+            let mut map = fa.borrow_mut();
+            for account in to_remove {
+                map.remove(&account);
+            }
+        });
+        update_total_volume(Tokens::zero(), false);
+        Ok(block_idx)
+    })?;
+    Ok(block_idx)
+}
+
+#[update]
+async fn icrc153_unfreeze_principal(
+    args: Icrc153UnfreezePrincipalArgs,
+) -> Result<Nat, Icrc153UnfreezePrincipalError> {
+    let block_idx = icrc153_unfreeze_principal_not_async(ic_cdk::api::caller(), args)?;
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    Ok(Nat::from(block_idx))
+}
+
+// ICRC-153 query endpoints
+
+#[query]
+fn icrc153_is_frozen_account(account: Account) -> bool {
+    if !Access::with_ledger(|l| l.feature_flags().icrc153) {
+        return false;
+    }
+    is_frozen_account(&account)
+}
+
+#[query]
+fn icrc153_is_frozen_principal(principal: Principal) -> bool {
+    if !Access::with_ledger(|l| l.feature_flags().icrc153) {
+        return false;
+    }
+    FROZEN_PRINCIPALS.with(|fp| fp.borrow().contains_key(&StorablePrincipal(principal)))
+}
+
+#[query]
+fn icrc153_list_frozen_accounts(req: FrozenAccountsRequest) -> FrozenAccountsResponse {
+    if !Access::with_ledger(|l| l.feature_flags().icrc153) {
+        return FrozenAccountsResponse {
+            accounts: vec![],
+            has_more: false,
+        };
+    }
+    let max_results = req.max_results.0.to_u64().unwrap_or(u64::MAX) as usize;
+    let accounts: Vec<Account> = FROZEN_ACCOUNTS.with(|fa| {
+        let map = fa.borrow();
+        let iter: Box<dyn Iterator<Item = (Account, ())>> = match req.start_after {
+            Some(ref start) => Box::new(map.range(*start..)),
+            None => Box::new(map.iter()),
+        };
+        let mut iter = iter.peekable();
+        // Skip the start_after key itself if present
+        if req.start_after.is_some()
+            && let Some((k, _)) = iter.peek()
+            && Some(k) == req.start_after.as_ref()
+        {
+            iter.next();
+        }
+        iter.take(max_results + 1)
+            .map(|(account, _)| account)
+            .collect()
+    });
+    let has_more = accounts.len() > max_results;
+    let accounts = if has_more {
+        accounts[..max_results].to_vec()
+    } else {
+        accounts
+    };
+    FrozenAccountsResponse { accounts, has_more }
+}
+
+#[query]
+fn icrc153_list_frozen_principals(req: FrozenPrincipalsRequest) -> FrozenPrincipalsResponse {
+    if !Access::with_ledger(|l| l.feature_flags().icrc153) {
+        return FrozenPrincipalsResponse {
+            principals: vec![],
+            has_more: false,
+        };
+    }
+    let max_results = req.max_results.0.to_u64().unwrap_or(u64::MAX) as usize;
+    let principals: Vec<Principal> = FROZEN_PRINCIPALS.with(|fp| {
+        let map = fp.borrow();
+        let start_key = req.start_after.map(StorablePrincipal);
+        let iter: Box<dyn Iterator<Item = (StorablePrincipal, ())>> = match start_key {
+            Some(ref start) => Box::new(map.range(start.clone()..)),
+            None => Box::new(map.iter()),
+        };
+        let mut iter = iter.peekable();
+        // Skip the start_after key itself if present
+        if start_key.is_some()
+            && let Some((k, _)) = iter.peek()
+            && Some(k) == start_key.as_ref()
+        {
+            iter.next();
+        }
+        iter.take(max_results + 1).map(|(sp, _)| sp.0).collect()
+    });
+    let has_more = principals.len() > max_results;
+    let principals = if has_more {
+        principals[..max_results].to_vec()
+    } else {
+        principals
+    };
+    FrozenPrincipalsResponse {
+        principals,
+        has_more,
+    }
+}
+
 #[query]
 fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
     Access::with_ledger(|ledger| {
@@ -1164,6 +1648,24 @@ fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::Suppor
         types.push(SupportedBlockType {
             block_type: "122burn".to_string(),
             url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-122.md".to_string(),
+        });
+    }
+    if Access::with_ledger(|ledger| ledger.feature_flags().icrc153) {
+        types.push(SupportedBlockType {
+            block_type: "123freezeaccount".to_string(),
+            url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-123.md".to_string(),
+        });
+        types.push(SupportedBlockType {
+            block_type: "123unfreezeaccount".to_string(),
+            url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-123.md".to_string(),
+        });
+        types.push(SupportedBlockType {
+            block_type: "123freezeprincipal".to_string(),
+            url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-123.md".to_string(),
+        });
+        types.push(SupportedBlockType {
+            block_type: "123unfreezeprincipal".to_string(),
+            url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-123.md".to_string(),
         });
     }
     types
