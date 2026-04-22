@@ -138,7 +138,7 @@ impl QueryEndpoint {
                 .await
             }
             QueryEndpoint::Subnet => {
-                ic_http_endpoints_test_agent::QuerySubnet::new(subnet_test_id(1).get())
+                ic_http_endpoints_test_agent::Query::new_subnet(subnet_test_id(1).get())
                     .query(addr)
                     .await
             }

@@ -30,7 +30,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_http_endpoints_public::{query, read_state};
 use ic_http_endpoints_test_agent::{
     self, APPLICATION_CBOR, Call, CallSubnet, CanisterReadState, IngressMessage, Query,
-    QuerySubnet, wait_for_status_healthy,
+    wait_for_status_healthy,
 };
 use ic_interfaces::execution_environment::QueryExecutionError;
 use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
@@ -1963,7 +1963,7 @@ fn test_query_v3_subnet_wrong_subnet_id() {
 
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
-        let response = QuerySubnet::new(wrong_subnet_id).query(addr).await;
+        let response = Query::new_subnet(wrong_subnet_id).query(addr).await;
 
         assert_eq!(StatusCode::BAD_REQUEST, response.status());
         assert_eq!(
@@ -1998,7 +1998,7 @@ fn test_query_v3_subnet_correct_subnet_id() {
 
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
-        let response = QuerySubnet::new(subnet_id).query(addr).await;
+        let response = Query::new_subnet(subnet_id).query(addr).await;
 
         assert_eq!(
             StatusCode::OK,
@@ -2031,7 +2031,7 @@ fn test_query_v3_subnet_wrong_canister_or_method(
 
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
-        let response = QuerySubnet::new(subnet_id)
+        let response = Query::new_subnet(subnet_id)
             .with_canister_id(canister_id)
             .with_method_name(method_name.to_string())
             .query(addr)

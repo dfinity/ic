@@ -200,18 +200,36 @@ impl CallSubnet {
     }
 }
 
-pub struct QuerySubnet {
-    subnet_id: PrincipalId,
+pub struct Query {
     canister_id: PrincipalId,
+    effective_canister_id: PrincipalId,
     method_name: String,
+    version: query::Version,
+    subnet_id: Option<PrincipalId>,
 }
 
-impl QuerySubnet {
-    pub fn new(subnet_id: PrincipalId) -> Self {
+impl Query {
+    pub fn new(
+        canister_id: PrincipalId,
+        effective_canister_id: PrincipalId,
+        version: query::Version,
+    ) -> Self {
         Self {
-            subnet_id,
+            canister_id,
+            effective_canister_id,
+            method_name: METHOD_NAME.to_string(),
+            version,
+            subnet_id: None,
+        }
+    }
+
+    pub fn new_subnet(subnet_id: PrincipalId) -> Self {
+        Self {
             canister_id: CanisterId::ic_00().get(),
+            effective_canister_id: PrincipalId::default(),
             method_name: "list_canisters".to_string(),
+            version: query::Version::SubnetV3,
+            subnet_id: Some(subnet_id),
         }
     }
 
@@ -248,71 +266,20 @@ impl QuerySubnet {
         };
 
         let body = serde_cbor::to_vec(&envelope).unwrap();
-        let url = format!("http://{}/api/v3/subnet/{}/query", addr, self.subnet_id);
-
-        reqwest::Client::new()
-            .post(url)
-            .body(body)
-            .header(CONTENT_TYPE, APPLICATION_CBOR)
-            .send()
-            .await
-            .unwrap()
-    }
-}
-
-pub struct Query {
-    canister_id: PrincipalId,
-    effective_canister_id: PrincipalId,
-    version: query::Version,
-}
-
-impl Query {
-    pub fn new(
-        canister_id: PrincipalId,
-        effective_canister_id: PrincipalId,
-        version: query::Version,
-    ) -> Self {
-        Self {
-            canister_id,
-            effective_canister_id,
-            version,
-        }
-    }
-
-    pub async fn query(self, addr: SocketAddr) -> reqwest::Response {
-        let ingress_expiry = (current_time() + INGRESS_EXPIRY_DURATION).as_nanos_since_unix_epoch();
-
-        let call_content = HttpQueryContent::Query {
-            query: HttpUserQuery {
-                canister_id: Blob(self.canister_id.into_vec()),
-                method_name: METHOD_NAME.to_string(),
-                arg: Blob(ARG),
-                sender: Blob(SENDER.into_vec()),
-                ingress_expiry,
-                nonce: None,
-                sender_info: None,
-            },
+        let url = match self.version {
+            query::Version::V2 => format!(
+                "http://{addr}/api/v2/canister/{}/query",
+                self.effective_canister_id
+            ),
+            query::Version::V3 => format!(
+                "http://{addr}/api/v3/canister/{}/query",
+                self.effective_canister_id
+            ),
+            query::Version::SubnetV3 => format!(
+                "http://{addr}/api/v3/subnet/{}/query",
+                self.subnet_id.expect("subnet_id required for SubnetV3")
+            ),
         };
-
-        let envelope = HttpRequestEnvelope {
-            content: call_content,
-            sender_pubkey: None,
-            sender_sig: None,
-            sender_delegation: None,
-        };
-
-        let body = serde_cbor::to_vec(&envelope).unwrap();
-        let version_str = match self.version {
-            query::Version::V2 => "v2",
-            query::Version::V3 => "v3",
-            query::Version::SubnetV3 => {
-                unreachable!("Use QuerySubnet for the subnet query endpoint")
-            }
-        };
-        let url = format!(
-            "http://{addr}/api/{version_str}/canister/{}/query",
-            self.effective_canister_id
-        );
 
         reqwest::Client::new()
             .post(url)
