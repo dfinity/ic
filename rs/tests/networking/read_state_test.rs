@@ -348,8 +348,7 @@ fn test_invalid_request_rejected(env: TestEnv, endpoint: Endpoint) {
         let path = vec!["request_status".into(), invalid_request_id.into()];
         let error = read_state(&env, vec![path], endpoint).expect_err("Invalid request");
         match endpoint {
-            Endpoint::CanisterReadState(_)
-            | Endpoint::SubnetReadState(read_state::Version::V3) => {
+            Endpoint::CanisterReadState(_) | Endpoint::SubnetReadState(read_state::Version::V3) => {
                 assert_matches!(
                     error,
                     AgentError::HttpError(error) if error.status == StatusCode::BAD_REQUEST.as_u16(),
