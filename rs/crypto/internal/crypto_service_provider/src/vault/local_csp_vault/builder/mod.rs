@@ -1,5 +1,6 @@
 use super::*;
 use rand::rngs::OsRng;
+use rayon::ThreadPool;
 
 pub struct LocalCspVaultBuilder<R, S, C, P> {
     csprng: Box<dyn FnOnce() -> R>,
@@ -9,6 +10,7 @@ pub struct LocalCspVaultBuilder<R, S, C, P> {
     time_source: Arc<dyn TimeSource>,
     metrics: Arc<CryptoMetrics>,
     logger: ReplicaLogger,
+    thread_pool_nidkg: Option<Arc<ThreadPool>>,
 }
 
 impl ProdLocalCspVault {
@@ -28,6 +30,7 @@ impl ProdLocalCspVault {
             time_source: Arc::new(SysTimeSource::new()),
             metrics,
             logger,
+            thread_pool_nidkg: None,
         }
     }
 
@@ -82,6 +85,7 @@ where
             time_source: self.time_source,
             metrics: self.metrics,
             logger: self.logger,
+            thread_pool_nidkg: self.thread_pool_nidkg,
         }
     }
 
@@ -97,6 +101,7 @@ where
             time_source: self.time_source,
             metrics: self.metrics,
             logger: self.logger,
+            thread_pool_nidkg: self.thread_pool_nidkg,
         }
     }
 
@@ -112,6 +117,7 @@ where
             time_source: self.time_source,
             metrics: self.metrics,
             logger: self.logger,
+            thread_pool_nidkg: self.thread_pool_nidkg,
         }
     }
 
@@ -127,6 +133,7 @@ where
             time_source: self.time_source,
             metrics: self.metrics,
             logger: self.logger,
+            thread_pool_nidkg: self.thread_pool_nidkg,
         }
     }
 
@@ -137,6 +144,18 @@ where
 
     pub fn with_logger(mut self, logger: ReplicaLogger) -> Self {
         self.logger = logger;
+        self
+    }
+
+    /// Installs an externally-managed rayon pool used for NIDKG work.
+    ///
+    /// If not called, `build` creates a small default pool — see
+    /// [`super::NIDKG_THREAD_POOL_SIZE`]. Prod callers that already own a
+    /// NIDKG pool (e.g., the remote vault server) should inject it here so
+    /// that a single pool is shared across the RPC dispatch layer and the
+    /// vault's internal `par_iter` calls.
+    pub fn with_nidkg_thread_pool(mut self, thread_pool_nidkg: Arc<ThreadPool>) -> Self {
+        self.thread_pool_nidkg = Some(thread_pool_nidkg);
         self
     }
 
@@ -158,6 +177,9 @@ where
             time_source: self.time_source,
             metrics: self.metrics,
             logger: self.logger,
+            thread_pool_nidkg: self
+                .thread_pool_nidkg
+                .unwrap_or_else(super::new_nidkg_thread_pool),
         }
     }
 
@@ -194,6 +216,7 @@ mod test_utils {
                 time_source: FastForwardTimeSource::new(),
                 logger: no_op_logger(),
                 metrics: Arc::new(CryptoMetrics::none()),
+                thread_pool_nidkg: None,
             }
         }
     }
