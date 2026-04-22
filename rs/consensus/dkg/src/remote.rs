@@ -491,11 +491,11 @@ mod tests {
         };
         let ni_dkg_key_id = NiDkgMasterPublicKeyId::VetKd(vet_key_id.clone());
         let tag = NiDkgTag::HighThresholdForKey(ni_dkg_key_id.clone());
-        let transcript_committee: Vec<_> = (50..54).map(node_test_id).collect();
-        let transcript = dummy_transcript_for_tests_with_params(
-            transcript_committee.clone(),
+        let next_transcript_committee: Vec<_> = (50..54).map(node_test_id).collect();
+        let next_transcript = dummy_transcript_for_tests_with_params(
+            next_transcript_committee.clone(),
             tag.clone(),
-            tag.threshold_for_subnet_of_size(transcript_committee.len()) as u32,
+            tag.threshold_for_subnet_of_size(next_transcript_committee.len()) as u32,
             1,
         );
         let current_transcript_committee: Vec<_> = (90..94).map(node_test_id).collect();
@@ -528,7 +528,7 @@ mod tests {
         let dkg_summary = test_dkg_summary(
             Height::from(101),
             BTreeMap::from([(tag.clone(), current_transcript.clone())]),
-            BTreeMap::from([(tag, transcript.clone())]),
+            BTreeMap::from([(tag, next_transcript.clone())]),
             BTreeMap::new(),
         );
         let map = build_callback_id_config_map(
@@ -548,12 +548,15 @@ mod tests {
             .expect("expected successful configs");
         assert_eq!(configs.len(), 1);
         let config = &configs[0];
-        assert_eq!(config.resharing_transcript().as_ref(), Some(&transcript));
+        assert_eq!(
+            config.resharing_transcript().as_ref(),
+            Some(&next_transcript)
+        );
         assert_ne!(
             config.resharing_transcript().as_ref(),
             Some(&current_transcript)
         );
-        assert_eq!(config.dealers().get(), transcript.committee.get());
+        assert_eq!(config.dealers().get(), next_transcript.committee.get());
         assert_ne!(config.dealers().get(), current_transcript.committee.get());
 
         let missing_transcript_summary = test_dkg_summary(
