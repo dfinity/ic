@@ -127,21 +127,22 @@ def resolve_full_commit_sha(sha: str) -> str:
 
     Only accepts inputs that look like a git commit SHA (hex 7-40 chars) to avoid
     accepting arbitrary revision expressions or option injection via `git rev-parse`.
-    The `--` separator and `^{commit}` suffix ensure git treats the input as a commit
-    object reference rather than an option or another kind of object (tag, tree, ...).
+    The `^{commit}` suffix ensures git treats the input as a commit object reference
+    rather than another kind of object (tag, tree, ...).
     """
     if not is_git_commit_sha(sha):
         die(f"Invalid git commit SHA '{sha}': expected 7-40 hexadecimal characters.")
     repo_root = THIS_SCRIPT_DIR.parent.parent
     try:
         result = subprocess.run(
-            ["git", "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}", "--"],
+            ["git", "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}"],
             cwd=repo_root,
             check=True,
             capture_output=True,
             text=True,
         )
-        return result.stdout.strip()
+        # Defensively take the first non-empty line of output.
+        return result.stdout.splitlines()[0].strip()
     except subprocess.CalledProcessError as e:
         die(f"Failed to resolve git commit '{sha}': {e.stderr.strip()}\nMake sure the commit exists in the repository.")
 
