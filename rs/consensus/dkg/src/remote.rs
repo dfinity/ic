@@ -1,7 +1,7 @@
 use crate::{
     MAX_REMOTE_DKG_ATTEMPTS, REMOTE_DKG_REPEATED_FAILURE_ERROR,
     payload_builder::{
-        create_low_high_remote_dkg_configs, create_remote_dkg_config_for_key_id, get_node_list,
+        create_low_high_remote_dkg_configs, create_remote_dkg_config, get_node_list,
     },
 };
 use ic_interfaces_registry::RegistryClient;
@@ -15,7 +15,7 @@ use ic_types::{
     consensus::dkg::{DkgPayloadCreationError, DkgSummary},
     crypto::threshold_sig::ni_dkg::{
         NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
-        NiDkgTranscript, config::NiDkgConfig,
+        config::NiDkgConfig,
     },
     messages::CallbackId,
 };
@@ -89,10 +89,9 @@ impl<'a> RemoteDkgContext<'a> {
 
     fn create_configs(
         &self,
-        start_block_height: Height,
+        dkg_summary: &DkgSummary,
         dealer_subnet: SubnetId,
         registry_client: &dyn RegistryClient,
-        get_reshare_transcript: impl Fn(&NiDkgTag) -> Option<NiDkgTranscript>,
         logger: &ReplicaLogger,
     ) -> Result<ConfigResult, DkgPayloadCreationError> {
         let config_result = match self {
@@ -100,7 +99,7 @@ impl<'a> RemoteDkgContext<'a> {
                 let dealers =
                     get_node_list(dealer_subnet, registry_client, context.registry_version)?;
                 create_low_high_remote_dkg_configs(
-                    start_block_height,
+                    dkg_summary.height,
                     dealer_subnet,
                     context.target_id,
                     dealers,
@@ -110,17 +109,35 @@ impl<'a> RemoteDkgContext<'a> {
                 )
                 .map(|(config0, config1)| vec![config0, config1])
             }
-            RemoteDkgContext::ReshareChainKey(context) => create_remote_dkg_config_for_key_id(
-                context.key_id.clone(),
-                start_block_height,
-                dealer_subnet,
-                context.context.target_id,
-                context.context.nodes.clone(),
-                get_reshare_transcript,
-                &context.context.registry_version,
-            )
-            .map(|config| vec![config])
-            .map_err(|err_box| vec![*err_box]),
+            RemoteDkgContext::ReshareChainKey(context) => {
+                let dkg_id = NiDkgId {
+                    start_block_height: dkg_summary.height,
+                    dealer_subnet,
+                    dkg_tag: NiDkgTag::HighThresholdForKey(context.key_id.clone()),
+                    target_subnet: NiDkgTargetSubnet::Remote(context.context.target_id),
+                };
+                let Some(resharing_transcript) = dkg_summary
+                    .next_transcripts()
+                    .get(&dkg_id.dkg_tag)
+                    .or_else(|| dkg_summary.current_transcripts().get(&dkg_id.dkg_tag))
+                    .cloned()
+                else {
+                    let err = format!(
+                        "Failed to find resharing transcript for a remote dkg for tag {:?}",
+                        &dkg_id.dkg_tag
+                    );
+                    return Ok(Err(vec![(dkg_id, err)]));
+                };
+                create_remote_dkg_config(
+                    dkg_id.clone(),
+                    resharing_transcript.committee.get().clone(),
+                    context.context.nodes.clone(),
+                    &context.context.registry_version,
+                    Some(resharing_transcript),
+                )
+                .map(|config| vec![config])
+                .map_err(|err| vec![(dkg_id, format!("{err:?}"))])
+            }
         };
         Ok(config_result)
     }
@@ -156,14 +173,6 @@ pub(crate) fn build_callback_id_config_map(
                     .map(|context| (callback_id, RemoteDkgContext::ReshareChainKey(context)))
             });
 
-    let get_reshare_transcript = |tag: &NiDkgTag| {
-        dkg_summary
-            .next_transcripts()
-            .get(tag)
-            .or_else(|| dkg_summary.current_transcripts().get(tag))
-            .cloned()
-    };
-
     for (callback_id, context) in setup_contexts.chain(reshare_contexts) {
         if context.registry_version() > registry_version {
             // Skip contexts with a registry version that hasn't been reached yet
@@ -190,13 +199,7 @@ pub(crate) fn build_callback_id_config_map(
         // Create configs for the context and insert them into the map
         callback_id_config_map.insert(
             callback_id,
-            context.create_configs(
-                dkg_summary.height,
-                this_subnet_id,
-                registry_client,
-                get_reshare_transcript,
-                logger,
-            )?,
+            context.create_configs(dkg_summary, this_subnet_id, registry_client, logger)?,
         );
     }
 
@@ -233,6 +236,7 @@ mod tests {
     use ic_test_utilities_state::ReplicatedStateBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_test_utilities_types::messages::RequestBuilder;
+    use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTranscript;
     use ic_types::{
         NodeId, RegistryVersion, crypto::threshold_sig::ni_dkg::NiDkgTag, messages::CallbackId,
         time::UNIX_EPOCH,

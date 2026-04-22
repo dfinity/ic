@@ -798,7 +798,6 @@ fn process_reshare_chain_key_contexts(
         .metadata
         .subnet_call_context_manager
         .reshare_chain_key_contexts;
-    let get_reshare_transcript = |tag: &NiDkgTag| reshared_transcripts.get(tag).cloned();
 
     for (_callback_id, context) in contexts.iter() {
         // if we haven't reached the required registry version yet, skip this context
@@ -811,20 +810,33 @@ fn process_reshare_chain_key_contexts(
             continue;
         };
 
-        match create_remote_dkg_config_for_key_id(
-            key_id,
+        let dkg_id = NiDkgId {
             start_block_height,
-            this_subnet_id,
-            context.target_id,
+            dealer_subnet: this_subnet_id,
+            dkg_tag: NiDkgTag::HighThresholdForKey(key_id),
+            target_subnet: NiDkgTargetSubnet::Remote(context.target_id),
+        };
+        let Some(resharing_transcript) = reshared_transcripts.get(&dkg_id.dkg_tag).cloned() else {
+            let err = format!(
+                "Failed to find resharing transcript for a remote dkg for tag {:?}",
+                &dkg_id.dkg_tag
+            );
+            errors.push((dkg_id, err));
+            continue;
+        };
+
+        match create_remote_dkg_config(
+            dkg_id.clone(),
+            resharing_transcript.committee.get().clone(),
             context.nodes.clone(),
-            get_reshare_transcript,
             &context.registry_version,
+            Some(resharing_transcript),
         ) {
             Ok(config) => {
                 new_configs.push(vec![config]);
                 valid_target_ids.push(context.target_id);
             }
-            Err(err) => errors.push(*err),
+            Err(err) => errors.push((dkg_id, format!("{err:?}"))),
         }
     }
     (new_configs, errors, valid_target_ids)
@@ -1015,42 +1027,7 @@ pub(crate) fn create_low_high_remote_dkg_configs(
     }
 }
 
-pub(crate) fn create_remote_dkg_config_for_key_id(
-    key_id: NiDkgMasterPublicKeyId,
-    start_block_height: Height,
-    dealer_subnet: SubnetId,
-    target_id: NiDkgTargetId,
-    receivers: BTreeSet<NodeId>,
-    get_reshare_transcript: impl Fn(&NiDkgTag) -> Option<NiDkgTranscript>,
-    registry_version: &RegistryVersion,
-) -> Result<NiDkgConfig, Box<(NiDkgId, String)>> {
-    let dkg_id = NiDkgId {
-        start_block_height,
-        dealer_subnet,
-        dkg_tag: NiDkgTag::HighThresholdForKey(key_id),
-        target_subnet: NiDkgTargetSubnet::Remote(target_id),
-    };
-
-    // Find the resharing transcript corresponding to the remote dkg id
-    let Some(resharing_transcript) = get_reshare_transcript(&dkg_id.dkg_tag) else {
-        let err = format!(
-            "Failed to find resharing transcript for a remote dkg for tag {:?}",
-            &dkg_id.dkg_tag
-        );
-        return Err(Box::new((dkg_id, err)));
-    };
-
-    create_remote_dkg_config(
-        dkg_id.clone(),
-        resharing_transcript.committee.get().clone(),
-        receivers,
-        registry_version,
-        Some(resharing_transcript),
-    )
-    .map_err(|err| Box::new((dkg_id, format!("{err:?}"))))
-}
-
-fn create_remote_dkg_config(
+pub(crate) fn create_remote_dkg_config(
     dkg_id: NiDkgId,
     dealers: BTreeSet<NodeId>,
     receivers: BTreeSet<NodeId>,
@@ -1221,7 +1198,7 @@ mod tests {
     }
 
     #[test]
-    fn test_create_remote_dkg_config_for_key_id_dealers_match_reshared_transcript_committee() {
+    fn test_remote_dkg_config_dealers_match_reshared_transcript_committee() {
         let transcript_committee: Vec<_> = (0..4).map(node_test_id).collect();
         let receivers: BTreeSet<_> = (4..8).map(node_test_id).collect();
         let start_block_height = Height::from(500);
@@ -1242,18 +1219,18 @@ mod tests {
             777,
         );
 
-        let mut reshared_transcripts = BTreeMap::new();
-        reshared_transcripts.insert(tag, resharing_transcript.clone());
-
-        let get_reshare_transcript = |tag: &NiDkgTag| reshared_transcripts.get(tag).cloned();
-        let config = super::create_remote_dkg_config_for_key_id(
-            key_id,
+        let dkg_id = NiDkgId {
             start_block_height,
             dealer_subnet,
-            target_id,
+            dkg_tag: tag,
+            target_subnet: NiDkgTargetSubnet::Remote(target_id),
+        };
+        let config = super::create_remote_dkg_config(
+            dkg_id,
+            resharing_transcript.committee.get().clone(),
             receivers,
-            get_reshare_transcript,
             &registry_version,
+            Some(resharing_transcript.clone()),
         )
         .expect("expected remote DKG config for resharing");
 
