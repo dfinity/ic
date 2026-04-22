@@ -148,7 +148,11 @@ def resolve_full_commit_sha(sha: str) -> str:
         if result.returncode != 0:
             return None
         # Defensively take the first non-empty line of output.
-        return result.stdout.splitlines()[0].strip()
+        for line in result.stdout.splitlines():
+            stripped_line = line.strip()
+            if stripped_line:
+                return stripped_line
+        return None
 
     full_sha = rev_parse()
     if full_sha is not None:
