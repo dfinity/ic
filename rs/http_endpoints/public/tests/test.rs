@@ -2051,6 +2051,7 @@ fn test_query_v3_subnet_wrong_canister_or_method(
     });
 }
 
+/// Tests that /api/v4/subnet/../call rejects calls to non-management canisters (even with
 /// method "create_canister") and calls to IC_00 methods other than "create_canister".
 #[rstest]
 #[case::wrong_canister_id(canister_test_id(1).get(), "create_canister")]
