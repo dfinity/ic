@@ -2552,3 +2552,195 @@ fn test_authorized_mint_and_burn_122() {
         );
     });
 }
+
+#[test]
+fn test_freeze_unfreeze_123() {
+    let rt = Runtime::new().unwrap();
+    let setup = Setup::builder()
+        .with_custom_ledger_wasm(icrc3_test_ledger())
+        .build();
+
+    rt.block_on(async {
+        let env = RosettaTestingEnvironmentBuilder::new(&setup).build().await;
+
+        let agent = get_custom_agent(Arc::new(test_identity()), setup.port).await;
+
+        let account_1 = Account {
+            owner: PrincipalId::new_user_test_id(1).into(),
+            subaccount: None,
+        };
+        let caller = PrincipalId::new_user_test_id(42);
+
+        // Block 0: regular mint to account_1 (10M)
+        let block0 = BlockBuilder::new(0, 0)
+            .mint(account_1, Tokens::from(10_000_000_u64))
+            .build();
+        let idx = add_block(&agent, &env.icrc1_ledger_id, &block0)
+            .await
+            .expect("failed to add block 0");
+        assert_eq!(idx, Nat::from(0_u64));
+
+        // Block 1: minimal freeze account (no caller/mthd/reason)
+        let block1 = BlockBuilder::<Tokens>::new(1, 1)
+            .with_parent_hash(block0.hash().to_vec())
+            .freeze_account(account_1)
+            .build();
+        let idx = add_block(&agent, &env.icrc1_ledger_id, &block1)
+            .await
+            .expect("failed to add block 1");
+        assert_eq!(idx, Nat::from(1_u64));
+
+        // Block 2: full freeze account with metadata
+        let block2 = BlockBuilder::<Tokens>::new(2, 2)
+            .with_parent_hash(block1.hash().to_vec())
+            .freeze_account(account_1)
+            .with_caller(caller.into())
+            .with_mthd("freeze_account".to_string())
+            .with_reason("suspicious_activity".to_string())
+            .build();
+        let idx = add_block(&agent, &env.icrc1_ledger_id, &block2)
+            .await
+            .expect("failed to add block 2");
+        assert_eq!(idx, Nat::from(2_u64));
+
+        // Block 3: unfreeze account
+        let block3 = BlockBuilder::<Tokens>::new(3, 3)
+            .with_parent_hash(block2.hash().to_vec())
+            .unfreeze_account(account_1)
+            .with_caller(caller.into())
+            .with_mthd("unfreeze_account".to_string())
+            .with_reason("cleared".to_string())
+            .build();
+        let idx = add_block(&agent, &env.icrc1_ledger_id, &block3)
+            .await
+            .expect("failed to add block 3");
+        assert_eq!(idx, Nat::from(3_u64));
+
+        // Block 4: freeze principal
+        let block4 = BlockBuilder::<Tokens>::new(4, 4)
+            .with_parent_hash(block3.hash().to_vec())
+            .freeze_principal(account_1.owner)
+            .with_caller(caller.into())
+            .with_mthd("freeze_principal".to_string())
+            .with_reason("compliance".to_string())
+            .build();
+        let idx = add_block(&agent, &env.icrc1_ledger_id, &block4)
+            .await
+            .expect("failed to add block 4");
+        assert_eq!(idx, Nat::from(4_u64));
+
+        // Block 5: unfreeze principal
+        let block5 = BlockBuilder::<Tokens>::new(5, 5)
+            .with_parent_hash(block4.hash().to_vec())
+            .unfreeze_principal(account_1.owner)
+            .with_caller(caller.into())
+            .with_mthd("unfreeze_principal".to_string())
+            .with_reason("resolved".to_string())
+            .build();
+        let idx = add_block(&agent, &env.icrc1_ledger_id, &block5)
+            .await
+            .expect("failed to add block 5");
+        assert_eq!(idx, Nat::from(5_u64));
+
+        // Wait for Rosetta to sync all blocks
+        let synced = wait_for_rosetta_block(&env.rosetta_client, env.network_identifier.clone(), 5)
+            .await
+            .expect("Failed to sync Rosetta to block 5");
+        assert_eq!(synced, 5);
+
+        // Verify balance is unchanged after freeze/unfreeze ops (still 10M)
+        assert_rosetta_balance(
+            account_1,
+            5,
+            10_000_000,
+            &env.rosetta_client,
+            env.network_identifier.clone(),
+        )
+        .await;
+
+        // Verify block 1 operations (minimal freeze account)
+        let ops1 =
+            get_block_operations(&env.rosetta_client, env.network_identifier.clone(), 1).await;
+        assert_eq!(ops1.len(), 1);
+        assert_eq!(ops1[0].type_, OperationType::FreezeAccount.to_string());
+        assert_eq!(
+            ops1[0].account.as_ref().unwrap(),
+            &AccountIdentifier::from(account_1)
+        );
+        assert!(ops1[0].amount.is_none(), "Freeze ops should have no amount");
+
+        // Verify block 2 operations (full freeze account with metadata)
+        let ops2 =
+            get_block_operations(&env.rosetta_client, env.network_identifier.clone(), 2).await;
+        assert_eq!(ops2.len(), 1);
+        assert_eq!(ops2[0].type_, OperationType::FreezeAccount.to_string());
+        let meta2 = ops2[0]
+            .metadata
+            .as_ref()
+            .expect("Expected metadata on full freeze account");
+        assert_eq!(
+            meta2.get("caller").and_then(|v| v.as_str()),
+            Some(hex::encode(caller.as_slice()).as_str())
+        );
+        assert_eq!(
+            meta2.get("mthd").and_then(|v| v.as_str()),
+            Some("freeze_account")
+        );
+        assert_eq!(
+            meta2.get("reason").and_then(|v| v.as_str()),
+            Some("suspicious_activity")
+        );
+
+        // Verify block 3 operations (unfreeze account)
+        let ops3 =
+            get_block_operations(&env.rosetta_client, env.network_identifier.clone(), 3).await;
+        assert_eq!(ops3.len(), 1);
+        assert_eq!(ops3[0].type_, OperationType::UnfreezeAccount.to_string());
+
+        // Verify block 4 operations (freeze principal)
+        let ops4 =
+            get_block_operations(&env.rosetta_client, env.network_identifier.clone(), 4).await;
+        assert_eq!(ops4.len(), 1);
+        assert_eq!(ops4[0].type_, OperationType::FreezePrincipal.to_string());
+
+        // Verify block 5 operations (unfreeze principal)
+        let ops5 =
+            get_block_operations(&env.rosetta_client, env.network_identifier.clone(), 5).await;
+        assert_eq!(ops5.len(), 1);
+        assert_eq!(ops5[0].type_, OperationType::UnfreezePrincipal.to_string());
+
+        // Verify search_transactions by account_1 finds freeze/unfreeze blocks
+        let search_req = SearchTransactionsRequest {
+            network_identifier: env.network_identifier.clone(),
+            account_identifier: Some(account_1.into()),
+            ..Default::default()
+        };
+        let search_resp = env
+            .rosetta_client
+            .search_transactions(&search_req)
+            .await
+            .expect("Failed to search transactions for account_1");
+        let block_indices: HashSet<u64> = search_resp
+            .transactions
+            .iter()
+            .map(|t| t.block_identifier.index)
+            .collect();
+        // account_1 should appear in block 0 (mint), 1 (freeze), 2 (freeze), 3 (unfreeze), 4 (freeze principal), 5 (unfreeze principal)
+        assert!(
+            block_indices.contains(&0),
+            "account_1 should appear in block 0"
+        );
+        assert!(
+            block_indices.contains(&1),
+            "account_1 should appear in block 1"
+        );
+        assert!(
+            block_indices.contains(&2),
+            "account_1 should appear in block 2"
+        );
+        assert!(
+            block_indices.contains(&3),
+            "account_1 should appear in block 3"
+        );
+    });
+}
