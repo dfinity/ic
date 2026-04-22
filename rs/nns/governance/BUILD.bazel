@@ -314,6 +314,18 @@ rust_canister(
     compile_data = [":test_did"],
     crate_features = TEST_WITH_TLA,
     crate_root = "canister/canister.rs",
+    extra_rustc_flags = [
+        "-C",
+        "codegen-units=16",
+    ],
+    # This canister is only used for tests, so we trade off some runtime performance
+    # for build wall time:
+    #   - `lto = "thin"` parallelizes the previously-serial LTO link step.
+    #   - `opt = "1"` lowers the optimization level (the default is "3").
+    #   - `codegen-units=16` lets rustc fan out backend codegen.
+    # Keep the production `governance-canister` target on the defaults.
+    lto = "thin",
+    opt = "1",
     proc_macro_deps = MACRO_DEPENDENCIES + [
         "//rs/tla_instrumentation:proc_macros",
     ],

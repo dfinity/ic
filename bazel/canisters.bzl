@@ -6,33 +6,48 @@ load("@rules_motoko//motoko:defs.bzl", "motoko_binary")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 def _wasm_rust_transition_impl(_settings, attr):
+    # `lto` controls the LLVM LTO flavor:
+    #   - "fat" (default): `-C lto` (full/fat LTO), best runtime perf, slowest build
+    #   - "thin":          `-C lto=thin`, parallelizable LTO, faster build, slightly
+    #                      larger/slower wasm. Intended for test-only canisters where
+    #                      runtime perf is not critical.
+    #   - "off":           `-C lto=off`, no LTO.
+    # `-C embed-bitcode=yes` is required whenever LTO is enabled (see comment below).
+    if attr.lto == "fat":
+        lto_flags = ["-C", "lto", "-C", "embed-bitcode=yes"]
+    elif attr.lto == "thin":
+        lto_flags = ["-C", "lto=thin", "-C", "embed-bitcode=yes"]
+    elif attr.lto == "off":
+        lto_flags = ["-C", "lto=off"]
+    else:
+        fail("rust_canister: unknown lto value '{}', expected one of 'fat', 'thin', 'off'".format(attr.lto))
+
+    flags = [
+        # rustc allocates a default stack size of 1MiB for Wasm, which causes stack overflow on certain
+        # recursive workloads when compiled with 1.78.0+. Hence, we set the new stack size to 3MiB
+        "-C",
+        "link-args=-z stack-size=3145728",
+        "-C",
+        "linker-plugin-lto",
+        "-C",
+        "opt-level=" + attr.opt,
+        "-C",
+        "debug-assertions=no",
+        "-C",
+        "debuginfo=0",
+    ] + lto_flags + [
+        # If combined with -C lto, -C embed-bitcode=no will cause rustc to abort at start-up,
+        # because the combination is invalid.
+        # See: https://doc.rust-lang.org/rustc/codegen-options/index.html#embed-bitcode
+        #
+        # embed-bitcode is disabled by default by rules_rust.
+        "-C",
+        "target-feature=+bulk-memory",
+    ] + list(attr.extra_rustc_flags)
+
     return {
         "//command_line_option:platforms": "@rules_rust//rust/platform:wasm",
-        "@rules_rust//:extra_rustc_flags": [
-            # rustc allocates a default stack size of 1MiB for Wasm, which causes stack overflow on certain
-            # recursive workloads when compiled with 1.78.0+. Hence, we set the new stack size to 3MiB
-            "-C",
-            "link-args=-z stack-size=3145728",
-            "-C",
-            "linker-plugin-lto",
-            "-C",
-            "opt-level=" + attr.opt,
-            "-C",
-            "debug-assertions=no",
-            "-C",
-            "debuginfo=0",
-            "-C",
-            "lto",
-            "-C",
-            # If combined with -C lto, -C embed-bitcode=no will cause rustc to abort at start-up,
-            # because the combination is invalid.
-            # See: https://doc.rust-lang.org/rustc/codegen-options/index.html#embed-bitcode
-            #
-            # embed-bitcode is disabled by default by rules_rust.
-            "embed-bitcode=yes",
-            "-C",
-            "target-feature=+bulk-memory",
-        ],
+        "@rules_rust//:extra_rustc_flags": flags,
     }
 
 wasm_rust_transition = transition(
@@ -61,10 +76,12 @@ wasm_rust_binary_rule = rule(
         "binary": attr.label(mandatory = True, cfg = wasm_rust_transition),
         "_allowlist_function_transition": attr.label(default = "@bazel_tools//tools/allowlists/function_transition_allowlist"),
         "opt": attr.string(mandatory = True),
+        "lto": attr.string(default = "fat"),
+        "extra_rustc_flags": attr.string_list(default = []),
     },
 )
 
-def rust_canister(name, service_file, visibility = ["//visibility:public"], testonly = False, opt = "3", **kwargs):
+def rust_canister(name, service_file, visibility = ["//visibility:public"], testonly = False, opt = "3", lto = "fat", extra_rustc_flags = [], **kwargs):
     """Defines a Rust program that builds into a WebAssembly module.
 
     The following targets are generated:
@@ -76,6 +93,12 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
       service_file: the label pointing the canister candid interface file.
       visibility: visibility of the Wasm target
       opt: opt-level for the Wasm target
+      lto: LTO flavor for the Wasm target. One of "fat" (default, best runtime
+        perf, slowest build), "thin" (parallelizable, faster build, slightly
+        larger/slower wasm; intended for test-only canisters), or "off".
+      extra_rustc_flags: additional rustc flags to pass during the Wasm build
+        (in addition to the canister defaults). Intended for tuning build
+        parallelism/opt knobs on individual canisters (e.g. `-C codegen-units=16`).
       testonly: testonly attribute for Wasm target
       **kwargs: additional arguments to pass a rust_binary.
     """
@@ -111,6 +134,8 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
         name = wasm_name,
         binary = ":" + bin_name,
         opt = opt,
+        lto = lto,
+        extra_rustc_flags = extra_rustc_flags,
         visibility = visibility,
         testonly = testonly,
         tags = tags,
