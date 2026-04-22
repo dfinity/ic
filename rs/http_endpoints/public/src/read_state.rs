@@ -41,25 +41,26 @@ use std::{
 };
 use tower::{ServiceBuilder, util::BoxCloneService};
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum Version {
-    /// Endpoint with the NNS delegation using the flat format of the canister ranges.
-    /// `/subnet/<subnet_id>/canister_ranges` path is allowed
-    V2,
-    /// Endpoint with the NNS delegation using the tree format of the canister ranges.
-    /// Explicitly requesting `/subnet/<subnet_id>/canister_ranges` path is NOT allowed
-    /// except when `subnet_id == nns_subnet_id`. Moreover, all paths of the form
-    /// `/subnet/<subnet_id>/canister_ranges`, where `subnet_id != nns_subnet_id`, are
-    /// pruned from the returned certificate.
-    V3,
-}
-
 /// Distinguishes between the `/api/v{2,3}/canister/…/read_state` and
 /// `/api/v{2,3}/subnet/…/read_state` endpoints.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Target {
     Canister,
     Subnet,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Version {
+    /// Endpoint with the NNS delegation using the flat format of the canister ranges.
+    /// `/subnet/<subnet_id>/canister_ranges` path is allowed
+    V2,
+    /// Endpoint with the NNS delegation using the tree format of the canister ranges (for
+    /// `Target::Canister`) or with all canister ranges pruned out (for `Target::Subnet`).
+    /// Explicitly requesting `/subnet/<subnet_id>/canister_ranges` path is NOT allowed
+    /// except when `subnet_id == nns_subnet_id`. Moreover, all paths of the form
+    /// `/subnet/<subnet_id>/canister_ranges`, where `subnet_id != nns_subnet_id`, are
+    /// pruned from the returned certificate.
+    V3,
 }
 
 #[derive(Clone)]
