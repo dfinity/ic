@@ -514,7 +514,9 @@ fn verify_paths(
                 b"request_status",
                 request_id,
                 b"status" | b"reply" | b"reject_code" | b"reject_message" | b"error_code",
-            ] if target == Target::Canister => {
+            ] if target == Target::Canister
+                || (target == Target::Subnet && version == Version::V3) =>
+            {
                 let message_id = MessageId::try_from(*request_id).map_err(|_| HttpError {
                     status: StatusCode::BAD_REQUEST,
                     message: format!(
@@ -1002,8 +1004,8 @@ mod test {
             Ok(())
         );
 
-        // request_status not allowed on subnet endpoint
-        let err = verify_paths(
+        // request_status not allowed on subnet V2 endpoint, allowed on V3
+        let result = verify_paths(
             &metrics,
             Target::Subnet,
             version,
@@ -1017,9 +1019,16 @@ mod test {
             &CanisterIdSet::all(),
             APP_SUBNET_ID.get(),
             NNS_SUBNET_ID,
-        )
-        .expect_err("Should fail");
-        assert_eq!(err.status, StatusCode::NOT_FOUND);
+        );
+        match version {
+            Version::V2 => {
+                assert_eq!(
+                    result.expect_err("Should fail").status,
+                    StatusCode::NOT_FOUND
+                )
+            }
+            Version::V3 => assert_eq!(result, Ok(())),
+        }
 
         // canister/* not allowed on subnet endpoint
         let err = verify_paths(
