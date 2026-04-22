@@ -45,8 +45,12 @@ impl LedgerContext for TestContext {
         &mut self.approvals
     }
 
-    fn fee_collector(&self) -> Option<&ic_ledger_core::block::FeeCollector<Self::AccountId>> {
+    fn fee_collector(&self) -> Option<Self::AccountId> {
         None
+    }
+
+    fn set_fee_collector(&mut self, _fee_collector: Option<Self::AccountId>) {
+        panic!("not implemented")
     }
 }
 

@@ -848,7 +848,7 @@ mod withdraw_erc20 {
                     .assert_has_unique_events_in_order(&[EventPayload::ReimbursedErc20Withdrawal {
                         withdrawal_id: cketh_block_index.clone(),
                         burn_in_block: ckerc20_block_index.clone(),
-                        reimbursed_in_block: Nat::from(3_u8),
+                        reimbursed_in_block: Nat::from(4_u8),
                         ledger_id: deposit_params.token().ledger_canister_id,
                         reimbursed_amount: ckerc20_withdrawal_amount.into(),
                         transaction_hash: Some(
@@ -857,7 +857,7 @@ mod withdraw_erc20 {
                     }])
                     .call_ckerc20_ledger_get_transaction(
                         deposit_params.token().ledger_canister_id,
-                        3_u8,
+                        4_u8,
                     )
                     .expect_mint(Mint {
                         amount: ckerc20_withdrawal_amount.into(),
@@ -1346,7 +1346,7 @@ fn should_deposit_ckerc20() {
         ckerc20
             .deposit(params.clone())
             .expect_mint()
-            .call_ckerc20_ledger_get_transaction(params.token().ledger_canister_id, 0_u8)
+            .call_ckerc20_ledger_get_transaction(params.token().ledger_canister_id, 1_u8)
             .expect_mint(Mint {
                 amount: Nat::from(params.ckerc20_amount()),
                 to: params.recipient(),
@@ -1452,7 +1452,7 @@ fn should_deposit_cketh_and_ckerc20() {
                 created_at_time: None,
                 fee: None,
             })
-            .call_ckerc20_ledger_get_transaction(params.token().ledger_canister_id, 0_u8)
+            .call_ckerc20_ledger_get_transaction(params.token().ledger_canister_id, 1_u8)
             .expect_mint(Mint {
                 amount: Nat::from(params.ckerc20_amount()),
                 to: params.recipient(),
@@ -1548,7 +1548,7 @@ fn should_deposit_cketh_and_ckerc20_when_ledger_temporary_offline() {
             },
             ckerc20_token_symbol: ckusdc.ckerc20_token_symbol,
             erc20_contract_address: ckusdc.erc20_contract_address,
-            mint_block_index: Nat::from(0_u8),
+            mint_block_index: Nat::from(1_u8),
         },
     ]);
 

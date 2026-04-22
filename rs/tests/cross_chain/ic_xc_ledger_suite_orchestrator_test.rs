@@ -162,7 +162,7 @@ fn ic_xc_ledger_suite_orchestrator_test(env: TestEnv) {
         assert_eq!(
             index_status,
             ic_icrc1_index_ng::Status {
-                num_blocks_synced: Nat::from(0_u8)
+                num_blocks_synced: Nat::from(1_u8)
             }
         );
     });

@@ -278,7 +278,7 @@ impl CkErc20Setup {
                 amount,
                 from_subaccount,
             )
-            .expect_ok(1);
+            .expect_ok(2);
         self
     }
 
@@ -754,7 +754,7 @@ impl CkErc20DepositFlow {
                 },
                 ckerc20_token_symbol: self.params.token().ckerc20_token_symbol.clone(),
                 erc20_contract_address: self.params.token().erc20_contract_address.clone(),
-                mint_block_index: Nat::from(0_u8),
+                mint_block_index: Nat::from(1_u8),
             },
         ]);
         self.setup
