@@ -11,7 +11,7 @@ const MIB: u64 = 1024 * KIB;
 const GIB: u64 = 1024 * MIB;
 const TIB: u64 = 1024 * GIB;
 
-const REPLICATED_INTER_CANISTER_LOG_FETCH_FEATURE: FlagStatus = FlagStatus::Enabled;
+const REPLICATED_INTER_CANISTER_LOG_FETCH_FEATURE: FlagStatus = FlagStatus::Disabled;
 
 // TODO(DSM-105): remove after the feature is enabled by default.
 pub const LOG_MEMORY_STORE_FEATURE_ENABLED: bool = false;
