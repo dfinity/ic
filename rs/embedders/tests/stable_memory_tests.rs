@@ -46,6 +46,7 @@ fn run_test(wat: &str) -> HypervisorResult<Option<WasmResult>> {
             Cycles::zero(),
             PrincipalId::new_user_test_id(0),
             0.into(),
+            None,
         ))
         .with_wat(wat)
         .build();

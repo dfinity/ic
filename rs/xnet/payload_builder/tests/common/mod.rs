@@ -71,6 +71,7 @@ impl StateManagerFixture {
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
+            tokio::sync::watch::channel(ic_types::Height::from(0)).0,
         );
 
         Self {
@@ -95,6 +96,7 @@ impl StateManagerFixture {
         height.inc_assign();
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);
+        self.state_manager.flush_hash_channel();
         certify_height(&self.state_manager, height);
         self.certified_height = height;
 

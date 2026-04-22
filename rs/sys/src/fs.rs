@@ -67,7 +67,7 @@ where
 }
 
 /// Whether the destination file may be overwritten.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Clobber {
     Yes,
     No,

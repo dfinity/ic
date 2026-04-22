@@ -16,6 +16,7 @@ BENCH_DEPENDENCIES = [
     "//rs/nns/constants",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
+    "//rs/sys",
     "//rs/test_utilities",
     "//rs/test_utilities/execution_environment",
     "//rs/test_utilities/state",

@@ -1,3 +1,8 @@
+//! Fast HostOS/GuestOS deployment to bare metal nodes, bypassing full SetupOS
+//! redeployment. SSHes into the target, copies images, and triggers an
+//! upgrade via the `reload_icos` script. Falls back to IPMI Serial-over-LAN
+//! for SSH key injection when SSH authentication fails.
+
 pub mod deploy;
 
 pub use deploy::SshAuthMethod;
