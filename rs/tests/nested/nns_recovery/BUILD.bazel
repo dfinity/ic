@@ -64,6 +64,7 @@ system_test_nns(
 #
 #     bazel \
 #         test \
+#         --set-required-host-features=dc=zh1
 #         --test_timeout=7200 \  # 2 hours
 #         //rs/tests/nested/nns_recovery:nr_large_with_mainnet_state
 #
