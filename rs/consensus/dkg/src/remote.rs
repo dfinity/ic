@@ -582,13 +582,40 @@ mod tests {
         assert_eq!(errors.len(), 1);
         assert_eq!(
             errors[0].0.dkg_tag,
-            NiDkgTag::HighThresholdForKey(ni_dkg_key_id)
+            NiDkgTag::HighThresholdForKey(ni_dkg_key_id.clone())
         );
         assert!(
             errors[0]
                 .1
                 .contains("Failed to find resharing transcript for a remote dkg")
         );
+
+        let max_attempts_summary = test_dkg_summary(
+            Height::from(103),
+            BTreeMap::new(),
+            BTreeMap::new(),
+            BTreeMap::from([(target_id, MAX_REMOTE_DKG_ATTEMPTS)]),
+        );
+        let max_attempts_map = build_callback_id_config_map(
+            dealer_subnet,
+            registry.as_ref(),
+            &state,
+            RegistryVersion::from(1),
+            &max_attempts_summary,
+            &no_op_logger(),
+        )
+        .expect("expected callback-id config map");
+        let timeout_errors = max_attempts_map
+            .get(&callback_id)
+            .expect("missing callback entry")
+            .as_ref()
+            .expect_err("expected timeout errors");
+        assert_eq!(timeout_errors.len(), 1);
+        assert_eq!(
+            timeout_errors[0].0.dkg_tag,
+            NiDkgTag::HighThresholdForKey(ni_dkg_key_id)
+        );
+        assert_eq!(timeout_errors[0].1, REMOTE_DKG_REPEATED_FAILURE_ERROR);
     }
 
     #[test]
