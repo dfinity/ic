@@ -139,7 +139,17 @@ function make_var_cryptsetup() {
     echo "After=init-config.service"
     # We need /boot/config for the decryption key (unless SEV is enabled)
     echo "RequiresMountsFor=/boot/config"
-    echo "BindsTo=${SYSTEMD_DEVICE}"
+    # NOTE: Intentionally Requires= instead of BindsTo= on ${SYSTEMD_DEVICE}.
+    # BindsTo= (used by stock systemd-cryptsetup units) propagates "stop" from
+    # the device: a transient udev removal/reappearance of the underlying
+    # encrypted partition enqueues a stop of this service and, through
+    # Conflicts=umount.target, cascades into stopping var.mount right after it
+    # was just mounted, producing a spurious "Failed unmounting var.mount - /var."
+    # during boot. Requires= preserves "pull the device into the transaction and
+    # wait for it" without the stop-propagation. The
+    # systemd-fsck@dev-mapper-var_crypt.service override dropped BindsTo= on the
+    # same device for the same reason (see commit 97956612d1).
+    echo "Requires=${SYSTEMD_DEVICE}"
     echo "After=${SYSTEMD_DEVICE}"
     echo "Before=umount.target"
     echo ""
