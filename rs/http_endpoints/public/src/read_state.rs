@@ -224,6 +224,7 @@ pub(crate) async fn read_state(
         return (status, text).into_response();
     }
 
+    // Convert the message to a strongly-typed struct.
     let request = match HttpRequest::<ReadState>::try_from(request) {
         Ok(request) => request,
         Err(e) => {
@@ -244,6 +245,7 @@ pub(crate) async fn read_state(
     } else {
         RegistryRootOfTrustProvider::new(registry_client, registry_version)
     };
+    // Since spawn blocking requires 'static we can't use any references
     let request_c = request.clone();
 
     let response = tokio::task::spawn_blocking(move || {
@@ -263,6 +265,7 @@ pub(crate) async fn read_state(
             return make_service_unavailable_response();
         };
 
+        // Verify authorization for requested paths.
         if let Err(HttpError { status, message }) = verify_paths(
             &metrics,
             target,
@@ -399,6 +402,7 @@ fn get_certificate_and_create_response(
     .into_response()
 }
 
+// Verifies that the `user` is authorized to retrieve the `paths` requested.
 fn verify_paths(
     metrics: &HttpHandlerMetrics,
     target: Target,
@@ -417,6 +421,7 @@ fn verify_paths(
 
     let mut last_request_status_id: Option<MessageId> = None;
 
+    // Convert the paths to slices to make it easier to match below.
     let paths: Vec<Vec<&[u8]>> = paths
         .iter()
         .map(|path| path.iter().map(|label| label.as_bytes()).collect())
@@ -439,7 +444,9 @@ fn verify_paths(
                     status: StatusCode::BAD_REQUEST,
                     message: format!("Could not parse the custom section name: {err}."),
                 })?;
+                // Get principal id from byte slice.
                 let principal_id = parse_principal_id(canister_id)?;
+                // Verify that canister id and effective canister id match.
                 verify_principal_ids(&principal_id, &effective_principal_id)?;
                 can_read_canister_metadata(
                     user,
@@ -486,9 +493,12 @@ fn verify_paths(
             [b"subnet", _subnet_id, b"node", _node_id, b"public_key"] => {
                 metrics.observe_read_state_path(endpoint, "subnet_node_public_key");
             }
+            // `/subnet/<subnet_id>/canister_ranges` is always allowed on the `/api/v2` endpoint
             [b"subnet", _subnet_id, b"canister_ranges"] if version == Version::V2 => {
                 metrics.observe_read_state_path(endpoint, "subnet_canister_ranges");
             }
+            // `/subnet/<subnet_id>/canister_ranges` is allowed on the `/api/v3` endpoint
+            // only when `subnet_id == nns_subnet_id`.
             [b"subnet", subnet_id, b"canister_ranges"]
                 if version == Version::V3
                     && parse_principal_id(subnet_id)? == nns_subnet_id.get() =>
@@ -526,6 +536,7 @@ fn verify_paths(
                 }
                 last_request_status_id = Some(message_id.clone());
 
+                // Verify that the request was signed by the same user.
                 let ingress_status = state.get_ingress_status(&message_id);
                 if let Some(ingress_user_id) = ingress_status.user_id()
                     && ingress_user_id != *user
@@ -550,6 +561,7 @@ fn verify_paths(
                 metrics.observe_read_state_path(endpoint, "request_status");
             }
             _ => {
+                // All other paths are unsupported.
                 return Err(HttpError {
                     status: StatusCode::NOT_FOUND,
                     message: "Invalid path requested.".to_string(),
@@ -582,6 +594,7 @@ fn can_read_canister_metadata(
                 None => return Ok(()),
             };
 
+            // Only the controller can request this custom section.
             if custom_section.visibility() == CustomSectionType::Private
                 && !canister.system_state.controllers.contains(&user.get())
             {
@@ -776,12 +789,16 @@ mod test {
         insert_dummy_canister(&mut state, canister_id, controller.get());
 
         let public_name = "dummy";
+        // Controller can read the public custom section
         assert!(can_read_canister_metadata(&controller, &canister_id, public_name, &state).is_ok());
+
+        // Non-controller can read public custom section
         assert!(
             can_read_canister_metadata(&non_controller, &canister_id, public_name, &state).is_ok()
         );
 
         let private_name = "candid";
+        // Controller can read private custom section
         assert!(
             can_read_canister_metadata(&controller, &canister_id, private_name, &state).is_ok()
         );
@@ -796,6 +813,7 @@ mod test {
         let mut state = ReplicatedState::new(APP_SUBNET_ID, SubnetType::Application);
         insert_dummy_canister(&mut state, canister_id, controller.get());
 
+        // Non-controller cannot read private custom section named `candid`.
         assert_eq!(
             can_read_canister_metadata(&non_controller, &canister_id, "candid", &state),
             Err(HttpError {
@@ -805,6 +823,7 @@ mod test {
             })
         );
 
+        // Non existent public custom section.
         assert_eq!(
             can_read_canister_metadata(&non_controller, &canister_id, "unknown-name", &state),
             Ok(())
