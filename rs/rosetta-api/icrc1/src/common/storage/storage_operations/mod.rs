@@ -499,7 +499,7 @@ pub fn update_account_balances(
                 | crate::common::storage::types::IcrcOperation::UnfreezeAccount { .. }
                 | crate::common::storage::types::IcrcOperation::FreezePrincipal { .. }
                 | crate::common::storage::types::IcrcOperation::UnfreezePrincipal { .. } => {
-                    panic!("freeze/unfreeze not yet supported in Rosetta")
+                    // Freeze/unfreeze operations do not affect account balances
                 }
             }
         }
@@ -677,12 +677,36 @@ pub fn store_blocks(
                 None,
                 None,
             ),
-            crate::common::storage::types::IcrcOperation::FreezeAccount { .. }
-            | crate::common::storage::types::IcrcOperation::UnfreezeAccount { .. }
-            | crate::common::storage::types::IcrcOperation::FreezePrincipal { .. }
-            | crate::common::storage::types::IcrcOperation::UnfreezePrincipal { .. } => {
-                panic!("freeze/unfreeze not yet supported in Rosetta")
-            }
+            crate::common::storage::types::IcrcOperation::FreezeAccount { account, .. }
+            | crate::common::storage::types::IcrcOperation::UnfreezeAccount { account, .. } => (
+                "freeze_account",
+                Some(account.owner),
+                Some(*account.effective_subaccount()),
+                Some(account.owner),
+                Some(*account.effective_subaccount()),
+                None,
+                None,
+                Nat::from(0_u64),
+                None,
+                None,
+                None,
+            ),
+            crate::common::storage::types::IcrcOperation::FreezePrincipal { principal, .. }
+            | crate::common::storage::types::IcrcOperation::UnfreezePrincipal {
+                principal, ..
+            } => (
+                "freeze_principal",
+                Some(principal),
+                Some(*Account::from(principal).effective_subaccount()),
+                Some(principal),
+                Some(*Account::from(principal).effective_subaccount()),
+                None,
+                None,
+                Nat::from(0_u64),
+                None,
+                None,
+                None,
+            ),
         };
 
         // SQLite doesn't support unsigned 64-bit integers. We need to convert the timestamps to signed

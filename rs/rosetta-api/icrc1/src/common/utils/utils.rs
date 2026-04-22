@@ -158,6 +158,10 @@ pub fn rosetta_core_operations_to_icrc1_operation(
         FeeCollector,
         AuthorizedMint,
         AuthorizedBurn,
+        FreezeAccount,
+        UnfreezeAccount,
+        FreezePrincipal,
+        UnfreezePrincipal,
     }
 
     // A builder which helps depict the icrc1 Operation and allows for an arbitrary order of rosetta_core Operations
@@ -262,7 +266,7 @@ pub fn rosetta_core_operations_to_icrc1_operation(
         }
 
         pub fn build(self) -> anyhow::Result<crate::common::storage::types::IcrcOperation> {
-            Ok(match self.icrc_operation.context("Icrc Operation type needs to be of type Mint, Burn, Transfer, Approve, FeeCollector, AuthorizedMint or AuthorizedBurn")? {
+            Ok(match self.icrc_operation.context("Icrc Operation type needs to be of type Mint, Burn, Transfer, Approve, FeeCollector, AuthorizedMint, AuthorizedBurn, FreezeAccount, UnfreezeAccount, FreezePrincipal or UnfreezePrincipal")? {
                 IcrcOperation::Mint => {
                     if self.from.is_some() {
                         bail!("From AccountIdentifier field is not allowed for Mint operation")
@@ -334,6 +338,64 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                     crate::common::storage::types::IcrcOperation::AuthorizedBurn {
                         from: self.from.context("From AccountIdentifier field needs to be populated for AuthorizedBurn operation")?.try_into()?,
                         amount: self.amount.context("Amount field needs to be populated for AuthorizedBurn operation")?,
+                        caller: self.caller,
+                        mthd: self.mthd,
+                        reason: self.reason,
+                    }
+                },
+                IcrcOperation::FreezeAccount => {
+                    if self.from.is_some() {
+                        bail!("From AccountIdentifier field is not allowed for FreezeAccount operation")
+                    }
+                    if self.spender.is_some() {
+                        bail!("Spender AccountIdentifier field is not allowed for FreezeAccount operation")
+                    }
+                    crate::common::storage::types::IcrcOperation::FreezeAccount {
+                        account: self.to.context("Account field needs to be populated for FreezeAccount operation")?.try_into()?,
+                        caller: self.caller,
+                        mthd: self.mthd,
+                        reason: self.reason,
+                    }
+                },
+                IcrcOperation::UnfreezeAccount => {
+                    if self.from.is_some() {
+                        bail!("From AccountIdentifier field is not allowed for UnfreezeAccount operation")
+                    }
+                    if self.spender.is_some() {
+                        bail!("Spender AccountIdentifier field is not allowed for UnfreezeAccount operation")
+                    }
+                    crate::common::storage::types::IcrcOperation::UnfreezeAccount {
+                        account: self.to.context("Account field needs to be populated for UnfreezeAccount operation")?.try_into()?,
+                        caller: self.caller,
+                        mthd: self.mthd,
+                        reason: self.reason,
+                    }
+                },
+                IcrcOperation::FreezePrincipal => {
+                    if self.from.is_some() {
+                        bail!("From AccountIdentifier field is not allowed for FreezePrincipal operation")
+                    }
+                    if self.spender.is_some() {
+                        bail!("Spender AccountIdentifier field is not allowed for FreezePrincipal operation")
+                    }
+                    let account: Account = self.to.context("Account field needs to be populated for FreezePrincipal operation")?.try_into()?;
+                    crate::common::storage::types::IcrcOperation::FreezePrincipal {
+                        principal: account.owner,
+                        caller: self.caller,
+                        mthd: self.mthd,
+                        reason: self.reason,
+                    }
+                },
+                IcrcOperation::UnfreezePrincipal => {
+                    if self.from.is_some() {
+                        bail!("From AccountIdentifier field is not allowed for UnfreezePrincipal operation")
+                    }
+                    if self.spender.is_some() {
+                        bail!("Spender AccountIdentifier field is not allowed for UnfreezePrincipal operation")
+                    }
+                    let account: Account = self.to.context("Account field needs to be populated for UnfreezePrincipal operation")?.try_into()?;
+                    crate::common::storage::types::IcrcOperation::UnfreezePrincipal {
+                        principal: account.owner,
                         caller: self.caller,
                         mthd: self.mthd,
                         reason: self.reason,
@@ -470,6 +532,38 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                     .with_icrc_operation(IcrcOperation::AuthorizedMint)
                     .with_to_accountidentifier(to_account)
                     .with_amount(Nat::try_from(amount)?)
+                    .with_caller(
+                        metadata
+                            .caller
+                            .map(|c| {
+                                let bytes = hex::decode(&c)?;
+                                Ok::<_, anyhow::Error>(Principal::from_slice(&bytes))
+                            })
+                            .transpose()?,
+                    )
+                    .with_mthd(metadata.mthd)
+                    .with_reason(metadata.reason)
+            }
+            OperationType::FreezeAccount
+            | OperationType::UnfreezeAccount
+            | OperationType::FreezePrincipal
+            | OperationType::UnfreezePrincipal => {
+                let account = operation
+                    .account
+                    .context("Account field needs to be populated for freeze/unfreeze operation")?;
+                let metadata = crate::common::types::AuthorizedOperationMetadata::try_from(
+                    operation.metadata,
+                )?;
+                let op_enum = match operation.type_.parse::<OperationType>()? {
+                    OperationType::FreezeAccount => IcrcOperation::FreezeAccount,
+                    OperationType::UnfreezeAccount => IcrcOperation::UnfreezeAccount,
+                    OperationType::FreezePrincipal => IcrcOperation::FreezePrincipal,
+                    OperationType::UnfreezePrincipal => IcrcOperation::UnfreezePrincipal,
+                    _ => unreachable!(),
+                };
+                icrc1_operation_builder
+                    .with_icrc_operation(op_enum)
+                    .with_to_accountidentifier(account)
                     .with_caller(
                         metadata
                             .caller
@@ -813,11 +907,101 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                 ),
             ));
         }
-        crate::common::storage::types::IcrcOperation::FreezeAccount { .. }
-        | crate::common::storage::types::IcrcOperation::UnfreezeAccount { .. }
-        | crate::common::storage::types::IcrcOperation::FreezePrincipal { .. }
-        | crate::common::storage::types::IcrcOperation::UnfreezePrincipal { .. } => {
-            panic!("freeze/unfreeze not yet supported in Rosetta")
+        crate::common::storage::types::IcrcOperation::FreezeAccount {
+            account,
+            caller,
+            mthd,
+            reason,
+        } => {
+            operations.push(rosetta_core::objects::Operation::new(
+                0,
+                OperationType::FreezeAccount.to_string(),
+                Some(account.into()),
+                None,
+                None,
+                Some(
+                    crate::common::types::AuthorizedOperationMetadata {
+                        caller: caller.map(|c| hex::encode(c.as_slice())),
+                        mthd,
+                        reason,
+                    }
+                    .try_into()?,
+                ),
+            ));
+        }
+        crate::common::storage::types::IcrcOperation::UnfreezeAccount {
+            account,
+            caller,
+            mthd,
+            reason,
+        } => {
+            operations.push(rosetta_core::objects::Operation::new(
+                0,
+                OperationType::UnfreezeAccount.to_string(),
+                Some(account.into()),
+                None,
+                None,
+                Some(
+                    crate::common::types::AuthorizedOperationMetadata {
+                        caller: caller.map(|c| hex::encode(c.as_slice())),
+                        mthd,
+                        reason,
+                    }
+                    .try_into()?,
+                ),
+            ));
+        }
+        crate::common::storage::types::IcrcOperation::FreezePrincipal {
+            principal,
+            caller,
+            mthd,
+            reason,
+        } => {
+            let account_from_principal = Account {
+                owner: principal,
+                subaccount: None,
+            };
+            operations.push(rosetta_core::objects::Operation::new(
+                0,
+                OperationType::FreezePrincipal.to_string(),
+                Some(account_from_principal.into()),
+                None,
+                None,
+                Some(
+                    crate::common::types::AuthorizedOperationMetadata {
+                        caller: caller.map(|c| hex::encode(c.as_slice())),
+                        mthd,
+                        reason,
+                    }
+                    .try_into()?,
+                ),
+            ));
+        }
+        crate::common::storage::types::IcrcOperation::UnfreezePrincipal {
+            principal,
+            caller,
+            mthd,
+            reason,
+        } => {
+            let account_from_principal = Account {
+                owner: principal,
+                subaccount: None,
+            };
+            operations.push(rosetta_core::objects::Operation::new(
+                0,
+                OperationType::UnfreezePrincipal.to_string(),
+                Some(account_from_principal.into()),
+                None,
+                None,
+                Some(
+                    crate::common::types::AuthorizedOperationMetadata {
+                        caller: caller.map(|c| hex::encode(c.as_slice())),
+                        mthd,
+                        reason,
+                    }
+                    .try_into()?,
+                ),
+            ));
         }
     };
 

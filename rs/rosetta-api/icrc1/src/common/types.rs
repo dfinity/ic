@@ -203,6 +203,10 @@ pub enum OperationType {
     FeeCollector,
     AuthorizedMint,
     AuthorizedBurn,
+    FreezeAccount,
+    UnfreezeAccount,
+    FreezePrincipal,
+    UnfreezePrincipal,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
