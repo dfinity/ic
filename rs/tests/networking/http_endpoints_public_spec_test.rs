@@ -162,7 +162,7 @@ fn query_calls(env: TestEnv, version: query::Version) {
     });
 }
 
-fn read_state_valid_succeeds(env: TestEnv, version: read_state::canister::Version) {
+fn read_state_valid_succeeds(env: TestEnv, version: read_state::Version) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
     let (primary, _test_ids) = get_canister_test_ids(&snapshot);
@@ -186,7 +186,7 @@ fn read_state_valid_succeeds(env: TestEnv, version: read_state::canister::Versio
     });
 }
 
-fn read_state_malformed_rejected(env: TestEnv, version: read_state::canister::Version) {
+fn read_state_malformed_rejected(env: TestEnv, version: read_state::Version) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
     let (primary, test_ids) = get_canister_test_ids(&snapshot);
@@ -212,7 +212,7 @@ fn read_state_malformed_rejected(env: TestEnv, version: read_state::canister::Ve
     });
 }
 
-fn read_time(env: TestEnv, version: read_state::canister::Version) {
+fn read_time(env: TestEnv, version: read_state::Version) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
     let (primary, _) = get_canister_test_ids(&snapshot);
@@ -237,10 +237,10 @@ fn read_time(env: TestEnv, version: read_state::canister::Version) {
         let response = read_state(primary, api_bn_url.clone()).await;
         let status = inspect_response(response, "ReadState", &logger).await;
         match version {
-            read_state::canister::Version::V2 => {
+            read_state::Version::V2 => {
                 assert_2xx(&status);
             }
-            read_state::canister::Version::V3 => {
+            read_state::Version::V3 => {
                 assert_2xx(&status);
             }
         }
@@ -863,16 +863,12 @@ fn main() -> Result<()> {
                 .add_test(systest!(update_calls; Call::V3))
                 .add_test(systest!(update_calls; Call::V4))
                 .add_test(systest!(update_calls_subnet_v4))
-                .add_test(systest!(read_state_valid_succeeds; read_state::canister::Version::V2))
-                .add_test(systest!(read_state_valid_succeeds; read_state::canister::Version::V3))
-                .add_test(
-                    systest!(read_state_malformed_rejected; read_state::canister::Version::V2),
-                )
-                .add_test(
-                    systest!(read_state_malformed_rejected; read_state::canister::Version::V3),
-                )
-                .add_test(systest!(read_time; read_state::canister::Version::V2))
-                .add_test(systest!(read_time; read_state::canister::Version::V3))
+                .add_test(systest!(read_state_valid_succeeds; read_state::Version::V2))
+                .add_test(systest!(read_state_valid_succeeds; read_state::Version::V3))
+                .add_test(systest!(read_state_malformed_rejected; read_state::Version::V2))
+                .add_test(systest!(read_state_malformed_rejected; read_state::Version::V3))
+                .add_test(systest!(read_time; read_state::Version::V2))
+                .add_test(systest!(read_time; read_state::Version::V3))
                 .add_test(systest!(malformed_http_request))
                 .add_test(systest!(method_name_edge_cases)),
         )
