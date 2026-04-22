@@ -84,6 +84,21 @@ impl RingBuffer {
         self.io.load_header()
     }
 
+    /// Returns the timestamp of the oldest live record, or `None` if the
+    /// buffer is empty. Takes an already-loaded `header` to avoid a
+    /// redundant page-map read when the caller has one in hand.
+    ///
+    /// Reads the record header at `data_head` — the same access pattern used
+    /// by `load_index_table` to reconstruct its `front` entry.
+    pub fn first_timestamp(&self, header: &Header) -> Option<u64> {
+        if header.data_size.get() == 0 {
+            return None;
+        }
+        self.io
+            .load_record_without_content(header, header.data_head)
+            .map(|r| r.timestamp)
+    }
+
     /// Returns the data capacity of the ring buffer.
     #[cfg(test)]
     pub fn byte_capacity(&self) -> usize {

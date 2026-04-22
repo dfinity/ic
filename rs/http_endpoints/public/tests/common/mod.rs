@@ -48,7 +48,7 @@ use ic_replicated_state::{
 };
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
-    CryptoHashOfPartialState, Height, RegistryVersion,
+    CanisterId, CryptoHashOfPartialState, Height, RegistryVersion,
     artifact::UnvalidatedArtifactMutation,
     batch::RawQueryStats,
     consensus::certification::{Certification, CertificationContent},
@@ -86,6 +86,36 @@ use tower_test::mock::Handle;
 
 pub type IngressFilterHandle = Handle<IngressFilterInput, IngressFilterResponse>;
 pub type QueryExecutionHandle = Handle<QueryExecutionInput, QueryExecutionResponse>;
+
+/// Unified endpoint type used to parameterise tests that cover both the canister and subnet
+/// synchronous call paths.
+#[derive(Copy, Clone, Debug)]
+pub enum UpdateEndpoint {
+    Canister(ic_http_endpoints_test_agent::Call),
+    Subnet(ic_http_endpoints_test_agent::CallSubnet),
+}
+
+impl UpdateEndpoint {
+    pub async fn call(
+        self,
+        addr: SocketAddr,
+        message: ic_http_endpoints_test_agent::IngressMessage,
+    ) -> reqwest::Response {
+        match self {
+            UpdateEndpoint::Canister(c) => c.call(addr, message).await,
+            UpdateEndpoint::Subnet(s) => s.call(addr, message).await,
+        }
+    }
+
+    pub fn default_ingress_message(&self) -> ic_http_endpoints_test_agent::IngressMessage {
+        match self {
+            UpdateEndpoint::Canister(_) => ic_http_endpoints_test_agent::IngressMessage::default(),
+            UpdateEndpoint::Subnet(_) => ic_http_endpoints_test_agent::IngressMessage::default()
+                .with_canister_id(CanisterId::ic_00().get(), CanisterId::ic_00().get())
+                .with_method_name("create_canister".to_string()),
+        }
+    }
+}
 
 fn setup_query_execution_mock() -> (QueryExecutionService, QueryExecutionHandle) {
     let (service, handle) = tower_test::mock::pair::<QueryExecutionInput, QueryExecutionResponse>();

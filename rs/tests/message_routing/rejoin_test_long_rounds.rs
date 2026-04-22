@@ -12,8 +12,8 @@ Runbook::
 . start the killed node
 
 Success::
-.. if the restarted node reaches the next CUP height and becomes healthy by the time the next CUP is produced
-.. if metrics confirm that the restarted node skipped cloning many states to speed up its catch-up
+.. if the restarted node reaches the second next CUP height and becomes healthy by the time the second next CUP is produced
+.. if metrics confirm that the restarted node skipped cloning and hashing many states to speed up its catch-up
 
 end::catalog[] */
 
