@@ -511,6 +511,27 @@ const ALLOWANCES_MEMORY_ID: MemoryId = MemoryId::new(1);
 const ALLOWANCES_EXPIRATIONS_MEMORY_ID: MemoryId = MemoryId::new(2);
 const BALANCES_MEMORY_ID: MemoryId = MemoryId::new(3);
 const BLOCKS_MEMORY_ID: MemoryId = MemoryId::new(4);
+const FROZEN_ACCOUNTS_MEMORY_ID: MemoryId = MemoryId::new(5);
+const FROZEN_PRINCIPALS_MEMORY_ID: MemoryId = MemoryId::new(6);
+
+/// Newtype wrapper for `Principal` to implement `Storable` for `StableBTreeMap`.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct StorablePrincipal(pub Principal);
+
+impl Storable for StorablePrincipal {
+    fn to_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
+        std::borrow::Cow::Owned(self.0.as_slice().to_vec())
+    }
+
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        StorablePrincipal(Principal::from_slice(bytes.as_ref()))
+    }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 29,
+        is_fixed_size: false,
+    };
+}
 
 thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
@@ -539,7 +560,23 @@ thread_local! {
     pub static BLOCKS_MEMORY: RefCell<StableBTreeMap<u64, Vec<u8>, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BLOCKS_MEMORY_ID))));
 
+    // account -> () - set of frozen accounts
+    pub static FROZEN_ACCOUNTS: RefCell<StableBTreeMap<Account, (), VirtualMemory<DefaultMemoryImpl>>> =
+        MEMORY_MANAGER.with(|mm| RefCell::new(StableBTreeMap::init(mm.borrow().get(FROZEN_ACCOUNTS_MEMORY_ID))));
+
+    // principal -> () - set of frozen principals
+    pub static FROZEN_PRINCIPALS: RefCell<StableBTreeMap<StorablePrincipal, (), VirtualMemory<DefaultMemoryImpl>>> =
+        MEMORY_MANAGER.with(|mm| RefCell::new(StableBTreeMap::init(mm.borrow().get(FROZEN_PRINCIPALS_MEMORY_ID))));
+
     static ARCHIVING_FAILURES: Cell<u64> = Cell::default();
+}
+
+pub fn is_frozen_account(account: &Account) -> bool {
+    FROZEN_ACCOUNTS.with(|fa| fa.borrow().contains_key(account))
+        || FROZEN_PRINCIPALS.with(|fp| {
+            let key = StorablePrincipal(account.owner);
+            fp.borrow().contains_key(&key)
+        })
 }
 
 type StableLedgerBalances = Balances<StableBalances>;
@@ -597,6 +634,8 @@ pub struct FeatureFlags {
     pub icrc2: bool,
     #[serde(default)]
     pub icrc152: bool,
+    #[serde(default)]
+    pub icrc153: bool,
 }
 
 impl FeatureFlags {
@@ -604,6 +643,7 @@ impl FeatureFlags {
         Self {
             icrc2: true,
             icrc152: false,
+            icrc153: false,
         }
     }
 }

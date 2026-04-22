@@ -382,6 +382,7 @@ fn init_args(initial_balances: Vec<(Account, u64)>) -> InitArgs {
         feature_flags: Some(FeatureFlags {
             icrc2: true,
             icrc152: false,
+            icrc153: false,
         }),
         index_principal: None,
     }
@@ -3262,6 +3263,7 @@ where
         feature_flags: Some(FeatureFlags {
             icrc2: true,
             icrc152: false,
+            icrc153: false,
         }),
         ..UpgradeArgs::default()
     }));
@@ -6152,6 +6154,7 @@ where
         feature_flags: Some(FeatureFlags {
             icrc2: true,
             icrc152: true,
+            icrc153: false,
         }),
         ..init_args(initial_balances)
     });
@@ -6682,4 +6685,1020 @@ where
         volume_after_burn > volume_after_mint,
         "total_volume should increase after authorized burn, got {volume_after_burn} (was {volume_after_mint})"
     );
+}
+
+// ---------------------------------------------------------------------------
+// ICRC-153 test helpers
+// ---------------------------------------------------------------------------
+
+use icrc_ledger_types::icrc153::{
+    FrozenAccountsRequest, FrozenAccountsResponse, FrozenPrincipalsRequest,
+    FrozenPrincipalsResponse, Icrc153FreezeAccountArgs, Icrc153FreezeAccountError,
+    Icrc153FreezePrincipalArgs, Icrc153FreezePrincipalError, Icrc153UnfreezeAccountArgs,
+    Icrc153UnfreezeAccountError, Icrc153UnfreezePrincipalArgs, Icrc153UnfreezePrincipalError,
+};
+
+fn icrc153_freeze_account(
+    env: &StateMachine,
+    ledger: CanisterId,
+    caller: PrincipalId,
+    args: &Icrc153FreezeAccountArgs,
+) -> Result<Nat, Icrc153FreezeAccountError> {
+    Decode!(
+        &env.execute_ingress_as(caller, ledger, "icrc153_freeze_account", Encode!(args).unwrap())
+            .expect("failed to call icrc153_freeze_account")
+            .bytes(),
+        Result<Nat, Icrc153FreezeAccountError>
+    )
+    .expect("failed to decode icrc153_freeze_account response")
+}
+
+fn icrc153_unfreeze_account(
+    env: &StateMachine,
+    ledger: CanisterId,
+    caller: PrincipalId,
+    args: &Icrc153UnfreezeAccountArgs,
+) -> Result<Nat, Icrc153UnfreezeAccountError> {
+    Decode!(
+        &env.execute_ingress_as(
+            caller,
+            ledger,
+            "icrc153_unfreeze_account",
+            Encode!(args).unwrap()
+        )
+        .expect("failed to call icrc153_unfreeze_account")
+        .bytes(),
+        Result<Nat, Icrc153UnfreezeAccountError>
+    )
+    .expect("failed to decode icrc153_unfreeze_account response")
+}
+
+fn icrc153_freeze_principal(
+    env: &StateMachine,
+    ledger: CanisterId,
+    caller: PrincipalId,
+    args: &Icrc153FreezePrincipalArgs,
+) -> Result<Nat, Icrc153FreezePrincipalError> {
+    Decode!(
+        &env.execute_ingress_as(
+            caller,
+            ledger,
+            "icrc153_freeze_principal",
+            Encode!(args).unwrap()
+        )
+        .expect("failed to call icrc153_freeze_principal")
+        .bytes(),
+        Result<Nat, Icrc153FreezePrincipalError>
+    )
+    .expect("failed to decode icrc153_freeze_principal response")
+}
+
+fn icrc153_unfreeze_principal(
+    env: &StateMachine,
+    ledger: CanisterId,
+    caller: PrincipalId,
+    args: &Icrc153UnfreezePrincipalArgs,
+) -> Result<Nat, Icrc153UnfreezePrincipalError> {
+    Decode!(
+        &env.execute_ingress_as(
+            caller,
+            ledger,
+            "icrc153_unfreeze_principal",
+            Encode!(args).unwrap()
+        )
+        .expect("failed to call icrc153_unfreeze_principal")
+        .bytes(),
+        Result<Nat, Icrc153UnfreezePrincipalError>
+    )
+    .expect("failed to decode icrc153_unfreeze_principal response")
+}
+
+fn icrc153_is_frozen_account(env: &StateMachine, ledger: CanisterId, account: &Account) -> bool {
+    Decode!(
+        &env.query(
+            ledger,
+            "icrc153_is_frozen_account",
+            Encode!(account).unwrap()
+        )
+        .expect("failed to query icrc153_is_frozen_account")
+        .bytes(),
+        bool
+    )
+    .expect("failed to decode icrc153_is_frozen_account response")
+}
+
+fn icrc153_is_frozen_principal(
+    env: &StateMachine,
+    ledger: CanisterId,
+    principal: &Principal,
+) -> bool {
+    Decode!(
+        &env.query(
+            ledger,
+            "icrc153_is_frozen_principal",
+            Encode!(principal).unwrap()
+        )
+        .expect("failed to query icrc153_is_frozen_principal")
+        .bytes(),
+        bool
+    )
+    .expect("failed to decode icrc153_is_frozen_principal response")
+}
+
+fn icrc153_list_frozen_accounts(
+    env: &StateMachine,
+    ledger: CanisterId,
+    req: &FrozenAccountsRequest,
+) -> FrozenAccountsResponse {
+    Decode!(
+        &env.query(
+            ledger,
+            "icrc153_list_frozen_accounts",
+            Encode!(req).unwrap()
+        )
+        .expect("failed to query icrc153_list_frozen_accounts")
+        .bytes(),
+        FrozenAccountsResponse
+    )
+    .expect("failed to decode icrc153_list_frozen_accounts response")
+}
+
+fn icrc153_list_frozen_principals(
+    env: &StateMachine,
+    ledger: CanisterId,
+    req: &FrozenPrincipalsRequest,
+) -> FrozenPrincipalsResponse {
+    Decode!(
+        &env.query(
+            ledger,
+            "icrc153_list_frozen_principals",
+            Encode!(req).unwrap()
+        )
+        .expect("failed to query icrc153_list_frozen_principals")
+        .bytes(),
+        FrozenPrincipalsResponse
+    )
+    .expect("failed to decode icrc153_list_frozen_principals response")
+}
+
+fn setup_icrc153<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+    initial_balances: Vec<(Account, u64)>,
+) -> (StateMachine, CanisterId)
+where
+    T: CandidType,
+{
+    let env = StateMachine::new();
+    let args = encode_init_args(InitArgs {
+        feature_flags: Some(FeatureFlags {
+            icrc2: true,
+            icrc152: true,
+            icrc153: true,
+        }),
+        ..init_args(initial_balances)
+    });
+    let args = Encode!(&args).unwrap();
+    let canister_id = env.install_canister(ledger_wasm, args, None).unwrap();
+    (env, canister_id)
+}
+
+// ---------------------------------------------------------------------------
+// ICRC-153 integration tests
+// ---------------------------------------------------------------------------
+
+pub fn test_icrc153_feature_flag_disabled<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
+    let controller = PrincipalId::new_anonymous();
+    let p1 = PrincipalId::new_user_test_id(1);
+
+    let result = icrc153_freeze_account(
+        &env,
+        canister_id,
+        controller,
+        &Icrc153FreezeAccountArgs {
+            account: Account::from(p1.0),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    match result {
+        Err(Icrc153FreezeAccountError::GenericError { message, .. }) => {
+            assert!(
+                message.contains("not enabled"),
+                "expected 'not enabled' message, got: {message}"
+            );
+        }
+        other => panic!("expected GenericError for disabled flag, got: {other:?}"),
+    }
+
+    let result = icrc153_freeze_principal(
+        &env,
+        canister_id,
+        controller,
+        &Icrc153FreezePrincipalArgs {
+            principal: p1.0,
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    match result {
+        Err(Icrc153FreezePrincipalError::GenericError { message, .. }) => {
+            assert!(
+                message.contains("not enabled"),
+                "expected 'not enabled' message, got: {message}"
+            );
+        }
+        other => panic!("expected GenericError for disabled flag, got: {other:?}"),
+    }
+
+    // Query endpoints should return false/empty when disabled
+    assert!(!icrc153_is_frozen_account(
+        &env,
+        canister_id,
+        &Account::from(p1.0)
+    ));
+    assert!(!icrc153_is_frozen_principal(&env, canister_id, &p1.0));
+}
+
+pub fn test_icrc153_unauthorized<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let (env, canister_id) = setup_icrc153(ledger_wasm, encode_init_args, vec![]);
+    let non_controller = PrincipalId::new_user_test_id(42);
+    let p1 = PrincipalId::new_user_test_id(1);
+
+    let result = icrc153_freeze_account(
+        &env,
+        canister_id,
+        non_controller,
+        &Icrc153FreezeAccountArgs {
+            account: Account::from(p1.0),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    match result {
+        Err(Icrc153FreezeAccountError::Unauthorized(_)) => {}
+        other => panic!("expected Unauthorized for freeze_account, got: {other:?}"),
+    }
+
+    let result = icrc153_freeze_principal(
+        &env,
+        canister_id,
+        non_controller,
+        &Icrc153FreezePrincipalArgs {
+            principal: p1.0,
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    match result {
+        Err(Icrc153FreezePrincipalError::Unauthorized(_)) => {}
+        other => panic!("expected Unauthorized for freeze_principal, got: {other:?}"),
+    }
+
+    let result = icrc153_unfreeze_account(
+        &env,
+        canister_id,
+        non_controller,
+        &Icrc153UnfreezeAccountArgs {
+            account: Account::from(p1.0),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    match result {
+        Err(Icrc153UnfreezeAccountError::Unauthorized(_)) => {}
+        other => panic!("expected Unauthorized for unfreeze_account, got: {other:?}"),
+    }
+
+    let result = icrc153_unfreeze_principal(
+        &env,
+        canister_id,
+        non_controller,
+        &Icrc153UnfreezePrincipalArgs {
+            principal: p1.0,
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    match result {
+        Err(Icrc153UnfreezePrincipalError::Unauthorized(_)) => {}
+        other => panic!("expected Unauthorized for unfreeze_principal, got: {other:?}"),
+    }
+}
+
+pub fn test_icrc153_validation<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let (env, canister_id) = setup_icrc153(ledger_wasm, encode_init_args, vec![]);
+    let controller = PrincipalId::new_anonymous();
+
+    // --- Anonymous principal ---
+    let result = icrc153_freeze_account(
+        &env,
+        canister_id,
+        controller,
+        &Icrc153FreezeAccountArgs {
+            account: Account {
+                owner: Principal::anonymous(),
+                subaccount: None,
+            },
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    match result {
+        Err(Icrc153FreezeAccountError::InvalidAccount(_)) => {}
+        other => panic!("expected InvalidAccount for anonymous, got: {other:?}"),
+    }
+
+    // --- Anonymous principal for freeze_principal ---
+    let result = icrc153_freeze_principal(
+        &env,
+        canister_id,
+        controller,
+        &Icrc153FreezePrincipalArgs {
+            principal: Principal::anonymous(),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    match result {
+        Err(Icrc153FreezePrincipalError::InvalidPrincipal(_)) => {}
+        other => panic!("expected InvalidPrincipal for anonymous, got: {other:?}"),
+    }
+
+    // --- Minting account ---
+    let result = icrc153_freeze_account(
+        &env,
+        canister_id,
+        controller,
+        &Icrc153FreezeAccountArgs {
+            account: MINTER,
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    match result {
+        Err(Icrc153FreezeAccountError::InvalidAccount(_)) => {}
+        other => panic!("expected InvalidAccount for minting account, got: {other:?}"),
+    }
+
+    // --- Reason too long ---
+    let long_reason = "x".repeat(1025);
+    let p1 = PrincipalId::new_user_test_id(1);
+    let result = icrc153_freeze_account(
+        &env,
+        canister_id,
+        controller,
+        &Icrc153FreezeAccountArgs {
+            account: Account::from(p1.0),
+            created_at_time: now_nanos(&env),
+            reason: Some(long_reason),
+        },
+    );
+    match result {
+        Err(Icrc153FreezeAccountError::GenericError { message, .. }) => {
+            assert!(message.contains("1024"), "got: {message}");
+        }
+        other => panic!("expected GenericError for long reason, got: {other:?}"),
+    }
+}
+
+pub fn test_icrc153_freeze_account_happy_path<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let (env, canister_id) = setup_icrc153(ledger_wasm, encode_init_args, vec![]);
+    let controller = PrincipalId::new_anonymous();
+    let account = Account::from(p1.0);
+
+    assert!(!icrc153_is_frozen_account(&env, canister_id, &account));
+
+    let result = icrc153_freeze_account(
+        &env,
+        canister_id,
+        controller,
+        &Icrc153FreezeAccountArgs {
+            account,
+            created_at_time: now_nanos(&env),
+            reason: Some("suspicious activity".to_string()),
+        },
+    );
+    let block_idx = result.expect("icrc153_freeze_account should succeed");
+    assert_eq!(block_idx, Nat::from(0_u64));
+
+    assert!(icrc153_is_frozen_account(&env, canister_id, &account));
+
+    // Verify block type
+    let blocks = icrc3_get_blocks(&env, canister_id, 0, 1);
+    assert_eq!(blocks.blocks.len(), 1);
+    let btype = match &blocks.blocks[0].block {
+        ICRC3Value::Map(m) => m
+            .iter()
+            .find(|(k, _)| k.as_str() == "btype")
+            .map(|(_, v)| v.clone()),
+        other => panic!("expected Map block, got: {other:?}"),
+    };
+    assert_eq!(
+        btype,
+        Some(ICRC3Value::Text("123freezeaccount".to_string())),
+    );
+}
+
+pub fn test_icrc153_unfreeze_account_happy_path<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let (env, canister_id) = setup_icrc153(ledger_wasm, encode_init_args, vec![]);
+    let controller = PrincipalId::new_anonymous();
+    let account = Account::from(p1.0);
+
+    // Freeze first
+    icrc153_freeze_account(
+        &env,
+        canister_id,
+        controller,
+        &Icrc153FreezeAccountArgs {
+            account,
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    )
+    .expect("freeze should succeed");
+
+    assert!(icrc153_is_frozen_account(&env, canister_id, &account));
+
+    // Unfreeze
+    let result = icrc153_unfreeze_account(
+        &env,
+        canister_id,
+        controller,
+        &Icrc153UnfreezeAccountArgs {
+            account,
+            created_at_time: now_nanos(&env),
+            reason: Some("cleared".to_string()),
+        },
+    );
+    result.expect("unfreeze should succeed");
+
+    assert!(!icrc153_is_frozen_account(&env, canister_id, &account));
+}
+
+pub fn test_icrc153_freeze_principal_happy_path<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let (env, canister_id) = setup_icrc153(ledger_wasm, encode_init_args, vec![]);
+    let controller = PrincipalId::new_anonymous();
+
+    assert!(!icrc153_is_frozen_principal(&env, canister_id, &p1.0));
+
+    icrc153_freeze_principal(
+        &env,
+        canister_id,
+        controller,
+        &Icrc153FreezePrincipalArgs {
+            principal: p1.0,
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    )
+    .expect("freeze_principal should succeed");
+
+    assert!(icrc153_is_frozen_principal(&env, canister_id, &p1.0));
+
+    // All accounts of that principal should be frozen
+    let account = Account::from(p1.0);
+    assert!(icrc153_is_frozen_account(&env, canister_id, &account));
+    let account_with_sub = Account {
+        owner: p1.0,
+        subaccount: Some([1_u8; 32]),
+    };
+    assert!(icrc153_is_frozen_account(
+        &env,
+        canister_id,
+        &account_with_sub
+    ));
+}
+
+pub fn test_icrc153_unfreeze_principal_clears_account_freezes<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let (env, canister_id) = setup_icrc153(ledger_wasm, encode_init_args, vec![]);
+    let controller = PrincipalId::new_anonymous();
+    let account = Account::from(p1.0);
+
+    // Freeze account-level
+    icrc153_freeze_account(
+        &env,
+        canister_id,
+        controller,
+        &Icrc153FreezeAccountArgs {
+            account,
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    )
+    .expect("freeze_account should succeed");
+
+    // Also freeze principal-level
+    icrc153_freeze_principal(
+        &env,
+        canister_id,
+        controller,
+        &Icrc153FreezePrincipalArgs {
+            principal: p1.0,
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    )
+    .expect("freeze_principal should succeed");
+
+    assert!(icrc153_is_frozen_account(&env, canister_id, &account));
+
+    // Unfreeze principal should clear both
+    icrc153_unfreeze_principal(
+        &env,
+        canister_id,
+        controller,
+        &Icrc153UnfreezePrincipalArgs {
+            principal: p1.0,
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    )
+    .expect("unfreeze_principal should succeed");
+
+    // Account should no longer be frozen (both principal and account-level cleared)
+    assert!(!icrc153_is_frozen_account(&env, canister_id, &account));
+    assert!(!icrc153_is_frozen_principal(&env, canister_id, &p1.0));
+}
+
+pub fn test_icrc153_already_frozen<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let (env, canister_id) = setup_icrc153(ledger_wasm, encode_init_args, vec![]);
+    let controller = PrincipalId::new_anonymous();
+    let account = Account::from(p1.0);
+
+    icrc153_freeze_account(
+        &env,
+        canister_id,
+        controller,
+        &Icrc153FreezeAccountArgs {
+            account,
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    )
+    .expect("first freeze should succeed");
+
+    let result = icrc153_freeze_account(
+        &env,
+        canister_id,
+        controller,
+        &Icrc153FreezeAccountArgs {
+            account,
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    match result {
+        Err(Icrc153FreezeAccountError::AlreadyFrozen(_)) => {}
+        other => panic!("expected AlreadyFrozen, got: {other:?}"),
+    }
+
+    // Same for principal
+    icrc153_freeze_principal(
+        &env,
+        canister_id,
+        controller,
+        &Icrc153FreezePrincipalArgs {
+            principal: p1.0,
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    )
+    .expect("first freeze_principal should succeed");
+
+    let result = icrc153_freeze_principal(
+        &env,
+        canister_id,
+        controller,
+        &Icrc153FreezePrincipalArgs {
+            principal: p1.0,
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    match result {
+        Err(Icrc153FreezePrincipalError::AlreadyFrozen(_)) => {}
+        other => panic!("expected AlreadyFrozen for principal, got: {other:?}"),
+    }
+}
+
+pub fn test_icrc153_freeze_guard_blocks_transfer<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let (env, canister_id) = setup_icrc153(
+        ledger_wasm,
+        encode_init_args,
+        vec![(Account::from(p1.0), 10_000_000)],
+    );
+    let controller = PrincipalId::new_anonymous();
+
+    // Transfer works before freeze
+    let result = transfer(&env, canister_id, p1.0, p2.0, 1_000);
+    assert!(result.is_ok(), "transfer should work before freeze");
+
+    // Freeze p1's account
+    icrc153_freeze_account(
+        &env,
+        canister_id,
+        controller,
+        &Icrc153FreezeAccountArgs {
+            account: Account::from(p1.0),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    )
+    .expect("freeze should succeed");
+
+    // Transfer from frozen account should be rejected (trap)
+    let result = env.execute_ingress_as(
+        p1,
+        canister_id,
+        "icrc1_transfer",
+        Encode!(&TransferArg {
+            from_subaccount: None,
+            to: Account::from(p2.0),
+            fee: None,
+            created_at_time: None,
+            amount: Nat::from(1_000_u64),
+            memo: None,
+        })
+        .unwrap(),
+    );
+    assert!(
+        result.is_err(),
+        "transfer from frozen account should be rejected"
+    );
+}
+
+pub fn test_icrc153_freeze_guard_blocks_approve<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let (env, canister_id) = setup_icrc153(
+        ledger_wasm,
+        encode_init_args,
+        vec![(Account::from(p1.0), 10_000_000)],
+    );
+    let controller = PrincipalId::new_anonymous();
+
+    // Freeze p1
+    icrc153_freeze_account(
+        &env,
+        canister_id,
+        controller,
+        &Icrc153FreezeAccountArgs {
+            account: Account::from(p1.0),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    )
+    .expect("freeze should succeed");
+
+    // Approve from frozen account should be rejected (trap)
+    let result = env.execute_ingress_as(
+        p1,
+        canister_id,
+        "icrc2_approve",
+        Encode!(&ApproveArgs {
+            from_subaccount: None,
+            spender: Account::from(p2.0),
+            amount: Nat::from(1_000_u64),
+            expected_allowance: None,
+            expires_at: None,
+            fee: None,
+            memo: None,
+            created_at_time: None,
+        })
+        .unwrap(),
+    );
+    assert!(
+        result.is_err(),
+        "approve from frozen account should be rejected"
+    );
+}
+
+pub fn test_icrc153_freeze_guard_allows_transfer_to_frozen<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let (env, canister_id) = setup_icrc153(
+        ledger_wasm,
+        encode_init_args,
+        vec![(Account::from(p1.0), 10_000_000)],
+    );
+    let controller = PrincipalId::new_anonymous();
+
+    // Freeze p2 (recipient)
+    icrc153_freeze_account(
+        &env,
+        canister_id,
+        controller,
+        &Icrc153FreezeAccountArgs {
+            account: Account::from(p2.0),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    )
+    .expect("freeze should succeed");
+
+    // Transfer TO frozen should work
+    let result = transfer(&env, canister_id, p1.0, p2.0, 1_000);
+    assert!(
+        result.is_ok(),
+        "transfer to frozen account should succeed, got: {:?}",
+        result
+    );
+}
+
+pub fn test_icrc153_freeze_guard_allows_privileged_ops<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let (env, canister_id) = setup_icrc153(
+        ledger_wasm,
+        encode_init_args,
+        vec![(Account::from(p1.0), 10_000_000)],
+    );
+    let controller = PrincipalId::new_anonymous();
+
+    // Freeze p1
+    icrc153_freeze_account(
+        &env,
+        canister_id,
+        controller,
+        &Icrc153FreezeAccountArgs {
+            account: Account::from(p1.0),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    )
+    .expect("freeze should succeed");
+
+    // icrc152_mint to frozen account should still work
+    let mint_result = icrc152_mint(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152MintArgs {
+            to: Account::from(p1.0),
+            amount: Nat::from(1_000_u64),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    assert!(
+        mint_result.is_ok(),
+        "icrc152_mint to frozen account should succeed"
+    );
+
+    // icrc152_burn from frozen account should still work
+    let burn_result = icrc152_burn(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152BurnArgs {
+            from: Account::from(p1.0),
+            amount: Nat::from(500_u64),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    assert!(
+        burn_result.is_ok(),
+        "icrc152_burn from frozen account should succeed"
+    );
+}
+
+pub fn test_icrc153_deduplication<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let (env, canister_id) = setup_icrc153(ledger_wasm, encode_init_args, vec![]);
+    let controller = PrincipalId::new_anonymous();
+    let ts = now_nanos(&env);
+
+    let args = Icrc153FreezeAccountArgs {
+        account: Account::from(p1.0),
+        created_at_time: ts,
+        reason: None,
+    };
+    let first = icrc153_freeze_account(&env, canister_id, controller, &args);
+    assert!(first.is_ok(), "first freeze should succeed");
+
+    // Duplicate (same created_at_time)
+    let dup = icrc153_freeze_account(&env, canister_id, controller, &args);
+    match dup {
+        Err(Icrc153FreezeAccountError::Duplicate { .. }) => {}
+        Err(Icrc153FreezeAccountError::AlreadyFrozen(_)) => {
+            // Also acceptable since the account is already frozen
+        }
+        other => panic!("expected Duplicate or AlreadyFrozen, got: {other:?}"),
+    }
+}
+
+pub fn test_icrc153_pagination<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let (env, canister_id) = setup_icrc153(ledger_wasm, encode_init_args, vec![]);
+    let controller = PrincipalId::new_anonymous();
+
+    // Freeze several accounts
+    for i in 1..=5_u64 {
+        let p = PrincipalId::new_user_test_id(i);
+        icrc153_freeze_account(
+            &env,
+            canister_id,
+            controller,
+            &Icrc153FreezeAccountArgs {
+                account: Account::from(p.0),
+                created_at_time: now_nanos(&env) + i,
+                reason: None,
+            },
+        )
+        .unwrap_or_else(|e| panic!("freeze account {i} failed: {e:?}"));
+    }
+
+    // List with max_results = 2
+    let resp = icrc153_list_frozen_accounts(
+        &env,
+        canister_id,
+        &FrozenAccountsRequest {
+            start_after: None,
+            max_results: Nat::from(2_u64),
+        },
+    );
+    assert_eq!(resp.accounts.len(), 2, "should return 2 accounts");
+    assert!(resp.has_more, "should have more accounts");
+
+    // Next page
+    let resp2 = icrc153_list_frozen_accounts(
+        &env,
+        canister_id,
+        &FrozenAccountsRequest {
+            start_after: Some(resp.accounts[1]),
+            max_results: Nat::from(2_u64),
+        },
+    );
+    assert_eq!(resp2.accounts.len(), 2, "second page should have 2");
+    assert!(resp2.has_more, "should have more after second page");
+
+    // Third page
+    let resp3 = icrc153_list_frozen_accounts(
+        &env,
+        canister_id,
+        &FrozenAccountsRequest {
+            start_after: Some(resp2.accounts[1]),
+            max_results: Nat::from(2_u64),
+        },
+    );
+    assert_eq!(resp3.accounts.len(), 1, "third page should have 1");
+    assert!(!resp3.has_more, "no more after third page");
+
+    // Similar test for principals
+    for i in 10..=12_u64 {
+        let p = PrincipalId::new_user_test_id(i);
+        icrc153_freeze_principal(
+            &env,
+            canister_id,
+            controller,
+            &Icrc153FreezePrincipalArgs {
+                principal: p.0,
+                created_at_time: now_nanos(&env) + i,
+                reason: None,
+            },
+        )
+        .unwrap_or_else(|e| panic!("freeze principal {i} failed: {e:?}"));
+    }
+
+    let presp = icrc153_list_frozen_principals(
+        &env,
+        canister_id,
+        &FrozenPrincipalsRequest {
+            start_after: None,
+            max_results: Nat::from(2_u64),
+        },
+    );
+    assert_eq!(presp.principals.len(), 2);
+    assert!(presp.has_more);
+
+    let presp2 = icrc153_list_frozen_principals(
+        &env,
+        canister_id,
+        &FrozenPrincipalsRequest {
+            start_after: Some(presp.principals[1]),
+            max_results: Nat::from(2_u64),
+        },
+    );
+    assert_eq!(presp2.principals.len(), 1);
+    assert!(!presp2.has_more);
+}
+
+pub fn test_icrc153_supported_standards<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    // With icrc153 disabled (default setup)
+    let (env, canister_id_disabled) = setup(ledger_wasm.clone(), encode_init_args, vec![]);
+    let standards_disabled: Vec<String> = supported_standards(&env, canister_id_disabled)
+        .into_iter()
+        .map(|s| s.name)
+        .collect();
+    assert!(
+        !standards_disabled.contains(&"ICRC-153".to_string()),
+        "ICRC-153 should NOT be in supported_standards when disabled"
+    );
+    let block_types_disabled: Vec<String> = supported_block_types(&env, canister_id_disabled)
+        .into_iter()
+        .map(|bt| bt.block_type)
+        .collect();
+    assert!(
+        !block_types_disabled.contains(&"123freezeaccount".to_string()),
+        "123freezeaccount should NOT be in supported_block_types when disabled"
+    );
+
+    // With icrc153 enabled
+    let (env, canister_id_enabled) = setup_icrc153(ledger_wasm, encode_init_args, vec![]);
+    let standards_enabled: Vec<String> = supported_standards(&env, canister_id_enabled)
+        .into_iter()
+        .map(|s| s.name)
+        .collect();
+    assert!(
+        standards_enabled.contains(&"ICRC-153".to_string()),
+        "ICRC-153 should be in supported_standards when enabled, got: {standards_enabled:?}"
+    );
+    let block_types_enabled: Vec<String> = supported_block_types(&env, canister_id_enabled)
+        .into_iter()
+        .map(|bt| bt.block_type)
+        .collect();
+    for expected_btype in [
+        "123freezeaccount",
+        "123unfreezeaccount",
+        "123freezeprincipal",
+        "123unfreezeprincipal",
+    ] {
+        assert!(
+            block_types_enabled.contains(&expected_btype.to_string()),
+            "{expected_btype} should be in supported_block_types when enabled, got: {block_types_enabled:?}"
+        );
+    }
 }

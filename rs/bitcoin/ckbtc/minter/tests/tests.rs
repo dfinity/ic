@@ -725,7 +725,8 @@ impl CkBtcSetup {
                     .with_max_memo_length(CKBTC_LEDGER_MEMO_SIZE)
                     .with_feature_flags(ic_icrc1_ledger::FeatureFlags {
                         icrc2: true,
-                        icrc152: false
+                        icrc152: false,
+                        icrc153: false,
                     })
                     .build()
             ))

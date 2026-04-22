@@ -921,6 +921,7 @@ fn icrc1_ledger_init_arg(
     const ICRC2_FEATURE: LedgerFeatureFlags = LedgerFeatureFlags {
         icrc2: true,
         icrc152: false,
+        icrc153: false,
     };
 
     LedgerInitArgs {

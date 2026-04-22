@@ -273,6 +273,7 @@ async fn install_cketh_ledger(runtime: &Runtime, minter: Principal) -> LedgerCan
             .with_feature_flags(FeatureFlags {
                 icrc2: true,
                 icrc152: false,
+                icrc153: false,
             })
             .with_fee_collector_account(Account {
                 owner: minter,
