@@ -278,15 +278,15 @@ impl ThresholdSignerImpl {
         }
 
         let share_string = share.to_string();
-        let ret = match self.crypto_verify_sig_share(inputs, share, idkg_pool.stats()) {
+        match self.crypto_verify_sig_share(inputs, share, idkg_pool.stats()) {
             Err(error) if error.is_reproducible() => {
                 self.metrics.sign_errors_inc("verify_sig_share_permanent");
-                return Some(IDkgChangeAction::HandleInvalid(
+                Some(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
                         "Signature share validation(permanent error): {share_string}, error = {error:?}"
                     ),
-                ));
+                ))
             }
             Err(error) => {
                 // Defer in case of transient errors
@@ -303,27 +303,26 @@ impl ThresholdSignerImpl {
                     "verify_sig_share_transient"
                 };
                 self.metrics.sign_errors_inc(label);
-                return None;
+                None
             }
             Ok(share) => {
                 self.metrics.sign_metrics_inc("sig_shares_received");
-                Some(IDkgChangeAction::MoveToValidated(share))
+
+                // Although we already checked the cache for duplicate shares above, it could happen that a
+                // different thread validated a share for the same request_id in the meantime, after we
+                // released the read lock. Therefore, we acquire the write lock here to check again with
+                // exclusive access.
+                let mut valid_sig_share_signers = self.validated_sig_share_signers.write().unwrap();
+                let signers = valid_sig_share_signers.entry(request_id).or_default();
+                if !signers.insert(signer) {
+                    self.metrics
+                        .sign_errors_inc("duplicate_sig_share_cache_miss");
+                    Some(IDkgChangeAction::RemoveUnvalidated(id))
+                } else {
+                    Some(IDkgChangeAction::MoveToValidated(share))
+                }
             }
-        };
-
-        // Although we already checked the cache for duplicate shares above, it could happen that a
-        // different thread validated a share for the same request_id in the meantime, after we
-        // released the read lock. Therefore, we acquire the write lock here to check again with
-        // exclusive access.
-        let mut valid_sig_share_signers = self.validated_sig_share_signers.write().unwrap();
-        let signers = valid_sig_share_signers.entry(request_id).or_default();
-        if !signers.insert(signer) {
-            self.metrics
-                .sign_errors_inc("duplicate_sig_share_cache_miss");
-            return Some(IDkgChangeAction::RemoveUnvalidated(id));
         }
-
-        ret
     }
 
     /// Purges the entries no longer needed from the artifact pool
