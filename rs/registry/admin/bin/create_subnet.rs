@@ -16,6 +16,7 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{NodeId, PrincipalId, ReplicaVersion};
 use registry_canister::mutations::do_create_subnet;
+use registry_canister::mutations::do_create_subnet::CanisterCyclesCostSchedule;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use url::Url;
@@ -167,9 +168,9 @@ pub(crate) struct ProposeToCreateSubnetCmd {
     pub max_number_of_canisters: Option<u64>,
 
     /// The canister cycles cost schedule for this subnet.
-    /// Can be "normal" (default) or "free" (used by cloud engine subnets).
+    /// Can be "Normal" (default) or "Free" (used by cloud engine subnets).
     #[clap(long)]
-    pub canister_cycles_cost_schedule: Option<do_create_subnet::CanisterCyclesCostSchedule>,
+    pub canister_cycles_cost_schedule: Option<CanisterCyclesCostSchedule>,
 
     /// The features that are enabled and disabled on the subnet.
     #[clap(long)]
@@ -278,7 +279,7 @@ impl ProposeToCreateSubnetCmd {
             self.max_number_of_canisters.get_or_insert(0);
             self.features.get_or_insert(SubnetFeatures::default());
             self.canister_cycles_cost_schedule
-                .get_or_insert(do_create_subnet::CanisterCyclesCostSchedule::Normal);
+                .get_or_insert(CanisterCyclesCostSchedule::Normal);
         }
     }
 
@@ -376,9 +377,7 @@ mod tests {
 
     fn minimal_create_payload() -> do_create_subnet::CreateSubnetPayload {
         do_create_subnet::CreateSubnetPayload {
-            canister_cycles_cost_schedule: Some(
-                do_create_subnet::CanisterCyclesCostSchedule::Normal,
-            ),
+            canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Normal),
             subnet_admins: Some(vec![]),
             ..Default::default()
         }
@@ -461,9 +460,7 @@ mod tests {
 
             replica_version_id: Some(replica_version_id.clone()),
             features: Some(features),
-            canister_cycles_cost_schedule: Some(
-                do_create_subnet::CanisterCyclesCostSchedule::Normal,
-            ),
+            canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Normal),
             ..empty_propose_to_create_subnet_cmd()
         };
         assert_eq!(

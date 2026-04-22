@@ -520,12 +520,10 @@ impl TryFrom<KeyConfigRequest> for KeyConfigRequestInternal {
 pub enum CanisterCyclesCostSchedule {
     /// Use the cost schedule associate with the subnet's type.
     #[default]
-    #[strum(serialize = "normal")]
     Normal,
 
     /// This is used by rented subnets. This is because rented subnets get paid
     /// for in a different way.
-    #[strum(serialize = "free")]
     Free,
 }
 
