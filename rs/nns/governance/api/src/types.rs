@@ -2931,13 +2931,12 @@ pub struct Batch {
 }
 
 /// Take multiple actions, sequentially, and stop if any step fails.
-/// 
+///
 /// Topic: All actions must have the same topic. This has the same topic
 /// as the constituents.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug)]
 pub struct BatchRequest {
     pub actions: Option<Vec<ProposalActionRequest>>,
-
     // A couple of ideas for possible future enhancements (no promises though):
     //
     //   1. Let user choose a different behavior on error. Currently,
