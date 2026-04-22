@@ -115,16 +115,15 @@ def is_git_commit_sha(s: str) -> bool:
 
 
 def commit_sha_arg(s: str) -> str:
-    """argparse `type` validator: accept only strings that look like a git commit SHA."""
+    """Argparse `type` validator: accept only strings that look like a git commit SHA."""
     if not is_git_commit_sha(s):
-        raise argparse.ArgumentTypeError(
-            f"Invalid git commit SHA '{s}': expected 7-40 hexadecimal characters."
-        )
+        raise argparse.ArgumentTypeError(f"Invalid git commit SHA '{s}': expected 7-40 hexadecimal characters.")
     return s
 
 
 def resolve_full_commit_sha(sha: str) -> str:
-    """Resolve a (possibly short) git commit SHA to its full 40-character form using `git rev-parse`.
+    """
+    Resolve a (possibly short) git commit SHA to its full 40-character form using `git rev-parse`.
 
     Only accepts inputs that look like a git commit SHA (hex 7-40 chars) to avoid
     accepting arbitrary revision expressions or option injection via `git rev-parse`.
