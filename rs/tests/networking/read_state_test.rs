@@ -13,7 +13,7 @@ Success::
     . public key and canister ranges for all subnets
     . public keys of nodes on the subnet
     . no public keys of nodes on other subnets
-. Malformed status requests are rejected by /api/{v2,v3}/canister/.../read_state
+. Malformed status requests are rejected by /api/{v2,v3}/canister/.../read_state and /api/v3/subnet/.../read_state
 . Status requests for non-existent requests contain an absence proof by /api/{v2,v3}/canister/.../read_state
 . /api/{v2,v3}/canister/.../read_state requests of invalid paths are rejected
 . A canister's public metadata sections can be read by
@@ -348,18 +348,19 @@ fn test_invalid_request_rejected(env: TestEnv, endpoint: Endpoint) {
         let path = vec!["request_status".into(), invalid_request_id.into()];
         let error = read_state(&env, vec![path], endpoint).expect_err("Invalid request");
         match endpoint {
-            Endpoint::CanisterReadState(_version) => {
+            Endpoint::CanisterReadState(_)
+            | Endpoint::SubnetReadState(read_state::Version::V3) => {
                 assert_matches!(
                     error,
                     AgentError::HttpError(error) if error.status == StatusCode::BAD_REQUEST.as_u16(),
                     "Invalid request id"
                 )
             }
-            Endpoint::SubnetReadState(_version) => {
+            Endpoint::SubnetReadState(read_state::Version::V2) => {
                 assert_matches!(
                     error,
                     AgentError::HttpError(error) if error.status == StatusCode::NOT_FOUND.as_u16(),
-                    "request_status is not allowed on subnet read_state endpoint"
+                    "request_status is not allowed on subnet read_state V2 endpoint"
                 )
             }
         }
