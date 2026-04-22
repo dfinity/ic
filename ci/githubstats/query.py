@@ -1149,7 +1149,7 @@ def top(args):
         branch=sql.Literal(args.branch if args.branch else ""),
         exclude_prs=sql.SQL("{}::int[]").format(sql.Literal(args.exclude_pr)),
         exclude_commits=sql.SQL("{}::text[]").format(
-            sql.Literal([resolve_full_commit_sha(c) for c in args.exclude_commit])
+            sql.Literal([resolve_full_commit_sha(c) for c in set(args.exclude_commit)])
         ),
         order_by=order_by,
         N=sql.Literal(args.N),
@@ -1252,7 +1252,7 @@ def last(args):
         branch=sql.Literal(args.branch if args.branch else ""),
         exclude_prs=sql.SQL("{}::int[]").format(sql.Literal(args.exclude_pr)),
         exclude_commits=sql.SQL("{}::text[]").format(
-            sql.Literal([resolve_full_commit_sha(c) for c in args.exclude_commit])
+            sql.Literal([resolve_full_commit_sha(c) for c in set(args.exclude_commit)])
         ),
     )
 
