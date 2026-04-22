@@ -45,7 +45,7 @@ enum RemoteDkgContext<'a> {
 }
 
 impl<'a> RemoteDkgContext<'a> {
-    fn target_id(&self) -> &'a NiDkgTargetId {
+    fn target_id(&self) -> &NiDkgTargetId {
         match self {
             RemoteDkgContext::SetupInitialDKG(context) => &context.target_id,
             RemoteDkgContext::ReshareChainKey(context) => &context.context.target_id,
