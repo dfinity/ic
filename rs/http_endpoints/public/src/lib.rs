@@ -371,9 +371,10 @@ pub fn start_server(
     let canister_read_state_v3_router =
         read_state_router(read_state::Version::V3, read_state::Target::Canister);
 
-    let subnet_read_state_router = |version| read_state_router(version, read_state::Target::Subnet);
-    let subnet_read_state_v2_router = subnet_read_state_router(read_state::Version::V2);
-    let subnet_read_state_v3_router = subnet_read_state_router(read_state::Version::V3);
+    let subnet_read_state_v2_router =
+        read_state_router(read_state::Version::V2, read_state::Target::Subnet);
+    let subnet_read_state_v3_router =
+        read_state_router(read_state::Version::V3, read_state::Target::Subnet);
 
     let status_router = StatusService::build_router(
         log.clone(),
