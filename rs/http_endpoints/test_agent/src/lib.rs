@@ -1,7 +1,7 @@
 use ic_crypto_tree_hash::Path;
 use ic_http_endpoints_public::{query, read_state};
 use ic_types::{
-    PrincipalId, UserId,
+    CanisterId, PrincipalId, UserId,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
@@ -200,6 +200,66 @@ impl CallSubnet {
     }
 }
 
+pub struct QuerySubnet {
+    subnet_id: PrincipalId,
+    canister_id: PrincipalId,
+    method_name: String,
+}
+
+impl QuerySubnet {
+    pub fn new(subnet_id: PrincipalId) -> Self {
+        Self {
+            subnet_id,
+            canister_id: CanisterId::ic_00().get(),
+            method_name: "list_canisters".to_string(),
+        }
+    }
+
+    pub fn with_canister_id(mut self, canister_id: PrincipalId) -> Self {
+        self.canister_id = canister_id;
+        self
+    }
+
+    pub fn with_method_name(mut self, method_name: String) -> Self {
+        self.method_name = method_name;
+        self
+    }
+
+    pub async fn query(self, addr: SocketAddr) -> reqwest::Response {
+        let ingress_expiry = (current_time() + INGRESS_EXPIRY_DURATION).as_nanos_since_unix_epoch();
+
+        let call_content = HttpQueryContent::Query {
+            query: HttpUserQuery {
+                canister_id: Blob(self.canister_id.into_vec()),
+                method_name: self.method_name,
+                arg: Blob(ARG),
+                sender: Blob(SENDER.into_vec()),
+                ingress_expiry,
+                nonce: None,
+                sender_info: None,
+            },
+        };
+
+        let envelope = HttpRequestEnvelope {
+            content: call_content,
+            sender_pubkey: None,
+            sender_sig: None,
+            sender_delegation: None,
+        };
+
+        let body = serde_cbor::to_vec(&envelope).unwrap();
+        let url = format!("http://{}/api/v4/subnet/{}/query", addr, self.subnet_id);
+
+        reqwest::Client::new()
+            .post(url)
+            .body(body)
+            .header(CONTENT_TYPE, APPLICATION_CBOR)
+            .send()
+            .await
+            .unwrap()
+    }
+}
+
 pub struct Query {
     canister_id: PrincipalId,
     effective_canister_id: PrincipalId,
@@ -245,6 +305,9 @@ impl Query {
         let version_str = match self.version {
             query::Version::V2 => "v2",
             query::Version::V3 => "v3",
+            query::Version::SubnetV4 => {
+                unreachable!("Use QuerySubnet for the subnet query endpoint")
+            }
         };
         let url = format!(
             "http://{addr}/api/{version_str}/canister/{}/query",
