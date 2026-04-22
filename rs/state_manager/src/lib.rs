@@ -3720,9 +3720,13 @@ impl StateManagerImpl {
     /// Note: Do not call this function while the calling scope holds a write lock to `SharedState`.
     pub fn flush_hash_channel(&self) {
         let (sender, recv) = bounded(1);
+        // Both sending the `Wait` request and receiving the response can fail if the
+        // hashing thread has already panicked (e.g. due to a hash mismatch). In either
+        // case the caller cannot wait for the hashing thread, so use a single panic
+        // message to avoid racy panic messages (see `commit_and_certify_panic_on_delivered_fake_certification`).
         self.hash_channel
             .send(HashRequest::Wait { sender })
-            .expect("failed to send Wait message to hashing thread");
+            .expect("failed to wait for hashing thread");
         recv.recv().expect("failed to wait for hashing thread");
     }
 }
