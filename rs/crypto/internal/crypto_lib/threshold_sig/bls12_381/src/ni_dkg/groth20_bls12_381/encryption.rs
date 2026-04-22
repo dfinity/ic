@@ -22,7 +22,6 @@ use ic_crypto_internal_types::sign::threshold_sig::{
 };
 use ic_types::{NumberOfNodes, crypto::AlgorithmId, crypto::error::InvalidArgumentError};
 use rand::{CryptoRng, RngCore};
-use rayon::prelude::*;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
@@ -101,12 +100,14 @@ pub fn encrypt_and_prove(
     public_coefficients: &PublicCoefficientsBytes,
     associated_data: &[u8],
 ) -> Result<(FsEncryptionCiphertextBytes, ZKProofDec, ZKProofShare), EncryptAndZKProveError> {
-    let public_keys: Result<Vec<G1Affine>, EncryptAndZKProveError> = key_message_pairs
-        .par_iter()
-        .enumerate()
-        .map(|(receiver_index, (pk_bytes, _))| {
-            let public_key_bytes = pk_bytes.as_bytes();
-            G1Affine::deserialize(public_key_bytes).map_err(|_| {
+    let receivers = key_message_pairs.len();
+
+    // TODO(CRP-2550) the deserialization step can run in parallel
+    let public_keys = {
+        let mut public_keys = Vec::with_capacity(receivers);
+        for receiver_index in 0..receivers {
+            let public_key_bytes = key_message_pairs[receiver_index].0.as_bytes();
+            let pk = G1Affine::deserialize(public_key_bytes).map_err(|_| {
                 EncryptAndZKProveError::MalformedFsPublicKeyError {
                     receiver_index: receiver_index as u32,
                     error: MalformedPublicKeyError {
@@ -115,10 +116,12 @@ pub fn encrypt_and_prove(
                         internal_error: "Could not parse public key.".to_string(),
                     },
                 }
-            })
-        })
-        .collect();
-    let public_keys = public_keys?;
+            })?;
+
+            public_keys.push(pk);
+        }
+        public_keys
+    };
 
     let plaintext_chunks = key_message_pairs
         .iter()
@@ -144,8 +147,7 @@ pub fn encrypt_and_prove(
         rng,
     );
 
-    // Generating the chunking and sharing proofs could happen in parallel but this
-    // changes the stability tests and may not be worth it
+    // TODO(CRP-2550) generating the chunking and sharing proofs can happen in parallel
 
     let chunking_proof = prove_chunking(
         &public_keys,
@@ -342,11 +344,10 @@ pub fn verify_zk_proofs(
     associated_data: &[u8],
 ) -> Result<(), CspDkgVerifyDealingError> {
     // Conversions
-    let pk_values: Vec<_> = receiver_fs_public_keys.values().collect();
-    let public_keys: Result<Vec<G1Affine>, CspDkgVerifyDealingError> = pk_values
-        .par_iter()
-        .enumerate()
-        .map(|(receiver_index, public_key)| {
+    let public_keys: Result<Vec<G1Affine>, CspDkgVerifyDealingError> = receiver_fs_public_keys
+        .values()
+        .zip(0..)
+        .map(|(public_key, receiver_index)| {
             G1Affine::deserialize(public_key.as_bytes()).map_err(|parse_error| {
                 let error = MalformedPublicKeyError {
                     algorithm: ALGORITHM_ID,
@@ -354,7 +355,7 @@ pub fn verify_zk_proofs(
                     internal_error: format!("{parse_error:?}"),
                 };
                 CspDkgVerifyDealingError::MalformedFsPublicKeyError {
-                    receiver_index: receiver_index as NodeIndex,
+                    receiver_index,
                     error,
                 }
             })
@@ -404,9 +405,10 @@ pub fn verify_zk_proofs(
 
     // More conversions
 
+    // TODO(CRP-2550) this loop can run in parallel
     let public_coefficients = public_coefficients
         .coefficients
-        .par_iter()
+        .iter()
         .map(G2Affine::deserialize)
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| {
