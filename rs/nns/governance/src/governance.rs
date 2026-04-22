@@ -4965,6 +4965,12 @@ impl Governance {
             ValidProposalAction::CreateCanisterAndInstallCode(create_canister_and_install_code) => {
                 create_canister_and_install_code.validate()
             }
+            ValidProposalAction::Batch(actions) => {
+                for action in actions {
+                    self.validate_proposal_action(action)?;
+                }
+                Ok(())
+            }
         }
     }
 

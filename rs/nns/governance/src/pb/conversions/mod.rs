@@ -468,6 +468,7 @@ impl From<api::proposal::Action> for pb::proposal::Action {
             api::proposal::Action::CreateCanisterAndInstallCode(v) => {
                 pb::proposal::Action::CreateCanisterAndInstallCode(v.into())
             }
+            api::proposal::Action::Batch(v) => pb::proposal::Action::Batch(v.into()),
         }
     }
 }
@@ -529,6 +530,39 @@ impl From<api::ProposalActionRequest> for pb::proposal::Action {
             api::ProposalActionRequest::CreateCanisterAndInstallCode(v) => {
                 pb::proposal::Action::CreateCanisterAndInstallCode(v.into())
             }
+            api::ProposalActionRequest::Batch(v) => pb::proposal::Action::Batch(v.into()),
+        }
+    }
+}
+
+impl From<api::Batch> for pb::Batch {
+    fn from(item: api::Batch) -> Self {
+        Self {
+            actions: item
+                .actions
+                .unwrap_or_default()
+                .into_iter()
+                .map(|action| pb::Proposal {
+                    action: Some(action.into()),
+                    ..Default::default()
+                })
+                .collect(),
+        }
+    }
+}
+
+impl From<api::BatchRequest> for pb::Batch {
+    fn from(item: api::BatchRequest) -> Self {
+        Self {
+            actions: item
+                .actions
+                .unwrap_or_default()
+                .into_iter()
+                .map(|action| pb::Proposal {
+                    action: Some(action.into()),
+                    ..Default::default()
+                })
+                .collect(),
         }
     }
 }

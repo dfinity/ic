@@ -281,6 +281,15 @@ fn convert_action(
                 convert_create_canister_and_install_code(v),
             )
         }
+        pb::proposal::Action::Batch(v) => api::proposal::Action::Batch(api::Batch {
+            actions: Some(
+                v.actions
+                    .iter()
+                    .filter_map(|p| p.action.as_ref())
+                    .map(|a| convert_action(a, display_options))
+                    .collect(),
+            ),
+        }),
         pb::proposal::Action::InstallCode(v) => {
             api::proposal::Action::InstallCode(convert_install_code(v))
         }
