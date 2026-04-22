@@ -1112,26 +1112,18 @@ mod tests {
                 if key_id.is_idkg_key() {
                     // IDKG key signature shares should be created when transcripts succeed to load
                     assert_eq!(change_set.len(), 3);
-                    assert_eq!(
-                        signer.validated_sig_share_signers(),
-                        BTreeMap::from([
-                            (ids[0], BTreeSet::from([NODE_1])),
-                            (ids[1], BTreeSet::from([NODE_1])),
-                            (ids[2], BTreeSet::from([NODE_1])),
-                        ])
-                    );
                 } else {
                     // No new shares should be created with NiDKG, as they were already created above
                     assert!(change_set.is_empty());
-                    assert_eq!(
-                        signer.validated_sig_share_signers(),
-                        BTreeMap::from([
-                            (ids[0], BTreeSet::from([NODE_1])),
-                            (ids[1], BTreeSet::from([NODE_1])),
-                            (ids[2], BTreeSet::from([NODE_1])),
-                        ])
-                    );
                 }
+                assert_eq!(
+                    signer.validated_sig_share_signers(),
+                    BTreeMap::from([
+                        (ids[0], BTreeSet::from([NODE_1])),
+                        (ids[1], BTreeSet::from([NODE_1])),
+                        (ids[2], BTreeSet::from([NODE_1])),
+                    ])
+                );
             })
         })
     }
