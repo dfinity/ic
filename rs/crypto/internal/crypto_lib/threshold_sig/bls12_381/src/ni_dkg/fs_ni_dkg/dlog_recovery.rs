@@ -1,7 +1,6 @@
 use crate::ni_dkg::fs_ni_dkg::forward_secure::{CHUNK_MAX, CHUNK_MIN, CHUNK_SIZE};
 use crate::ni_dkg::fs_ni_dkg::nizk_chunking::{CHALLENGE_BITS, NUM_ZK_REPETITIONS};
 use ic_crypto_internal_bls12_381_type::{Gt, Scalar};
-use rayon::prelude::*;
 use std::sync::LazyLock;
 pub struct HonestDealerDlogLookupTable {
     table: Vec<u32>,
@@ -30,50 +29,67 @@ impl HonestDealerDlogLookupTable {
     pub fn solve_several(&self, targets: &[Gt]) -> Vec<Option<Scalar>> {
         use subtle::{ConditionallySelectable, ConstantTimeEq};
 
-        // Solve each target in parallel. For each target, perform a constant-time
-        // scan of the full table, then confirm the candidate (since hash collisions
-        // may have occurred if the dealer was dishonest).
-        targets
-            .par_iter()
-            .map(|target| {
-                let target_hash = target.short_hash_for_linear_search();
+        let target_hashes = targets
+            .iter()
+            .map(|t| t.short_hash_for_linear_search())
+            .collect::<Vec<_>>();
 
-                let mut candidate = 0_u16;
-                for x in CHUNK_MIN..=CHUNK_MAX {
-                    let x_hash = self.table[x as usize];
-                    /*
-                    Should this function need to be further optimized a good start would be to
-                    replace the statements below with something like
+        // This code assumes that CHUNK_MAX fits in a u16
+        let mut scan_results = vec![0_u16; targets.len()];
 
-                    // Variable diff equals 0 iff x_hash == target_hash;
-                    let diff = x_hash ^ target_hash;
-                    // Variable mask equals u32::max if diff == 0, or 0 otherwise
-                    let mask = 0u32.wrapping_sub((!diff & diff.wrapping_sub(1)) >> 31);
-                    // Selectively OR in x as the solution, iff x_hash == target_hash
-                    candidate |= (mask as u16) & (x as u16);
+        for x in CHUNK_MIN..=CHUNK_MAX {
+            let x_hash = self.table[x as usize];
 
-                    This is more or less what ct_eq / conditional_assign end up being compiled
-                    to, with the difference that it skips the volatile loads which subtle uses
-                    to (try to) prevent LLVM from optimizing code into using a conditional jump.
+            for i in 0..targets.len() {
+                /*
+                Should this function need to be further optimized a good start would be to
+                replace the statements below with something like
 
-                    Also regarding performance note that it would be quite straightforward to
-                    express the above statements in a 4-wide or 8-wide SIMD expression suitable
-                    for SSE2 or AVX2 execution. This would not only be faster but also highly
-                    likely immune to compiler optimizations that would introduce jumps, since
-                    this would require moving the data out of SIMD registers which would be
-                    expensive, and so the compiler would avoid such a transformation.
-                    */
-                    let hashes_eq = x_hash.ct_eq(&target_hash);
-                    candidate.conditional_assign(&(x as u16), hashes_eq);
-                }
+                // Variable diff equals 0 iff x_hash == target_hashes[i];
+                let diff = x_hash ^ target_hashes[i];
+                // Variable mask equals u32::max if diff == 0, or 0 otherwise
+                let mask = 0u32.wrapping_sub((!diff & diff.wrapping_sub(1)) >> 31);
+                // Selectively OR in x as the solution, iff x_hash == target_hashes[i]
+                scan_results[i] |= (mask as u16) & (x as u16);
 
-                if Gt::g_mul_u16(candidate) == *target {
-                    Some(Scalar::from_u64(candidate as u64))
-                } else {
-                    None
-                }
-            })
-            .collect()
+                This is more or less what ct_eq / conditional_assign end up being compiled
+                to, with the difference that it skips the volatile loads which subtle uses
+                to (try to) prevent LLVM from optimizing code into using a conditional jump.
+
+                Also regarding performance note that it would be quite straighforward to
+                express the above statements in a 4-wide or 8-wide SIMD expression suitable
+                for SSE2 or AVX2 execution. This would not only be faster but also highly
+                likely immune to compiler optimizations that would introduce jumps, since
+                this would require moving the data out of SIMD registers which would be
+                expensive, and so the compiler would avoid such a transformation.
+                */
+                let hashes_eq = x_hash.ct_eq(&target_hashes[i]);
+                scan_results[i].conditional_assign(&(x as u16), hashes_eq);
+            }
+        }
+
+        // Now confirm the results (since collisions may have occurred
+        // if the dealer was dishonest) and convert to Scalar
+
+        let mut results = Vec::with_capacity(targets.len());
+
+        for i in 0..targets.len() {
+            /*
+            After finding a candidate we must perform a multiplication in order
+            to tell if we found the dlog correctly, or if there was a collision
+            due to a dishonest dealer.
+
+            If no match was found then scan_results[i] will just be zero, we
+            perform the multiplication anyway and then reject the candidate dlog.
+             */
+            if Gt::g_mul_u16(scan_results[i]) == targets[i] {
+                results.push(Some(Scalar::from_u64(scan_results[i] as u64)));
+            } else {
+                results.push(None);
+            }
+        }
+
+        results
     }
 }
 
@@ -202,60 +218,22 @@ impl BabyStepGiantStepTable {
 
     /// Returns the table plus the giant step
     fn new(base: &Gt, table_size: usize) -> (Self, Gt) {
-        let num_threads = rayon::current_num_threads();
-        let chunk_size = table_size.div_ceil(num_threads.max(1));
-
-        /*
-         * We have to compute the entire table of [base*1, base*2, ..., base*t]
-         * but would prefer to do so in parallel.
-         *
-         * All `t` elements _can_ be computed perfectly in parallel, but at the cost
-         * of requiring a Gt multiplication per table element, which is rather costly.
-         *
-         * Instead split the table computation into chunks such that there is ~1 thread
-         * per chunk, compute the starting index for that chunk using a Gt mul, then
-         * use plain additions in Gt from there.
-         */
-        let chunks: Vec<Vec<_>> = (0..num_threads)
-            .into_par_iter()
-            .map(|t| {
-                let start = t * chunk_size;
-                let end = (start + chunk_size).min(table_size);
-                if start >= table_size {
-                    return vec![];
-                }
-                // TODO: Gt::mul_vartime_usize could use the 16-bit mul tables
-                // and be significantly faster than this
-                let mut accum = base.mul_vartime(&Scalar::from_usize(start));
-                let mut result = Vec::with_capacity(end - start);
-                for i in start..end {
-                    let (prefix, hash) = Self::hash_gt(&accum);
-                    result.push((hash, i, prefix));
-                    accum += base;
-                }
-                result
-            })
-            .collect();
-
         let mut table = Vec::with_capacity(table_size);
         let mut prefix_set =
             std::collections::HashSet::with_capacity_and_hasher(table_size, BuildShiftXorHasher);
+        let mut accum = Gt::identity();
 
-        for chunk in chunks {
-            for (hash, i, prefix) in chunk {
-                table.push((hash, i));
-                // we are not checking the return value of `insert` because
-                // duplicate prefixes do not affect the correctness
-                prefix_set.insert(prefix);
-            }
+        for i in 0..table_size {
+            let (prefix, hash) = Self::hash_gt(&accum);
+            table.push((hash, i));
+            // we are not checking the return value of `insert` because
+            // duplicate prefixes do not affect the correctness
+            prefix_set.insert(prefix);
+            accum += base;
         }
-
         table.sort_unstable();
 
-        // Giant step is -(base * table_size)
-        let giant_step = base.mul_vartime(&Scalar::from_usize(table_size)).neg();
-
-        (Self { table, prefix_set }, giant_step)
+        (Self { table, prefix_set }, accum.neg())
     }
 
     /// Return the value if gt exists in this table
@@ -338,35 +316,17 @@ impl BabyStepGiantStep {
     ///
     /// Returns `None` if the discrete logarithm is not in the searched range.
     pub fn solve(&self, tgt: &Gt) -> Option<Scalar> {
-        let start = tgt + &self.offset;
+        let mut step = tgt + &self.offset;
 
-        let num_threads = rayon::current_num_threads();
-        let steps_per_thread = self.giant_steps.div_ceil(num_threads.max(1));
-
-        (0..num_threads).into_par_iter().find_map_any(|t| {
-            let first_step = t * steps_per_thread;
-            let last_step = (first_step + steps_per_thread).min(self.giant_steps);
-            if first_step >= self.giant_steps {
-                return None;
+        for giant_step in 0..self.giant_steps {
+            if let Some(i) = self.table.get(&step) {
+                let x = self.lo + (i + self.n * giant_step) as isize;
+                return Some(Scalar::from_isize(x));
             }
+            step += &self.giant_step;
+        }
 
-            // Compute starting point for this thread's range of giant steps
-            let mut step = if first_step == 0 {
-                start.clone()
-            } else {
-                &start + &self.giant_step.mul_vartime(&Scalar::from_usize(first_step))
-            };
-
-            for giant_step in first_step..last_step {
-                if let Some(i) = self.table.get(&step) {
-                    let x = self.lo + (i + self.n * giant_step) as isize;
-                    return Some(Scalar::from_isize(x));
-                }
-                step += &self.giant_step;
-            }
-
-            None
-        })
+        None
     }
 }
 

@@ -348,6 +348,11 @@ async fn call_sync(
     // TODO(DSM-121): ensure that `ParsedMessageStatus::Unknown` never occurs
     // and trigger a critical error here if it does.
     if let ParsedMessageStatus::Unknown = message_status {
+        error!(
+            every_n_seconds => LOG_EVERY_N_SECONDS,
+            log,
+            "Unknown status of call {} in the certificate at height {}.", message_id, certification.height
+        );
         return SyncCallResponse::Accepted(
             "Certified state does not contain request status. Please try /read_state.",
         );

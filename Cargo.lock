@@ -7926,7 +7926,6 @@ dependencies = [
  "mockall",
  "prometheus",
  "slog",
- "tokio",
 ]
 
 [[package]]
@@ -8433,7 +8432,6 @@ dependencies = [
  "paste",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "rayon",
  "sha2 0.10.9",
  "subtle",
  "zeroize",
@@ -8667,7 +8665,6 @@ dependencies = [
  "proptest-derive",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "rayon",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -11076,6 +11073,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "num-traits",
  "proptest",
+ "serde",
  "serde_bytes",
 ]
 
@@ -12773,6 +12771,7 @@ dependencies = [
  "slog",
  "tempfile",
  "thiserror 2.0.18",
+ "tokio",
  "url",
  "x509-cert",
 ]
@@ -14689,6 +14688,7 @@ dependencies = [
  "strum 0.26.3",
  "tempfile",
  "test-strategy 0.4.5",
+ "tokio",
  "tree-deserializer",
  "uuid",
 ]
@@ -21426,6 +21426,7 @@ dependencies = [
  "serde",
  "serde_json",
  "strum 0.26.3",
+ "strum_macros 0.26.4",
  "tempfile",
  "tokio",
  "url",

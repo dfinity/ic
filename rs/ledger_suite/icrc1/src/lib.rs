@@ -16,6 +16,7 @@ use ic_ledger_core::{
 };
 use ic_ledger_hash_of::HashOf;
 use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc122::schema::{BTYPE_122_BURN, BTYPE_122_MINT};
 use icrc_ledger_types::{icrc1::transfer::Memo, icrc3::transactions::TRANSACTION_FEE_COLLECTOR};
 use serde::{Deserialize, Serialize};
 
@@ -53,6 +54,20 @@ pub enum Operation<Tokens: TokensType> {
         fee_collector: Option<Account>,
         caller: Option<Principal>,
         mthd: Option<String>,
+    },
+    AuthorizedMint {
+        to: Account,
+        amount: Tokens,
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+    },
+    AuthorizedBurn {
+        from: Account,
+        amount: Tokens,
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
     },
 }
 
@@ -122,6 +137,10 @@ struct FlattenedTransaction<Tokens: TokensType> {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mthd: Option<String>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 
 impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<Tokens> {
@@ -161,6 +180,26 @@ impl<Tokens: TokensType> TryFrom<(Option<String>, FlattenedTransaction<Tokens>)>
                 fee_collector: value.fee_collector,
                 caller: value.caller,
                 mthd: value.mthd,
+            },
+            Some(BTYPE_122_MINT) => Operation::AuthorizedMint {
+                to: value.to.ok_or("`to` field required for `122mint` block")?,
+                amount: value
+                    .amount
+                    .ok_or("`amount` required for `122mint` block")?,
+                caller: value.caller,
+                mthd: value.mthd,
+                reason: value.reason,
+            },
+            Some(BTYPE_122_BURN) => Operation::AuthorizedBurn {
+                from: value
+                    .from
+                    .ok_or("`from` field required for `122burn` block")?,
+                amount: value
+                    .amount
+                    .ok_or("`amount` required for `122burn` block")?,
+                caller: value.caller,
+                mthd: value.mthd,
+                reason: value.reason,
             },
             _ => Operation::try_from(value)
                 .map_err(|e| format!("{} and/or unknown btype {:?}", e, btype_str))?,
@@ -241,26 +280,34 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 Mint { .. } => Some("mint".to_string()),
                 Transfer { .. } => Some("xfer".to_string()),
                 Approve { .. } => Some("approve".to_string()),
-                FeeCollector { .. } => None,
+                FeeCollector { .. } | AuthorizedMint { .. } | AuthorizedBurn { .. } => None,
             },
             from: match &t.operation {
-                Transfer { from, .. } | Burn { from, .. } | Approve { from, .. } => Some(*from),
-                Mint { .. } | FeeCollector { .. } => None,
+                Transfer { from, .. }
+                | Burn { from, .. }
+                | Approve { from, .. }
+                | AuthorizedBurn { from, .. } => Some(*from),
+                Mint { .. } | FeeCollector { .. } | AuthorizedMint { .. } => None,
             },
             to: match &t.operation {
-                Mint { to, .. } | Transfer { to, .. } => Some(*to),
-                Burn { .. } | Approve { .. } | FeeCollector { .. } => None,
+                Mint { to, .. } | Transfer { to, .. } | AuthorizedMint { to, .. } => Some(*to),
+                Burn { .. } | Approve { .. } | FeeCollector { .. } | AuthorizedBurn { .. } => None,
             },
             spender: match &t.operation {
                 Transfer { spender, .. } | Burn { spender, .. } => spender.to_owned(),
                 Approve { spender, .. } => Some(*spender),
-                Mint { .. } | FeeCollector { .. } => None,
+                Mint { .. }
+                | FeeCollector { .. }
+                | AuthorizedMint { .. }
+                | AuthorizedBurn { .. } => None,
             },
             amount: match &t.operation {
                 Burn { amount, .. }
                 | Mint { amount, .. }
                 | Transfer { amount, .. }
-                | Approve { amount, .. } => Some(amount.clone()),
+                | Approve { amount, .. }
+                | AuthorizedMint { amount, .. }
+                | AuthorizedBurn { amount, .. } => Some(amount.clone()),
                 FeeCollector { .. } => None,
             },
             fee: match &t.operation {
@@ -268,29 +315,56 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 | Approve { fee, .. }
                 | Mint { fee, .. }
                 | Burn { fee, .. } => fee.to_owned(),
-                FeeCollector { .. } => None,
+                FeeCollector { .. } | AuthorizedMint { .. } | AuthorizedBurn { .. } => None,
             },
             expected_allowance: match &t.operation {
                 Approve {
                     expected_allowance, ..
                 } => expected_allowance.to_owned(),
-                Mint { .. } | Transfer { .. } | Burn { .. } | FeeCollector { .. } => None,
+                Mint { .. }
+                | Transfer { .. }
+                | Burn { .. }
+                | FeeCollector { .. }
+                | AuthorizedMint { .. }
+                | AuthorizedBurn { .. } => None,
             },
             expires_at: match &t.operation {
                 Approve { expires_at, .. } => expires_at.to_owned(),
-                Mint { .. } | Transfer { .. } | Burn { .. } | FeeCollector { .. } => None,
+                Mint { .. }
+                | Transfer { .. }
+                | Burn { .. }
+                | FeeCollector { .. }
+                | AuthorizedMint { .. }
+                | AuthorizedBurn { .. } => None,
             },
             fee_collector: match &t.operation {
                 FeeCollector { fee_collector, .. } => fee_collector.to_owned(),
-                Mint { .. } | Transfer { .. } | Burn { .. } | Approve { .. } => None,
+                Mint { .. }
+                | Transfer { .. }
+                | Burn { .. }
+                | Approve { .. }
+                | AuthorizedMint { .. }
+                | AuthorizedBurn { .. } => None,
             },
             caller: match &t.operation {
-                FeeCollector { caller, .. } => caller.to_owned(),
+                FeeCollector { caller, .. }
+                | AuthorizedMint { caller, .. }
+                | AuthorizedBurn { caller, .. } => caller.to_owned(),
                 Mint { .. } | Transfer { .. } | Burn { .. } | Approve { .. } => None,
             },
             mthd: match &t.operation {
-                FeeCollector { mthd, .. } => mthd.to_owned(),
+                FeeCollector { mthd, .. }
+                | AuthorizedMint { mthd, .. }
+                | AuthorizedBurn { mthd, .. } => mthd.to_owned(),
                 Mint { .. } | Transfer { .. } | Burn { .. } | Approve { .. } => None,
+            },
+            reason: match &t.operation {
+                AuthorizedMint { reason, .. } | AuthorizedBurn { reason, .. } => reason.to_owned(),
+                Mint { .. }
+                | Transfer { .. }
+                | Burn { .. }
+                | Approve { .. }
+                | FeeCollector { .. } => None,
             },
         }
     }
@@ -482,6 +556,12 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                     return Err(e);
                 }
             }
+            Operation::AuthorizedMint { to, amount, .. } => {
+                context.balances_mut().mint(to, amount.clone())?;
+            }
+            Operation::AuthorizedBurn { from, amount, .. } => {
+                context.balances_mut().burn(from, amount.clone())?;
+            }
             Operation::FeeCollector { .. } => {
                 panic!("FeeCollector107 not implemented")
             }
@@ -669,13 +749,21 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
         effective_fee: Tokens,
         fee_collector: Option<FeeCollector<Self::AccountId>>,
     ) -> Self {
+        let btype = match &transaction.operation {
+            Operation::AuthorizedMint { .. } => Some(BTYPE_122_MINT.to_string()),
+            Operation::AuthorizedBurn { .. } => Some(BTYPE_122_BURN.to_string()),
+            _ => None,
+        };
         let effective_fee = match &transaction.operation {
             Operation::Transfer { fee, .. } => fee.is_none().then_some(effective_fee),
             Operation::Approve { fee, .. } => fee.is_none().then_some(effective_fee),
             Operation::FeeCollector { .. } => {
                 panic!("FeeCollector107 not implemented")
             }
-            Operation::Mint { .. } | Operation::Burn { .. } => None,
+            Operation::Mint { .. }
+            | Operation::Burn { .. }
+            | Operation::AuthorizedMint { .. }
+            | Operation::AuthorizedBurn { .. } => None,
         };
         let (fee_collector, fee_collector_block_index) = match fee_collector {
             Some(FeeCollector {
@@ -692,7 +780,7 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
             timestamp: timestamp.as_nanos_since_unix_epoch(),
             fee_collector,
             fee_collector_block_index,
-            btype: None,
+            btype,
         }
     }
 }

@@ -264,14 +264,14 @@ impl Query {
 pub struct CanisterReadState {
     paths: Vec<Path>,
     effective_canister_id: PrincipalId,
-    version: read_state::canister::Version,
+    version: read_state::Version,
 }
 
 impl CanisterReadState {
     pub fn new(
         paths: Vec<Path>,
         effective_canister_id: PrincipalId,
-        version: read_state::canister::Version,
+        version: read_state::Version,
     ) -> Self {
         Self {
             paths,
@@ -308,8 +308,8 @@ impl CanisterReadState {
         let body = serde_cbor::to_vec(&envelope).unwrap();
 
         let version_str = match self.version {
-            read_state::canister::Version::V2 => "v2",
-            read_state::canister::Version::V3 => "v3",
+            read_state::Version::V2 => "v2",
+            read_state::Version::V3 => "v3",
         };
 
         url.set_path(&format!(
