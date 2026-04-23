@@ -131,7 +131,8 @@ pub fn test(env: TestEnv) {
             };
             info!(
                 log,
-                "Submitting proposal to create subnet with nodes: {nodes:?}, initial_dkg_subnet_id: {initial_dkg_subnet_id:?}"
+                "Submitting proposal to create subnet with nodes: {nodes:?},
+                 initial_dkg_subnet_id: {initial_dkg_subnet_id:?}"
             );
             let proposal_id = submit_create_application_subnet_proposal_with_initial_dkg_subnet(
                 &governance,
