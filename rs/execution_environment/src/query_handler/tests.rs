@@ -1,16 +1,19 @@
 use crate::InternalHttpQueryHandler;
-use ic_base_types::{CanisterId, NumSeconds};
+use candid::{Decode, Encode};
+use ic_base_types::{CanisterId, NumSeconds, PrincipalId};
 use ic_config::execution_environment::INSTRUCTION_OVERHEAD_PER_QUERY_CALL;
 use ic_error_types::{ErrorCode, UserError};
+use ic_management_canister_types_private::{CanisterIdRange, ListCanistersResponse};
 use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
+use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
     NumInstructions,
     ingress::WasmResult,
     messages::{Query, QuerySource},
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use more_asserts::{assert_gt, assert_lt};
 use std::sync::Arc;
 
@@ -1282,5 +1285,77 @@ fn query_call_exceeds_instructions_limit() {
             &format!(
                 "Error from Canister {canister}: Canister exceeded the limit of {instructions_limit} instructions for single message execution."
             )
+    );
+}
+
+// Subnet with a Normal cost schedule has no subnet admins concept; any caller
+// must be rejected with CanisterRejectedMessage.
+#[test]
+fn test_list_canisters_no_subnet_admins() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let err = test
+        .non_replicated_query(CanisterId::ic_00(), "list_canisters", Encode!().unwrap())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterRejectedMessage);
+}
+
+// Subnet has admins configured, but the caller is not one of them.
+#[test]
+fn test_list_canisters_non_admin_rejected() {
+    let admin: PrincipalId = user_test_id(1).get();
+    let non_admin = user_test_id(2);
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![admin])
+        .build();
+    test.set_user_id(non_admin);
+    let err = test
+        .non_replicated_query(CanisterId::ic_00(), "list_canisters", Encode!().unwrap())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidSubnetAdmin);
+}
+
+// Admin caller receives correct ranges: 5-7 coalesced, gap, 10 alone, gap,
+// 12-15 coalesced.
+#[test]
+fn test_list_canisters_success() {
+    let admin: PrincipalId = user_test_id(1).get();
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![admin])
+        .build();
+    test.set_user_id(user_test_id(1));
+
+    // IDs 5, 6, 7 are consecutive (coalesce into [5,7]), ID 10 is isolated
+    // ([10,10]), and IDs 12, 13, 14, 15 are consecutive (coalesce into [12,15]).
+    for raw_id in [5_u64, 6, 7, 10, 12, 13, 14, 15] {
+        test.state_mut().put_canister_state(
+            CanisterStateBuilder::new()
+                .with_canister_id(CanisterId::from(raw_id))
+                .build(),
+        );
+    }
+
+    let reply = test
+        .non_replicated_query(CanisterId::ic_00(), "list_canisters", Encode!().unwrap())
+        .unwrap();
+    let response = Decode!(&reply.bytes(), ListCanistersResponse).unwrap();
+
+    assert_eq!(
+        response.canisters,
+        vec![
+            CanisterIdRange {
+                start: CanisterId::from(5_u64),
+                end: CanisterId::from(7_u64),
+            },
+            CanisterIdRange {
+                start: CanisterId::from(10_u64),
+                end: CanisterId::from(10_u64),
+            },
+            CanisterIdRange {
+                start: CanisterId::from(12_u64),
+                end: CanisterId::from(15_u64),
+            },
+        ]
     );
 }

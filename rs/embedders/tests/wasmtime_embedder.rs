@@ -71,6 +71,7 @@ fn cannot_execute_wasm_without_memory() {
 fn correctly_count_instructions() {
     let data_size = 1024;
     let mut instance = WasmtimeInstanceBuilder::new()
+        .with_deterministic_memory_tracker_enabled(false)
         .with_wat(
             format!(
                 r#"
@@ -215,6 +216,7 @@ fn correctly_report_performance_counter() {
         + system_api_complexity::overhead::PERFORMANCE_COUNTER.get();
     let expected_instructions = expected_instructions_counter2;
     let mut instance = WasmtimeInstanceBuilder::new()
+        .with_deterministic_memory_tracker_enabled(false)
         .with_wat(
             format!(
                 r#"
@@ -1805,6 +1807,7 @@ fn wasm_debug_print_instructions_charging() {
     for (rate_limiting, subnet_type, expected_instructions) in test_cases.clone() {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = rate_limiting;
+        config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(subnet_type)
@@ -1826,6 +1829,7 @@ fn wasm_debug_print_instructions_charging() {
     for (rate_limiting, subnet_type, expected_instructions) in test_cases {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = rate_limiting;
+        config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(subnet_type)
@@ -1859,6 +1863,7 @@ fn wasm_canister_logging_instructions_charging() {
     for (message_len, expected_instructions) in test_cases.clone() {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
+        config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(SubnetType::Application)
@@ -1877,6 +1882,7 @@ fn wasm_canister_logging_instructions_charging() {
     for (message_len, expected_instructions) in test_cases {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
+        config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(SubnetType::Application)
@@ -1935,6 +1941,7 @@ fn wasm_logging_new_records_after_exceeding_log_size_limit() {
 
     let mut config = Config::default();
     config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
+    config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
     let instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_subnet_type(SubnetType::Application)
@@ -1946,6 +1953,7 @@ fn wasm_logging_new_records_after_exceeding_log_size_limit() {
     // same for wasm64
     let mut config = Config::default();
     config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
+    config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
     let instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_subnet_type(SubnetType::Application)
@@ -3510,9 +3518,6 @@ fn test_environment_variable_system_api() {
     env_vars.insert("TEST_VAR_1".to_string(), "Hello World".to_string());
     env_vars.insert("TEST_VAR_2".to_string(), "Test Value".to_string());
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.environment_variables = FlagStatus::Enabled;
-
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_api_type(ApiType::update(
             UNIX_EPOCH,
@@ -3522,7 +3527,6 @@ fn test_environment_variable_system_api() {
             0.into(),
             None,
         ))
-        .with_config(config)
         .with_environment_variables(env_vars)
         .with_wat(wat)
         .build();
@@ -3536,42 +3540,6 @@ fn test_environment_variable_system_api() {
     assert_eq!(
         result,
         Ok(Some(WasmResult::Reply(b"Hello WorldTest Value".to_vec())))
-    );
-}
-
-// TODO(EXC-2071): Delete test when feature flag is removed.
-#[test]
-fn test_environment_variable_system_api_not_enabled() {
-    let wat = r#"
-    (module
-        (import "ic0" "env_var_count" (func $ic0_env_var_count (result i32)))
-
-        (func (export "canister_update go")
-            (call $ic0_env_var_count)
-            drop
-        )
-    )"#;
-
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.environment_variables = FlagStatus::Disabled;
-
-    let builder = WasmtimeInstanceBuilder::new()
-        .with_wat(wat)
-        .with_config(config)
-        .with_api_type(ApiType::update(
-            UNIX_EPOCH,
-            vec![],
-            Cycles::zero(),
-            PrincipalId::new_user_test_id(0),
-            0.into(),
-            None,
-        ));
-
-    let instance = builder.try_build();
-    assert!(instance.is_err());
-    assert_matches!(
-        instance.err().unwrap().0,
-        HypervisorError::WasmEngineError { .. }
     );
 }
 

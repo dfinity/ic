@@ -1532,3 +1532,53 @@ fn test_storage_reservation_cycles_free() {
         .real()
     );
 }
+
+#[test]
+fn variable_execution_cost_matches_refund() {
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    let subnet_size = SMALL_APP_SUBNET_MAX_SIZE;
+    let cam = CyclesAccountManagerBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let n_max = NumInstructions::from(1_000_000);
+    let n_refund = NumInstructions::from(600_000);
+
+    let mut system_state = SystemStateBuilder::new().build();
+    let prepaid = cam
+        .prepay_execution_cycles(
+            &mut system_state,
+            NumBytes::from(0),
+            MessageMemoryUsage::ZERO,
+            ComputeAllocation::default(),
+            n_max,
+            subnet_size,
+            cost_schedule,
+            false,
+            WASM_EXECUTION_MODE,
+        )
+        .unwrap();
+
+    let balance_after_prepay = system_state.balance();
+
+    let no_op_counter = IntCounter::new("no_op", "no_op").unwrap();
+    cam.refund_unused_execution_cycles(
+        &mut system_state,
+        n_refund,
+        n_max,
+        prepaid,
+        &no_op_counter,
+        subnet_size,
+        cost_schedule,
+        WASM_EXECUTION_MODE,
+        &no_op_logger(),
+    );
+
+    let expected_refund = cam
+        .variable_execution_cost(n_refund, subnet_size, cost_schedule, WASM_EXECUTION_MODE)
+        .real();
+    assert_eq!(
+        system_state.balance(),
+        balance_after_prepay + expected_refund
+    );
+}

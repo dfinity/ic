@@ -327,8 +327,9 @@ impl IDkgImpl {
             Ok(transcripts) => transcripts,
             Err(err) => {
                 warn!(
+                    every_n_seconds => 10,
                     self.logger,
-                    "purge_inactive_transcripts(): abort due to: {}", err,
+                    "purge_inactive_transcripts(): abort due to: {}", err
                 );
                 return;
             }
@@ -337,6 +338,7 @@ impl IDkgImpl {
         match IDkgProtocol::retain_active_transcripts(&*self.crypto, &active_transcripts) {
             Err(IDkgRetainKeysError::TransientInternalError { internal_error }) => {
                 warn!(
+                    every_n_seconds => 10,
                     self.logger,
                     "purge_inactive_transcripts(): failed due to transient error: {}",
                     internal_error
@@ -348,6 +350,7 @@ impl IDkgImpl {
             }
             Err(error) => {
                 error!(
+                    every_n_seconds => 10,
                     self.logger,
                     "{}: failed with error = {:?}",
                     CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS,
@@ -387,11 +390,12 @@ fn get_active_transcripts(
             }
             Err(error) => {
                 warn!(
+                    every_n_seconds => 10,
                     logger,
                     "purge_inactive_transcripts(): failed to resolve transcript ref: err = {:?}, \
                         {:?}",
                     error,
-                    transcript_ref,
+                    transcript_ref
                 );
                 metrics
                     .client_errors

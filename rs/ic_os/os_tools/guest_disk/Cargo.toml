@@ -21,6 +21,7 @@ sev_guest = { path = "../../sev/guest" }
 ic-sys = { path = "../../../sys" }
 itertools = { workspace = true }
 nix = { workspace = true }
+prometheus = { workspace = true }
 rand = { workspace = true }
 sev = { workspace = true }
 tempfile = { workspace = true }

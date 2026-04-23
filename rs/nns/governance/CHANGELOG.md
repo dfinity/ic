@@ -11,6 +11,44 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-04-17: Proposal 141441
+
+http://dashboard.internetcomputer.org/proposal/141441
+
+## Added
+
+* Enabled CreateCanisterAndInstallCode proposals.
+
+## Changed
+
+* The minimum dissolve delay required to submit non-manage-neuron proposals is now
+  a fixed 6 months, decoupled from the voting eligibility threshold which can be lower.
+
+* Enable Mission 70 voting rewards changes. This includes the following:
+  1. Reduce max dissolve delay from 8 years to 2 years. This includes capping existing neurons via data migration.
+  2. Reduce voting rewards pool by approximately 36.71% (equivalently, scale by 0.6329 times).
+  3. Dissolve delay bonus: quadratic instead of linear, with a maximum of 3x instead of 2x.
+  4. Reduce the minimum dissolve delay needed to vote to 2 weeks instead of 6 months.
+  5. 8 year gang 10% bonus.
+
+
+# 2026-04-14: Proposal 141380
+
+http://dashboard.internetcomputer.org/proposal/141380
+
+## Fixed
+
+* When result in `get_node_providers_rewards_cached` is `Err`,
+  release INFLIGHT (i.e. set it to `false`).
+
+
+# 2026-04-11: Proposal 141331
+
+http://dashboard.internetcomputer.org/proposal/141331
+
+Maintenance release. New code is disabled by flags.
+
+
 # 2026-04-06: Proposal 141242
 
 http://dashboard.internetcomputer.org/proposal/141242

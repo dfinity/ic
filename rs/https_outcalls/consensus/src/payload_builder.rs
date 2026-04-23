@@ -31,7 +31,9 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, warn};
 use ic_management_canister_types_private::{
-    CanisterHttpResponsePayload, FlexibleHttpRequestResult,
+    CanisterHttpResponsePayload, FlexibleHttpGlobalError, FlexibleHttpNodeDetail,
+    FlexibleHttpNodeError, FlexibleHttpRequestErr, FlexibleHttpRequestResult,
+    HttpRequestResourceReport,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -77,6 +79,8 @@ pub struct CanisterHttpBatchStats {
     pub single_signature_responses: usize,
     pub flexible_ok_responses: usize,
     pub flexible_ok_responses_candid_failures: usize,
+    pub flexible_errors: usize,
+    pub flexible_errors_candid_failures: usize,
     pub payload_bytes: usize,
 }
 
@@ -679,10 +683,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 )
                 .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
-                if matches!(
-                    response_with_proof.response.content,
-                    CanisterHttpResponseContent::Reject(_)
-                ) {
+                if response_with_proof.response.content.is_reject() {
                     return invalid_artifact(
                         InvalidCanisterHttpPayloadReason::FlexibleRejectNotAllowedInOkResponses {
                             callback_id,
@@ -718,6 +719,7 @@ impl CanisterHttpPayloadBuilderImpl {
                     callback_id,
                 ));
             };
+            let min_responses = *min_responses as usize;
 
             match error {
                 FlexibleCanisterHttpError::Timeout { .. } => {
@@ -727,7 +729,7 @@ impl CanisterHttpPayloadBuilderImpl {
                         ));
                     }
                 }
-                FlexibleCanisterHttpError::TooManyRequestErrors {
+                FlexibleCanisterHttpError::TooManyRejects {
                     reject_responses, ..
                 } => {
                     let mut seen_signers = HashSet::new();
@@ -743,10 +745,7 @@ impl CanisterHttpPayloadBuilderImpl {
                         )
                         .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
-                        if !matches!(
-                            response_with_proof.response.content,
-                            CanisterHttpResponseContent::Reject(_)
-                        ) {
+                        if !response_with_proof.response.content.is_reject() {
                             return invalid_artifact(
                                 InvalidCanisterHttpPayloadReason::FlexibleRejectExpectedInErrorResponse(
                                     callback_id,
@@ -755,8 +754,7 @@ impl CanisterHttpPayloadBuilderImpl {
                         }
                     }
 
-                    let max_allowed_rejects =
-                        flex_committee.len().saturating_sub(*min_responses as usize);
+                    let max_allowed_rejects = flex_committee.len().saturating_sub(min_responses);
                     if reject_responses.len() <= max_allowed_rejects {
                         return invalid_artifact(
                             InvalidCanisterHttpPayloadReason::FlexibleInsufficientRejectCount {
@@ -768,11 +766,35 @@ impl CanisterHttpPayloadBuilderImpl {
                     }
                 }
                 FlexibleCanisterHttpError::ResponsesTooLarge {
-                    metadata_shares, ..
+                    all_seen_shares,
+                    total_requests,
+                    min_responses: claimed_min_responses,
+                    ..
                 } => {
+                    if *total_requests != flex_committee.len() as u32 {
+                        return invalid_artifact(
+                            InvalidCanisterHttpPayloadReason::FlexibleResponsesTooLargeParamMismatch {
+                                callback_id,
+                                field: "total_requests",
+                                expected: flex_committee.len() as u32,
+                                actual: *total_requests,
+                            },
+                        );
+                    }
+                    if *claimed_min_responses != min_responses as u32 {
+                        return invalid_artifact(
+                            InvalidCanisterHttpPayloadReason::FlexibleResponsesTooLargeParamMismatch {
+                                callback_id,
+                                field: "min_responses",
+                                expected: min_responses as u32,
+                                actual: *claimed_min_responses,
+                            },
+                        );
+                    }
+
                     let mut seen_signers = HashSet::new();
 
-                    for share in metadata_shares {
+                    for share in all_seen_shares {
                         validate_response_share(
                             share,
                             callback_id,
@@ -784,30 +806,32 @@ impl CanisterHttpPayloadBuilderImpl {
                         .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
                     }
 
-                    if metadata_shares.len() < *min_responses as usize {
-                        return invalid_artifact(
-                            InvalidCanisterHttpPayloadReason::FlexibleInsufficientMetadataShareCount {
-                                callback_id,
-                                share_count: metadata_shares.len(),
-                                min_needed: *min_responses as usize,
-                            },
-                        );
-                    }
-                    // Verify the smallest `min_responses` response-with-proof sizes
-                    // actually exceed MAX_CANISTER_HTTP_PAYLOAD_SIZE.
-                    let canister_id = &context.request.sender;
-                    let mut entry_sizes: Vec<usize> = metadata_shares
+                    let num_unseen = flex_committee.len().saturating_sub(all_seen_shares.len());
+                    let min_known_ok_needed = min_responses.saturating_sub(num_unseen);
+
+                    let mut ok_entry_sizes: Vec<usize> = all_seen_shares
                         .iter()
+                        .filter(|share| !share.content.is_reject)
                         .map(|share| {
                             FlexibleCanisterHttpResponseWithProof::count_bytes_from_parts(
-                                canister_id,
+                                &context.request.sender,
                                 share.content.content_size as usize,
                                 share,
                             )
                         })
                         .collect();
-                    entry_sizes.sort_unstable();
-                    let smallest_sum: usize = entry_sizes[..*min_responses as usize].iter().sum();
+                    if ok_entry_sizes.len() < min_known_ok_needed {
+                        return invalid_artifact(
+                            InvalidCanisterHttpPayloadReason::FlexibleResponsesTooLargeInsufficientEvidence {
+                                callback_id,
+                                ok_count: ok_entry_sizes.len(),
+                                min_known_ok_needed,
+                            },
+                        );
+                    }
+
+                    ok_entry_sizes.sort_unstable();
+                    let smallest_sum: usize = ok_entry_sizes.iter().take(min_known_ok_needed).sum();
                     if smallest_sum <= MAX_CANISTER_HTTP_PAYLOAD_SIZE {
                         return invalid_artifact(
                             InvalidCanisterHttpPayloadReason::FlexibleResponsesNotTooLarge(
@@ -956,10 +980,21 @@ impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
             })
             .flatten();
 
+        let flexible_errors = messages
+            .flexible_errors
+            .into_iter()
+            .map(flexible_error_into_consensus_response)
+            .inspect(|result| match result {
+                Some(_) => stats.flexible_errors += 1,
+                None => stats.flexible_errors_candid_failures += 1,
+            })
+            .flatten();
+
         let responses = responses
             .chain(timeouts)
             .chain(divergence_responses)
             .chain(flexible_ok_responses)
+            .chain(flexible_errors)
             .collect();
 
         (responses, stats)
@@ -996,6 +1031,126 @@ fn flexible_ok_responses_into_consensus_response(
         response_group.callback_id,
         Payload::Data(bytes),
     ))
+}
+
+/// Converts a [`FlexibleCanisterHttpError`] into a [`ConsensusResponse`]
+/// carrying a Candid-encoded [`FlexibleHttpRequestResult::Err`].
+///
+/// Returns `None` if Candid encoding fails (should never happen).
+fn flexible_error_into_consensus_response(
+    error: FlexibleCanisterHttpError,
+) -> Option<ConsensusResponse> {
+    let callback_id = error.callback_id();
+
+    let err = match error {
+        FlexibleCanisterHttpError::Timeout { .. } => FlexibleHttpRequestErr {
+            global_error: Some(FlexibleHttpGlobalError::Timeout(candid::Reserved)),
+            node_details: vec![],
+            message: "Flexible HTTP request timed out".to_string(),
+        },
+        FlexibleCanisterHttpError::TooManyRejects {
+            reject_responses, ..
+        } => {
+            let message = format!(
+                "Too many rejects: {} responses are rejects",
+                reject_responses.len(),
+            );
+            let node_details: Vec<_> = reject_responses
+                .into_iter()
+                .filter_map(|reject_response| {
+                    match reject_response.response.content {
+                        CanisterHttpResponseContent::Reject(reject) => {
+                            Some(FlexibleHttpNodeDetail {
+                                node_id: candid::Principal::from(
+                                    reject_response.proof.signature.signer.get(),
+                                ),
+                                report: HttpRequestResourceReport::default(),
+                                error: Some(FlexibleHttpNodeError {
+                                    code: format!("{:?}", reject.reject_code),
+                                    message: reject.message,
+                                }),
+                            })
+                        }
+                        CanisterHttpResponseContent::Success(_) => {
+                            // Unreachable: payload building/validation ensure
+                            // that there are no oks in the reject-responses.
+                            None
+                        }
+                    }
+                })
+                .collect();
+            FlexibleHttpRequestErr {
+                global_error: Some(FlexibleHttpGlobalError::TooManyRejects(candid::Reserved)),
+                node_details,
+                message,
+            }
+        }
+        FlexibleCanisterHttpError::ResponsesTooLarge {
+            all_seen_shares,
+            total_requests,
+            min_responses,
+            ..
+        } => {
+            let num_ok = all_seen_shares
+                .iter()
+                .filter(|s| !s.content.is_reject)
+                .count() as u32;
+            let num_reject = all_seen_shares.len() as u32 - num_ok;
+            let num_unseen = total_requests.saturating_sub(all_seen_shares.len() as u32);
+            let min_known_ok_needed = min_responses.saturating_sub(num_unseen);
+
+            let node_details: Vec<_> = all_seen_shares
+                .iter()
+                .map(|share| {
+                    let code = if share.content.is_reject {
+                        "reject"
+                    } else {
+                        "ok"
+                    };
+                    FlexibleHttpNodeDetail {
+                        node_id: candid::Principal::from(share.signature.signer.get()),
+                        report: HttpRequestResourceReport::default(),
+                        error: Some(FlexibleHttpNodeError {
+                            code: code.to_string(),
+                            message: format!("{} bytes", share.content.content_size),
+                        }),
+                    }
+                })
+                .collect();
+
+            let mut ok_sizes: Vec<_> = all_seen_shares
+                .iter()
+                .filter(|s| !s.content.is_reject)
+                .map(|share| share.content.content_size)
+                .collect();
+            // Sort defensively, as validator doesn't enforce ordering on `all_seen_shares`
+            ok_sizes.sort_unstable();
+            let relevant_ok_sizes: Vec<_> = ok_sizes
+                .iter()
+                .take(min_known_ok_needed as usize)
+                .map(|size| size.to_string())
+                .collect();
+
+            let message = format!(
+                "Responses too large: need at least {min_responses} \
+                 OK responses to fit within {MAX_CANISTER_HTTP_PAYLOAD_SIZE} bytes, \
+                 but even the smallest {min_known_ok_needed} \
+                 (= {min_responses} min_responses - {num_unseen} unseen) of {num_ok} \
+                 OK responses have sizes [{}] bytes \
+                 ({num_ok} ok + {num_reject} reject + {num_unseen} unseen = {total_requests} total_requests)",
+                relevant_ok_sizes.join(", "),
+            );
+            FlexibleHttpRequestErr {
+                global_error: Some(FlexibleHttpGlobalError::ResponsesTooLarge(candid::Reserved)),
+                node_details,
+                message,
+            }
+        }
+    };
+
+    let bytes = Encode!(&FlexibleHttpRequestResult::Err(err)).ok()?;
+
+    Some(ConsensusResponse::new(callback_id, Payload::Data(bytes)))
 }
 
 /// Turns a [`CanisterHttpResponseDivergence`] into a [`ConsensusResponse`] containing a rejection.

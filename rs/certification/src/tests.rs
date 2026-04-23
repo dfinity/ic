@@ -1147,6 +1147,40 @@ fn should_reject_cloud_engine_delegation_via_canister_sig_path() {
 }
 
 #[test]
+fn should_reject_missing_subnet_type_delegation_via_canister_sig_path() {
+    let rng = &mut reproducible_rng();
+    let subnet_id = subnet_id(42);
+    let cid = canister_id(1);
+    let certified_data = random_certified_data();
+
+    let (_cert, root_pk, cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: cid,
+            certified_data: certified_data.clone(),
+        },
+        rng,
+    )
+    .with_delegation(CertificateBuilder::new_with_rng(
+        SubnetData {
+            subnet_id,
+            canister_id_ranges: vec![(canister_id(0), canister_id(10))],
+        },
+        rng,
+    ))
+    .build();
+
+    assert_matches!(
+        verify_certified_data_with_cache_for_canister_sig(
+            &cbor,
+            &cid,
+            &root_pk,
+            certified_data.as_bytes(),
+        ),
+        Err(CertificateValidationError::UntrustedDelegationSubnet(_))
+    );
+}
+
+#[test]
 fn should_accept_delegation_with_non_cloud_engine_type() {
     let rng = &mut reproducible_rng();
     let subnet_id = subnet_id(42);
