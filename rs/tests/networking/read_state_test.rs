@@ -1096,6 +1096,7 @@ fn main() -> Result<()> {
         .add_test(systest!(test_subnet_canister_ranges_paths; read_state::Version::V3))
         .add_test(systest!(test_canister_canister_ranges_paths; read_state::Version::V2))
         .add_test(systest!(test_canister_canister_ranges_paths; read_state::Version::V3))
+        // paths with /request_status prefix are not supported by /api/v2/subnet/read_state
         .add_test(systest!(test_request_path; Endpoint::CanisterReadState(read_state::Version::V2)))
         .add_test(systest!(test_request_path; Endpoint::CanisterReadState(read_state::Version::V3)))
         .add_test(systest!(test_request_path; Endpoint::SubnetReadState(read_state::Version::V3)))
