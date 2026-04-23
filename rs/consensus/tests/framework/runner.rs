@@ -17,6 +17,7 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
+use tokio::sync::watch;
 
 fn stop_immediately(_: &ConsensusInstance<'_>) -> bool {
     true
@@ -194,6 +195,7 @@ impl<'a> ConsensusRunner<'a> {
             deps.consensus_pool.read().unwrap().get_cache(),
             deps.metrics_registry.clone(),
             replica_logger.clone(),
+            watch::channel(Height::from(0)).0,
         );
         let now = self.time.get_relative_time();
         let in_queue: Queue<Input> = Default::default();
