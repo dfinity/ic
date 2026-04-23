@@ -13,9 +13,10 @@ Success::
     . public key and canister ranges for all subnets
     . public keys of nodes on the subnet
     . no public keys of nodes on other subnets
-. Malformed status requests are rejected by /api/{v2,v3}/canister/.../read_state and /api/v3/subnet/.../read_state
+. Malformed status requests are rejected by /api/{v2,v3}/canister/.../read_state and /api/{v2,v3}/subnet/.../read_state
 . Status requests for non-existent requests contain an absence proof by /api/{v2,v3}/canister/.../read_state
-. /api/{v2,v3}/canister/.../read_state requests of invalid paths are rejected
+  and /api/v3/subnet/.../read_state
+. /api/{v2,v3}/canister/.../read_state and /api/{v2,v3}/subnet/.../read_state requests of invalid paths are rejected
 . A canister's public metadata sections can be read by
     . The canister controller
     . The anonymous identity
@@ -27,11 +28,13 @@ Success::
     . module_hash is absent for empty canisters;
     . module_hash is a blob for non-empty canisters;
     . controllers are always present for existing canisters and consist of a list of principals
-. /api/{v2,v3}/canister/.../read_state requests for the full paths /request_status/R/status and /request_status/R/reply succeed
-. /api/{v2,v3}/canister/.../read_state requests for the path /request_status/R are rejected with 403 if signed by a different
-  principal than who made the original request with request ID R;
-. /api/{v2,v3}/canister/.../read_state requests for two paths /request_status/R and /request_status/S with two different request
-  IDs R and S are rejected with 400 (while requesting each of the two paths in isolation would succeed);
+. /api/{v2,v3}/canister/.../read_state and /api/v3/subnet/.../read_state requests for the full paths
+  /request_status/R/status and /request_status/R/reply succeed
+. /api/{v2,v3}/canister/.../read_state and /api/v3/subnet/.../read_state requests for the path /request_status/R
+  are rejected with 403 if signed by a different principal than who made the original request with request ID R;
+. /api/{v2,v3}/canister/.../read_state and /api/v3/subnet/.../read_state requests for two paths /request_status/R
+  and /request_status/S with two different request IDs R and S are rejected with 400
+  (while requesting each of the two paths in isolation would succeed);
 . Read state requests at `/api/{v2,v3}/subnet/{subnet_id}/read_state` for the path `/canister_ranges/{subnet_id}`
   succeed and return a correct list of canister ranges assigned to the subnet.
 . Read state requests at `/api/{v2,v3}/canister/{canister_id}/read_state` for the path `/canister_ranges/{subnet_id}`
@@ -271,7 +274,7 @@ fn test_subnet_path(env: TestEnv, endpoint: Endpoint) {
     let (app_subnet, other_app_subnet) = get_both_app_subnets(&env);
     let app_subnet_id = app_subnet.subnet_id;
 
-    // Query the `/subnet` enpoint of the app subnet
+    // Query the `/subnet` endpoint of the app subnet
     let path = vec!["subnet".into()];
     let cert = read_state(&env, vec![path], endpoint).expect("Valid request");
 
@@ -806,7 +809,7 @@ fn test_request_path_access(env: TestEnv, endpoint: Endpoint) {
 }
 
 /// Queries the `api/{v2,v3}/canister/{canister_id}/read_state` endpoint for the canister ranges,
-/// and makes sure the requests fails.
+/// and makes sure the request fails.
 fn test_canister_canister_ranges_paths(env: TestEnv, version: read_state::Version) {
     let endpoint = Endpoint::CanisterReadState(version);
     let subnet = get_first_app_subnet(&env);
@@ -824,7 +827,7 @@ fn test_canister_canister_ranges_paths(env: TestEnv, version: read_state::Versio
     assert_matches!(err, AgentError::HttpError(payload) if payload.status == 404);
 }
 
-/// Queries the `api/{v2,v3}/subnet/{subnet_id}/read_state` endpoint for the canister ranges.
+/// Queries the `api/{v2,v3}/subnet/{subnet_id}/read_state` endpoint for the canister ranges
 /// and compares the result with the canister ranges obtained from the registry.
 fn test_subnet_canister_ranges_paths(env: TestEnv, version: read_state::Version) {
     let endpoint = Endpoint::SubnetReadState(version);
