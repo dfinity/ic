@@ -13,12 +13,8 @@ ic-limits = { path = "../../limits" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
+static_assertions = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-assert_matches = { workspace = true }
-ic-artifact-pool = { path = "../../artifact_pool" }
-ic-config = { path = "../../config" }
-ic-protobuf = { path = "../../protobuf" }
-ic-test-utilities = { path = "../../test_utilities" }
