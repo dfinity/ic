@@ -478,7 +478,7 @@ async fn test_rosetta_blocks_mode_enabled() {
         fee: None,
         created_at_time: None,
         memo: None,
-        amount: Nat::from(1u64),
+        amount: Nat::from(1_u64),
     }])
     .await;
     // Let rosetta catch up to the latest block
@@ -538,7 +538,7 @@ async fn test_rosetta_blocks_enabled_after_first_block() {
             fee: None,
             created_at_time: None,
             memo: None,
-            amount: Nat::from(1u64),
+            amount: Nat::from(1_u64),
         },
         // create block 2 which will go inside Rosetta Block 2
         TransferArg {
@@ -547,7 +547,7 @@ async fn test_rosetta_blocks_enabled_after_first_block() {
             fee: None,
             created_at_time: None,
             memo: None,
-            amount: Nat::from(2u64),
+            amount: Nat::from(2_u64),
         },
     ])
     .await;
@@ -621,7 +621,7 @@ async fn test_rosetta_blocks_enabled_after_first_block() {
                     operation: Operation::Transfer {
                         from: AccountIdentifier::new(env.sender_id.into(), None),
                         to: AccountIdentifier::new(Principal::anonymous().into(), None),
-                        amount: Tokens::from_e8s(1u64),
+                        amount: Tokens::from_e8s(1_u64),
                         fee: DEFAULT_TRANSFER_FEE,
                         spender: None,
                     },
@@ -644,7 +644,7 @@ async fn test_rosetta_blocks_enabled_after_first_block() {
                     operation: Operation::Transfer {
                         from: AccountIdentifier::new(env.sender_id.into(), None),
                         to: AccountIdentifier::new(Principal::anonymous().into(), None),
-                        amount: Tokens::from_e8s(2u64),
+                        amount: Tokens::from_e8s(2_u64),
                         fee: DEFAULT_TRANSFER_FEE,
                         spender: None,
                     },
@@ -676,7 +676,7 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
             fee: None,
             created_at_time: None,
             memo: None,
-            amount: Nat::from(1u64),
+            amount: Nat::from(1_u64),
         },
         // Create block 2 with the same transaction as block 1.
         // This must create a new Rosetta Block at index 2
@@ -686,7 +686,7 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
             fee: None,
             created_at_time: None,
             memo: None,
-            amount: Nat::from(1u64),
+            amount: Nat::from(1_u64),
         },
         // Create block 3 with a different transaction than the one in block 2.
         // block 3 will therefore go inside Rosetta Block 2
@@ -696,7 +696,7 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
             fee: None,
             created_at_time: None,
             memo: None,
-            amount: Nat::from(2u64),
+            amount: Nat::from(2_u64),
         },
         // Create block 4 with the same transaction as block 2.
         // This must create a new Rosetta Block at index 3
@@ -706,7 +706,7 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
             fee: None,
             created_at_time: None,
             memo: None,
-            amount: Nat::from(1u64),
+            amount: Nat::from(1_u64),
         },
     ])
     .await;
@@ -754,7 +754,7 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
                     operation: Operation::Transfer {
                         from: AccountIdentifier::new(env.sender_id.into(), None),
                         to: AccountIdentifier::new(Principal::anonymous().into(), None),
-                        amount: Tokens::from_e8s(1u64),
+                        amount: Tokens::from_e8s(1_u64),
                         fee: DEFAULT_TRANSFER_FEE,
                         spender: None,
                     },
@@ -793,7 +793,7 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
                     operation: Operation::Transfer {
                         from: AccountIdentifier::new(env.sender_id.into(), None),
                         to: AccountIdentifier::new(Principal::anonymous().into(), None),
-                        amount: Tokens::from_e8s(1u64),
+                        amount: Tokens::from_e8s(1_u64),
                         fee: DEFAULT_TRANSFER_FEE,
                         spender: None,
                     },
@@ -811,7 +811,7 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
                     operation: Operation::Transfer {
                         from: AccountIdentifier::new(env.sender_id.into(), None),
                         to: AccountIdentifier::new(Principal::anonymous().into(), None),
-                        amount: Tokens::from_e8s(2u64),
+                        amount: Tokens::from_e8s(2_u64),
                         fee: DEFAULT_TRANSFER_FEE,
                         spender: None,
                     },
@@ -850,7 +850,7 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
                     operation: Operation::Transfer {
                         from: AccountIdentifier::new(env.sender_id.into(), None),
                         to: AccountIdentifier::new(Principal::anonymous().into(), None),
-                        amount: Tokens::from_e8s(1u64),
+                        amount: Tokens::from_e8s(1_u64),
                         fee: DEFAULT_TRANSFER_FEE,
                         spender: None,
                     },
@@ -947,7 +947,7 @@ async fn test_block_transaction() {
             fee: None,
             created_at_time: None,
             memo: Some(1.into()),
-            amount: Nat::from(1u64),
+            amount: Nat::from(1_u64),
         },
         TransferArg {
             from_subaccount: None,
@@ -955,7 +955,7 @@ async fn test_block_transaction() {
             fee: None,
             created_at_time: None,
             memo: Some(2.into()),
-            amount: Nat::from(1u64),
+            amount: Nat::from(1_u64),
         },
         TransferArg {
             from_subaccount: None,
@@ -963,7 +963,7 @@ async fn test_block_transaction() {
             fee: None,
             created_at_time: None,
             memo: Some(3.into()),
-            amount: Nat::from(2u64),
+            amount: Nat::from(2_u64),
         },
         TransferArg {
             from_subaccount: None,
@@ -971,7 +971,7 @@ async fn test_block_transaction() {
             memo: Some(4.into()),
             created_at_time: None,
             fee: None,
-            amount: Nat::from(1u64),
+            amount: Nat::from(1_u64),
         },
     ])
     .await;
@@ -1116,7 +1116,7 @@ async fn test_network_status_multiple_genesis_transactions() {
             fee: None,
             created_at_time: None,
             memo: None,
-            amount: Nat::from(1u64),
+            amount: Nat::from(1_u64),
         },
         TransferArg {
             from_subaccount: None,
@@ -1124,7 +1124,7 @@ async fn test_network_status_multiple_genesis_transactions() {
             fee: None,
             created_at_time: None,
             memo: None,
-            amount: Nat::from(2u64),
+            amount: Nat::from(2_u64),
         },
         TransferArg {
             from_subaccount: None,
@@ -1132,7 +1132,7 @@ async fn test_network_status_multiple_genesis_transactions() {
             fee: None,
             created_at_time: None,
             memo: None,
-            amount: Nat::from(2u64),
+            amount: Nat::from(2_u64),
         },
     ])
     .await;
@@ -1245,7 +1245,7 @@ async fn test_network_status_single_genesis_transaction() {
             fee: None,
             created_at_time: None,
             memo: Some(1.into()),
-            amount: Nat::from(1u64),
+            amount: Nat::from(1_u64),
         },
         TransferArg {
             from_subaccount: None,
@@ -1253,7 +1253,7 @@ async fn test_network_status_single_genesis_transaction() {
             fee: None,
             created_at_time: None,
             memo: Some(2.into()),
-            amount: Nat::from(2u64),
+            amount: Nat::from(2_u64),
         },
     ])
     .await;

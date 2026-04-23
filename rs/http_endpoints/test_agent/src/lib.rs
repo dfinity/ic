@@ -1,7 +1,8 @@
 use ic_crypto_tree_hash::Path;
 use ic_http_endpoints_public::{query, read_state};
 use ic_types::{
-    PrincipalId,
+    PrincipalId, UserId,
+    ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
         HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery, MessageId, SignedIngress,
@@ -118,6 +119,7 @@ impl IngressMessage {
                 arg: Blob(ARG),
                 sender: Blob(SENDER.into_vec()),
                 nonce: None,
+                sender_info: None,
             },
         };
 
@@ -132,6 +134,15 @@ impl IngressMessage {
     pub fn message_id(&self) -> MessageId {
         let signed_ingress: SignedIngress = self.envelope().try_into().unwrap();
         signed_ingress.id()
+    }
+
+    pub fn known_ingress_status(&self) -> IngressStatus {
+        IngressStatus::Known {
+            receiver: self.canister_id,
+            user_id: UserId::new(SENDER),
+            time: current_time(),
+            state: IngressState::Completed(WasmResult::Reply(vec![])),
+        }
     }
 }
 
@@ -155,6 +166,30 @@ impl Call {
             addr, version, ingress_message.effective_canister_id
         );
 
+        reqwest::Client::new()
+            .post(url)
+            .body(body)
+            .header(CONTENT_TYPE, APPLICATION_CBOR)
+            .send()
+            .await
+            .unwrap()
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum CallSubnet {
+    V4(PrincipalId),
+}
+
+impl CallSubnet {
+    pub async fn call(
+        self,
+        addr: SocketAddr,
+        ingress_message: IngressMessage,
+    ) -> reqwest::Response {
+        let CallSubnet::V4(subnet_id) = self;
+        let body = serde_cbor::to_vec(&ingress_message.envelope()).unwrap();
+        let url = format!("http://{addr}/api/v4/subnet/{subnet_id}/call");
         reqwest::Client::new()
             .post(url)
             .body(body)
@@ -195,6 +230,7 @@ impl Query {
                 sender: Blob(SENDER.into_vec()),
                 ingress_expiry,
                 nonce: None,
+                sender_info: None,
             },
         };
 
@@ -228,14 +264,14 @@ impl Query {
 pub struct CanisterReadState {
     paths: Vec<Path>,
     effective_canister_id: PrincipalId,
-    version: read_state::canister::Version,
+    version: read_state::Version,
 }
 
 impl CanisterReadState {
     pub fn new(
         paths: Vec<Path>,
         effective_canister_id: PrincipalId,
-        version: read_state::canister::Version,
+        version: read_state::Version,
     ) -> Self {
         Self {
             paths,
@@ -272,8 +308,8 @@ impl CanisterReadState {
         let body = serde_cbor::to_vec(&envelope).unwrap();
 
         let version_str = match self.version {
-            read_state::canister::Version::V2 => "v2",
-            read_state::canister::Version::V3 => "v3",
+            read_state::Version::V2 => "v2",
+            read_state::Version::V3 => "v3",
         };
 
         url.set_path(&format!(

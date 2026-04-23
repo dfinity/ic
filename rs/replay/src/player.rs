@@ -300,6 +300,7 @@ impl Player {
             &cfg.state_manager,
             None,
             MaliciousFlags::default(),
+            tokio::sync::watch::channel(ic_types::Height::from(0)).0,
         ));
         let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
         let execution_service = ExecutionServices::setup_execution(
@@ -904,6 +905,7 @@ impl Player {
                 user_id: UserId::from(PrincipalId::new_anonymous()),
                 ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
                 nonce: None,
+                sender_info: None,
             },
             receiver: REGISTRY_CANISTER_ID,
             method_name: "get_latest_version".to_string(),
@@ -1248,6 +1250,7 @@ async fn get_changes_since(
             user_id: UserId::from(PrincipalId::new_anonymous()),
             ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
             nonce: None,
+            sender_info: None,
         },
         receiver: REGISTRY_CANISTER_ID,
         method_name: "get_changes_since".to_string(),
@@ -1306,6 +1309,7 @@ impl<PerformQueryImpl: PerformQuery + Sync> GetChunk for GetChunkImpl<'_, Perfor
                 user_id: UserId::from(PrincipalId::new_anonymous()),
                 ingress_expiry: expiry_time_from_now().as_nanos_since_unix_epoch(),
                 nonce: None,
+                sender_info: None,
             },
             receiver: REGISTRY_CANISTER_ID,
             method_name: "get_chunk".to_string(),
@@ -1383,6 +1387,7 @@ where
             user_id: UserId::from(PrincipalId::new_anonymous()),
             ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
             nonce: None,
+            sender_info: None,
         },
         receiver: REGISTRY_CANISTER_ID,
         method_name: "get_value".to_string(),
@@ -1995,6 +2000,7 @@ mod tests {
                             user_id: UserId::from(PrincipalId::new_anonymous()),
                             ingress_expiry: observed_ingress_expiry,
                             nonce: None,
+                            sender_info: None,
                         },
                         receiver: REGISTRY_CANISTER_ID,
                         method_name: method_name.to_string(),

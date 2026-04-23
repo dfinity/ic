@@ -108,8 +108,11 @@ rust_test(
     timeout = "long",
     srcs = ["tests/replay_events.rs"],
     data = [
-        "test_resources/mainnet_events.gz",
+        "@ckdoge_mainnet_events.gz//file",
     ],
+    env = {
+        "MAINNET_EVENTS_PATH": "$(rootpath @ckdoge_mainnet_events.gz//file)",
+    },
     deps = [
         # Keep sorted.
         ":ckdoge_minter_lib",

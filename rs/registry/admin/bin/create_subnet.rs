@@ -11,10 +11,12 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_common::types::NeuronId;
 use ic_prep_lib::subnet_configuration::get_default_config_params;
 use ic_protobuf::registry::subnet::v1::SubnetFeatures as SubnetFeaturesPb;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{NodeId, PrincipalId, ReplicaVersion};
 use registry_canister::mutations::do_create_subnet;
+use registry_canister::mutations::do_create_subnet::CanisterCyclesCostSchedule;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use url::Url;
@@ -90,7 +92,7 @@ pub(crate) struct ProposeToCreateSubnetCmd {
 
     #[clap(long)]
     /// The type of the subnet.
-    /// Can be either "application" or "system".
+    /// Can be "application", "system", "verified_application", or "cloud_engine".
     pub subnet_type: SubnetType,
 
     /// If set, the created subnet will be halted: it will not create or execute
@@ -165,9 +167,22 @@ pub(crate) struct ProposeToCreateSubnetCmd {
     #[clap(long)]
     pub max_number_of_canisters: Option<u64>,
 
+    /// The canister cycles cost schedule for this subnet.
+    /// Can be "Normal" (default) or "Free" (used by cloud engine subnets).
+    #[clap(long)]
+    pub canister_cycles_cost_schedule: Option<CanisterCyclesCostSchedule>,
+
     /// The features that are enabled and disabled on the subnet.
     #[clap(long)]
     pub features: Option<SubnetFeatures>,
+
+    /// The list of principals that are subnet admins.
+    #[clap(long, num_args(1..))]
+    pub subnet_admins: Vec<PrincipalId>,
+
+    /// Limits on resource consumption (e.g., memory usage) of the subnet.
+    #[command(flatten)]
+    pub resource_limits: Option<ResourceLimits>,
 }
 
 fn parse_key_config_requests_option(
@@ -263,6 +278,8 @@ impl ProposeToCreateSubnetCmd {
                 .get_or_insert(ReplicaVersion::default());
             self.max_number_of_canisters.get_or_insert(0);
             self.features.get_or_insert(SubnetFeatures::default());
+            self.canister_cycles_cost_schedule
+                .get_or_insert(CanisterCyclesCostSchedule::Normal);
         }
     }
 
@@ -320,10 +337,11 @@ impl ProposeToCreateSubnetCmd {
             max_number_of_canisters: self.max_number_of_canisters.unwrap_or_default(),
             chain_key_config,
             canister_cycles_cost_schedule: Some(
-                do_create_subnet::CanisterCyclesCostSchedule::Normal,
+                self.canister_cycles_cost_schedule
+                    .expect("canister_cycles_cost_schedule must be specified."),
             ),
-            subnet_admins: Some(vec![]),
-            resource_limits: Default::default(),
+            subnet_admins: Some(self.subnet_admins.clone()),
+            resource_limits: self.resource_limits,
 
             // Deprecated fields.
             ingress_bytes_per_block_soft_cap: Default::default(),
@@ -359,9 +377,7 @@ mod tests {
 
     fn minimal_create_payload() -> do_create_subnet::CreateSubnetPayload {
         do_create_subnet::CreateSubnetPayload {
-            canister_cycles_cost_schedule: Some(
-                do_create_subnet::CanisterCyclesCostSchedule::Normal,
-            ),
+            canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Normal),
             subnet_admins: Some(vec![]),
             ..Default::default()
         }
@@ -400,6 +416,9 @@ mod tests {
             max_parallel_pre_signature_transcripts_in_creation: None,
             max_number_of_canisters: None,
             features: None,
+            subnet_admins: vec![],
+            resource_limits: None,
+            canister_cycles_cost_schedule: None,
         }
     }
 
@@ -441,6 +460,7 @@ mod tests {
 
             replica_version_id: Some(replica_version_id.clone()),
             features: Some(features),
+            canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Normal),
             ..empty_propose_to_create_subnet_cmd()
         };
         assert_eq!(

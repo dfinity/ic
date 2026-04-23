@@ -61,7 +61,7 @@ use ic_system_test_driver::{
     systest,
     util::{UniversalCanister, block_on},
 };
-use ic_types::{CanisterId, PrincipalId};
+use ic_types::{CanisterId, PrincipalId, SubnetId};
 use ic_universal_canister::wasm;
 use ic_utils::interfaces::ManagementCanister;
 use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
@@ -162,7 +162,7 @@ fn query_calls(env: TestEnv, version: query::Version) {
     });
 }
 
-fn read_state_valid_succeeds(env: TestEnv, version: read_state::canister::Version) {
+fn read_state_valid_succeeds(env: TestEnv, version: read_state::Version) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
     let (primary, _test_ids) = get_canister_test_ids(&snapshot);
@@ -186,7 +186,7 @@ fn read_state_valid_succeeds(env: TestEnv, version: read_state::canister::Versio
     });
 }
 
-fn read_state_malformed_rejected(env: TestEnv, version: read_state::canister::Version) {
+fn read_state_malformed_rejected(env: TestEnv, version: read_state::Version) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
     let (primary, test_ids) = get_canister_test_ids(&snapshot);
@@ -212,7 +212,7 @@ fn read_state_malformed_rejected(env: TestEnv, version: read_state::canister::Ve
     });
 }
 
-fn read_time(env: TestEnv, version: read_state::canister::Version) {
+fn read_time(env: TestEnv, version: read_state::Version) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
     let (primary, _) = get_canister_test_ids(&snapshot);
@@ -237,10 +237,10 @@ fn read_time(env: TestEnv, version: read_state::canister::Version) {
         let response = read_state(primary, api_bn_url.clone()).await;
         let status = inspect_response(response, "ReadState", &logger).await;
         match version {
-            read_state::canister::Version::V2 => {
+            read_state::Version::V2 => {
                 assert_2xx(&status);
             }
-            read_state::canister::Version::V3 => {
+            read_state::Version::V3 => {
                 assert_2xx(&status);
             }
         }
@@ -760,6 +760,11 @@ fn get_api_bn_url(snapshot: &TopologySnapshot) -> Url {
     api_bn.get_public_url()
 }
 
+fn get_subnet_ids(snapshot: &TopologySnapshot) -> (SubnetId, SubnetId) {
+    let (sys_subnet, app_subnet) = get_subnets(snapshot);
+    (sys_subnet.subnet_id, app_subnet.subnet_id)
+}
+
 fn get_canister_test_ids(snapshot: &TopologySnapshot) -> (CanisterId, [CanisterId; 5]) {
     let (primary, sys_uc, app_uc) = get_canister_ids(snapshot);
     (
@@ -777,6 +782,60 @@ fn get_canister_test_ids(snapshot: &TopologySnapshot) -> (CanisterId, [CanisterI
             CanisterId::try_from(PrincipalId::new_user_test_id(42)).unwrap(),
         ],
     )
+}
+
+fn update_calls_subnet_v4(env: TestEnv) {
+    let logger = env.logger();
+    let snapshot = env.topology_snapshot();
+    let socket = get_socket_addr(&snapshot);
+    let (sys_subnet_id, app_subnet_id) = get_subnet_ids(&snapshot);
+
+    let mgmt_message = || {
+        IngressMessage::default()
+            .with_canister_id(CanisterId::ic_00().get(), CanisterId::ic_00().get())
+            .with_method_name("create_canister".to_string())
+    };
+
+    block_on(async {
+        // Correct subnet ID → accepted
+        let response = CallSubnet::V4(sys_subnet_id.get())
+            .call(socket, mgmt_message())
+            .await;
+        let status = inspect_response(response, "CallSubnet", &logger).await;
+        assert_2xx(&status);
+
+        // Wrong subnet ID → rejected
+        let response = CallSubnet::V4(app_subnet_id.get())
+            .call(socket, mgmt_message())
+            .await;
+        let status = inspect_response(response, "CallSubnet", &logger).await;
+        assert_4xx(&status);
+
+        // Non-management canister with "create_canister" → rejected
+        let (non_mgmt_canister, _) = get_canister_test_ids(&snapshot);
+        let response = CallSubnet::V4(sys_subnet_id.get())
+            .call(
+                socket,
+                IngressMessage::default()
+                    .with_canister_id(non_mgmt_canister.get(), non_mgmt_canister.get())
+                    .with_method_name("create_canister".to_string()),
+            )
+            .await;
+        let status = inspect_response(response, "CallSubnet", &logger).await;
+        assert_4xx(&status);
+
+        // IC_00 with wrong method → rejected
+        let response = CallSubnet::V4(sys_subnet_id.get())
+            .call(
+                socket,
+                IngressMessage::default()
+                    .with_canister_id(CanisterId::ic_00().get(), CanisterId::ic_00().get())
+                    .with_method_name("install_code".to_string()),
+            )
+            .await;
+        let status = inspect_response(response, "CallSubnet", &logger).await;
+        assert_4xx(&status);
+    });
 }
 
 fn assert_2xx(status: &u16) {
@@ -803,16 +862,13 @@ fn main() -> Result<()> {
                 .add_test(systest!(update_calls; Call::V2))
                 .add_test(systest!(update_calls; Call::V3))
                 .add_test(systest!(update_calls; Call::V4))
-                .add_test(systest!(read_state_valid_succeeds; read_state::canister::Version::V2))
-                .add_test(systest!(read_state_valid_succeeds; read_state::canister::Version::V3))
-                .add_test(
-                    systest!(read_state_malformed_rejected; read_state::canister::Version::V2),
-                )
-                .add_test(
-                    systest!(read_state_malformed_rejected; read_state::canister::Version::V3),
-                )
-                .add_test(systest!(read_time; read_state::canister::Version::V2))
-                .add_test(systest!(read_time; read_state::canister::Version::V3))
+                .add_test(systest!(update_calls_subnet_v4))
+                .add_test(systest!(read_state_valid_succeeds; read_state::Version::V2))
+                .add_test(systest!(read_state_valid_succeeds; read_state::Version::V3))
+                .add_test(systest!(read_state_malformed_rejected; read_state::Version::V2))
+                .add_test(systest!(read_state_malformed_rejected; read_state::Version::V3))
+                .add_test(systest!(read_time; read_state::Version::V2))
+                .add_test(systest!(read_time; read_state::Version::V3))
                 .add_test(systest!(malformed_http_request))
                 .add_test(systest!(method_name_edge_cases)),
         )

@@ -29,7 +29,7 @@ use ic_types::{
     CanisterLog, CanisterTimer, Height, MemoryAllocation, NumInstructions, Time,
     messages::CanisterCall,
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CompoundCycles, Cycles, Instructions};
 use ic_wasm_types::WasmHash;
 
 use crate::{
@@ -315,6 +315,7 @@ impl InstallCodeHelper {
             .system_state
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
+                round.cost_schedule,
                 round.log,
                 round.counters.charging_from_balance_error,
             );
@@ -358,7 +359,7 @@ impl InstallCodeHelper {
             match self
                 .canister
                 .system_state
-                .reserve_cycles(reservation_cycles)
+                .reserve_cycles(reservation_cycles.real())
             {
                 Ok(()) => {}
                 Err(err) => {
@@ -824,7 +825,7 @@ pub(crate) struct OriginalContext {
     pub config: CanisterMgrConfig,
     pub message: CanisterCall,
     pub call_id: InstallCodeCallId,
-    pub prepaid_execution_cycles: Cycles,
+    pub prepaid_execution_cycles: CompoundCycles<Instructions>,
     pub time: Time,
     pub compilation_cost_handling: CompilationCostHandling,
     pub subnet_size: usize,
@@ -873,6 +874,7 @@ pub(crate) fn finish_err(
         .system_state
         .apply_ingress_induction_cycles_debit(
             new_canister.canister_id(),
+            round.cost_schedule,
             round.log,
             round.counters.charging_from_balance_error,
         );

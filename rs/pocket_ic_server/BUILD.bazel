@@ -55,6 +55,7 @@ LIB_DEPENDENCIES = [
     "//rs/types/cycles",
     "//rs/types/management_canister_types",
     "//rs/types/types",
+    "//rs/validator/http_request_test_utils",
     "//rs/validator/ingress_message",
     "@crate_index//:aide",
     "@crate_index//:askama",
@@ -277,7 +278,7 @@ MAINNET_NNS_CANISTER_ENV = {
         crate_name = "pocket_ic_server",
         proc_macro_deps = MACRO_DEPENDENCIES,
         rustc_env = EXTERNAL_CANISTER_ENV | nns_canister_env,
-        version = "12.0.0",
+        version = "13.0.0",
         deps = LIB_DEPENDENCIES + [":build_script"],
     )
     for (name_suffix, nns_canister_data, nns_canister_env) in [

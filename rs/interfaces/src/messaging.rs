@@ -30,6 +30,7 @@ pub enum InvalidXNetPayload {
 pub enum XNetPayloadValidationFailure {
     StateNotCommittedYet(Height),
     StateRemoved(Height),
+    Transient(String),
 }
 
 pub type XNetPayloadValidationError =

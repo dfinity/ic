@@ -1208,7 +1208,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "ledger_notify_method_calls",
-        0f64,
+        0_f64,
         "Total number of calls to the notify-method method.",
     )?;
     w.encode_counter(

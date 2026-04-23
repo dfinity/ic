@@ -39,6 +39,7 @@ use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use ic_boundary::{ErrorClientFacing, MAX_REQUEST_BODY_SIZE};
 use ic_http_endpoints_public::{cors_layer, make_plaintext_response, query, read_state};
 use ic_registry_routing_table::RoutingTable;
+use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::{CanisterId, SnapshotId, SubnetId};
 use pocket_ic::RejectResponse;
 use pocket_ic::common::rest::{
@@ -977,7 +978,7 @@ async fn handler_canister_read_state(
     State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
-    version: read_state::canister::Version,
+    version: read_state::Version,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = CanisterReadStateRequest {
         effective_canister_id,
@@ -992,7 +993,7 @@ pub async fn handler_canister_read_state_v2(
     path: NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    handler_canister_read_state(state, path, bytes, read_state::canister::Version::V2).await
+    handler_canister_read_state(state, path, bytes, read_state::Version::V2).await
 }
 
 pub async fn handler_canister_read_state_v3(
@@ -1000,14 +1001,14 @@ pub async fn handler_canister_read_state_v3(
     path: NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    handler_canister_read_state(state, path, bytes, read_state::canister::Version::V3).await
+    handler_canister_read_state(state, path, bytes, read_state::Version::V3).await
 }
 
 pub async fn handler_subnet_read_state(
     State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, subnet_id))): NoApi<Path<(InstanceId, SubnetId)>>,
     bytes: Bytes,
-    version: read_state::subnet::Version,
+    version: read_state::Version,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = SubnetReadStateRequest {
         subnet_id,
@@ -1022,7 +1023,7 @@ pub async fn handler_subnet_read_state_v2(
     path: NoApi<Path<(InstanceId, SubnetId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    handler_subnet_read_state(state, path, bytes, read_state::subnet::Version::V2).await
+    handler_subnet_read_state(state, path, bytes, read_state::Version::V2).await
 }
 
 pub async fn handler_subnet_read_state_v3(
@@ -1030,7 +1031,7 @@ pub async fn handler_subnet_read_state_v3(
     path: NoApi<Path<(InstanceId, SubnetId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    handler_subnet_read_state(state, path, bytes, read_state::subnet::Version::V3).await
+    handler_subnet_read_state(state, path, bytes, read_state::Version::V3).await
 }
 
 async fn handle_raw<T: Operation + Send + Sync + 'static>(
@@ -1567,6 +1568,14 @@ pub async fn create_instance(
         }
     }
 
+    let mut malicious_flags = MaliciousFlags::default();
+    if instance_config
+        .disable_ingress_validation
+        .unwrap_or_default()
+    {
+        malicious_flags.maliciously_disable_ingress_validation = true;
+    }
+
     match api_state
         .add_instance(
             move |seed, gateway_port| {
@@ -1586,6 +1595,7 @@ pub async fn create_instance(
                     auto_progress_enabled,
                     gateway_port,
                     instance_config.mainnet_nns_subnet_id.unwrap_or_default(),
+                    malicious_flags,
                 )
             },
             auto_progress,

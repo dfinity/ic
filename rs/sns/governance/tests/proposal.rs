@@ -11,10 +11,10 @@ mod early_decision {
         // If a proposal can be adopted by 50% absolute majority, flipping the "yes/no" votes should be sufficient to reject the decision
         #[test]
         fn flips_when_votes_flip(
-            minimum_yes_proportion_of_total in 0u64..5_000,
-            yes in 0u64..1_000_000,
-            no in 0u64..1_000_000,
-            uncast in 0u64..1_000_000,
+            minimum_yes_proportion_of_total in 0_u64..5_000,
+            yes in 0_u64..1_000_000,
+            no in 0_u64..1_000_000,
+            uncast in 0_u64..1_000_000,
         ) {
             let total = yes + no + uncast;
             let base_proposal = ProposalData {
@@ -60,9 +60,9 @@ mod early_decision {
         // are None, the proposal logic should assume the default values
         #[test]
         fn assumes_default_voting_thresholds_when_not_present(
-            yes in 0u64..1_000_000,
-            no in 0u64..1_000_000,
-            uncast in 0u64..1_000_000,
+            yes in 0_u64..1_000_000,
+            no in 0_u64..1_000_000,
+            uncast in 0_u64..1_000_000,
         ) {
             let total = yes + no + uncast;
             let base_proposal = ProposalData {
@@ -95,12 +95,12 @@ mod early_decision {
         // should not change the decision
         #[test]
         fn monotonic(
-            minimum_yes_proportion_of_total in 0u64..5_000,
-            minimum_yes_proportion_of_exercised in 5_000u64..9_999,
-            yes in 0u64..1_000_000,
-            no in 0u64..1_000_000,
-            uncast in 0u64..1_000_000,
-            extra_percent in 0u64..100u64,
+            minimum_yes_proportion_of_total in 0_u64..5_000,
+            minimum_yes_proportion_of_exercised in 5_000_u64..9_999,
+            yes in 0_u64..1_000_000,
+            no in 0_u64..1_000_000,
+            uncast in 0_u64..1_000_000,
+            extra_percent in 0_u64..100_u64,
         ) {
             let total = yes + no + uncast;
             let base_proposal = ProposalData {
@@ -166,11 +166,11 @@ mod early_decision {
         // "either way" by casting the remaining votes
         #[test]
         fn could_go_either_way(
-            minimum_yes_proportion_of_total in 0u64..5_000,
-            minimum_yes_proportion_of_exercised in 5_000u64..9_999,
-            yes in 0u64..1_000_000,
-            no in 0u64..1_000_000,
-            uncast in 0u64..1_000_000,
+            minimum_yes_proportion_of_total in 0_u64..5_000,
+            minimum_yes_proportion_of_exercised in 5_000_u64..9_999,
+            yes in 0_u64..1_000_000,
+            no in 0_u64..1_000_000,
+            uncast in 0_u64..1_000_000,
         ) {
             let total = yes + no + uncast;
             let base_proposal = ProposalData {
@@ -222,11 +222,11 @@ mod early_decision {
         // base_proposal.is_accepted() should agree with base_proposal.early_decision()
         #[test]
         fn early_decision_implies_accepted(
-            minimum_yes_proportion_of_total in 0u64..5_000,
-            minimum_yes_proportion_of_exercised in 5_000u64..9_999,
-            yes in 0u64..1_000_000,
-            no in 0u64..1_000_000,
-            uncast in 0u64..1_000_000,
+            minimum_yes_proportion_of_total in 0_u64..5_000,
+            minimum_yes_proportion_of_exercised in 5_000_u64..9_999,
+            yes in 0_u64..1_000_000,
+            no in 0_u64..1_000_000,
+            uncast in 0_u64..1_000_000,
         ) {
             let total = yes + no + uncast;
             let base_proposal = ProposalData {
@@ -524,10 +524,10 @@ mod can_make_decision {
     proptest! {
         #[test]
         fn implied_by_early_decision(
-            minimum_yes_proportion_of_total in 0u64..5_000,
-            yes in 0u64..1_000_000,
-            no in 0u64..1_000_000,
-            uncast in 0u64..1_000_000,
+            minimum_yes_proportion_of_total in 0_u64..5_000,
+            yes in 0_u64..1_000_000,
+            no in 0_u64..1_000_000,
+            uncast in 0_u64..1_000_000,
         ) {
             let total = yes + no + uncast;
             let now_seconds = 2;
@@ -609,9 +609,9 @@ mod is_accepted {
     proptest! {
         #[test]
         fn quorum_size_50_equivalent_to_absolute_majority(
-            yes in 0u64..1_000_000,
-            no in 0u64..1_000_000,
-            uncast in 0u64..1_000_000,
+            yes in 0_u64..1_000_000,
+            no in 0_u64..1_000_000,
+            uncast in 0_u64..1_000_000,
         ) {
             let total = yes + no + uncast;
             let proposal = ProposalData {

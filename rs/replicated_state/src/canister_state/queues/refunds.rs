@@ -14,7 +14,7 @@ mod tests;
 ///
 /// Refunds are ordered by amount (larger amounts first). Ties are broken by
 /// recipient (smaller IDs first).
-#[derive(Debug, Clone, Default, PartialEq, Eq, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 pub struct RefundPool {
     /// Refund priority queue. Holds all refunds, ordered by amount.
     ///

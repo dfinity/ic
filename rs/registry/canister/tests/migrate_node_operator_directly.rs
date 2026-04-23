@@ -52,7 +52,7 @@ fn setup_node_operator_mutations(
 
     // Add nodes for each operator
     let mut all_node_ids = vec![];
-    let mut node_index = 0usize;
+    let mut node_index = 0_usize;
     for (operator_principal, count) in nodes_per_operator {
         let mut operator_node_ids = vec![];
         for _ in 0..*count {

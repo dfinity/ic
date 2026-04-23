@@ -418,7 +418,7 @@ impl EccScalar {
     pub fn random<R: CryptoRng + RngCore>(curve: EccCurveType, rng: &mut R) -> Self {
         // Use rejection sampling to avoid biasing the output
 
-        let mut buf = vec![0u8; curve.scalar_bytes()];
+        let mut buf = vec![0_u8; curve.scalar_bytes()];
 
         loop {
             rng.fill_bytes(&mut buf);
@@ -1201,7 +1201,7 @@ impl EccPoint {
             }
             let sb = (*s).scalar_bits_be();
 
-            let mut window = vec![0u8; num_windows];
+            let mut window = vec![0_u8; num_windows];
             for (i, w) in window.iter_mut().enumerate() {
                 *w = Window::extract(&sb, i);
             }
