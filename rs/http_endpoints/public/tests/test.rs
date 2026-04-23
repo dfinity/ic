@@ -275,7 +275,7 @@ fn test_unauthorized_query(
 
         assert_eq!(
             format!(
-                "Specified CanisterId {canister1} does not match effective canister id in URL {canister2}"
+                "Specified canister ID {canister1} does not match effective canister ID in URL {canister2}"
             ),
             response.text().await.unwrap()
         )
@@ -383,7 +383,7 @@ fn test_unauthorized_call(#[values(Call::V2, Call::V3, Call::V4)] endpoint: Call
 
         assert_eq!(
             format!(
-                "Specified CanisterId {canister1} does not match effective canister id in URL {canister2}"
+                "Specified canister ID {canister1} does not match effective canister ID in URL {canister2}"
             ),
             invalid_update_call.text().await.unwrap()
         );
@@ -1884,7 +1884,7 @@ fn test_call_v4_subnet_wrong_subnet_id() {
         assert_eq!(StatusCode::BAD_REQUEST, response.status());
         assert_eq!(
             format!(
-                "Specified SubnetId {wrong_subnet_id} does not match the subnet id of this node {node_subnet_id}"
+                "Specified subnet ID {wrong_subnet_id} does not match the subnet ID of this node {node_subnet_id}"
             ),
             response.text().await.unwrap()
         );
@@ -1960,7 +1960,7 @@ fn test_query_v3_subnet_wrong_subnet_id() {
         assert_eq!(StatusCode::BAD_REQUEST, response.status());
         assert_eq!(
             format!(
-                "Specified SubnetId {wrong_subnet_id} does not match the subnet id of this node {node_subnet_id}"
+                "Specified subnet ID {wrong_subnet_id} does not match the subnet ID of this node {node_subnet_id}"
             ),
             response.text().await.unwrap()
         );

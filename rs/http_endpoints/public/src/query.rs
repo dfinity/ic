@@ -234,7 +234,7 @@ pub(crate) async fn query(
             if canister_id != CanisterId::ic_00() && canister_id != effective_canister_id {
                 let status = StatusCode::BAD_REQUEST;
                 let text = format!(
-                    "Specified CanisterId {canister_id} does not match effective canister id in URL {effective_canister_id}"
+                    "Specified canister ID {canister_id} does not match effective canister ID in URL {effective_canister_id}"
                 );
                 return (status, text).into_response();
             }
@@ -244,7 +244,7 @@ pub(crate) async fn query(
             if effective_subnet_id != subnet_id {
                 let status = StatusCode::BAD_REQUEST;
                 let text = format!(
-                    "Specified SubnetId {effective_subnet_id} does not match the subnet id of this node {subnet_id}"
+                    "Specified subnet ID {effective_subnet_id} does not match the subnet ID of this node {subnet_id}"
                 );
                 return (status, text).into_response();
             }

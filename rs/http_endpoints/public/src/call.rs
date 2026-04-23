@@ -261,7 +261,7 @@ impl IngressValidator {
                     Err(HttpError {
                         status: StatusCode::BAD_REQUEST,
                         message: format!(
-                            "Specified CanisterId {} does not match effective canister id in URL {}",
+                            "Specified canister ID {} does not match effective canister ID in URL {}",
                             msg.canister_id(),
                             effective_canister_id
                         ),
@@ -273,7 +273,7 @@ impl IngressValidator {
                     Err(HttpError {
                         status: StatusCode::BAD_REQUEST,
                         message: format!(
-                            "Specified SubnetId {} does not match the subnet id of this node {}",
+                            "Specified subnet ID {} does not match the subnet ID of this node {}",
                             effective_subnet_id, subnet_id
                         ),
                     })?;
