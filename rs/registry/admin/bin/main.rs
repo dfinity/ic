@@ -1921,7 +1921,7 @@ impl ProposeToBlessAlternativeGuestOsVersionCmd {
                 )
             });
         SubnetRecord::from(
-            &SubnetRecordProto::decode(&subnet_record_bytes[..]).unwrap_or_else(|err| {
+            SubnetRecordProto::decode(&subnet_record_bytes[..]).unwrap_or_else(|err| {
                 panic!(
                     "Failed to decode SubnetRecord for subnet {}: {}",
                     subnet_id, err
@@ -5961,7 +5961,7 @@ async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
                 // subnet records are emitted as JSON
                 let value = SubnetRecordProto::decode(&bytes[..])
                     .expect("Error decoding value from registry.");
-                let subnet_record = SubnetRecord::from(&value);
+                let subnet_record = SubnetRecord::from(value);
 
                 let mut registry = Registry {
                     version,
