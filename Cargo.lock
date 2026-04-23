@@ -4394,6 +4394,7 @@ dependencies = [
  "candid",
  "canister-test",
  "criterion",
+ "ic-embedders",
  "ic-test-utilities-execution-environment",
  "ic-types",
  "wirm",
@@ -4730,6 +4731,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-registry-subnet-type",
  "ic-replicated-state",
+ "ic-sys",
  "ic-test-utilities",
  "ic-test-utilities-execution-environment",
  "ic-test-utilities-state",
@@ -7926,7 +7928,6 @@ dependencies = [
  "mockall",
  "prometheus",
  "slog",
- "tokio",
 ]
 
 [[package]]
@@ -11076,6 +11077,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "num-traits",
  "proptest",
+ "serde",
  "serde_bytes",
 ]
 
@@ -11791,6 +11793,7 @@ dependencies = [
  "ic-nervous-system-clients",
  "ic-nervous-system-lock",
  "ic-nervous-system-runtime",
+ "ic-nns-constants",
  "serde",
  "serde_bytes",
  "tokio",
@@ -12454,6 +12457,7 @@ dependencies = [
  "prometheus-parse",
  "prost 0.13.5",
  "rand 0.8.5",
+ "regex",
  "registry-canister",
  "rewards-calculation",
  "rustc-hash 1.1.0",
@@ -12461,6 +12465,7 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "strum 0.26.3",
+ "tempfile",
  "tokio",
  "wat",
  "xrc-mock",
@@ -12770,6 +12775,7 @@ dependencies = [
  "slog",
  "tempfile",
  "thiserror 2.0.18",
+ "tokio",
  "url",
  "x509-cert",
 ]
@@ -14686,6 +14692,7 @@ dependencies = [
  "strum 0.26.3",
  "tempfile",
  "test-strategy 0.4.5",
+ "tokio",
  "tree-deserializer",
  "uuid",
 ]
@@ -15227,7 +15234,6 @@ dependencies = [
  "ic-canister-client",
  "ic-canister-client-sender",
  "ic-crypto-utils-threshold-sig-der",
- "ic-limits",
  "ic-nervous-system-common",
  "ic-nns-common",
  "ic-nns-constants",
@@ -15246,6 +15252,7 @@ dependencies = [
  "serde",
  "slog",
  "ssh2",
+ "tokio",
  "url",
 ]
 
@@ -16156,6 +16163,7 @@ dependencies = [
 name = "ic_os_logging"
 version = "0.0.0"
 dependencies = [
+ "tracing",
  "tracing-journald",
  "tracing-subscriber",
 ]
@@ -16290,7 +16298,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-agent"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "candid",
  "ciborium",
@@ -16304,7 +16312,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-client"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -16313,7 +16321,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-client-cdk"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -16323,7 +16331,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-types"
-version = "0.1.13"
+version = "0.2.0"
 dependencies = [
  "assert_matches",
  "base32",
@@ -18963,6 +18971,7 @@ dependencies = [
  "ic-nns-governance-api",
  "ic-types",
  "ic_device",
+ "ic_os_logging",
  "linux_kernel_command_line",
  "pem",
  "rand 0.8.5",
@@ -18971,6 +18980,7 @@ dependencies = [
  "sev_guest",
  "sev_guest_testing",
  "tempfile",
+ "tracing",
  "uuid",
 ]
 
@@ -21420,6 +21430,7 @@ dependencies = [
  "serde",
  "serde_json",
  "strum 0.26.3",
+ "strum_macros 0.26.4",
  "tempfile",
  "tokio",
  "url",

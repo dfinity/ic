@@ -24,7 +24,6 @@ use ic_types::{
         Signed,
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetSubnet, config::NiDkgConfig},
     },
-    messages::CallbackId,
 };
 use prometheus::Histogram;
 use rayon::prelude::*;
@@ -36,8 +35,9 @@ use std::{
 pub mod dkg_key_manager;
 pub mod payload_builder;
 pub mod payload_validator;
+pub(crate) mod remote;
 
-use crate::payload_builder::{ConfigResult, build_callback_id_config_map};
+use crate::remote::{build_callback_id_config_map, merge_configs};
 pub use crate::utils::get_vetkey_public_keys;
 
 #[cfg(test)]
@@ -306,19 +306,6 @@ fn contains_dkg_messages(dkg_pool: &dyn DkgPool, config: &NiDkgConfig, replica_i
 
 fn get_handle_invalid_change_action<T: AsRef<str>>(message: &Message, reason: T) -> ChangeAction {
     ChangeAction::HandleInvalid(DkgMessageId::from(message), reason.as_ref().to_string())
-}
-
-pub(crate) fn merge_configs<'a>(
-    summary_configs: &'a BTreeMap<NiDkgId, NiDkgConfig>,
-    config_results: &'a BTreeMap<CallbackId, ConfigResult>,
-) -> BTreeMap<&'a NiDkgId, &'a NiDkgConfig> {
-    let mut merged_configs: BTreeMap<&NiDkgId, &NiDkgConfig> = summary_configs.iter().collect();
-    for configs in config_results.values().flatten() {
-        for config in configs {
-            merged_configs.insert(config.dkg_id(), config);
-        }
-    }
-    merged_configs
 }
 
 impl<T: DkgPool> PoolMutationsProducer<T> for DkgImpl {
@@ -1984,7 +1971,7 @@ mod tests {
                     .state_manager
                     .get_state_at(validation_context.certified_height)
                     .unwrap();
-                let callback_id_map = payload_builder::build_callback_id_config_map(
+                let callback_id_map = remote::build_callback_id_config_map(
                     subnet_test_id(0),
                     deps.registry.as_ref(),
                     state.get_ref(),

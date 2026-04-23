@@ -1,6 +1,7 @@
 use candid::Encode;
 use canister_test::{CanisterId, CanisterInstallMode, Cycles, InstallCodeArgs};
 use criterion::{BatchSize, Criterion, Throughput};
+use ic_embedders::SerializedModule;
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_types::NumBytes;
 use ic_types::ingress::WasmResult;
@@ -22,6 +23,7 @@ fn initialize_execution_test(
     initialization_arg: &[u8],
     setup_action: SetupAction,
     cell: &RefCell<Option<(ExecutionTest, CanisterId)>>,
+    precompiled_module: Option<&SerializedModule>,
 ) {
     const LARGE_INSTRUCTION_LIMIT: u64 = 1_000_000_000_000;
 
@@ -60,6 +62,13 @@ fn initialize_execution_test(
         test = test.with_max_wasm64_memory_size(NumBytes::from(8 * 1024 * 1024 * 1024));
     }
     let mut test = test.build();
+
+    // Pre-populate the compilation cache so that `install_code` below doesn't
+    // recompile the Wasm from scratch.
+    if let Some(module) = precompiled_module {
+        test.execution_environment()
+            .compilation_cache_insert_for_testing(wasm.to_vec(), module.clone());
+    }
 
     let canister_id = test.create_canister(Cycles::from(1_u128 << 64));
     let args = InstallCodeArgs::new(
@@ -110,7 +119,7 @@ pub fn update_bench(
         group.throughput(throughput);
     }
     group.bench_function(name, |bench| {
-        initialize_execution_test(wasm, initialization_arg, setup_action, &cell);
+        initialize_execution_test(wasm, initialization_arg, setup_action, &cell, None);
         bench.iter_custom(|iters| {
             let mut total_duration = Duration::ZERO;
             for _ in 0..iters {
@@ -159,7 +168,7 @@ pub fn update_bench_once(
         bench.iter_batched(
             || {
                 let cell = RefCell::new(None);
-                initialize_execution_test(wasm, initialization_arg, setup_action, &cell);
+                initialize_execution_test(wasm, initialization_arg, setup_action, &cell, None);
                 let mut setup = cell.borrow_mut();
                 setup.take().unwrap()
             },
@@ -185,6 +194,62 @@ pub fn query_bench(
     throughput: Option<Throughput>,
     setup_action: SetupAction,
 ) {
+    query_bench_impl(
+        c,
+        group_name,
+        name,
+        wasm,
+        initialization_arg,
+        method,
+        payload,
+        throughput,
+        setup_action,
+        None,
+    );
+}
+
+/// Like [`query_bench`], but pre-populates the compilation cache with
+/// `precompiled_module` so that installing the canister reuses it instead of
+/// recompiling the Wasm from scratch.
+pub fn query_bench_with_precompiled_module(
+    c: &mut Criterion,
+    group_name: &str,
+    name: &str,
+    wasm: &[u8],
+    initialization_arg: &[u8],
+    method: &str,
+    payload: &[u8],
+    throughput: Option<Throughput>,
+    setup_action: SetupAction,
+    precompiled_module: &SerializedModule,
+) {
+    query_bench_impl(
+        c,
+        group_name,
+        name,
+        wasm,
+        initialization_arg,
+        method,
+        payload,
+        throughput,
+        setup_action,
+        Some(precompiled_module),
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn query_bench_impl(
+    c: &mut Criterion,
+    group_name: &str,
+    name: &str,
+    wasm: &[u8],
+    initialization_arg: &[u8],
+    method: &str,
+    payload: &[u8],
+    throughput: Option<Throughput>,
+    setup_action: SetupAction,
+    precompiled_module: Option<&SerializedModule>,
+) {
     let cell = RefCell::new(None);
 
     let mut group = c.benchmark_group(group_name);
@@ -192,7 +257,13 @@ pub fn query_bench(
         group.throughput(throughput);
     }
     group.bench_function(name, |bench| {
-        initialize_execution_test(wasm, initialization_arg, setup_action, &cell);
+        initialize_execution_test(
+            wasm,
+            initialization_arg,
+            setup_action,
+            &cell,
+            precompiled_module,
+        );
         bench.iter(|| {
             let mut setup = cell.borrow_mut();
             let (test, canister_id) = setup.as_mut().unwrap();

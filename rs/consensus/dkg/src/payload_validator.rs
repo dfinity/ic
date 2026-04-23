@@ -1,14 +1,12 @@
-use crate::{merge_configs, payload_builder::build_callback_id_config_map};
-
-use self::payload_builder::create_early_remote_transcripts;
 use super::{crypto_validate_dealing, payload_builder, utils};
+use crate::remote::{build_callback_id_config_map, merge_configs};
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{
     dkg::{DkgPayloadValidationError, DkgPool},
     validation::ValidationResult,
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateManager;
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
@@ -37,7 +35,7 @@ pub fn validate_payload(
     dkg_pool: &dyn DkgPool,
     parent: Block,
     payload: &BlockPayload,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
     validation_context: &ValidationContext,
     metrics: &IntCounterVec,
     log: &ReplicaLogger,
@@ -71,7 +69,7 @@ pub fn validate_payload(
                 last_dkg_summary,
                 &parent,
                 registry_version,
-                state_manager,
+                state_reader,
                 validation_context,
                 log.clone(),
             )?;
@@ -131,7 +129,7 @@ pub fn validate_payload(
                 &data_payload.dkg,
                 max_dealings_per_block,
                 &parent,
-                state_manager,
+                state_reader,
                 validation_context,
                 log,
                 metrics,
@@ -153,7 +151,7 @@ fn validate_dealings_payload(
     dealings: &DkgDataPayload,
     max_dealings_per_payload: usize,
     parent: &Block,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
     validation_context: &ValidationContext,
     log: &ReplicaLogger,
     metrics: &IntCounterVec,
@@ -191,7 +189,7 @@ fn validate_dealings_payload(
         return Err(InvalidDkgPayloadReason::DealerAlreadyDealt(dealer_id).into());
     }
 
-    let state = state_manager
+    let state = state_reader
         .get_state_at(validation_context.certified_height)
         .map_err(DkgPayloadCreationError::StateManagerError)?;
 
@@ -226,7 +224,7 @@ fn validate_dealings_payload(
 
     // If we have early transcripts, we compare them
     if !dealings.transcripts_for_remote_subnets.is_empty() {
-        let expected_transcripts = create_early_remote_transcripts(
+        let expected_transcripts = payload_builder::create_early_remote_transcripts(
             pool_reader,
             crypto,
             parent,

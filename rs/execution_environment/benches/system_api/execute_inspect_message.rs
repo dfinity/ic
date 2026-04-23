@@ -53,7 +53,7 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Disabled,
             ),
-            520000511,
+            520000511 + common::deterministic_tracker_overhead(1),
         ),
         common::Benchmark(
             "wasm64/ic0_msg_method_name_copy()/1B".into(),
@@ -63,7 +63,7 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ),
-            520000511,
+            520000511 + common::deterministic_tracker_overhead(1),
         ),
         common::Benchmark(
             "wasm32/ic0_msg_method_name_copy()/20B".into(),
@@ -73,7 +73,7 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Disabled,
             ),
-            539000511,
+            539000511 + common::deterministic_tracker_overhead(1),
         ),
         common::Benchmark(
             "wasm64/ic0_msg_method_name_copy()/20B".into(),
@@ -83,7 +83,7 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ),
-            539000511,
+            539000511 + common::deterministic_tracker_overhead(1),
         ),
         common::Benchmark(
             "wasm32/ic0_accept_message()*".into(),

@@ -8,18 +8,24 @@ use ic_replicated_state::metadata_state::subnet_call_context_manager::{
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_consensus::fake::FakeContentSigner;
-use ic_test_utilities_types::{ids::node_test_id, messages::RequestBuilder};
+use ic_test_utilities_types::{
+    ids::{node_test_id, subnet_test_id},
+    messages::RequestBuilder,
+};
 use ic_types::{
-    Height, RegistryVersion,
+    Height, NumberOfNodes, RegistryVersion,
     consensus::{
         BlockPayload,
         dkg::{DealingContent, DealingMessages, Message},
     },
-    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetId, NiDkgTranscript, config::NiDkgConfig},
+    crypto::threshold_sig::ni_dkg::{
+        NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
+        config::{NiDkgConfig, NiDkgConfigData},
+    },
     messages::CallbackId,
 };
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     sync::{Arc, Mutex},
 };
 
@@ -203,4 +209,41 @@ pub(super) fn extract_dkg_configs_from_highest_block(
 pub(super) fn create_dealing(node_idx: u64, dkg_id: NiDkgId) -> Message {
     let content = DealingContent::new(dummy_dealing(node_idx as u8), dkg_id);
     Message::fake(content, node_test_id(node_idx))
+}
+
+pub(super) fn make_test_config(dkg_id: NiDkgId, max_corrupt_dealers: u32) -> NiDkgConfig {
+    let nodes: BTreeSet<_> = (0..10).map(node_test_id).collect();
+    NiDkgConfig::new(NiDkgConfigData {
+        dkg_id,
+        max_corrupt_dealers: NumberOfNodes::from(max_corrupt_dealers),
+        dealers: nodes.clone(),
+        max_corrupt_receivers: NumberOfNodes::from(1),
+        receivers: nodes,
+        threshold: NumberOfNodes::from(2),
+        registry_version: RegistryVersion::from(1),
+        resharing_transcript: None,
+    })
+    .unwrap()
+}
+
+pub(super) fn local_dkg_id(tag: NiDkgTag) -> NiDkgId {
+    NiDkgId {
+        start_block_height: Height::from(0),
+        dealer_subnet: subnet_test_id(0),
+        dkg_tag: tag,
+        target_subnet: NiDkgTargetSubnet::Local,
+    }
+}
+
+pub(super) fn remote_dkg_id(tag: NiDkgTag) -> NiDkgId {
+    remote_dkg_id_with_target(tag, [0_u8; 32])
+}
+
+pub(super) fn remote_dkg_id_with_target(tag: NiDkgTag, target_id: [u8; 32]) -> NiDkgId {
+    NiDkgId {
+        start_block_height: Height::from(0),
+        dealer_subnet: subnet_test_id(0),
+        dkg_tag: tag,
+        target_subnet: NiDkgTargetSubnet::Remote(NiDkgTargetId::new(target_id)),
+    }
 }

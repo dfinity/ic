@@ -345,7 +345,6 @@ fn setup_execution_helper(
         logger.clone(),
         metrics_registry,
         completed_execution_messages_tx,
-        Arc::clone(&state_reader),
     ));
     let ingress_history_reader = Box::new(IngressHistoryReaderImpl::new(Arc::clone(&state_reader)));
 
