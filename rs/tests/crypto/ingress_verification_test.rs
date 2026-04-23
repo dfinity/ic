@@ -861,13 +861,9 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                     )
                     .await;
 
-                    // v3/v4 sync calls may return 202 under load
                     let response =
-                        if api_ver >= 3 && response.status() == 202 && include_mgmt_canister_id {
-                            await_ingress_via_read_state(&test_info, sender, &request_id).await
-                        } else {
-                            response
-                        };
+                        await_pending_update(api_ver, response, &test_info, sender, &request_id)
+                            .await;
 
                     let response = response.with_request_id(request_id);
 
@@ -907,9 +903,10 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                         let signature = sender.sign_update(&content);
                         let request_id = MessageId::from(content.representation_independent_hash());
 
-                        // Always use a v3 call to test read state request since the call is sync,
-                        // otherwise we have to wait until the call executes before checking the read state, which
-                        // requires a potentially flaky retry loop.
+                        // Use a v3 call (sync delivery with fallback to read_state polling) to
+                        // ensure the ingress is processed before we exercise read_state below.
+                        // A v2 call would return 202 immediately without waiting for
+                        // processing, forcing us to poll here anyway.
 
                         let response = send_request(
                             /*api_ver=*/ 3,
@@ -922,13 +919,9 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                         )
                         .await;
 
-                        // v3 sync call may return 202 under load; use read_state
-                        // to wait for the ingress to be processed
-                        let response = if response.status() == 202 {
-                            await_ingress_via_read_state(&test_info, sender, &request_id).await
-                        } else {
-                            response
-                        };
+                        let response =
+                            await_pending_update(3, response, &test_info, sender, &request_id)
+                                .await;
 
                         let response = response.with_request_id(request_id.clone());
                         response.expect_update_ok(3);
@@ -1878,6 +1871,25 @@ enum IngressStatus {
 /// When a v3/v4 sync update call returns 202 (the replica's internal timeout
 /// was exceeded before the ingress message was processed), fall back to polling
 /// read_state until a terminal request status is available.
+/// If a v3+ sync update call returned 202 (the replica's internal timeout was
+/// exceeded before the ingress was processed), fall back to polling
+/// `read_state` for the final request status. Otherwise returns the response
+/// unchanged. Has no effect for v2 update calls, which are async and always
+/// return 202 on success.
+async fn await_pending_update(
+    api_ver: usize,
+    response: ReplicaResponse,
+    test: &TestInformation,
+    sender: &GenericIdentity<'_>,
+    request_id: &MessageId,
+) -> ReplicaResponse {
+    if api_ver >= 3 && response.status() == 202 {
+        await_ingress_via_read_state(test, sender, request_id).await
+    } else {
+        response
+    }
+}
+
 async fn await_ingress_via_read_state(
     test: &TestInformation,
     sender: &GenericIdentity<'_>,
@@ -1949,7 +1961,7 @@ async fn await_ingress_via_read_state(
                     return ReplicaResponse {
                         status: StatusCode::OK,
                         body: ResponseBody::Cbor(body),
-                        request_id: Some(request_id),
+                        request_id: Some(request_id.clone()),
                     };
                 }
                 Some(IngressStatus::Rejected {
@@ -2134,12 +2146,7 @@ async fn perform_update_call_with_delegations(
     )
     .await;
 
-    // v3/v4 sync calls may return 202 under load; fall back to read_state polling
-    let response = if api_ver >= 3 && response.status() == 202 {
-        await_ingress_via_read_state(test, sender, &request_id).await
-    } else {
-        response
-    };
+    let response = await_pending_update(api_ver, response, test, sender, &request_id).await;
 
     response.with_request_id(request_id)
 }
@@ -2176,9 +2183,10 @@ async fn perform_read_state_call_with_delegations(
         let signature = sender.sign_update(&content);
         let request_id = MessageId::from(content.representation_independent_hash());
 
-        // Always use a v3 call to test read state request since the call is sync,
-        // otherwise we have to wait until the call executes before checking the read state, which
-        // requires a potentially flaky retry loop.
+        // Use a v3 call (sync delivery with fallback to read_state polling) to
+        // ensure the ingress is processed before we exercise read_state below.
+        // A v2 call would return 202 immediately without waiting for
+        // processing, forcing us to poll here anyway.
 
         let response = send_request(
             /*api_ver=*/ 3,
@@ -2191,13 +2199,7 @@ async fn perform_read_state_call_with_delegations(
         )
         .await;
 
-        // v3 sync call may return 202 under load; use read_state
-        // to wait for the ingress to be processed
-        let response = if response.status() == 202 {
-            await_ingress_via_read_state(test, sender, &request_id).await
-        } else {
-            response
-        };
+        let response = await_pending_update(3, response, test, sender, &request_id).await;
 
         let response = response.with_request_id(request_id.clone());
         response.expect_update_ok(3);
@@ -2301,12 +2303,7 @@ async fn perform_update_with_expiry(
     )
     .await;
 
-    // v3/v4 sync calls may return 202 under load; fall back to read_state polling
-    let response = if api_ver >= 3 && response.status() == 202 {
-        await_ingress_via_read_state(test, sender, &request_id).await
-    } else {
-        response
-    };
+    let response = await_pending_update(api_ver, response, test, sender, &request_id).await;
 
     response.with_request_id(request_id)
 }
