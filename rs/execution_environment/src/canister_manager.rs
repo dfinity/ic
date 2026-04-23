@@ -1,5 +1,5 @@
 use crate::as_round_instructions;
-use crate::canister_settings::{CanisterSettings, ValidatedCanisterSettings};
+use crate::canister_settings::CanisterSettings;
 use crate::execution::common::{
     validate_controller, validate_controller_or_subnet_admin, validate_snapshot_visibility,
     validate_subnet_admin,
@@ -14,14 +14,13 @@ use crate::execution_environment_metrics::ExecutionEnvironmentMetrics;
 use crate::hypervisor::Hypervisor;
 use crate::types::{IngressResponse, Response};
 use crate::util::{GOVERNANCE_CANISTER_ID, MIGRATION_CANISTER_ID};
-use ic_base_types::NumSeconds;
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::wasm_utils::decoding::decode_wasm;
 use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_interfaces::execution_environment::{MessageMemoryUsage, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use ic_logger::{ReplicaLogger, error, fatal, info};
 use ic_management_canister_types_private::{
@@ -58,8 +57,8 @@ use ic_types::messages::{
     StopCanisterCallId,
 };
 use ic_types::{
-    CanisterId, CanisterTimer, ComputeAllocation, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
-    MAX_AGGREGATE_LOG_MEMORY_LIMIT, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
+    CanisterId, CanisterTimer, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
+    MAX_AGGREGATE_LOG_MEMORY_LIMIT, NumBytes, NumInstructions, PrincipalId,
     SnapshotId, Time,
 };
 use ic_types_cycles::{
@@ -316,7 +315,7 @@ impl CanisterManager {
         Ok(())
     }
 
-    /// Validates the new canisters settings:
+    /// Validates the new canister settings and applies them to the canister:
     /// - memory allocation:
     ///     - it cannot be lower than the current canister memory usage.
     ///     - there must be enough available subnet capacity for the change.
@@ -335,28 +334,36 @@ impl CanisterManager {
     ///     - must be at least the specified minimum.
     ///     - must not exceed the specified maximum.
     ///
-    /// Keep this function in sync with `do_update_settings()`.
+    /// If `metrics` is `Some`, a `log_memory_limit` resize that does real
+    /// work (see `LogMemoryStore::would_resize`) is timed and recorded into
+    /// `canister_log_resize_duration`. Pass `None` to skip observation on
+    /// paths where the resize isn't the user-facing operation (e.g. first
+    /// allocation during canister creation).
     #[allow(clippy::too_many_arguments)]
-    fn validate_canister_settings(
+    fn check_canister_settings(
         &self,
         settings: CanisterSettings,
-        canister_memory_usage: NumBytes,
-        canister_message_memory_usage: MessageMemoryUsage,
-        canister_memory_allocation: MemoryAllocation,
+        canister: &mut CanisterState,
         subnet_available_memory: &SubnetAvailableMemory,
         subnet_memory_saturation: &ResourceSaturation,
-        canister_compute_allocation: ComputeAllocation,
         subnet_compute_allocation_usage: u64,
-        canister_freezing_threshold: NumSeconds,
-        canister_cycles_balance: Cycles,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
-        canister_reserved_balance: Cycles,
-        canister_reserved_balance_limit: Option<Cycles>,
-        canister_log_bytes_used: NumBytes,
         log_resize_needed: bool,
-    ) -> Result<ValidatedCanisterSettings, CanisterManagerError> {
+        metrics: Option<&ExecutionEnvironmentMetrics>,
+    ) -> Result<(), CanisterManagerError> {
         self.validate_environment_variables(&settings)?;
+
+        let canister_memory_usage = canister.memory_usage();
+        let canister_message_memory_usage = canister.message_memory_usage();
+        let canister_memory_allocation = canister.memory_allocation();
+        let canister_compute_allocation = canister.compute_allocation();
+        let canister_freezing_threshold = canister.system_state.freeze_threshold;
+        let canister_cycles_balance = canister.system_state.balance();
+        let canister_reserved_balance = canister.system_state.reserved_balance();
+        let canister_reserved_balance_limit = canister.system_state.reserved_balance_limit();
+        let canister_log_bytes_used =
+            NumBytes::new(canister.system_state.log_memory_store.bytes_used() as u64);
 
         let old_memory_bytes = canister_memory_allocation.allocated_bytes(canister_memory_usage);
         let new_memory_bytes = settings
@@ -535,75 +542,14 @@ impl CanisterManager {
             Some(requested_limit)
         } else {
             // User did not set log_memory_limit: default so that new canisters
-            // get a log memory store initialized via do_update_settings.
+            // get a log memory store initialized.
             // For existing canisters this is a no-op (resize early-returns
             // when capacity is unchanged). No cycles are charged.
             Some(NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64))
         };
 
-        Ok(ValidatedCanisterSettings::new(
-            settings.controllers(),
-            settings.compute_allocation(),
-            settings.memory_allocation(),
-            settings.wasm_memory_threshold(),
-            settings.freezing_threshold(),
-            settings.reserved_cycles_limit(),
-            reservation_cycles,
-            settings.log_visibility().cloned(),
-            settings.snapshot_visibility().cloned(),
-            log_memory_limit,
-            settings.wasm_memory_limit(),
-            settings.environment_variables().cloned(),
-        ))
-    }
-
-    fn validate_settings_for_canister_creation(
-        &self,
-        settings: CanisterSettings,
-        subnet_compute_allocation_usage: u64,
-        subnet_available_memory: &SubnetAvailableMemory,
-        subnet_memory_saturation: &ResourceSaturation,
-        canister_cycles_balance: Cycles,
-        subnet_size: usize,
-        cost_schedule: CanisterCyclesCostSchedule,
-    ) -> Result<ValidatedCanisterSettings, CanisterManagerError> {
-        self.validate_canister_settings(
-            settings,
-            NumBytes::new(0),
-            MessageMemoryUsage::ZERO,
-            MemoryAllocation::default(),
-            subnet_available_memory,
-            subnet_memory_saturation,
-            ComputeAllocation::zero(),
-            subnet_compute_allocation_usage,
-            self.config.default_freeze_threshold,
-            canister_cycles_balance,
-            subnet_size,
-            cost_schedule,
-            Cycles::zero(),
-            None,
-            NumBytes::new(0),
-            true, // New canister: resize always needed.
-        )
-    }
-
-    /// Applies the requested settings on the canister.
-    /// Note: Called only after validating the settings.
-    /// Keep this function in sync with `validate_canister_settings()`.
-    ///
-    /// If `metrics` is `Some`, a `log_memory_limit` resize that does real
-    /// work (see `LogMemoryStore::would_resize`) is timed and recorded into
-    /// `canister_log_resize_duration`. Pass `None` to skip observation on
-    /// paths where the resize isn't the user-facing operation (e.g. first
-    /// allocation during canister creation).
-    fn do_update_settings(
-        &self,
-        settings: &ValidatedCanisterSettings,
-        canister: &mut CanisterState,
-        metrics: Option<&ExecutionEnvironmentMetrics>,
-    ) {
-        // Note: At this point, the settings are validated.
-        if let Some(controllers) = settings.controllers() {
+        // All checks passed — apply settings to the canister.
+        if let Some(controllers) = controllers {
             canister.system_state.controllers.clear();
             for principal in controllers {
                 canister.system_state.controllers.insert(principal);
@@ -623,11 +569,13 @@ impl CanisterManager {
         }
         canister
             .system_state
-            .reserve_cycles(settings.reservation_cycles())
-            .expect(
-                "Reserving cycles should succeed because \
-                    the canister settings have been validated.",
-            );
+            .reserve_cycles(reservation_cycles)
+            .map_err(|err| CanisterManagerError::InvalidSettings {
+                message: format!(
+                    "Reserving cycles failed unexpectedly after settings validation: {:?}",
+                    err
+                ),
+            })?;
         if let Some(freezing_threshold) = settings.freezing_threshold() {
             canister.system_state.freeze_threshold = freezing_threshold;
         }
@@ -637,7 +585,7 @@ impl CanisterManager {
         if let Some(snapshot_visibility) = settings.snapshot_visibility() {
             canister.system_state.snapshot_visibility = snapshot_visibility.clone();
         }
-        if let Some(log_memory_limit) = settings.log_memory_limit() {
+        if let Some(log_memory_limit) = log_memory_limit {
             let limit = log_memory_limit.get() as usize;
             let log_memory_store = &mut canister.system_state.log_memory_store;
             {
@@ -653,6 +601,7 @@ impl CanisterManager {
         if let Some(environment_variables) = settings.environment_variables() {
             canister.system_state.environment_variables = environment_variables.clone();
         }
+        Ok(())
     }
 
     /// Tries to apply the requested settings on the canister identified by
@@ -683,31 +632,24 @@ impl CanisterManager {
                     .would_resize(limit.get() as usize)
             })
             .unwrap_or(false);
-        let validated_settings = self.validate_canister_settings(
-            settings,
-            canister.memory_usage(),
-            canister.message_memory_usage(),
-            canister.memory_allocation(),
-            &round_limits.subnet_available_memory,
-            &subnet_memory_saturation,
-            canister.compute_allocation(),
-            round_limits.compute_allocation_used,
-            canister.system_state.freeze_threshold,
-            canister.system_state.balance(),
-            subnet_size,
-            cost_schedule,
-            canister.system_state.reserved_balance(),
-            canister.system_state.reserved_balance_limit(),
-            NumBytes::new(canister.system_state.log_memory_store.bytes_used() as u64),
-            log_resize_needed,
-        )?;
+        let controllers_changed = settings.controllers().is_some();
 
         let old_usage = canister.memory_usage();
         let old_mem = canister.memory_allocation().allocated_bytes(old_usage);
         let old_compute_allocation = canister.compute_allocation().as_percent();
         let old_log_bytes_used = canister.system_state.log_memory_store.bytes_used() as u64;
 
-        self.do_update_settings(&validated_settings, canister, Some(metrics));
+        self.check_canister_settings(
+            settings,
+            canister,
+            &round_limits.subnet_available_memory,
+            &subnet_memory_saturation,
+            round_limits.compute_allocation_used,
+            subnet_size,
+            cost_schedule,
+            log_resize_needed,
+            Some(metrics),
+        )?;
 
         let new_compute_allocation = canister.compute_allocation().as_percent();
         if old_compute_allocation < new_compute_allocation {
@@ -723,11 +665,15 @@ impl CanisterManager {
         let new_usage = canister.memory_usage();
         let new_mem = canister.memory_allocation().allocated_bytes(new_usage);
         if new_mem >= old_mem {
-            // Settings were validated before so this should always succeed.
             round_limits
                 .subnet_available_memory
                 .try_decrement(new_mem - old_mem, NumBytes::from(0), NumBytes::from(0))
-                .expect("Error: Cannot fail to decrement SubnetAvailableMemory after validating the canister's settings");
+                .map_err(|err| CanisterManagerError::InvalidSettings {
+                    message: format!(
+                        "Decrementing subnet available memory failed unexpectedly after settings validation: {:?}",
+                        err
+                    ),
+                })?;
         } else {
             round_limits.subnet_available_memory.increment(
                 old_mem - new_mem,
@@ -737,7 +683,6 @@ impl CanisterManager {
         }
 
         // Deduct cycles and account instructions for log resize.
-        // Validation was done in validate_canister_settings; this is the actual deduction.
         // Use consume_with_threshold with zero threshold instead of
         // consume_cycles_for_management_canister_instructions to avoid
         // recomputing the freezing threshold from post-mutation memory usage,
@@ -761,17 +706,20 @@ impl CanisterManager {
                     Cycles::zero(),
                     reveal_top_up,
                 )
-                .expect(
-                    "Consuming cycles for log resize should succeed because \
-                        the canister settings have been validated.",
-                );
+                .map_err(|err| CanisterManagerError::InvalidSettings {
+                    message: format!(
+                        "Consuming cycles for log resize failed unexpectedly after settings validation: {:?}",
+                        err
+                    ),
+                })?;
             round_limits.instructions -= as_round_instructions(log_resize_instructions);
         }
 
         canister.system_state.bump_canister_version();
-        let new_controllers = match validated_settings.controllers() {
-            Some(_) => Some(canister.system_state.controllers.iter().copied().collect()),
-            None => None,
+        let new_controllers = if controllers_changed {
+            Some(canister.system_state.controllers.iter().copied().collect())
+        } else {
+            None
         };
 
         // For the sake of backward-compatibility, we do not record
@@ -904,41 +852,29 @@ impl CanisterManager {
             .wasm_memory_limit
             .get_or_insert(self.config.default_wasm_memory_limit);
 
-        // Validate settings before `create_canister_helper` applies them
-        match self.validate_settings_for_canister_creation(
+        // Test coverage relies on the fact that
+        // the IC method `provisional_create_canister_with_cycles`
+        // implemented by `CanisterManager::create_canister_with_cycles`
+        // uses the same code (in `CanisterManager::create_canister_helper`)
+        // as the production IC method `create_canister`
+        // implemented by this function `CanisterManager::create_canister`.
+        let canister_id = match self.create_canister_helper(
+            origin,
+            cycles,
+            fee,
             settings,
-            round_limits.compute_allocation_used,
-            &round_limits.subnet_available_memory,
-            &subnet_memory_saturation,
-            cycles - fee.real(),
+            max_number_of_canisters,
+            state,
+            round_limits,
+            None,
+            subnet_memory_saturation,
             subnet_size,
-            state.get_own_cost_schedule(),
+            canister_creation_error,
         ) {
-            Err(err) => (Err(err.into()), cycles),
-            Ok(validate_settings) => {
-                // Test coverage relies on the fact that
-                // the IC method `provisional_create_canister_with_cycles`
-                // implemented by `CanisterManager::create_canister_with_cycles`
-                // uses the same code (in `CanisterManager::create_canister_helper`)
-                // as the production IC method `create_canister`
-                // implemented by this function `CanisterManager::create_canister`.
-                let canister_id = match self.create_canister_helper(
-                    origin,
-                    cycles,
-                    fee,
-                    validate_settings,
-                    max_number_of_canisters,
-                    state,
-                    round_limits,
-                    None,
-                    canister_creation_error,
-                ) {
-                    Ok(canister_id) => canister_id,
-                    Err(err) => return (Err(err.into()), cycles),
-                };
-                (Ok(canister_id), Cycles::zero())
-            }
-        }
+            Ok(canister_id) => canister_id,
+            Err(err) => return (Err(err.into()), cycles),
+        };
+        (Ok(canister_id), Cycles::zero())
     }
 
     /// Installs code to a canister.
@@ -1456,37 +1392,25 @@ impl CanisterManager {
             .wasm_memory_limit
             .get_or_insert(self.config.default_wasm_memory_limit);
 
-        // Validate settings before `create_canister_helper` applies them
-        // No creation fee applied.
-        //
         // Test coverage relies on the fact that
         // the IC method `provisional_create_canister_with_cycles`
         // implemented by this function `CanisterManager::create_canister_with_cycles`
         // uses the same code (in `CanisterManager::create_canister_helper`)
         // as the production IC method `create_canister`
         // implemented by `CanisterManager::create_canister`.
-        match self.validate_settings_for_canister_creation(
-            settings,
-            round_limits.compute_allocation_used,
-            &round_limits.subnet_available_memory,
-            &subnet_memory_saturation,
+        self.create_canister_helper(
+            origin,
             cycles,
+            CompoundCycles::new(Cycles::zero(), state.get_own_cost_schedule()),
+            settings,
+            max_number_of_canisters,
+            state,
+            round_limits,
+            specified_id,
+            subnet_memory_saturation,
             subnet_size,
-            state.get_own_cost_schedule(),
-        ) {
-            Err(err) => Err(err),
-            Ok(validated_settings) => self.create_canister_helper(
-                origin,
-                cycles,
-                CompoundCycles::new(Cycles::zero(), state.get_own_cost_schedule()),
-                validated_settings,
-                max_number_of_canisters,
-                state,
-                round_limits,
-                specified_id,
-                canister_creation_error,
-            ),
-        }
+            canister_creation_error,
+        )
     }
 
     /// Validates specified ID is available for use.
@@ -1529,11 +1453,13 @@ impl CanisterManager {
         origin: CanisterChangeOrigin,
         cycles: Cycles,
         creation_fee: CompoundCycles<CanisterCreation>,
-        settings: ValidatedCanisterSettings,
+        settings: CanisterSettings,
         max_number_of_canisters: u64,
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
         specified_id: Option<PrincipalId>,
+        subnet_memory_saturation: ResourceSaturation,
+        subnet_size: usize,
         canister_creation_error: &IntCounter,
     ) -> Result<CanisterId, CanisterManagerError> {
         let sender = origin.origin();
@@ -1552,6 +1478,11 @@ impl CanisterManager {
 
             None => self.generate_new_canister_id(state, canister_creation_error)?,
         };
+
+        // Capture environment variables hash before settings is consumed.
+        let environment_variables_hash = settings
+            .environment_variables()
+            .map(|env_vars| env_vars.hash());
 
         // Canister id available. Create the new canister.
         let mut system_state = SystemState::new_running(
@@ -1574,18 +1505,32 @@ impl CanisterManager {
         // Canister creation's first-time allocation is a different event class
         // from user-triggered `log_memory_limit` resize — don't mix their
         // distributions. Pass `None` to skip observation here.
-        self.do_update_settings(&settings, &mut new_canister, None);
+        self.check_canister_settings(
+            settings,
+            &mut new_canister,
+            &round_limits.subnet_available_memory,
+            &subnet_memory_saturation,
+            round_limits.compute_allocation_used,
+            subnet_size,
+            state.get_own_cost_schedule(),
+            true, // New canister: resize always needed.
+            None,
+        )?;
         let new_usage = new_canister.memory_usage();
         let new_mem = new_canister
             .system_state
             .memory_allocation
             .allocated_bytes(new_usage);
 
-        // settings were validated before so this should always succeed
         round_limits
             .subnet_available_memory
             .try_decrement(new_mem, NumBytes::from(0), NumBytes::from(0))
-            .expect("Error: Cannot fail to decrement SubnetAvailableMemory after validating canister's settings");
+            .map_err(|err| CanisterManagerError::InvalidSettings {
+                message: format!(
+                    "Decrementing subnet available memory failed unexpectedly after settings validation: {:?}",
+                    err
+                ),
+            })?;
 
         round_limits.compute_allocation_used = round_limits
             .compute_allocation_used
@@ -1597,10 +1542,6 @@ impl CanisterManager {
             .iter()
             .copied()
             .collect();
-
-        let environment_variables_hash = settings
-            .environment_variables()
-            .map(|env_vars| env_vars.hash());
         let available_execution_memory_change = new_canister.add_canister_change(
             state.time(),
             origin,
