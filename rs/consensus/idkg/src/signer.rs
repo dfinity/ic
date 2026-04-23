@@ -166,7 +166,7 @@ impl ThresholdSignerImpl {
                     .ok()
                 })
                 .filter(|(request_id, inputs)| {
-                    !self.signer_has_issued_share(
+                    !Self::signer_has_issued_share(
                         idkg_pool,
                         &self.node_id,
                         request_id,
@@ -262,7 +262,7 @@ impl ThresholdSignerImpl {
                 return Some(IDkgChangeAction::RemoveUnvalidated(id));
             }
 
-            if self.inputs_already_have_enough_shares(inputs, maybe_signers) {
+            if Self::inputs_already_have_enough_shares(inputs, maybe_signers) {
                 // We already have enough valid shares for this request
                 return Some(IDkgChangeAction::RemoveUnvalidated(id));
             }
@@ -271,7 +271,7 @@ impl ThresholdSignerImpl {
         let signer = share.signer();
         let request_id = share.request_id();
         let scheme = share.scheme();
-        if self.signer_has_issued_share(idkg_pool, &signer, &request_id, scheme) {
+        if Self::signer_has_issued_share(idkg_pool, &signer, &request_id, scheme) {
             // The node already sent a valid share for this request
             self.metrics.sign_errors_inc("duplicate_sig_share");
             return Some(IDkgChangeAction::RemoveUnvalidated(id));
@@ -345,7 +345,7 @@ impl ThresholdSignerImpl {
             .unvalidated()
             .signature_shares()
             .filter(|(_, share)| {
-                self.should_purge(share.request_id(), current_height, &in_progress)
+                Self::should_purge(share.request_id(), current_height, &in_progress)
             })
             .map(|(id, _)| IDkgChangeAction::RemoveUnvalidated(id));
 
@@ -355,7 +355,7 @@ impl ThresholdSignerImpl {
             .validated()
             .signature_shares()
             .filter(|(_, share)| {
-                self.should_purge(share.request_id(), current_height, &in_progress)
+                Self::should_purge(share.request_id(), current_height, &in_progress)
             })
             // Side-effect: remove from the validated_sig_share_signers map
             .map(|(id, share)| {
@@ -532,7 +532,6 @@ impl ThresholdSignerImpl {
     /// Checks if the signer node has already issued a signature share for the
     /// request
     fn signer_has_issued_share(
-        &self,
         idkg_pool: &dyn IDkgPool,
         signer_id: &NodeId,
         request_id: &RequestId,
@@ -568,7 +567,6 @@ impl ThresholdSignerImpl {
     }
 
     fn inputs_already_have_enough_shares(
-        &self,
         inputs: &ThresholdSigInputs,
         maybe_signers: Option<&BTreeSet<NodeId>>,
     ) -> bool {
@@ -587,7 +585,6 @@ impl ThresholdSignerImpl {
 
     /// Checks if the signature share should be purged
     fn should_purge(
-        &self,
         request_id: RequestId,
         current_height: Height,
         in_progress: &BTreeSet<CallbackId>,
