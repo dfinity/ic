@@ -124,7 +124,11 @@ pub fn test(env: TestEnv) {
         let mut proposal_ids = vec![];
         for proposal_idx in 0..APP_SUBNETS {
             let nodes = unassigned_nodes.by_ref().take(APP_PRE_MASTER).collect();
-            let initial_dkg_subnet_id = (proposal_idx % 2 == 0).then_some(initial_dkg_subnet_id);
+            let initial_dkg_subnet_id = if proposal_idx % 2 == 0 {
+                Some(initial_dkg_subnet_id)
+            } else {
+                None
+            };
             info!(
                 log,
                 "Submitting proposal to create subnet with nodes: {nodes:?}, initial_dkg_subnet_id: {initial_dkg_subnet_id:?}"
