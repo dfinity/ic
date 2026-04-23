@@ -895,7 +895,7 @@ fn main() -> Result<()> {
             SystemTestSubGroup::new()
                 .add_test(systest!(query_calls; query::Version::V2))
                 .add_test(systest!(query_calls; query::Version::V3))
-                .add_test(systest!(query_calls_subnet_v4))
+                .add_test(systest!(query_calls_subnet_v3))
                 .add_test(systest!(update_calls; Call::V2))
                 .add_test(systest!(update_calls; Call::V3))
                 .add_test(systest!(update_calls; Call::V4))
