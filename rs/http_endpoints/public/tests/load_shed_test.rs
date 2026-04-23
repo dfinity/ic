@@ -1,9 +1,9 @@
 pub mod common;
 
 use crate::common::{
-    HttpEndpointBuilder, MockIngressPoolThrottler, QueryEndpoint, UpdateEndpoint,
-    default_certified_state_reader, default_get_latest_state, default_read_certified_state,
-    get_free_localhost_socket_addr,
+    HttpEndpointBuilder, MockIngressPoolThrottler, UpdateEndpoint, default_certified_state_reader,
+    default_get_latest_state, default_read_certified_state, get_free_localhost_socket_addr,
+    query_endpoint,
 };
 use async_trait::async_trait;
 use axum::body::Body;
@@ -11,7 +11,7 @@ use hyper::{Method, Request, StatusCode};
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_config::http_handler::Config;
 use ic_crypto_tree_hash::{Label, Path};
-use ic_http_endpoints_public::read_state;
+use ic_http_endpoints_public::{query, read_state};
 use ic_http_endpoints_test_agent::{
     self, Call, CallSubnet, CanisterReadState, IngressMessage, wait_for_status_healthy,
 };
@@ -35,12 +35,8 @@ use tokio::{runtime::Runtime, sync::Notify};
 /// we return 429.
 #[rstest]
 fn test_load_shedding_query(
-    #[values(
-        QueryEndpoint::Canister(ic_http_endpoints_public::query::Version::V2),
-        QueryEndpoint::Canister(ic_http_endpoints_public::query::Version::V3),
-        QueryEndpoint::Subnet
-    )]
-    endpoint: QueryEndpoint,
+    #[values(query::Version::V2, query::Version::V3, query::Version::SubnetV3)]
+    version: query::Version,
 ) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
@@ -63,7 +59,7 @@ fn test_load_shedding_query(
     let load_shedded_request = rt.spawn(async move {
         query_exec_running_clone.notified().await;
 
-        let response = endpoint.query(addr).await;
+        let response = query_endpoint(version, addr).await;
 
         load_shedder_returned_clone.notify_one();
 
@@ -85,7 +81,7 @@ fn test_load_shedding_query(
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
 
-        let response = endpoint.query(addr).await;
+        let response = query_endpoint(version, addr).await;
 
         assert_eq!(
             StatusCode::OK,
