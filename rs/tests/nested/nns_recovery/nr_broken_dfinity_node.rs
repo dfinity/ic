@@ -51,6 +51,9 @@ fn main() -> Result<()> {
             fix_dfinity_owned_node_like_np: false,
             sequential_np_actions: false,
         }))
+        // The replica binary is "broken" and restarted by the orchestrator multiple times
+        // during subnet recovery, so don't assert on the default threshold of 1 start attempt.
+        .remove_metrics_to_check("orchestrator_replica_process_start_attempts_total")
         .with_timeout_per_test(Duration::from_secs(30 * 60))
         .execute_from_args()?;
 
