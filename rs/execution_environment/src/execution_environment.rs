@@ -4571,6 +4571,49 @@ impl ExecutionEnvironment {
         }
     }
 
+    /// Removes `StopCanisterCall`s from `SubnetCallContextManager` that have no
+    /// corresponding `StopCanisterContext` in the target canister's stop contexts.
+    /// These can arise from a bug fixed in commit 52e7b89 where a `StopCanisterCall`
+    /// was pushed but never removed when the target canister was already stopped.
+    fn cleanup_orphaned_stop_canister_calls(
+        &self,
+        state: &mut ReplicatedState,
+        canister_states: &BTreeMap<CanisterId, Arc<CanisterState>>,
+    ) {
+        let orphaned: Vec<(StopCanisterCallId, CanisterId)> = state
+            .metadata
+            .subnet_call_context_manager
+            .iter_stop_canister_calls()
+            .filter_map(|(call_id, stop_canister_call)| {
+                let canister_id = stop_canister_call.effective_canister_id;
+                let has_context = match canister_states
+                    .get(&canister_id)
+                    .map(|c| c.system_state.get_status())
+                {
+                    Some(CanisterStatus::Stopping { stop_contexts, .. }) => stop_contexts
+                        .iter()
+                        .any(|ctx| ctx.call_id() == &Some(*call_id)),
+                    _ => false,
+                };
+                if has_context {
+                    None
+                } else {
+                    Some((*call_id, canister_id))
+                }
+            })
+            .collect();
+
+        for (call_id, canister_id) in orphaned {
+            warn!(
+                self.log,
+                "Removing orphaned StopCanisterCall with ID {} for canister {}",
+                call_id,
+                canister_id,
+            );
+            self.remove_stop_canister_call(state, canister_id, Some(call_id));
+        }
+    }
+
     /// Checks for stopping canisters and performs the following:
     ///   1. If there are stop contexts that have timed out, respond to them.
     ///   2. If any stopping canisters are ready to stop, transition them to
@@ -4585,6 +4628,8 @@ impl ExecutionEnvironment {
     ) -> ReplicatedState {
         let mut canister_states = state.take_canister_states();
         let time = state.time();
+
+        self.cleanup_orphaned_stop_canister_calls(&mut state, &canister_states);
 
         for canister in canister_states.values_mut() {
             match canister.system_state.get_status() {
