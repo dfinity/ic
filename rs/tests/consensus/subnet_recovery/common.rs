@@ -273,6 +273,7 @@ struct TestConfig {
     subnet_size: usize,
     upgrade: bool,
     chain_key: bool,
+    remote_initial_dkg: bool,
     corrupt_cup: CupCorruption,
     local_recovery: bool,
     provision_write_access: bool,
@@ -284,6 +285,7 @@ impl TestConfig {
             subnet_size: APP_NODES,
             upgrade: true,
             chain_key: false,
+            remote_initial_dkg: false,
             corrupt_cup: CupCorruption::NotCorrupted,
             local_recovery: false,
             provision_write_access: false,
@@ -305,6 +307,11 @@ impl TestConfig {
         self
     }
 
+    fn with_remote_initial_dkg(mut self) -> Self {
+        self.remote_initial_dkg = true;
+        self
+    }
+
     fn with_corrupt_cup(mut self, corrupt_cup: CupCorruption) -> Self {
         self.corrupt_cup = corrupt_cup;
         self
@@ -323,6 +330,11 @@ impl TestConfig {
 
 pub fn test_with_chain_keys(env: TestEnv) {
     let config = TestConfig::new().with_chain_key();
+    app_subnet_recovery_test(env, config);
+}
+
+pub fn test_with_chain_keys_and_remote_initial_dkg(env: TestEnv) {
+    let config = TestConfig::new().with_chain_key().with_remote_initial_dkg();
     app_subnet_recovery_test(env, config);
 }
 
@@ -672,6 +684,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
         wait_for_cup_node: Some(upload_node.get_ip_addr()),
         chain_key_subnet_id: cfg.chain_key.then_some(source_subnet_id),
+        initial_dkg_subnet_id: cfg.remote_initial_dkg.then_some(source_subnet_id),
         next_step: None,
         // Skip validating the output if the CUP is corrupted, as in this case no replica will be
         // running to compare the heights to.

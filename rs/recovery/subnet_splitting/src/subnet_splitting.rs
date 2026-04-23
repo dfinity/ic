@@ -326,6 +326,7 @@ impl SubnetSplitting {
             state_hash,
             /*replacement_nodes=*/ &[],
             /*registry_params=*/ None,
+            /*initial_dkg_subnet_id=*/ None,
             /*chain_key_subnet_id=*/ None,
         )
     }

@@ -814,6 +814,7 @@ impl Recovery {
         state_hash: String,
         replacement_nodes: &[NodeId],
         registry_params: Option<RegistryParams>,
+        initial_dkg_subnet_id: Option<SubnetId>,
         chain_key_subnet_id: Option<SubnetId>,
     ) -> RecoveryResult<impl Step + use<>> {
         let chain_key_config = chain_key_subnet_id
@@ -841,6 +842,7 @@ impl Recovery {
                     subnet_id,
                     checkpoint_height,
                     state_hash,
+                    initial_dkg_subnet_id,
                     chain_key_config,
                     replacement_nodes,
                     registry_params,

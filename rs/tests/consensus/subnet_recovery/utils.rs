@@ -428,6 +428,7 @@ pub mod local {
             upload_method: _, // ignored to choose "local" in local recoveries, see below
             wait_for_cup_node,
             chain_key_subnet_id,
+            initial_dkg_subnet_id,
             next_step,
             skip,
         } = &subnet_recovery.params;
@@ -485,6 +486,7 @@ pub mod local {
         let upload_method_cli = r#"--upload-method "local" "#.to_string();
         let wait_for_cup_node_cli = opt_cli_arg!(wait_for_cup_node);
         let chain_key_subnet_id_cli = opt_cli_arg!(chain_key_subnet_id);
+        let initial_dkg_subnet_id_cli = opt_cli_arg!(initial_dkg_subnet_id);
         let next_step_cli = opt_cli_arg!(next_step);
         let skip_cli = opt_vec_cli_arg!(skip);
 
@@ -509,6 +511,7 @@ pub mod local {
             {upload_method_cli} \
             {wait_for_cup_node_cli} \
             {chain_key_subnet_id_cli} \
+            {initial_dkg_subnet_id_cli} \
             {next_step_cli} \
             {skip_cli}"#
         )

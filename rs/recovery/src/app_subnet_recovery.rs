@@ -189,6 +189,11 @@ pub struct AppSubnetRecoveryArgs {
     #[clap(long, value_parser=crate::util::subnet_id_from_str)]
     pub chain_key_subnet_id: Option<SubnetId>,
 
+    /// Optional subnet used to run `setup_initial_dkg` during recovery CUP proposal.
+    /// If not set, the request is handled by the NNS subnet.
+    #[clap(long, value_parser=crate::util::subnet_id_from_str)]
+    pub initial_dkg_subnet_id: Option<SubnetId>,
+
     /// If present the tool will start execution for the provided step, skipping the initial ones
     #[clap(long = "resume")]
     pub next_step: Option<StepType>,
@@ -373,6 +378,12 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                     self.params.chain_key_subnet_id = read_optional_subnet_id(
                         &self.logger,
                         "Enter ID of subnet to reshare Chain keys from: ",
+                    );
+                }
+                if self.params.initial_dkg_subnet_id.is_none() {
+                    self.params.initial_dkg_subnet_id = read_optional_subnet_id(
+                        &self.logger,
+                        "Enter ID of subnet to setup initial DKG on (default: NNS): ",
                     );
                 }
             }
@@ -579,6 +590,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                     state_params.hash,
                     self.params.replacement_nodes.as_ref().unwrap_or(&default),
                     None,
+                    self.params.initial_dkg_subnet_id,
                     self.params.chain_key_subnet_id,
                 )?))
             }

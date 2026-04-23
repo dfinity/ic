@@ -2273,6 +2273,7 @@ fn create_canister_xnet_called_from_nns() {
 fn setup_initial_dkg_sender_on_nns() {
     let own_subnet = subnet_test_id(1);
     let nns_subnet = subnet_test_id(2);
+    let other_subnet = subnet_test_id(3);
     let nns_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
@@ -2281,12 +2282,15 @@ fn setup_initial_dkg_sender_on_nns() {
         .with_caller(nns_subnet, nns_canister)
         .build();
     let nodes = vec![node_test_id(1)];
-    let args = ic00::SetupInitialDKGArgs::new(nodes, RegistryVersion::new(1));
-    test.inject_call_to_ic00(
-        Method::SetupInitialDKG,
-        args.encode(),
-        test.canister_creation_fee().real(),
-    );
+    for subnet_id in [None, Some(own_subnet), Some(other_subnet), Some(nns_subnet)] {
+        let args =
+            ic00::SetupInitialDKGArgs::new(nodes.clone(), RegistryVersion::new(1), subnet_id);
+        test.inject_call_to_ic00(
+            Method::SetupInitialDKG,
+            args.encode(),
+            test.canister_creation_fee().real(),
+        );
+    }
     test.execute_all();
     assert_eq!(0, test.xnet_messages().len());
 }
@@ -2303,33 +2307,38 @@ fn setup_initial_dkg_sender_not_on_nns() {
         .with_caller(other_subnet, other_canister)
         .build();
     let nodes = vec![node_test_id(1)];
-    let args = ic00::SetupInitialDKGArgs::new(nodes, RegistryVersion::new(1));
-    test.inject_call_to_ic00(
-        Method::SetupInitialDKG,
-        args.encode(),
-        test.canister_creation_fee().real(),
-    );
+    for subnet_id in [None, Some(own_subnet), Some(other_subnet), Some(nns_subnet)] {
+        let args =
+            ic00::SetupInitialDKGArgs::new(nodes.clone(), RegistryVersion::new(1), subnet_id);
+        test.inject_call_to_ic00(
+            Method::SetupInitialDKG,
+            args.encode(),
+            test.canister_creation_fee().real(),
+        );
+    }
     test.execute_all();
-    let response = test.xnet_messages()[0].clone();
-    assert_eq!(
-        response,
-        Response {
-            originator: other_canister,
-            respondent: CanisterId::from(own_subnet),
-            originator_reply_callback: CallbackId::new(0),
-            refund: test.canister_creation_fee().real(),
-            response_payload: Payload::Reject(RejectContext::new(
-                RejectCode::CanisterError,
-                format!(
-                    "{} is called by {}. It can only be called by NNS.",
-                    ic00::Method::SetupInitialDKG,
-                    other_canister,
-                )
-            )),
-            deadline: NO_DEADLINE,
-        }
-        .into()
-    );
+    assert_eq!(test.xnet_messages().len(), 4);
+    for response in test.xnet_messages().iter() {
+        assert_eq!(
+            response.clone(),
+            Response {
+                originator: other_canister,
+                respondent: CanisterId::from(own_subnet),
+                originator_reply_callback: CallbackId::new(0),
+                refund: test.canister_creation_fee().real(),
+                response_payload: Payload::Reject(RejectContext::new(
+                    RejectCode::CanisterError,
+                    format!(
+                        "{} is called by {}. It can only be called by NNS.",
+                        ic00::Method::SetupInitialDKG,
+                        other_canister,
+                    )
+                )),
+                deadline: NO_DEADLINE,
+            }
+            .into()
+        );
+    }
 }
 
 #[test]
