@@ -60,6 +60,7 @@ jobs:
     environment: Nightly Tests
     steps:
       - *checkout
+      - uses: ./.github/actions/netrc
       - *backup-pod-access
       - name: Run NNS Recovery Test with Mainnet State
         uses: ./.github/actions/bazel
