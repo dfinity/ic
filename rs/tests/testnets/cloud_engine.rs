@@ -307,10 +307,36 @@ pub fn setup(env: TestEnv) {
 
     // Build unassigned nodes distributed across 30 datacenters.
     // Each datacenter gets its own node operator with 2 unassigned nodes.
+    //
+    // Reward types are assigned in a circular rotation across all nodes globally:
+    // node index 0 -> type4.1, 1 -> type4.2, 2 -> type4.3, 3 -> type4.1, ...
+    // With 30 DCs * 2 nodes = 60 nodes total, this yields exactly 20 nodes
+    // of each of type4.1, type4.2, and type4.3.
+    const CLOUD_ENGINE_REWARD_TYPES: &[(NodeRewardType, &str)] = &[
+        (NodeRewardType::Type4dot1, "type4.1"),
+        (NodeRewardType::Type4dot2, "type4.2"),
+        (NodeRewardType::Type4dot3, "type4.3"),
+    ];
+    const NODES_PER_DC: usize = 2;
+
     // let mut cloud_engine_subnet = Subnet::new(SubnetType::CloudEngine);
+    let mut node_counter: usize = 0;
     for (i, dc) in DATA_CENTERS.iter().enumerate() {
         let operator_principal = PrincipalId::new_user_test_id(1000 + i as u64);
         let provider_principal = PrincipalId::new_user_test_id(2000 + i as u64);
+
+        // Determine the reward types for this DC's nodes (before incrementing counter).
+        let dc_node_types: Vec<(NodeRewardType, &'static str)> = (0..NODES_PER_DC)
+            .map(|n| {
+                CLOUD_ENGINE_REWARD_TYPES[(node_counter + n) % CLOUD_ENGINE_REWARD_TYPES.len()]
+            })
+            .collect();
+
+        // Aggregate rewardable_nodes counts per type string for this operator.
+        let mut rewardable_nodes: BTreeMap<String, u32> = BTreeMap::new();
+        for (_, type_str) in &dc_node_types {
+            *rewardable_nodes.entry(type_str.to_string()).or_insert(0) += 1;
+        }
 
         ic = ic
             .add_data_center(DataCenterRecord {
@@ -326,9 +352,9 @@ pub fn setup(env: TestEnv) {
                 name: format!("operator_{}", dc.id),
                 principal_id: operator_principal,
                 node_provider_principal_id: Some(provider_principal),
-                node_allowance: 2,
+                node_allowance: NODES_PER_DC as u64,
                 dc_id: dc.id.to_string(),
-                rewardable_nodes: BTreeMap::from([("type4.1".to_string(), 2)]),
+                rewardable_nodes,
             });
 
         // 1 CloudEngine node per DC
@@ -338,17 +364,15 @@ pub fn setup(env: TestEnv) {
         //         .with_node_reward_type(NodeRewardType::Type4),
         // );
 
-        // 1 unassigned node per DC
-        ic = ic.with_unassigned_node(
-            Node::new()
-                .with_node_operator_principal_id(operator_principal)
-                .with_node_reward_type(NodeRewardType::Type4),
-        );
-        ic = ic.with_unassigned_node(
-            Node::new()
-                .with_node_operator_principal_id(operator_principal)
-                .with_node_reward_type(NodeRewardType::Type4),
-        );
+        // Add unassigned nodes for this DC using the circularly-assigned types.
+        for (reward_type, _) in dc_node_types {
+            ic = ic.with_unassigned_node(
+                Node::new()
+                    .with_node_operator_principal_id(operator_principal)
+                    .with_node_reward_type(reward_type),
+            );
+            node_counter += 1;
+        }
     }
 
     ic = ic
