@@ -4574,7 +4574,8 @@ impl ExecutionEnvironment {
     /// Removes `StopCanisterCall`s from `SubnetCallContextManager` that have no
     /// corresponding `StopCanisterContext` in the target canister's stop contexts.
     /// These can arise from a bug fixed in commit 52e7b89 where a `StopCanisterCall`
-    /// was pushed but never removed when the target canister was already stopped.
+    /// was pushed but never removed when the `stop_canister` call failed, e.g., because
+    /// the target canister was already stopped or the sender was not a controller.
     fn cleanup_orphaned_stop_canister_calls(
         &self,
         state: &mut ReplicatedState,
