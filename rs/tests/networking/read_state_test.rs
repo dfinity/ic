@@ -366,8 +366,7 @@ fn test_invalid_request_rejected(env: TestEnv, endpoint: Endpoint) {
     }
 }
 
-fn test_absent_request(env: TestEnv, version: read_state::Version) {
-    let endpoint = Endpoint::CanisterReadState(version);
+fn test_absent_request(env: TestEnv, endpoint: Endpoint) {
     for absent_request_id in [&[0; 32], &[8; 32], &[255; 32]] {
         let path = vec!["request_status".into(), absent_request_id.into()];
         let cert = read_state(&env, vec![path], endpoint).expect("Valid request");
@@ -722,8 +721,7 @@ fn make_update_call(agent: &Agent, canister_id: &Principal) -> (RequestId, Vec<u
     (request_id, result)
 }
 
-fn test_request_path(env: TestEnv, version: read_state::Version) {
-    let endpoint = Endpoint::CanisterReadState(version);
+fn test_request_path(env: TestEnv, endpoint: Endpoint) {
     let node = get_first_app_node(&env);
     let effective_canister_id = node.effective_canister_id();
     let agent = node.build_default_agent();
@@ -760,8 +758,7 @@ fn test_request_path(env: TestEnv, version: read_state::Version) {
     assert_eq!(value.to_vec(), result);
 }
 
-fn test_request_path_access(env: TestEnv, version: read_state::Version) {
-    let endpoint = Endpoint::CanisterReadState(version);
+fn test_request_path_access(env: TestEnv, endpoint: Endpoint) {
     let node = get_first_app_node(&env);
     let effective_canister_id = node.effective_canister_id();
     let agent = node.build_default_agent();
@@ -1096,18 +1093,15 @@ fn main() -> Result<()> {
         .add_test(systest!(test_subnet_canister_ranges_paths; read_state::Version::V3))
         .add_test(systest!(test_canister_canister_ranges_paths; read_state::Version::V2))
         .add_test(systest!(test_canister_canister_ranges_paths; read_state::Version::V3))
-        // Only /api/{v2,v3}/canister/read_state endpoints are tested because paths with
-        // /request_status prefix are not supported by /api/{v2,v3}/subnet/read_state
-        .add_test(systest!(test_request_path; read_state::Version::V2))
-        .add_test(systest!(test_request_path; read_state::Version::V3))
-        // Only /api/{v2,v3}/canister/read_state endpoints are tested because paths with
-        // /request_status prefix are not supported by /api/{v2,v3}/subnet/read_state
-        .add_test(systest!(test_request_path_access; read_state::Version::V2))
-        .add_test(systest!(test_request_path_access; read_state::Version::V3))
-        // Only /api/{v2,v3}/canister/read_state endpoints are tested because paths with
-        // /request_status prefix are not supported by /api/{v2,v3}/subnet/read_state
-        .add_test(systest!(test_absent_request; read_state::Version::V2))
-        .add_test(systest!(test_absent_request; read_state::Version::V3))
+        .add_test(systest!(test_request_path; Endpoint::CanisterReadState(read_state::Version::V2)))
+        .add_test(systest!(test_request_path; Endpoint::CanisterReadState(read_state::Version::V3)))
+        .add_test(systest!(test_request_path; Endpoint::SubnetReadState(read_state::Version::V3)))
+        .add_test(systest!(test_request_path_access; Endpoint::CanisterReadState(read_state::Version::V2)))
+        .add_test(systest!(test_request_path_access; Endpoint::CanisterReadState(read_state::Version::V3)))
+        .add_test(systest!(test_request_path_access; Endpoint::SubnetReadState(read_state::Version::V3)))
+        .add_test(systest!(test_absent_request; Endpoint::CanisterReadState(read_state::Version::V2)))
+        .add_test(systest!(test_absent_request; Endpoint::CanisterReadState(read_state::Version::V3)))
+        .add_test(systest!(test_absent_request; Endpoint::SubnetReadState(read_state::Version::V3)))
         // Only /api/{v2,v3}/canister/read_state endpoints are tested because paths with
         // /canister prefix are not supported by /api/{v2,v3}/subnet/read_state
         .add_test(systest!(test_canister_path; read_state::Version::V2))
