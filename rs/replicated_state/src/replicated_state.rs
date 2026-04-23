@@ -497,7 +497,7 @@ impl ReplicatedState {
     /// Removes `StopCanisterCall`s from `SubnetCallContextManager` that have no
     /// corresponding `StopCanisterContext` in the target canister's stop contexts.
     /// These can arise from a bug fixed in commit 52e7b89 where a `StopCanisterCall`
-    /// was pushed but never removed when the `stop_canister` call failed, e.g., because
+    /// was pushed but never removed when the `stop_canister` completed, e.g., when
     /// the target canister was already stopped or the sender was not a controller.
     pub fn remove_orphaned_stop_canister_calls(&mut self) {
         let call_ids_with_context: BTreeSet<StopCanisterCallId> = self
