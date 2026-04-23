@@ -92,7 +92,7 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
       service_file: the label pointing the canister candid interface file.
       visibility: visibility of the Wasm target
       opt: opt-level for the Wasm target
-      lto: LTO flavor for the Wasm target. One of "fat" (default, best runtime
+      lto: Link time optimization (LTO) flavor for the Wasm target. One of "fat" (default, best runtime
         perf, slowest build) or "thin" (parallelizable, faster build, slightly
         larger/slower wasm; intended for test-only canisters).
       extra_rustc_flags: additional rustc flags to pass during the Wasm build
