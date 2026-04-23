@@ -1141,49 +1141,34 @@ pub async fn get_node_metrics(logger: &Logger, ip: &IpAddr) -> Option<NodeMetric
         manifest_height: Height::from(0),
         _ip: *ip,
     };
+    let set_height = |height: &mut Height, val: &str| match val.trim().parse::<u64>() {
+        Ok(val) => *height = Height::from(val),
+        Err(err) => {
+            warn!(logger, "Couldn't parse height {}: {}", val, err)
+        }
+    };
     for line in body.split('\n') {
         let mut parts = line.split(' ');
         if let (Some(prefix), Some(height)) = (parts.next(), parts.next()) {
             match prefix {
-                r#"artifact_pool_consensus_height_stat{pool_type="validated",stat="max",type="catch_up_package"}"# => {
-                    match height.trim().parse::<u64>() {
-                        Ok(val) => node_heights.catch_up_package_height = Height::from(val),
-                        error => {
-                            warn!(logger, "Couldn't parse height {}: {:?}", height, error)
-                        }
-                    }
+                r#"artifact_pool_consensus_height_stat{pool_type="validated",stat="max",type="catch_up_package"}"# =>
+                {
+                    set_height(&mut node_heights.catch_up_package_height, height);
                 }
-                r#"artifact_pool_certification_height_stat{pool_type="validated",stat="max",type="certification"}"# => {
-                    match height.trim().parse::<u64>() {
-                        Ok(val) => node_heights.certification_height = Height::from(val),
-                        error => {
-                            warn!(logger, "Couldn't parse height {}: {:?}", height, error)
-                        }
-                    }
+                r#"artifact_pool_certification_height_stat{pool_type="validated",stat="max",type="certification"}"# =>
+                {
+                    set_height(&mut node_heights.certification_height, height);
                 }
-                r#"artifact_pool_certification_height_stat{pool_type="validated",stat="max",type="certification_share"}"# => {
-                    match height.trim().parse::<u64>() {
-                        Ok(val) => node_heights.certification_share_height = Height::from(val),
-                        error => {
-                            warn!(logger, "Couldn't parse height {}: {:?}", height, error)
-                        }
-                    }
+                r#"artifact_pool_certification_height_stat{pool_type="validated",stat="max",type="certification_share"}"# =>
+                {
+                    set_height(&mut node_heights.certification_share_height, height);
                 }
-                r#"artifact_pool_consensus_height_stat{pool_type="validated",stat="max",type="finalization"}"# => {
-                    match height.trim().parse::<u64>() {
-                        Ok(val) => node_heights.finalization_height = Height::from(val),
-                        error => {
-                            warn!(logger, "Couldn't parse height {}: {:?}", height, error)
-                        }
-                    }
+                r#"artifact_pool_consensus_height_stat{pool_type="validated",stat="max",type="finalization"}"# =>
+                {
+                    set_height(&mut node_heights.finalization_height, height);
                 }
-                "state_manager_last_computed_manifest_height" => {
-                    match height.trim().parse::<u64>() {
-                        Ok(val) => node_heights.manifest_height = Height::from(val),
-                        error => {
-                            warn!(logger, "Couldn't parse height {}: {:?}", height, error)
-                        }
-                    }
+                r#"state_manager_last_computed_manifest_height"# => {
+                    set_height(&mut node_heights.manifest_height, height);
                 }
                 _ => continue,
             }
