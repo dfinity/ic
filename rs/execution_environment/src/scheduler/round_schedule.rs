@@ -36,7 +36,12 @@ const fn from_ca(ca: ComputeAllocation) -> AccumulatedPriority {
     AccumulatedPriority::new(ca.as_percent() as i64 * MULTIPLIER)
 }
 
+/// Soft upper bound for accumulated priority (in rounds). We apply an
+/// exponential decay to AP values greater than this.
 const AP_ROUNDS_MAX: i64 = 5;
+
+/// Soft lower bound for accumulated priority (in rounds). We apply an
+/// exponential decay to AP values less than this.
 const AP_ROUNDS_MIN: i64 = -20;
 
 /// Round metrics required to prioritize a canister.
@@ -58,24 +63,12 @@ pub(super) struct CanisterRoundState {
 }
 
 impl CanisterRoundState {
-    pub fn new(
-        canister: &CanisterState,
-        canister_priority: &mut CanisterPriority,
-        round: ExecutionRound,
-    ) -> Self {
-        // debug_assert_eq!(
-        //     canister.has_long_execution(),
-        //     canister_priority.long_execution_start_round.is_some()
-        // );
-        // Ensure that `long_execution_progress` matches the canister state.
-        // FIXME: Drop this.
-        if canister.has_long_execution() {
-            canister_priority
-                .long_execution_start_round
-                .get_or_insert(round);
-        } else {
-            canister_priority.long_execution_start_round = None;
-        }
+    pub fn new(canister: &CanisterState, canister_priority: &mut CanisterPriority) -> Self {
+        // Ensure that `long_execution_start_round` matches the canister state.
+        debug_assert_eq!(
+            canister.has_long_execution(),
+            canister_priority.long_execution_start_round.is_some()
+        );
 
         let compute_allocation = from_ca(canister.compute_allocation());
         Self {
@@ -257,7 +250,6 @@ impl RoundSchedule {
     pub fn start_iteration(
         &mut self,
         state: &mut ReplicatedState,
-        current_round: ExecutionRound,
         is_first_iteration: bool,
         metrics: &SchedulerMetrics,
         logger: &ReplicaLogger,
@@ -293,7 +285,7 @@ impl RoundSchedule {
                             return None;
                         }
                         let priority = subnet_schedule.get_mut(*canister_id);
-                        CanisterRoundState::new(canister, priority, current_round)
+                        CanisterRoundState::new(canister, priority)
                     }
 
                     NextExecution::ContinueLong => {
@@ -301,7 +293,7 @@ impl RoundSchedule {
                             self.long_execution_canisters.insert(*canister_id);
                         }
                         let priority = subnet_schedule.get_mut(*canister_id);
-                        let rs = CanisterRoundState::new(canister, priority, current_round);
+                        let rs = CanisterRoundState::new(canister, priority);
                         long_executions_count += 1;
                         long_executions_compute_allocation += rs.compute_allocation;
                         rs

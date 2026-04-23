@@ -280,8 +280,7 @@ fn scheduler_long_execution_progress_across_checkpoints() {
         })
         .build();
 
-    let penalized_long_id = test.create_canister();
-    let other_long_id = test.create_canister();
+    let long_id = test.create_canister();
     let mut canister_ids = vec![];
     for _ in 0..num_canisters {
         let canister_id = test.create_canister();
@@ -289,45 +288,37 @@ fn scheduler_long_execution_progress_across_checkpoints() {
         canister_ids.push(canister_id);
     }
 
-    // Start a long execution on the (to be) penalized canister.
-    test.send_ingress(penalized_long_id, ingress(message_instructions));
+    // Start a long execution.
+    test.send_ingress(long_id, ingress(message_instructions));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    // Assert the canister has long execution progress.
-    let penalized = test.state().canister_priority(&penalized_long_id);
-    assert!(penalized.long_execution_start_round.is_some());
+    // Assert that there's long execution progress.
+    let priority = test.state().canister_priority(&long_id);
+    assert!(priority.long_execution_start_round.is_some());
+    let start_round = priority.long_execution_start_round;
 
-    // Start a long execution on another non-penalized canister.
-    test.send_ingress(other_long_id, ingress(message_instructions));
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
-    // Assert the other canister also has long execution progress.
-    let other = test.state().canister_priority(&other_long_id);
-    assert!(other.long_execution_start_round.is_some());
-
-    // Abort both canisters on checkpoint.
+    // Abort the long execution on checkpoint.
     test.execute_round(ExecutionRoundType::CheckpointRound);
 
-    // Assert that the penalized canister accumulated priority is higher (because it
-    // has been scheduled for longer).
-    let penalized = test.state().canister_priority(&penalized_long_id);
-    let other = test.state().canister_priority(&other_long_id);
-    assert_gt!(penalized.accumulated_priority, other.accumulated_priority);
+    // Assert that the long execution canister still has the same start round.
+    let priority = test.state().canister_priority(&long_id);
+    assert_eq!(priority.long_execution_start_round, start_round);
 
-    let penalized = test.state().canister_state(&penalized_long_id).unwrap();
-    let penalized_executed_before = penalized.system_state.canister_metrics().executed();
+    let canister = test.state().canister_state(&long_id).unwrap();
+    let executed_before = canister.system_state.canister_metrics().executed();
+    assert_gt!(executed_before, 0);
 
-    // Send a bunch of messages.
+    // Send a bunch of messages to the other canisters.
     for canister_id in &canister_ids {
         test.send_ingress(*canister_id, ingress(slice_instructions));
     }
 
-    // Assert that after the checkpoint the penalized canister continues its long execution.
+    // After the checkpoint, the long execution continues.
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    let penalized = test.state().canister_state(&penalized_long_id).unwrap();
+    let canister = test.state().canister_state(&long_id).unwrap();
     assert_eq!(
-        penalized_executed_before + 1,
-        penalized.system_state.canister_metrics().executed()
+        executed_before + 1,
+        canister.system_state.canister_metrics().executed()
     );
 }
 

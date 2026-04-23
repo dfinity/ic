@@ -490,7 +490,6 @@ impl SchedulerImpl {
             let scheduling_timer = self.metrics.round_inner_iteration_scheduling.start_timer();
             let iteration_schedule = round_schedule.start_iteration(
                 &mut state,
-                current_round,
                 is_first_iteration,
                 &self.metrics,
                 round_log,
@@ -1040,11 +1039,7 @@ impl SchedulerImpl {
     }
 
     /// Aborts paused execution above `max_paused_executions` based on scheduler priority.
-    fn abort_paused_executions_above_limit(
-        &self,
-        state: &mut ReplicatedState,
-        current_round: ExecutionRound,
-    ) {
+    fn abort_paused_executions_above_limit(&self, state: &mut ReplicatedState) {
         // TODO(DSM-103): Have RoundSchedule return an iterator over prioritized paused executions.
         let cost_schedule = state.get_own_cost_schedule();
         let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
@@ -1053,11 +1048,7 @@ impl SchedulerImpl {
             .filter_map(|(canister_id, canister)| {
                 if canister.has_paused_execution() {
                     let canister_priority = subnet_schedule.get_mut(*canister_id);
-                    Some(CanisterRoundState::new(
-                        canister,
-                        canister_priority,
-                        current_round,
-                    ))
+                    Some(CanisterRoundState::new(canister, canister_priority))
                 } else {
                     None
                 }
@@ -1075,7 +1066,6 @@ impl SchedulerImpl {
                     subnet_schedule,
                     &self.exec_env,
                     cost_schedule,
-                    current_round,
                     &self.log,
                 );
             });
@@ -1105,16 +1095,10 @@ impl SchedulerImpl {
                 state.metadata.expected_compiled_wasms = Arc::new(BTreeSet::new());
 
                 // Abort all paused execution before the checkpoint.
-                abort_all_paused_executions(
-                    state,
-                    &self.exec_env,
-                    cost_schedule,
-                    current_round,
-                    &self.log,
-                );
+                abort_all_paused_executions(state, &self.exec_env, cost_schedule, &self.log);
             }
             ExecutionRoundType::OrdinaryRound => {
-                self.abort_paused_executions_above_limit(state, current_round);
+                self.abort_paused_executions_above_limit(state);
             }
         }
 
@@ -2228,17 +2212,12 @@ fn abort_canister(
     subnet_schedule: &mut SubnetSchedule,
     exec_env: &ExecutionEnvironment,
     cost_schedule: CanisterCyclesCostSchedule,
-    current_round: ExecutionRound,
     log: &ReplicaLogger,
 ) {
     if exec_env.abort_canister(canister, log, cost_schedule) {
         // Reset `executed_slices` to zero.
         let canister_priority = subnet_schedule.get_mut(canister.canister_id());
         canister_priority.executed_slices = 0;
-        // FIXME: This should be a debug_assert.
-        canister_priority
-            .long_execution_start_round
-            .get_or_insert(current_round);
     }
 }
 
@@ -2250,18 +2229,10 @@ pub fn abort_all_paused_executions(
     state: &mut ReplicatedState,
     exec_env: &ExecutionEnvironment,
     cost_schedule: CanisterCyclesCostSchedule,
-    current_round: ExecutionRound,
     log: &ReplicaLogger,
 ) {
     let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
     for canister in canister_states.values_mut() {
-        abort_canister(
-            canister,
-            subnet_schedule,
-            exec_env,
-            cost_schedule,
-            current_round,
-            log,
-        );
+        abort_canister(canister, subnet_schedule, exec_env, cost_schedule, log);
     }
 }
