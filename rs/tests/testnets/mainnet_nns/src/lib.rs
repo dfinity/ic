@@ -70,7 +70,7 @@ const MAINNET_NNS_DAPP_CANISTER_ID: &str = "qoctq-giaaa-aaaaa-aaaea-cai";
 // `ic-replay` and `ic-recovery` respectively and avoid compatibility bugs. Though, if some changes
 // were made to them specifically to make this testnet work, then we should use the HEAD version
 // and switch the corresponding flag to `true`. We must then hope that no incompatible changes were
-// also also introduced. It is thus then advised to switch back the flag to `false` when the changes
+// also introduced. It is thus then advised to switch back the flag to `false` when the changes
 // reach mainnet NNS.
 const USE_HEAD_IC_REPLAY: bool = false;
 const USE_HEAD_IC_RECOVERY: bool = false;
