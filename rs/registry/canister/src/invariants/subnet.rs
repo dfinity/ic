@@ -268,28 +268,20 @@ fn check_node_type4_iff_cloud_engine(
     node_records: &[NodeRecord],
 ) -> Result<(), InvariantCheckError> {
     let is_cloud_engine = subnet_record.subnet_type == i32::from(SubnetType::CloudEngine);
-    let is_cloud_engine_node = |node: &NodeRecord| {
-        let Some(reward_type) = node
-            .node_reward_type
-            .and_then(|t| NodeRewardType::try_from(t).ok())
-        else {
-            return false;
-        };
-        match reward_type {
-            NodeRewardType::Unspecified
-            | NodeRewardType::Type0
-            | NodeRewardType::Type1
-            | NodeRewardType::Type2
-            | NodeRewardType::Type3
-            | NodeRewardType::Type3dot1
-            | NodeRewardType::Type1dot1 => false,
-            NodeRewardType::Type4
-            | NodeRewardType::Type4dot1
-            | NodeRewardType::Type4dot2
-            | NodeRewardType::Type4dot3
-            | NodeRewardType::Type4dot4
-            | NodeRewardType::Type4dot5 => true,
-        }
+    let is_cloud_engine_node = |node: &NodeRecord| match node.node_reward_type() {
+        NodeRewardType::Unspecified
+        | NodeRewardType::Type0
+        | NodeRewardType::Type1
+        | NodeRewardType::Type2
+        | NodeRewardType::Type3
+        | NodeRewardType::Type3dot1
+        | NodeRewardType::Type1dot1 => false,
+        NodeRewardType::Type4
+        | NodeRewardType::Type4dot1
+        | NodeRewardType::Type4dot2
+        | NodeRewardType::Type4dot3
+        | NodeRewardType::Type4dot4
+        | NodeRewardType::Type4dot5 => true,
     };
     let is_node_ok = |node: &NodeRecord| is_cloud_engine == is_cloud_engine_node(node);
 
