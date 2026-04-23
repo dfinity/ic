@@ -6,6 +6,7 @@ use crate::common::storage::types::{
 use candid::{Nat, Principal};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc122::schema::{BTYPE_122_BURN, BTYPE_122_MINT};
+use icrc_ledger_types::icrc123::schema::{BTYPE_123_FREEZE_ACCOUNT, BTYPE_123_UNFREEZE_ACCOUNT};
 use rusqlite::{Connection, params};
 use tempfile::tempdir;
 
@@ -960,6 +961,208 @@ fn test_update_account_balances_authorized_burn() -> anyhow::Result<()> {
         balance,
         Some(Nat::from(700_u64)),
         "AuthorizedBurn should debit the 'from' account (1000 - 300 = 700)"
+    );
+
+    Ok(())
+}
+
+// Helper function to create a test block with a FreezeAccount operation
+fn create_test_freeze_account_block(index: u64, timestamp: u64, principal: &[u8]) -> RosettaBlock {
+    let account = Account {
+        owner: Principal::from_slice(principal),
+        subaccount: None,
+    };
+
+    let transaction = IcrcTransaction {
+        operation: IcrcOperation::FreezeAccount {
+            account,
+            caller: Some(Principal::from_slice(b"\x01")),
+            mthd: Some("freeze".to_string()),
+            reason: Some("suspicious".to_string()),
+        },
+        memo: None,
+        created_at_time: Some(timestamp),
+    };
+
+    let icrc_block = IcrcBlock {
+        parent_hash: None,
+        transaction,
+        timestamp,
+        effective_fee: None,
+        fee_collector: None,
+        fee_collector_block_index: None,
+        btype: Some(BTYPE_123_FREEZE_ACCOUNT.to_string()),
+    };
+
+    RosettaBlock {
+        index,
+        block: icrc_block,
+    }
+}
+
+// Helper function to create a test block with an UnfreezeAccount operation
+fn create_test_unfreeze_account_block(
+    index: u64,
+    timestamp: u64,
+    principal: &[u8],
+) -> RosettaBlock {
+    let account = Account {
+        owner: Principal::from_slice(principal),
+        subaccount: None,
+    };
+
+    let transaction = IcrcTransaction {
+        operation: IcrcOperation::UnfreezeAccount {
+            account,
+            caller: Some(Principal::from_slice(b"\x01")),
+            mthd: Some("unfreeze".to_string()),
+            reason: Some("cleared".to_string()),
+        },
+        memo: None,
+        created_at_time: Some(timestamp),
+    };
+
+    let icrc_block = IcrcBlock {
+        parent_hash: None,
+        transaction,
+        timestamp,
+        effective_fee: None,
+        fee_collector: None,
+        fee_collector_block_index: None,
+        btype: Some(BTYPE_123_UNFREEZE_ACCOUNT.to_string()),
+    };
+
+    RosettaBlock {
+        index,
+        block: icrc_block,
+    }
+}
+
+#[test]
+fn test_store_and_read_freeze_account_block() -> anyhow::Result<()> {
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir.path().join("test_freeze_account_db.sqlite");
+    let mut connection = Connection::open(&db_path)?;
+    schema::create_tables(&connection)?;
+
+    let principal = vec![1, 2, 3, 4];
+    let block = create_test_freeze_account_block(0, 1000000000, &principal);
+
+    store_blocks(&mut connection, vec![block.clone()])?;
+
+    let retrieved = get_block_at_idx(&connection, 0)?.unwrap();
+
+    assert_eq!(retrieved.index, block.index);
+    assert_eq!(retrieved.get_timestamp(), 1000000000);
+    assert_eq!(
+        retrieved.block.btype,
+        Some(BTYPE_123_FREEZE_ACCOUNT.to_string()),
+        "btype should be preserved as BTYPE_123_FREEZE_ACCOUNT"
+    );
+
+    match &retrieved.block.transaction.operation {
+        IcrcOperation::FreezeAccount {
+            account,
+            caller,
+            mthd,
+            reason,
+        } => {
+            assert_eq!(
+                *account,
+                Account {
+                    owner: Principal::from_slice(&principal),
+                    subaccount: None,
+                }
+            );
+            assert_eq!(*caller, Some(Principal::from_slice(b"\x01")));
+            assert_eq!(*mthd, Some("freeze".to_string()));
+            assert_eq!(*reason, Some("suspicious".to_string()));
+        }
+        _ => panic!("Expected FreezeAccount operation"),
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_store_and_read_unfreeze_account_block() -> anyhow::Result<()> {
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir.path().join("test_unfreeze_account_db.sqlite");
+    let mut connection = Connection::open(&db_path)?;
+    schema::create_tables(&connection)?;
+
+    let principal = vec![5, 6, 7, 8];
+    let block = create_test_unfreeze_account_block(0, 2000000000, &principal);
+
+    store_blocks(&mut connection, vec![block.clone()])?;
+
+    let retrieved = get_block_at_idx(&connection, 0)?.unwrap();
+
+    assert_eq!(retrieved.index, block.index);
+    assert_eq!(retrieved.get_timestamp(), 2000000000);
+    assert_eq!(
+        retrieved.block.btype,
+        Some(BTYPE_123_UNFREEZE_ACCOUNT.to_string()),
+        "btype should be preserved as BTYPE_123_UNFREEZE_ACCOUNT"
+    );
+
+    match &retrieved.block.transaction.operation {
+        IcrcOperation::UnfreezeAccount {
+            account,
+            caller,
+            mthd,
+            reason,
+        } => {
+            assert_eq!(
+                *account,
+                Account {
+                    owner: Principal::from_slice(&principal),
+                    subaccount: None,
+                }
+            );
+            assert_eq!(*caller, Some(Principal::from_slice(b"\x01")));
+            assert_eq!(*mthd, Some("unfreeze".to_string()));
+            assert_eq!(*reason, Some("cleared".to_string()));
+        }
+        _ => panic!("Expected UnfreezeAccount operation"),
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_update_account_balances_freeze() -> anyhow::Result<()> {
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir.path().join("test_balance_freeze_db.sqlite");
+    let mut connection = Connection::open(&db_path)?;
+    schema::create_tables(&connection)?;
+
+    let principal = vec![1, 2, 3, 4];
+    let account = Account {
+        owner: Principal::from_slice(&principal),
+        subaccount: None,
+    };
+
+    // First mint tokens so the account has a balance
+    let mint_block = create_test_authorized_mint_block(0, 1000000000, &principal, 1000);
+    // Then freeze the account
+    let freeze_block = create_test_freeze_account_block(1, 1000000001, &principal);
+    // Then unfreeze
+    let unfreeze_block = create_test_unfreeze_account_block(2, 1000000002, &principal);
+
+    store_blocks(
+        &mut connection,
+        vec![mint_block, freeze_block, unfreeze_block],
+    )?;
+
+    update_account_balances(&mut connection, false, BALANCE_SYNC_BATCH_SIZE_DEFAULT)?;
+
+    // Balance should remain unchanged after freeze/unfreeze (only the mint matters)
+    let balance = get_account_balance_at_block_idx(&connection, &account, 2)?;
+    assert_eq!(
+        balance,
+        Some(Nat::from(1000_u64)),
+        "Freeze/unfreeze should not change account balance"
     );
 
     Ok(())

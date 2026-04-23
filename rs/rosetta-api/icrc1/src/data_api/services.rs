@@ -1318,9 +1318,17 @@ mod test {
                                             .try_into()
                                             .unwrap()
                                     }
-                                    IcrcOperation::FreezeAccount { .. }
-                                    | IcrcOperation::UnfreezeAccount { .. }
-                                    | IcrcOperation::FreezePrincipal { .. }
+                                    IcrcOperation::FreezeAccount { account, .. }
+                                    | IcrcOperation::UnfreezeAccount { account, .. } => {
+                                        account
+                                            == search_transactions_request
+                                                .account_identifier
+                                                .clone()
+                                                .unwrap()
+                                                .try_into()
+                                                .unwrap()
+                                    }
+                                    IcrcOperation::FreezePrincipal { .. }
                                     | IcrcOperation::UnfreezePrincipal { .. } => false,
                                 })
                                 .count();
