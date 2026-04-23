@@ -350,7 +350,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
 
     let msg = "subnet recovery works!";
     if cfg.use_mainnet_state {
-        assert_subnet_is_healthy_with_mainnet_state(
+        assert_subnet_is_healthy_without_signature_verification(
             &nns_subnet.nodes().collect::<Vec<_>>(),
             &current_version,
             app_can_id,
@@ -697,7 +697,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     info!(logger, "Ensure the subnet is healthy after the recovery");
     let new_msg = "subnet recovery still works!";
     if cfg.use_mainnet_state {
-        assert_subnet_is_healthy_with_mainnet_state(
+        assert_subnet_is_healthy_without_signature_verification(
             &nns_subnet.nodes().collect::<Vec<_>>(),
             &upgrade_version,
             app_can_id,
@@ -878,7 +878,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: NNSRecoverySameNodes, 
 /// So we create a new agent that does not verify the query response signatures for the time being.
 /// A long-term solution involves modifying the agent to fetch the root subnet_id from the HTTP
 /// status endpoint.
-fn assert_subnet_is_healthy_with_mainnet_state(
+fn assert_subnet_is_healthy_without_signature_verification(
     subnet: &[IcNodeSnapshot],
     target_version: &ReplicaVersion,
     can_id: Principal,
