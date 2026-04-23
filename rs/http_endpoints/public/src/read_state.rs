@@ -1334,6 +1334,10 @@ mod test {
         )
         .expect_err("Should fail");
         assert_eq!(err.status, StatusCode::FORBIDDEN);
+        assert_eq!(
+            err.message,
+            "The user tries to access Request ID not signed by the caller."
+        );
     }
 
     #[rstest]
@@ -1367,5 +1371,10 @@ mod test {
         )
         .expect_err("Should fail");
         assert_eq!(err.status, StatusCode::FORBIDDEN);
+        assert_eq!(
+            err.message,
+            "The user tries to access request IDs for canisters \
+                not belonging to sender delegation targets."
+        );
     }
 }
