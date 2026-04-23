@@ -582,7 +582,7 @@ impl ExecutionEnvironment {
 
     /// Executes a (mgmt canister) operation on the canister state
     /// for a given canister ID.
-    /// Changes to the canister state and round limits
+    /// Changes to the canister state, message, and round limits
     /// are discarded if the operation fails with an error.
     ///
     /// If the operation fails with an error, the amount of cycles
