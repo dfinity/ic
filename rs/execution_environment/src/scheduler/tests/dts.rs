@@ -759,12 +759,25 @@ fn abort_paused_executions_keeps_highest_priority() {
     test.send_ingress(mid, ingress(100));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // `low` started a round earlier, so it has long execution progress.
-    assert!(
+    // The low compute allocation canister started execution a round earlier.
+    assert_eq!(
         test.state()
             .canister_priority(&low)
-            .long_execution_start_round
-            .is_some()
+            .long_execution_start_round,
+        Some(ExecutionRound::new(0))
+    );
+    // The high and mid compute allocation canisters started a round later.
+    assert_eq!(
+        test.state()
+            .canister_priority(&high)
+            .long_execution_start_round,
+        Some(ExecutionRound::new(1))
+    );
+    assert_eq!(
+        test.state()
+            .canister_priority(&mid)
+            .long_execution_start_round,
+        Some(ExecutionRound::new(1))
     );
 
     // `low` has the most executed slices (highest priority among long

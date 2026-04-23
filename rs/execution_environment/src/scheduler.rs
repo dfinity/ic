@@ -498,12 +498,12 @@ impl SchedulerImpl {
             if iteration_schedule.is_empty() {
                 break state;
             }
+            drop(scheduling_timer);
 
             // In every iteration after the first, recompute the subnet available memory,
             // before taking out the canisters.
+            let preparation_timer = self.metrics.round_inner_iteration_prep.start_timer();
             if !is_first_iteration {
-                // FIXME: This overlaps with `round_inner_iteration_scheduling`.
-                let _preparation_timer = self.metrics.round_inner_iteration_prep.start_timer();
                 round_limits.subnet_available_memory =
                     self.exec_env.scaled_subnet_available_memory(&state);
             }
@@ -511,7 +511,7 @@ impl SchedulerImpl {
             let canisters = state.take_canister_states();
             let (active_canisters_partitioned_by_cores, inactive_canisters) =
                 iteration_schedule.partition_canisters_to_cores(canisters);
-            drop(scheduling_timer);
+            drop(preparation_timer);
 
             let execution_timer = self.metrics.round_inner_iteration_exe.start_timer();
             let instructions_before = round_limits.instructions;

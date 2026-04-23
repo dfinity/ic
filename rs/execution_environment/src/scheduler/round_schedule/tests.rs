@@ -1155,17 +1155,17 @@ impl CanisterArchetype {
 
     /// Returns true if the given round is the start of a new activity cycle.
     fn is_new_cycle(&self, round: usize) -> bool {
-        round % self.activity_cycle() == 0
+        round.is_multiple_of(self.activity_cycle())
     }
 
     /// Returns the heap delta debit produced by the canister after the given number
     /// of full rounds, given its rate limiting pattern. Zero if the canister is not
     /// rate limited or this is not the start of a new rate limiting cycle.
     fn heap_delta_produced(&self, full_rounds: usize) -> NumBytes {
-        if let Some(ref rl) = self.rate_limiting {
-            if full_rounds % rl.unlimited_rounds == 0 {
-                return HEAP_DELTA_RATE_LIMIT * rl.limited_rounds as u64;
-            }
+        if let Some(ref rl) = self.rate_limiting
+            && full_rounds.is_multiple_of(rl.unlimited_rounds)
+        {
+            return HEAP_DELTA_RATE_LIMIT * rl.limited_rounds as u64;
         }
         NumBytes::new(0)
     }
@@ -1316,11 +1316,6 @@ fn run_multi_round_simulation(
     }
 
     for round in 0..num_rounds {
-        fixture.round_schedule = RoundScheduleBuilder::new()
-            .with_cores(scheduler_cores)
-            .with_heap_delta_rate_limit(HEAP_DELTA_RATE_LIMIT)
-            .build();
-
         // --- Setup phase: prepare canister state based round and inputs ---
         for (idx, sim) in sims.iter_mut().enumerate() {
             let canister_id = sim.canister_id;
@@ -1354,6 +1349,10 @@ fn run_multi_round_simulation(
         }
 
         // --- start_iteration ---
+        fixture.round_schedule = RoundScheduleBuilder::new()
+            .with_cores(scheduler_cores)
+            .with_heap_delta_rate_limit(HEAP_DELTA_RATE_LIMIT)
+            .build();
         let current_round = ExecutionRound::new(round as u64);
         let iteration = fixture.start_iteration_at_round(current_round, true);
 

@@ -1,4 +1,5 @@
 use super::*;
+use crate::CanisterPriority;
 use ic_base_types::subnet_id_try_from_option;
 use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule as CanisterCyclesCostScheduleProto;
 use ic_protobuf::state::system_metadata::v1::ThresholdSignatureAgreementsEntry;
@@ -13,7 +14,7 @@ use ic_protobuf::{
     },
     types::v1 as pb_types,
 };
-use ic_types::subnet_id_try_from_protobuf;
+use ic_types::{AccumulatedPriority, ExecutionRound, subnet_id_try_from_protobuf};
 
 impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
     fn from(item: &NetworkTopology) -> Self {
@@ -420,7 +421,7 @@ impl
                         executed_slices: entry.executed_slices,
                         long_execution_start_round: entry
                             .long_execution_start_round
-                            .map(|round| ExecutionRound::new(round)),
+                            .map(ExecutionRound::new),
                         last_full_execution_round: ExecutionRound::new(
                             entry.last_full_execution_round,
                         ),

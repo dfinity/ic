@@ -286,18 +286,16 @@ impl RoundSchedule {
 
                 let canister_round_state = match canister.next_execution() {
                     NextExecution::StartNew => {
-                        // Don't schedule canisters that started the round with a long execution and
-                        // completed it. We need canisters to move between the long execution and new
-                        // execution pools, so the two groups' priorities don't drift apart.
+                        // Don't schedule canisters that completed a long execution this round. We need
+                        // canisters to move between the long execution and new execution pools, so the
+                        // two groups' priorities don't drift apart.
                         if self.long_execution_canisters.contains(canister_id) {
                             return None;
                         }
-                        CanisterRoundState::new(
-                            canister,
-                            subnet_schedule.get_mut(*canister_id),
-                            current_round,
-                        )
+                        let priority = subnet_schedule.get_mut(*canister_id);
+                        CanisterRoundState::new(canister, priority, current_round)
                     }
+
                     NextExecution::ContinueLong => {
                         if is_first_iteration {
                             self.long_execution_canisters.insert(*canister_id);
@@ -308,6 +306,7 @@ impl RoundSchedule {
                         long_executions_compute_allocation += rs.compute_allocation;
                         rs
                     }
+
                     NextExecution::None => {
                         if is_first_iteration && !canister.must_be_in_schedule() {
                             let canister_priority = subnet_schedule.get(canister_id);
@@ -319,6 +318,7 @@ impl RoundSchedule {
                         }
                         return None;
                     }
+
                     NextExecution::ContinueInstallCode => return None,
                 };
 
@@ -500,7 +500,8 @@ impl RoundSchedule {
         subnet_schedule.retain(|canister_id, _| canister_states.contains_key(canister_id));
 
         // Add all canisters that we (tried to) schedule this round to the subnet
-        // schedule; and apply their respective priority credits.
+        // schedule; and charge any immediate or deferred (on long execution completion)
+        // costs.
         for canister_id in &self.scheduled_canisters {
             let Some(canister) = canister_states.get_mut(canister_id) else {
                 // Canister was deleted.
@@ -544,7 +545,7 @@ impl RoundSchedule {
         let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
 
         // Grant all canisters in the subnet schedule their compute allocation.
-        // And collect all canisters' compute allocations; plus global AP and CA sums.
+        // Collect each canister's compute allocation; and compute total AP and CA.
         let mut total_ap = ZERO;
         let mut total_ca = ZERO;
         let mut compute_allocations = Vec::with_capacity(subnet_schedule.len());
@@ -564,6 +565,20 @@ impl RoundSchedule {
                 // Maybe drop idle canisters with 0-100 AP in start_iteration instead?
                 canister_priority.accumulated_priority -=
                     ONE_HUNDRED_PERCENT.min(canister_priority.accumulated_priority);
+            }
+
+            // Apply an exponential decay to AP values outside the [AP_ROUNDS_MIN,
+            // AP_ROUNDS_MAX] range to limit any runaway AP.
+            const AP_MAX: AccumulatedPriority =
+                AccumulatedPriority::new(AP_ROUNDS_MAX * 100 * MULTIPLIER);
+            const AP_MIN: AccumulatedPriority =
+                AccumulatedPriority::new(AP_ROUNDS_MIN * 100 * MULTIPLIER);
+            if canister_priority.accumulated_priority > AP_MAX {
+                canister_priority.accumulated_priority =
+                    AP_MAX + (canister_priority.accumulated_priority - AP_MAX) * 80 / 100;
+            } else if canister_priority.accumulated_priority < AP_MIN {
+                canister_priority.accumulated_priority =
+                    AP_MIN + (canister_priority.accumulated_priority - AP_MIN) * 80 / 100;
             }
 
             total_ap += canister_priority.accumulated_priority;
@@ -610,22 +625,8 @@ impl RoundSchedule {
             }
         }
 
-        // Apply an exponential decay to AP values outside the [AP_ROUNDS_MIN,
-        // AP_ROUNDS_MAX] range to limit any runaway AP.
         let mut accumulated_priority_deviation = 0.0;
-        for (_, canister_priority) in subnet_schedule.iter_mut() {
-            const AP_MAX: AccumulatedPriority =
-                AccumulatedPriority::new(AP_ROUNDS_MAX * 100 * MULTIPLIER);
-            const AP_MIN: AccumulatedPriority =
-                AccumulatedPriority::new(AP_ROUNDS_MIN * 100 * MULTIPLIER);
-            if canister_priority.accumulated_priority > AP_MAX {
-                canister_priority.accumulated_priority =
-                    AP_MAX + (canister_priority.accumulated_priority - AP_MAX) * 80 / 100;
-            } else if canister_priority.accumulated_priority < AP_MIN {
-                canister_priority.accumulated_priority =
-                    AP_MIN + (canister_priority.accumulated_priority - AP_MIN) * 80 / 100;
-            }
-
+        for (_, canister_priority) in subnet_schedule.iter() {
             let accumulated_priority =
                 canister_priority.accumulated_priority.get() as f64 / MULTIPLIER as f64;
             accumulated_priority_deviation += accumulated_priority * accumulated_priority;
