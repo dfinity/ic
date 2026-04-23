@@ -1,5 +1,5 @@
+use self::payload_builder::create_early_remote_transcripts;
 use super::{crypto_validate_dealing, payload_builder, utils};
-use crate::remote::{build_callback_id_config_map, merge_configs};
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{
     dkg::{DkgPayloadValidationError, DkgPool},
@@ -15,10 +15,7 @@ use ic_types::{
     batch::ValidationContext,
     consensus::{
         Block, BlockPayload,
-        dkg::{
-            DkgDataPayload, DkgPayloadCreationError, DkgPayloadValidationFailure, DkgSummary,
-            InvalidDkgPayloadReason,
-        },
+        dkg::{DkgDataPayload, DkgPayloadValidationFailure, DkgSummary, InvalidDkgPayloadReason},
     },
 };
 use prometheus::IntCounterVec;
@@ -120,8 +117,6 @@ pub fn validate_payload(
                 });
 
             validate_dealings_payload(
-                subnet_id,
-                registry_client,
                 crypto,
                 pool_reader,
                 dkg_pool,
@@ -139,11 +134,8 @@ pub fn validate_payload(
 }
 
 // Validates the payload containing dealings.
-#[allow(clippy::too_many_arguments)]
 #[allow(clippy::result_large_err)]
 fn validate_dealings_payload(
-    subnet_id: SubnetId,
-    registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,
     pool_reader: &PoolReader<'_>,
     dkg_pool: &dyn DkgPool,
@@ -189,20 +181,6 @@ fn validate_dealings_payload(
         return Err(InvalidDkgPayloadReason::DealerAlreadyDealt(dealer_id).into());
     }
 
-    let state = state_reader
-        .get_state_at(validation_context.certified_height)
-        .map_err(DkgPayloadCreationError::StateManagerError)?;
-
-    let remote_config_results = build_callback_id_config_map(
-        subnet_id,
-        registry_client,
-        state.get_ref(),
-        validation_context.registry_version,
-        last_summary,
-        log,
-    )?;
-    let configs = merge_configs(&last_summary.configs, &remote_config_results);
-
     // Check that all messages have a valid DKG config from the summary and the
     // dealer is valid, then verify each dealing.
     for message in &dealings.messages {
@@ -214,7 +192,7 @@ fn validate_dealings_payload(
             continue;
         }
 
-        let Some(config) = configs.get(&message.content.dkg_id) else {
+        let Some(config) = last_summary.configs.get(&message.content.dkg_id) else {
             return Err(InvalidDkgPayloadReason::MissingDkgConfigForDealing.into());
         };
 
@@ -224,12 +202,14 @@ fn validate_dealings_payload(
 
     // If we have early transcripts, we compare them
     if !dealings.transcripts_for_remote_subnets.is_empty() {
-        let expected_transcripts = payload_builder::create_early_remote_transcripts(
+        let expected_transcripts = create_early_remote_transcripts(
             pool_reader,
             crypto,
             parent,
-            remote_config_results,
-            log,
+            last_summary,
+            state_reader,
+            validation_context,
+            log.clone(),
         )?;
 
         if dealings.transcripts_for_remote_subnets != expected_transcripts {
@@ -266,13 +246,11 @@ mod tests {
         dkg::ChangeAction,
         p2p::consensus::{MutablePool, PoolMutationsProducer},
     };
-    use ic_interfaces_state_manager::Labeled;
     use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_registry_keys::make_subnet_record_key;
     use ic_test_utilities_consensus::fake::FakeContentSigner;
     use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_state::get_initial_state;
     use ic_test_utilities_types::ids::{
         NODE_1, NODE_2, NODE_3, SUBNET_1, SUBNET_2, node_test_id, subnet_test_id,
     };
@@ -729,13 +707,6 @@ mod tests {
                         .build(),
                 )],
             );
-            state_manager
-                .get_mut()
-                .expect_get_latest_certified_state()
-                .return_const(Some(Labeled::new(
-                    Height::new(0),
-                    Arc::new(get_initial_state(0, 0)),
-                )));
 
             // Both summary registry versions should be 1 initially
             let summary_block = pool.as_cache().summary_block();
@@ -787,9 +758,6 @@ mod tests {
             let key_manager = Arc::new(Mutex::new(key_manager));
             let dkg_impl = DkgImpl::new(
                 node_id,
-                subnet_id,
-                registry.clone(),
-                state_manager.clone(),
                 crypto.clone(),
                 pool.get_cache(),
                 key_manager,
@@ -810,10 +778,9 @@ mod tests {
             };
 
             // It should be possible to validate the dealing
-            let configs = dkg_summary.configs.iter().collect();
             let result = dkg_impl.validate_dealings_for_dealer(
                 &dkg_pool,
-                &configs,
+                &dkg_summary.configs,
                 start_height,
                 vec![dealing],
             );
