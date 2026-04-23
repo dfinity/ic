@@ -4580,25 +4580,25 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         canister_states: &BTreeMap<CanisterId, Arc<CanisterState>>,
     ) {
+        // Build a set of all call IDs that have a matching StopCanisterContext.
+        let call_ids_with_context: BTreeSet<StopCanisterCallId> = canister_states
+            .values()
+            .flat_map(|canister| match canister.system_state.get_status() {
+                CanisterStatus::Stopping { stop_contexts, .. } => stop_contexts.as_slice(),
+                _ => &[],
+            })
+            .filter_map(|ctx| *ctx.call_id())
+            .collect();
+
         let orphaned: Vec<(StopCanisterCallId, CanisterId)> = state
             .metadata
             .subnet_call_context_manager
             .iter_stop_canister_calls()
             .filter_map(|(call_id, stop_canister_call)| {
-                let canister_id = stop_canister_call.effective_canister_id;
-                let has_context = match canister_states
-                    .get(&canister_id)
-                    .map(|c| c.system_state.get_status())
-                {
-                    Some(CanisterStatus::Stopping { stop_contexts, .. }) => stop_contexts
-                        .iter()
-                        .any(|ctx| ctx.call_id() == &Some(*call_id)),
-                    _ => false,
-                };
-                if has_context {
+                if call_ids_with_context.contains(call_id) {
                     None
                 } else {
-                    Some((*call_id, canister_id))
+                    Some((*call_id, stop_canister_call.effective_canister_id))
                 }
             })
             .collect();
