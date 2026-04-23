@@ -784,7 +784,7 @@ fn get_canister_test_ids(snapshot: &TopologySnapshot) -> (CanisterId, [CanisterI
     )
 }
 
-fn query_calls_subnet_v4(env: TestEnv) {
+fn query_calls_subnet_v3(env: TestEnv) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
     let socket = get_socket_addr(&snapshot);
