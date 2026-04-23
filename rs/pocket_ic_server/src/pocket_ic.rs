@@ -4841,6 +4841,7 @@ impl Operation for QueryRequest {
                     Arc::new(StandaloneIngressSigVerifier),
                     NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     query_handler,
+                    subnet_id,
                     self.version,
                 )
                 .with_malicious_flags(pic.malicious_flags.clone())
@@ -4851,6 +4852,9 @@ impl Operation for QueryRequest {
                 let version_str = match self.version {
                     query::Version::V2 => "v2",
                     query::Version::V3 => "v3",
+                    query::Version::SubnetV3 => {
+                        unreachable!("SubnetV3 query not supported in PocketIC")
+                    }
                 };
 
                 let request = axum::http::Request::builder()
