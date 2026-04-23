@@ -5,6 +5,7 @@ load(
     "IC_GATEWAY_RUNTIME_DEPS",
     "IMPERSONATE_UPSTREAMS_RUNTIME_DEPS",
     "MAINNET_ENV",
+    "MAINNET_NNS_SYSTEM_TEST_RUNTIME_DEPS",
     "MESSAGE_CANISTER_RUNTIME_DEPS",
 )
 load("//rs/tests:system_tests.bzl", "system_test_nns")
@@ -25,13 +26,17 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/ic_os/os_tools/manual_guestos_recovery",
+        "//rs/nervous_system/root",
         "//rs/recovery",
         "//rs/tests/consensus/subnet_recovery:lib",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nested",
+        "//rs/tests/testnets/mainnet_nns:lib",
         "//rs/types/types",
         "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-agent",
         "@crate_index//:rand",
         "@crate_index//:serde_json",
         "@crate_index//:slog",
@@ -55,17 +60,33 @@ system_test_nns(
     ],
 )
 
+# To run this test,
+#
+#     bazel \
+#         test \
+#         --set-required-host-features=dc=zh1 \
+#         --test_timeout=7200 \  # 2 hours
+#         //rs/tests/nested/nns_recovery:nr_large_with_mainnet_state
+#
+# You should use `--test_timeout=7200` because the test is expected to take a very long time.
+# You should also have your `SSH_AUTH_SOCK` environment variable set, and the corresponding SSH agent
+# should be running and have permission to fetch mainnet test data.
 system_test_nns(
-    name = "nr_large",
+    name = "nr_large_with_mainnet_state",
     enable_head_nns_variant = False,
     env = ENV,
+    env_inherit = ["SSH_AUTH_SOCK"],
+    guestos = "mainnet_nns_dev",  # necessary for configuring NNS public key
     guestos_update = "test",
-    setupos = True,
+    setupos = "mainnet_nns_dev",
     tags = [
-        "system_test_large",
+        "colocate",
+        "manual",  # to prevent the job to be ran twice.
+        "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
+        "requires-network",  # Because mainnet state is downloaded (and used).
     ],
-    test_timeout = "eternal",
-    runtime_deps = RUNTIME_DEPS,
+    test_timeout = "eternal",  # "eternal" (1 hour) is not even enough for this test. Use `--test_timeout=7200` when running it.
+    runtime_deps = RUNTIME_DEPS | MAINNET_NNS_SYSTEM_TEST_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",

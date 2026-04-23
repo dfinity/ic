@@ -767,6 +767,8 @@ impl SystemMetadata {
     /// roll back `Stopping` states on all subnet B canisters.
     ///
     /// Notes:
+    ///  * `prev_state_hash` has just been set by `take_tip()` to the checkpoint
+    ///    hash (checked against the hash in the CUP). It must be preserved.
     ///  * `own_subnet_type` has just been set during `load_checkpoint()`, based on
     ///    the registry subnet record of the subnet that this node is part of.
     ///  * `batch_time`, `network_topology` and `own_subnet_features` will be set

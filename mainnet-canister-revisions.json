@@ -80,12 +80,12 @@
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
   "internet_identity_backend": {
-    "sha256": "5dc3dec9b91e8cf384248f9a4c6265dcb3c2b294dd0d2362490d600ddfde4733",
-    "tag": "release-2026-04-03"
+    "sha256": "8de10f01747b8f0ef890ba27181474a1b6bfe7b3f3f76687ecee6bb331d6a7c2",
+    "tag": "release-2026-04-21"
   },
   "internet_identity_frontend": {
-    "sha256": "bbbac12ca3ccf84301dd6e1fc29c197cdfbb282e664a430c4322e52257377cbf",
-    "tag": "release-2026-04-03"
+    "sha256": "ea7c21b71eb6f1bce1d501eb944751fe3f907b578da1687309bfd62ce1690546",
+    "tag": "release-2026-04-21"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
@@ -100,8 +100,8 @@
     "sha256": "a7c87d163a0cc69f6a5e4ed11f9a99618bde8658d21e8d84207963bb2400347c"
   },
   "nns_dapp_test": {
-    "sha256": "5e9a6458895f620f6e46e482e984eb82c79814bbe834444448b05877adee89a0",
-    "tag": "proposal-141440"
+    "sha256": "074d5d074783413ea8330bd7c05d4036241aa495071973094bd9e7627a6e2747",
+    "tag": "proposal-141543"
   },
   "node-rewards": {
     "rev": "cafe032cdc97bc6eeb2cffd47222e830e9827646",
