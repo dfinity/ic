@@ -1814,6 +1814,9 @@ impl From<pb::SuccessfulProposalExecutionValue> for Option<api::SuccessfulPropos
             ProposalType::TakeCanisterSnapshot(ok) => {
                 api::SuccessfulProposalExecutionValue::TakeCanisterSnapshot(ok.into())
             }
+            ProposalType::Batch(ok) => {
+                api::SuccessfulProposalExecutionValue::Batch(ok.into())
+            }
         };
 
         Some(result)
@@ -1824,6 +1827,18 @@ impl From<pb::CreateCanisterAndInstallCodeOk> for api::CreateCanisterAndInstallC
     fn from(item: pb::CreateCanisterAndInstallCodeOk) -> Self {
         Self {
             canister_id: item.canister_id,
+        }
+    }
+}
+
+impl From<pb::BatchOk> for api::BatchOk {
+    fn from(item: pb::BatchOk) -> Self {
+        Self {
+            sub_results: item
+                .sub_results
+                .into_iter()
+                .map(Option::<api::SuccessfulProposalExecutionValue>::from)
+                .collect(),
         }
     }
 }

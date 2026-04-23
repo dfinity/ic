@@ -2069,6 +2069,7 @@ pub struct ProposalInfo {
 pub enum SuccessfulProposalExecutionValue {
     CreateCanisterAndInstallCode(CreateCanisterAndInstallCodeOk),
     TakeCanisterSnapshot(TakeCanisterSnapshotOk),
+    Batch(BatchOk),
 }
 
 /// The result of a successful CreateCanisterAndInstallCode proposal execution.
@@ -2083,6 +2084,14 @@ pub struct TakeCanisterSnapshotOk {
     pub snapshot_id: Vec<u8>,
 }
 
+/// The result of successfully executing a Batch proposal.
+/// Each element corresponds to the same-indexed sub-action in the batch.
+/// Sub-actions that produce no value have `None`.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug)]
+pub struct BatchOk {
+    pub sub_results: Vec<Option<SuccessfulProposalExecutionValue>>,
+}
+
 impl From<CreateCanisterAndInstallCodeOk> for SuccessfulProposalExecutionValue {
     fn from(ok: CreateCanisterAndInstallCodeOk) -> Self {
         Self::CreateCanisterAndInstallCode(ok)
@@ -2092,6 +2101,12 @@ impl From<CreateCanisterAndInstallCodeOk> for SuccessfulProposalExecutionValue {
 impl From<TakeCanisterSnapshotOk> for SuccessfulProposalExecutionValue {
     fn from(ok: TakeCanisterSnapshotOk) -> Self {
         Self::TakeCanisterSnapshot(ok)
+    }
+}
+
+impl From<BatchOk> for SuccessfulProposalExecutionValue {
+    fn from(ok: BatchOk) -> Self {
+        Self::Batch(ok)
     }
 }
 

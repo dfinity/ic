@@ -256,9 +256,14 @@ type TakeCanisterSnapshotOk = record {
   snapshot_id : blob;
 };
 
+type BatchOk = record {
+  sub_results : vec opt SuccessfulProposalExecutionValue;
+};
+
 type SuccessfulProposalExecutionValue = variant {
   CreateCanisterAndInstallCode : CreateCanisterAndInstallCodeOk;
   TakeCanisterSnapshot : TakeCanisterSnapshotOk;
+  Batch : BatchOk;
 };
 
 type CreateServiceNervousSystem = record {

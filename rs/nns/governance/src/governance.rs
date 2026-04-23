@@ -33,11 +33,11 @@ use crate::{
     pb::{
         proposal_conversions::{ProposalDisplayOptions, proposal_data_to_info},
         v1::{
-            self as pb, ArchivedMonthlyNodeProviderRewards, Ballot, CreateServiceNervousSystem,
-            Followees, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
-            Governance as GovernanceProto, GovernanceError, KnownNeuron, ListKnownNeuronsResponse,
-            ManageNeuron, MonthlyNodeProviderRewards, Motion, NetworkEconomics, NeuronState,
-            NeuronsFundAuditInfo, NeuronsFundData,
+            self as pb, ArchivedMonthlyNodeProviderRewards, Ballot, BatchOk,
+            CreateServiceNervousSystem, Followees, GetNeuronsFundAuditInfoRequest,
+            GetNeuronsFundAuditInfoResponse, Governance as GovernanceProto, GovernanceError,
+            KnownNeuron, ListKnownNeuronsResponse, ManageNeuron, MonthlyNodeProviderRewards,
+            Motion, NetworkEconomics, NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
             NeuronsFundParticipation as NeuronsFundParticipationPb,
             NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
             ProposalData, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary, RewardEvent,
@@ -66,6 +66,7 @@ use crate::{
             settle_neurons_fund_participation_response::{
                 self, NeuronsFundNeuron as NeuronsFundNeuronPb,
             },
+            successful_proposal_execution_value::ProposalType as SuccessfulProposalExecutionProposalType,
             swap_background_information,
         },
     },
@@ -4278,21 +4279,27 @@ impl Governance {
         proposal_id: u64,
         subactions: Vec<ValidProposalAction>,
     ) -> Result<Option<SuccessfulProposalExecutionValue>, GovernanceError> {
+        let mut sub_results = Vec::with_capacity(subactions.len());
         for (i, sub_action) in subactions.into_iter().enumerate() {
-            let sub_result = Box::pin(self.try_perform_action(proposal_id, sub_action)).await;
-
-            // DO NOT MERGE - Do NOT throw away Ok! Data is GOLD!!!
-            if let Err(e) = sub_result {
-                return Err(GovernanceError {
-                    error_message: format!(
-                        "Step {i} in batch proposal {proposal_id} failed: {}",
-                        e.error_message
-                    ),
-                    ..e
-                });
+            match Box::pin(self.try_perform_action(proposal_id, sub_action)).await {
+                Ok(value) => sub_results.push(value.unwrap_or_default()),
+                Err(e) => {
+                    return Err(GovernanceError {
+                        error_message: format!(
+                            "Step {i} in batch proposal {proposal_id} failed: {}",
+                            e.error_message
+                        ),
+                        ..e
+                    });
+                }
             }
         }
-        Ok(None)
+
+        Ok(Some(SuccessfulProposalExecutionValue {
+            proposal_type: Some(SuccessfulProposalExecutionProposalType::Batch(BatchOk {
+                sub_results,
+            })),
+        }))
     }
 
     fn try_perform_manage_network_economics(

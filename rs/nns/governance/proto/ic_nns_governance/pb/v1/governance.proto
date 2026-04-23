@@ -1281,6 +1281,7 @@ message SuccessfulProposalExecutionValue {
   oneof proposal_type {
     CreateCanisterAndInstallCodeOk create_canister_and_install_code = 1;
     TakeCanisterSnapshotOk take_canister_snapshot = 2;
+    BatchOk batch = 3;
   }
 }
 
@@ -1290,6 +1291,14 @@ message CreateCanisterAndInstallCodeOk {
 
 message TakeCanisterSnapshotOk {
   bytes snapshot_id = 1;
+}
+
+// The result of successfully executing a Batch proposal.
+// Each element corresponds to the same-indexed sub-action in the batch.
+// Sub-actions that produce no value have an empty SuccessfulProposalExecutionValue
+// (i.e. proposal_type is not set).
+message BatchOk {
+  repeated SuccessfulProposalExecutionValue sub_results = 1;
 }
 
 // This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
