@@ -339,7 +339,7 @@ impl CanisterManager {
     /// paths where the resize isn't the user-facing operation (e.g. first
     /// allocation during canister creation).
     #[allow(clippy::too_many_arguments)]
-    fn check_canister_settings(
+    fn check_and_update_canister_settings(
         &self,
         settings: CanisterSettings,
         canister: &mut CanisterState,
@@ -476,6 +476,21 @@ impl CanisterManager {
             }
         }
 
+        let reserved_balance_limit = settings
+            .reserved_cycles_limit()
+            .or(canister_reserved_balance_limit);
+        if let Some(limit) = reserved_balance_limit
+            && canister_reserved_balance > limit
+        {
+            return Err(CanisterManagerError::ReservedCyclesLimitIsTooLow {
+                cycles: canister_reserved_balance,
+                limit,
+            });
+        }
+        if let Some(limit) = settings.reserved_cycles_limit() {
+            canister.system_state.set_reserved_balance_limit(limit);
+        }
+
         let allocated_bytes = new_memory_bytes.saturating_sub(&old_memory_bytes);
         let reservation_cycles = self
             .cycles_account_manager
@@ -486,38 +501,26 @@ impl CanisterManager {
                 cost_schedule,
             )
             .real();
-        let reserved_balance_limit = settings
-            .reserved_cycles_limit()
-            .or(canister_reserved_balance_limit);
-
-        if let Some(limit) = reserved_balance_limit {
-            if canister_reserved_balance > limit {
-                return Err(CanisterManagerError::ReservedCyclesLimitIsTooLow {
-                    cycles: canister_reserved_balance,
-                    limit,
-                });
-            } else if canister_reserved_balance + reservation_cycles > limit {
-                return Err(
+        canister
+            .system_state
+            .reserve_cycles(reservation_cycles)
+            .map_err(|err| match err {
+                ReservationError::InsufficientCycles {
+                    requested,
+                    available,
+                } => CanisterManagerError::InsufficientCyclesInMemoryAllocation {
+                    memory_allocation: new_memory_allocation,
+                    available,
+                    threshold: requested,
+                },
+                ReservationError::ReservedLimitExceed { requested, limit } => {
                     CanisterManagerError::ReservedCyclesLimitExceededInMemoryAllocation {
                         memory_allocation: new_memory_allocation,
-                        requested: canister_reserved_balance + reservation_cycles,
+                        requested,
                         limit,
-                    },
-                );
-            }
-        }
-
-        // Note that this check does not include the freezing threshold to be
-        // consistent with the `reserve_cycles()` function, which moves
-        // cycles between the main and reserved balances without checking
-        // the freezing threshold.
-        if canister_cycles_balance < reservation_cycles {
-            return Err(CanisterManagerError::InsufficientCyclesInMemoryAllocation {
-                memory_allocation: new_memory_allocation,
-                available: canister_cycles_balance,
-                threshold: reservation_cycles,
-            });
-        }
+                    }
+                }
+            })?;
 
         let log_memory_limit = if let Some(requested_limit) = settings.log_memory_limit() {
             // User explicitly sets log_memory_limit: validate the limit
@@ -537,17 +540,23 @@ impl CanisterManager {
             if log_resize_needed {
                 let log_resize_instructions =
                     NumInstructions::new(canister_log_bytes_used.get() * LOG_RESIZE_COST_PER_BYTE);
-                let log_resize_cycles = self
-                    .cycles_account_manager
-                    .management_canister_cost(log_resize_instructions, subnet_size, cost_schedule)
-                    .real();
-                if canister_cycles_balance < reservation_cycles + threshold + log_resize_cycles {
-                    return Err(CanisterManagerError::LogResizeNotEnoughCycles {
-                        available: canister_cycles_balance,
-                        threshold: reservation_cycles + threshold,
-                        requested: log_resize_cycles,
-                    });
-                }
+                let log_resize_cycles = self.cycles_account_manager.management_canister_cost(
+                    log_resize_instructions,
+                    subnet_size,
+                    cost_schedule,
+                );
+                self.cycles_account_manager
+                    .consume_with_threshold(
+                        &mut canister.system_state,
+                        log_resize_cycles,
+                        threshold,
+                        true, // The caller is always a controller.
+                    )
+                    .map_err(|err| CanisterManagerError::LogResizeNotEnoughCycles {
+                        available: err.available,
+                        threshold: err.threshold,
+                        requested: err.requested,
+                    })?;
             }
             Some(requested_limit)
         } else {
@@ -574,18 +583,6 @@ impl CanisterManager {
         if let Some(wasm_memory_threshold) = settings.wasm_memory_threshold() {
             canister.system_state.wasm_memory_threshold = wasm_memory_threshold;
         }
-        if let Some(limit) = settings.reserved_cycles_limit() {
-            canister.system_state.set_reserved_balance_limit(limit);
-        }
-        canister
-            .system_state
-            .reserve_cycles(reservation_cycles)
-            .map_err(|err| CanisterManagerError::InvalidSettings {
-                message: format!(
-                    "Reserving cycles failed unexpectedly after settings validation: {:?}",
-                    err
-                ),
-            })?;
         if let Some(freezing_threshold) = settings.freezing_threshold() {
             canister.system_state.freeze_threshold = freezing_threshold;
         }
@@ -647,7 +644,7 @@ impl CanisterManager {
         let old_compute_allocation = canister.compute_allocation().as_percent();
         let old_log_bytes_used = canister.system_state.log_memory_store.bytes_used() as u64;
 
-        self.check_canister_settings(
+        self.check_and_update_canister_settings(
             settings,
             canister,
             &mut round_limits.subnet_available_memory,
@@ -670,36 +667,13 @@ impl CanisterManager {
                 .saturating_sub(old_compute_allocation - new_compute_allocation);
         }
 
-        // Deduct cycles and account instructions for log resize.
-        // Use consume_with_threshold with zero threshold instead of
-        // consume_cycles_for_management_canister_instructions to avoid
-        // recomputing the freezing threshold from post-mutation memory usage,
-        // which could fail despite validation having passed.
+        // Account instructions for log resize.
+        // Use pre-mutation bytes_used so that downsize operations (which drop
+        // old records) are charged for the actual work of reading/rewriting
+        // the original buffer, matching what validation checked.
         if log_resize_needed {
-            // Use pre-mutation bytes_used so that downsize operations (which drop
-            // old records) are charged for the actual work of reading/rewriting
-            // the original buffer, matching what validation checked.
             let log_resize_instructions =
                 NumInstructions::new(old_log_bytes_used * LOG_RESIZE_COST_PER_BYTE);
-            let log_resize_cycles = self.cycles_account_manager.management_canister_cost(
-                log_resize_instructions,
-                subnet_size,
-                cost_schedule,
-            );
-            let reveal_top_up = canister.system_state.controllers.contains(&sender);
-            self.cycles_account_manager
-                .consume_with_threshold(
-                    &mut canister.system_state,
-                    log_resize_cycles,
-                    Cycles::zero(),
-                    reveal_top_up,
-                )
-                .map_err(|err| CanisterManagerError::InvalidSettings {
-                    message: format!(
-                        "Consuming cycles for log resize failed unexpectedly after settings validation: {:?}",
-                        err
-                    ),
-                })?;
             round_limits.instructions -= as_round_instructions(log_resize_instructions);
         }
 
@@ -1493,7 +1467,7 @@ impl CanisterManager {
         // Canister creation's first-time allocation is a different event class
         // from user-triggered `log_memory_limit` resize — don't mix their
         // distributions. Pass `None` to skip observation here.
-        self.check_canister_settings(
+        self.check_and_update_canister_settings(
             settings,
             &mut new_canister,
             &mut round_limits.subnet_available_memory,
