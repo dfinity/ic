@@ -13,7 +13,7 @@ source /opt/ic/bin/metrics.sh
 # not yet been set up on the VM.
 function info() {
     echo "$@"
-    echo "$@" >/dev/ttyS0 || true
+    echo "init-config: $@" >/dev/ttyS0 || true
 }
 
 function mount_config_device() {
