@@ -237,7 +237,12 @@ impl Firewall {
                 | NodeRewardType::Type1dot1,
             ) => true,
             (
-                NodeRewardType::Type4,
+                NodeRewardType::Type4
+                | NodeRewardType::Type4dot1
+                | NodeRewardType::Type4dot2
+                | NodeRewardType::Type4dot3
+                | NodeRewardType::Type4dot4
+                | NodeRewardType::Type4dot5,
                 NodeRewardType::Unspecified
                 | NodeRewardType::Type0
                 | NodeRewardType::Type1
@@ -245,7 +250,12 @@ impl Firewall {
                 | NodeRewardType::Type3
                 | NodeRewardType::Type3dot1
                 | NodeRewardType::Type1dot1
-                | NodeRewardType::Type4,
+                | NodeRewardType::Type4
+                | NodeRewardType::Type4dot1
+                | NodeRewardType::Type4dot2
+                | NodeRewardType::Type4dot3
+                | NodeRewardType::Type4dot4
+                | NodeRewardType::Type4dot5,
             ) => true,
             (
                 NodeRewardType::Unspecified
@@ -255,7 +265,12 @@ impl Firewall {
                 | NodeRewardType::Type3
                 | NodeRewardType::Type3dot1
                 | NodeRewardType::Type1dot1,
-                NodeRewardType::Type4,
+                NodeRewardType::Type4
+                | NodeRewardType::Type4dot1
+                | NodeRewardType::Type4dot2
+                | NodeRewardType::Type4dot3
+                | NodeRewardType::Type4dot4
+                | NodeRewardType::Type4dot5,
             ) => false,
         }
     }
@@ -987,7 +1002,7 @@ mod tests {
     fn nftables_golden_assigned_replica_test() {
         // For assigned replicas, only Type4 (cloud engine) nodes have a different firewall
         for reward_type in NodeRewardType::iter()
-            .filter(|reward_type| *reward_type != NodeRewardType::Type4)
+            .filter(|reward_type| !is_cloud_engine_reward_type(*reward_type))
             .map(Some)
             .chain(std::iter::once(None))
         {
@@ -1016,7 +1031,7 @@ mod tests {
     fn nftables_unassigned_replica_golden_test() {
         // For unassigned replicas, only Type4 (cloud engine) nodes have a different firewall
         for reward_type in NodeRewardType::iter()
-            .filter(|reward_type| *reward_type != NodeRewardType::Type4)
+            .filter(|reward_type| !is_cloud_engine_reward_type(*reward_type))
             .map(Some)
             .chain(std::iter::once(None))
         {
@@ -1082,6 +1097,24 @@ mod tests {
                 NFTABLES_BOUNDARY_NODE_APP_SUBNET_GOLDEN_BYTES,
                 "boundary_node_app_subnet",
             );
+        }
+    }
+
+    fn is_cloud_engine_reward_type(reward_type: NodeRewardType) -> bool {
+        match reward_type {
+            NodeRewardType::Unspecified
+            | NodeRewardType::Type0
+            | NodeRewardType::Type1
+            | NodeRewardType::Type2
+            | NodeRewardType::Type3
+            | NodeRewardType::Type3dot1
+            | NodeRewardType::Type1dot1 => false,
+            NodeRewardType::Type4
+            | NodeRewardType::Type4dot1
+            | NodeRewardType::Type4dot2
+            | NodeRewardType::Type4dot3
+            | NodeRewardType::Type4dot4
+            | NodeRewardType::Type4dot5 => true,
         }
     }
 

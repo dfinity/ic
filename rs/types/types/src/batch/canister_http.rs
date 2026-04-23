@@ -1,5 +1,5 @@
 use crate::{
-    CountBytes, ReplicaVersion,
+    CanisterId, CountBytes, ReplicaVersion,
     canister_http::{
         CanisterHttpReject, CanisterHttpRequestId, CanisterHttpResponse,
         CanisterHttpResponseArtifact, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
@@ -45,9 +45,11 @@ pub enum FlexibleCanisterHttpError {
     },
     ResponsesTooLarge {
         callback_id: CallbackId,
-        metadata_shares: Vec<CanisterHttpResponseShare>,
+        all_seen_shares: Vec<CanisterHttpResponseShare>,
+        total_requests: u32,
+        min_responses: u32,
     },
-    TooManyRequestErrors {
+    TooManyRejects {
         callback_id: CallbackId,
         reject_responses: Vec<FlexibleCanisterHttpResponseWithProof>,
     },
@@ -58,7 +60,7 @@ impl FlexibleCanisterHttpError {
         match self {
             Self::Timeout { callback_id }
             | Self::ResponsesTooLarge { callback_id, .. }
-            | Self::TooManyRequestErrors { callback_id, .. } => *callback_id,
+            | Self::TooManyRejects { callback_id, .. } => *callback_id,
         }
     }
 }
@@ -83,10 +85,61 @@ pub struct FlexibleCanisterHttpResponseWithProof {
     pub proof: CanisterHttpResponseShare,
 }
 
+impl FlexibleCanisterHttpResponseWithProof {
+    pub fn count_bytes(
+        response: &CanisterHttpResponse,
+        proof: &CanisterHttpResponseShare,
+    ) -> usize {
+        Self::count_bytes_from_parts(&response.canister_id, response.content.count_bytes(), proof)
+    }
+
+    /// Same calculation as [`Self::count_bytes`] but from decomposed parts.
+    pub fn count_bytes_from_parts(
+        canister_id: &CanisterId,
+        content_size: usize,
+        proof: &CanisterHttpResponseShare,
+    ) -> usize {
+        let response_size = CanisterHttpResponse::count_bytes_from_parts(canister_id, content_size);
+        response_size + proof.count_bytes()
+    }
+}
+
 impl CountBytes for FlexibleCanisterHttpResponseWithProof {
     fn count_bytes(&self) -> usize {
         let Self { response, proof } = self;
-        response.count_bytes() + proof.count_bytes()
+        Self::count_bytes(response, proof)
+    }
+}
+
+impl CountBytes for FlexibleCanisterHttpError {
+    fn count_bytes(&self) -> usize {
+        match self {
+            Self::Timeout { callback_id } => callback_id.count_bytes(),
+            Self::ResponsesTooLarge {
+                callback_id,
+                all_seen_shares,
+                total_requests,
+                min_responses,
+            } => {
+                callback_id.count_bytes()
+                    + all_seen_shares
+                        .iter()
+                        .map(|s| s.count_bytes())
+                        .sum::<usize>()
+                    + std::mem::size_of_val(total_requests)
+                    + std::mem::size_of_val(min_responses)
+            }
+            Self::TooManyRejects {
+                callback_id,
+                reject_responses,
+            } => {
+                callback_id.count_bytes()
+                    + reject_responses
+                        .iter()
+                        .map(|r| r.count_bytes())
+                        .sum::<usize>()
+            }
+        }
     }
 }
 
@@ -152,6 +205,7 @@ impl From<CanisterHttpResponseWithConsensus> for pb::CanisterHttpResponseWithCon
                 })
                 .collect(),
             content_size: payload.proof.content.content_size,
+            is_reject: payload.proof.content.is_reject,
         }
     }
 }
@@ -193,6 +247,7 @@ impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWith
                         payload.hash,
                     )),
                     content_size: payload.content_size,
+                    is_reject: payload.is_reject,
                     registry_version: RegistryVersion::new(payload.registry_version),
                     replica_version: ReplicaVersion::try_from(payload.replica_version)
                         .map_err(|err| ProxyDecodeError::ReplicaVersionParseError(Box::new(err)))?,
@@ -288,6 +343,7 @@ impl From<CanisterHttpResponseShare> for pb::CanisterHttpShare {
                 registry_version: share.content.registry_version.get(),
                 replica_version: share.content.replica_version.into(),
                 content_size: share.content.content_size,
+                is_reject: share.content.is_reject,
             }),
             signature: Some(pb::CanisterHttpResponseSignature {
                 signer: share.signature.signer.get().into_vec(),
@@ -316,6 +372,7 @@ impl TryFrom<pb::CanisterHttpShare> for CanisterHttpResponseShare {
                 id,
                 content_hash,
                 content_size: metadata.content_size,
+                is_reject: metadata.is_reject,
                 registry_version,
                 replica_version,
             },
@@ -386,16 +443,21 @@ impl From<FlexibleCanisterHttpError> for pb::FlexibleCanisterHttpError {
                 ErrorDetails::Timeout(pb::FlexibleCanisterHttpTimeout {})
             }
             FlexibleCanisterHttpError::ResponsesTooLarge {
-                metadata_shares, ..
+                all_seen_shares,
+                total_requests,
+                min_responses,
+                ..
             } => ErrorDetails::ResponsesTooLarge(pb::FlexibleCanisterHttpResponsesTooLarge {
-                metadata_shares: metadata_shares
+                all_seen_shares: all_seen_shares
                     .into_iter()
                     .map(pb::CanisterHttpShare::from)
                     .collect(),
+                total_requests,
+                min_responses,
             }),
-            FlexibleCanisterHttpError::TooManyRequestErrors {
+            FlexibleCanisterHttpError::TooManyRejects {
                 reject_responses, ..
-            } => ErrorDetails::TooManyRequestErrors(pb::FlexibleCanisterHttpTooManyRequestErrors {
+            } => ErrorDetails::TooManyRejects(pb::FlexibleCanisterHttpTooManyRejects {
                 reject_responses: reject_responses
                     .into_iter()
                     .map(pb::FlexibleCanisterHttpResponseWithProof::from)
@@ -420,23 +482,25 @@ impl TryFrom<pb::FlexibleCanisterHttpError> for FlexibleCanisterHttpError {
                 Ok(FlexibleCanisterHttpError::Timeout { callback_id })
             }
             Some(ErrorDetails::ResponsesTooLarge(details)) => {
-                let metadata_shares = details
-                    .metadata_shares
+                let all_seen_shares = details
+                    .all_seen_shares
                     .into_iter()
                     .map(CanisterHttpResponseShare::try_from)
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(FlexibleCanisterHttpError::ResponsesTooLarge {
                     callback_id,
-                    metadata_shares,
+                    all_seen_shares,
+                    total_requests: details.total_requests,
+                    min_responses: details.min_responses,
                 })
             }
-            Some(ErrorDetails::TooManyRequestErrors(details)) => {
+            Some(ErrorDetails::TooManyRejects(details)) => {
                 let reject_responses = details
                     .reject_responses
                     .into_iter()
                     .map(FlexibleCanisterHttpResponseWithProof::try_from)
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok(FlexibleCanisterHttpError::TooManyRequestErrors {
+                Ok(FlexibleCanisterHttpError::TooManyRejects {
                     callback_id,
                     reject_responses,
                 })
@@ -536,6 +600,7 @@ mod tests {
                     4, 5, 6, 7,
                 ])),
                 content_size: 42,
+                is_reject: false,
                 registry_version: RegistryVersion::new(2),
                 replica_version: ReplicaVersion::default(),
             },

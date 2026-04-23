@@ -3498,6 +3498,26 @@ fn default_cost_schedule_on_cloud_engine() {
 }
 
 #[test]
+fn cloud_engine_with_registry() {
+    // Regression test: creating a cloud engine subnet with the registry ICP feature enabled
+    // must not trigger the registry invariant check failure
+    // "is a cloud engine subnet but some nodes do not have reward type 4".
+    let icp_features = IcpFeatures {
+        registry: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    };
+    let subnet_spec = SubnetSpec::default().with_cost_schedule(CanisterCyclesCostSchedule::Free);
+    let config = ExtendedSubnetConfigSet {
+        nns: Some(SubnetSpec::default()),
+        cloud_engine: vec![subnet_spec],
+        ..Default::default()
+    };
+    let _pic = PocketIcBuilder::new_with_config(config)
+        .with_icp_features(icp_features)
+        .build();
+}
+
+#[test]
 fn cloud_engine_default_effective_canister_id() {
     // Create a PocketIC instance with a single (cloud) engine and NNS subnet.
     let admin = Principal::anonymous();

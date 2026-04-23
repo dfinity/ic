@@ -176,6 +176,30 @@ impl Call {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+pub enum CallSubnet {
+    V4(PrincipalId),
+}
+
+impl CallSubnet {
+    pub async fn call(
+        self,
+        addr: SocketAddr,
+        ingress_message: IngressMessage,
+    ) -> reqwest::Response {
+        let CallSubnet::V4(subnet_id) = self;
+        let body = serde_cbor::to_vec(&ingress_message.envelope()).unwrap();
+        let url = format!("http://{addr}/api/v4/subnet/{subnet_id}/call");
+        reqwest::Client::new()
+            .post(url)
+            .body(body)
+            .header(CONTENT_TYPE, APPLICATION_CBOR)
+            .send()
+            .await
+            .unwrap()
+    }
+}
+
 pub struct Query {
     canister_id: PrincipalId,
     effective_canister_id: PrincipalId,
@@ -240,14 +264,14 @@ impl Query {
 pub struct CanisterReadState {
     paths: Vec<Path>,
     effective_canister_id: PrincipalId,
-    version: read_state::canister::Version,
+    version: read_state::Version,
 }
 
 impl CanisterReadState {
     pub fn new(
         paths: Vec<Path>,
         effective_canister_id: PrincipalId,
-        version: read_state::canister::Version,
+        version: read_state::Version,
     ) -> Self {
         Self {
             paths,
@@ -284,8 +308,8 @@ impl CanisterReadState {
         let body = serde_cbor::to_vec(&envelope).unwrap();
 
         let version_str = match self.version {
-            read_state::canister::Version::V2 => "v2",
-            read_state::canister::Version::V3 => "v3",
+            read_state::Version::V2 => "v2",
+            read_state::Version::V3 => "v3",
         };
 
         url.set_path(&format!(

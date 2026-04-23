@@ -2415,25 +2415,44 @@ fn metrics_are_observed_for_subnet_messages() {
 }
 
 #[test]
-fn ingress_deducts_execution_cost_from_canister_balance() {
-    let mut test = ExecutionTestBuilder::new().build();
-    let canister = test.universal_canister().unwrap();
-    let run = wasm().message_payload().append_and_reply().build();
-    let balance_before = test.canister_state(canister).system_state.balance();
-    let execution_cost_before = test.canister_execution_cost(canister);
-    test.ingress(canister, "update", run).unwrap();
-    let balance_after = test.canister_state(canister).system_state.balance();
-    let execution_cost_after = test.canister_execution_cost(canister);
-    assert_eq!(
-        balance_before - balance_after,
-        (execution_cost_after - execution_cost_before).real()
-    );
-    // Ensure that we charged some cycles. The actual value is unknown to us at
-    // this point but it is definitely larger that 1000.
-    assert_gt!(
-        (execution_cost_after - execution_cost_before).real(),
-        Cycles::new(1_000)
-    );
+fn ingress_deducts_execution_cost_from_canister_balance_and_updates_consumed_metrics() {
+    for cost_schedule in [
+        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        let mut test = ExecutionTestBuilder::new()
+            .with_cost_schedule(cost_schedule)
+            .build();
+        let canister = test.universal_canister().unwrap();
+        let run = wasm().message_payload().append_and_reply().build();
+        let balance_before = test.canister_state(canister).system_state.balance();
+        let execution_cost_before = test.canister_execution_cost(canister);
+        let consumed_cycles_before = *test
+            .canister_state(canister)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
+            .get(&CyclesUseCase::Instructions)
+            .unwrap_or(&NominalCycles::zero());
+        test.ingress(canister, "update", run).unwrap();
+        let balance_after = test.canister_state(canister).system_state.balance();
+        let execution_cost_after = test.canister_execution_cost(canister);
+        let consumed_cycles_after = *test
+            .canister_state(canister)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
+            .get(&CyclesUseCase::Instructions)
+            .unwrap_or(&NominalCycles::zero());
+
+        let execution_cost_diff = execution_cost_after - execution_cost_before;
+        assert_eq!(balance_before - balance_after, execution_cost_diff.real());
+        // Consumed cycles should be updated by the same amount as the execution cost.
+        assert_eq!(
+            consumed_cycles_after - consumed_cycles_before,
+            execution_cost_diff.nominal()
+        );
+    }
 }
 
 #[test]
@@ -3904,179 +3923,177 @@ fn replicated_query_does_not_burn_cycles_on_trap() {
 
 #[test]
 fn test_consumed_cycles_by_use_case_with_refund() {
-    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
-    let initial_cycles = Cycles::new(1_000_000_000_000);
-    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
-    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
-    let transferred_cycles = Cycles::new(1_000_000);
+    for cost_schedule in [
+        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        let mut test = ExecutionTestBuilder::new()
+            .with_cost_schedule(cost_schedule)
+            .with_manual_execution()
+            .build();
+        let initial_cycles = Cycles::new(1_000_000_000_000);
+        let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+        let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+        let transferred_cycles = Cycles::new(1_000_000);
 
-    let b_callback = wasm()
-        .accept_cycles(transferred_cycles)
-        .message_payload()
-        .append_and_reply()
-        .build();
+        let b_callback = wasm()
+            .accept_cycles(transferred_cycles)
+            .message_payload()
+            .append_and_reply()
+            .build();
 
-    let a_payload = wasm()
-        .call_with_cycles(
-            b_id,
-            "update",
-            call_args().other_side(b_callback.clone()),
-            transferred_cycles,
-        )
-        .build();
+        let a_payload = wasm()
+            .call_with_cycles(
+                b_id,
+                "update",
+                call_args().other_side(b_callback.clone()),
+                transferred_cycles,
+            )
+            .build();
 
-    let (message_id, _) = test.ingress_raw(a_id, "update", a_payload);
-    // Canister A sends the message to canister B.
-    test.execute_message(a_id);
-    test.induct_messages();
-    test.execute_message(b_id);
+        let (message_id, _) = test.ingress_raw(a_id, "update", a_payload);
+        // Canister A sends the message to canister B.
+        test.execute_message(a_id);
+        test.induct_messages();
+        test.execute_message(b_id);
 
-    let system_state = &mut test.canister_state_mut(b_id).system_state;
-    // Check that canister B has produced the response.
-    assert_eq!(1, system_state.queues().output_queues_len());
-    assert_eq!(1, system_state.queues().output_queues_message_count());
+        let system_state = &mut test.canister_state_mut(b_id).system_state;
+        // Check that canister B has produced the response.
+        assert_eq!(1, system_state.queues().output_queues_len());
+        assert_eq!(1, system_state.queues().output_queues_message_count());
 
-    let message = system_state
-        .queues_mut()
-        .clone()
-        .pop_canister_output(&a_id)
-        .unwrap();
+        let message = system_state
+            .queues_mut()
+            .clone()
+            .pop_canister_output(&a_id)
+            .unwrap();
 
-    if let RequestOrResponse::Response(msg) = message {
-        assert_eq!(msg.originator, a_id);
-        assert_eq!(msg.respondent, b_id);
-        assert!(matches!(msg.response_payload, Payload::Data(..)));
-    } else {
-        panic!("unexpected message popped: {message:?}");
-    }
-
-    // Get consumption for 'RequestAndResponseTransmission' and 'Instructions'
-    // before receiving a response on canister A.
-    let transmission_consumption_before_response = *test
-        .canister_state(a_id)
-        .system_state
-        .canister_metrics()
-        .consumed_cycles_by_use_cases()
-        .get(&CyclesUseCase::RequestAndResponseTransmission)
-        .unwrap();
-    let instruction_consumption_before_response = *test
-        .canister_state(a_id)
-        .system_state
-        .canister_metrics()
-        .consumed_cycles_by_use_cases()
-        .get(&CyclesUseCase::Instructions)
-        .unwrap();
-
-    assert_gt!(transmission_consumption_before_response.get(), 0);
-    assert_gt!(instruction_consumption_before_response.get(), 0);
-
-    // Check that canister A's balance is decremented for consumed cycles
-    // plus transferred cycles to canister B.
-    assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
-        initial_cycles
-            - Cycles::from(transmission_consumption_before_response.get())
-            - Cycles::from(instruction_consumption_before_response.get())
-            - transferred_cycles
-    );
-
-    // Canister A executed the response.
-    test.induct_messages();
-    test.execute_message(a_id);
-
-    let ingress_state = test.ingress_state(&message_id);
-
-    if let IngressState::Completed(wasm_result) = ingress_state {
-        match wasm_result {
-            WasmResult::Reject(result) => panic!("unexpected result {result}"),
-            WasmResult::Reply(_) => (),
+        if let RequestOrResponse::Response(msg) = message {
+            assert_eq!(msg.originator, a_id);
+            assert_eq!(msg.respondent, b_id);
+            assert!(matches!(msg.response_payload, Payload::Data(..)));
+        } else {
+            panic!("unexpected message popped: {message:?}");
         }
-    } else {
-        panic!("unexpected ingress state {ingress_state:?}");
-    }
 
-    let transmission_cost = test.call_fee("update", &b_callback) + test.reply_fee(&b_callback);
-
-    let execution_cost = test.canister_execution_cost(a_id);
-
-    // Check that canister A's balance is updated correctly.
-    assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
-        initial_cycles - execution_cost.real() - transmission_cost.real() - transferred_cycles
-    );
-
-    assert_eq!(
-        test.canister_state(a_id)
+        // Get consumption for 'RequestAndResponseTransmission' and 'Instructions'
+        // before receiving a response on canister A.
+        let transmission_consumption_before_response = *test
+            .canister_state(a_id)
             .system_state
             .canister_metrics()
             .consumed_cycles_by_use_cases()
-            .len(),
-        2
-    );
-
-    let transmission_consumption_after_response = *test
-        .canister_state(a_id)
-        .system_state
-        .canister_metrics()
-        .consumed_cycles_by_use_cases()
-        .get(&CyclesUseCase::RequestAndResponseTransmission)
-        .unwrap();
-    let instruction_consumption_after_response = *test
-        .canister_state(a_id)
-        .system_state
-        .canister_metrics()
-        .consumed_cycles_by_use_cases()
-        .get(&CyclesUseCase::Instructions)
-        .unwrap();
-
-    // Check that consumed cycles are correct for both use cases.
-    assert_eq!(
-        transmission_consumption_after_response,
-        transmission_cost.nominal(),
-    );
-
-    assert_eq!(
-        instruction_consumption_after_response,
-        execution_cost.nominal(),
-    );
-
-    // Consumed cycles after the response should be smaller than before
-    // the response because we expect a refund for prepaid cycles.
-    assert_lt!(
-        transmission_consumption_after_response,
-        transmission_consumption_before_response
-    );
-    assert_lt!(
-        instruction_consumption_after_response,
-        instruction_consumption_before_response
-    );
-
-    // Check that canister B's balance is updated correctly.
-    assert_eq!(
-        test.canister_state(b_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(b_id).real() + transferred_cycles
-    );
-
-    // Check that consumed cycles are correct only for the `Instructions` use case.
-    assert_eq!(
-        test.canister_state(b_id)
-            .system_state
-            .canister_metrics()
-            .consumed_cycles_by_use_cases()
-            .len(),
-        1
-    );
-
-    assert_eq!(
-        *test
-            .canister_state(b_id)
+            .get(&CyclesUseCase::RequestAndResponseTransmission)
+            .unwrap();
+        let instruction_consumption_before_response = *test
+            .canister_state(a_id)
             .system_state
             .canister_metrics()
             .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::Instructions)
-            .unwrap(),
-        test.canister_execution_cost(b_id).nominal(),
-    );
+            .unwrap();
+
+        assert_gt!(transmission_consumption_before_response.get(), 0);
+        assert_gt!(instruction_consumption_before_response.get(), 0);
+
+        // Canister A executed the response.
+        test.induct_messages();
+        test.execute_message(a_id);
+
+        let ingress_state = test.ingress_state(&message_id);
+
+        if let IngressState::Completed(wasm_result) = ingress_state {
+            match wasm_result {
+                WasmResult::Reject(result) => panic!("unexpected result {result}"),
+                WasmResult::Reply(_) => (),
+            }
+        } else {
+            panic!("unexpected ingress state {ingress_state:?}");
+        }
+
+        let transmission_cost = test.call_fee("update", &b_callback) + test.reply_fee(&b_callback);
+
+        let execution_cost = test.canister_execution_cost(a_id);
+
+        // Check that canister A's balance is updated correctly.
+        assert_eq!(
+            test.canister_state(a_id).system_state.balance(),
+            initial_cycles - execution_cost.real() - transmission_cost.real() - transferred_cycles
+        );
+
+        assert_eq!(
+            test.canister_state(a_id)
+                .system_state
+                .canister_metrics()
+                .consumed_cycles_by_use_cases()
+                .len(),
+            2
+        );
+
+        let transmission_consumption_after_response = *test
+            .canister_state(a_id)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
+            .get(&CyclesUseCase::RequestAndResponseTransmission)
+            .unwrap();
+        let instruction_consumption_after_response = *test
+            .canister_state(a_id)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
+            .get(&CyclesUseCase::Instructions)
+            .unwrap();
+
+        // Check that consumed cycles are correct for both use cases.
+        assert_eq!(
+            transmission_consumption_after_response,
+            transmission_cost.nominal(),
+        );
+
+        assert_eq!(
+            instruction_consumption_after_response,
+            execution_cost.nominal(),
+        );
+
+        // Consumed cycles after the response should be smaller than before
+        // the response because we expect a refund for prepaid cycles.
+        assert_lt!(
+            transmission_consumption_after_response,
+            transmission_consumption_before_response
+        );
+        assert_lt!(
+            instruction_consumption_after_response,
+            instruction_consumption_before_response
+        );
+
+        // Check that canister B's balance is updated correctly.
+        assert_eq!(
+            test.canister_state(b_id).system_state.balance(),
+            initial_cycles - test.canister_execution_cost(b_id).real() + transferred_cycles
+        );
+
+        // Check that consumed cycles are correct only for the `Instructions` use case.
+        assert_eq!(
+            test.canister_state(b_id)
+                .system_state
+                .canister_metrics()
+                .consumed_cycles_by_use_cases()
+                .len(),
+            1
+        );
+
+        assert_eq!(
+            *test
+                .canister_state(b_id)
+                .system_state
+                .canister_metrics()
+                .consumed_cycles_by_use_cases()
+                .get(&CyclesUseCase::Instructions)
+                .unwrap(),
+            test.canister_execution_cost(b_id).nominal(),
+        );
+    }
 }
 
 #[test]

@@ -300,6 +300,7 @@ impl Player {
             &cfg.state_manager,
             None,
             MaliciousFlags::default(),
+            tokio::sync::watch::channel(ic_types::Height::from(0)).0,
         ));
         let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
         let execution_service = ExecutionServices::setup_execution(
