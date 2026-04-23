@@ -343,7 +343,7 @@ impl CanisterManager {
         &self,
         settings: CanisterSettings,
         canister: &mut CanisterState,
-        subnet_available_memory: &SubnetAvailableMemory,
+        subnet_available_memory: &mut SubnetAvailableMemory,
         subnet_memory_saturation: &ResourceSaturation,
         subnet_compute_allocation_usage: u64,
         subnet_size: usize,
@@ -370,18 +370,29 @@ impl CanisterManager {
             .unwrap_or(canister_memory_allocation)
             .allocated_bytes(canister_memory_usage);
 
-        // If the available memory in the subnet is negative, then we must cap
-        // it at zero such that the new memory allocation can change between
-        // zero and the old memory allocation. Note that capping at zero also
-        // makes conversion from `i64` to `u64` valid.
-        let subnet_available_memory = subnet_available_memory.get_execution_memory().max(0) as u64;
-        let subnet_available_memory =
-            subnet_available_memory.saturating_add(old_memory_bytes.get());
-        if new_memory_bytes.get() > subnet_available_memory {
-            return Err(CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-                requested: new_memory_bytes,
-                available: NumBytes::from(subnet_available_memory),
-            });
+        if new_memory_bytes >= old_memory_bytes {
+            let available = NumBytes::from(
+                (subnet_available_memory.get_execution_memory().max(0) as u64)
+                    .saturating_add(old_memory_bytes.get()),
+            );
+            subnet_available_memory
+                .try_decrement(
+                    new_memory_bytes - old_memory_bytes,
+                    NumBytes::from(0),
+                    NumBytes::from(0),
+                )
+                .map_err(
+                    |_| CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
+                        requested: new_memory_bytes,
+                        available,
+                    },
+                )?;
+        } else {
+            subnet_available_memory.increment(
+                old_memory_bytes - new_memory_bytes,
+                NumBytes::from(0),
+                NumBytes::from(0),
+            );
         }
 
         if let Some(new_compute_allocation) = settings.compute_allocation {
@@ -633,15 +644,13 @@ impl CanisterManager {
             .unwrap_or(false);
         let controllers_changed = settings.controllers().is_some();
 
-        let old_usage = canister.memory_usage();
-        let old_mem = canister.memory_allocation().allocated_bytes(old_usage);
         let old_compute_allocation = canister.compute_allocation().as_percent();
         let old_log_bytes_used = canister.system_state.log_memory_store.bytes_used() as u64;
 
         self.check_canister_settings(
             settings,
             canister,
-            &round_limits.subnet_available_memory,
+            &mut round_limits.subnet_available_memory,
             &subnet_memory_saturation,
             round_limits.compute_allocation_used,
             subnet_size,
@@ -659,26 +668,6 @@ impl CanisterManager {
             round_limits.compute_allocation_used = round_limits
                 .compute_allocation_used
                 .saturating_sub(old_compute_allocation - new_compute_allocation);
-        }
-
-        let new_usage = canister.memory_usage();
-        let new_mem = canister.memory_allocation().allocated_bytes(new_usage);
-        if new_mem >= old_mem {
-            round_limits
-                .subnet_available_memory
-                .try_decrement(new_mem - old_mem, NumBytes::from(0), NumBytes::from(0))
-                .map_err(|err| CanisterManagerError::InvalidSettings {
-                    message: format!(
-                        "Decrementing subnet available memory failed unexpectedly after settings validation: {:?}",
-                        err
-                    ),
-                })?;
-        } else {
-            round_limits.subnet_available_memory.increment(
-                old_mem - new_mem,
-                NumBytes::from(0),
-                NumBytes::from(0),
-            );
         }
 
         // Deduct cycles and account instructions for log resize.
@@ -1507,7 +1496,7 @@ impl CanisterManager {
         self.check_canister_settings(
             settings,
             &mut new_canister,
-            &round_limits.subnet_available_memory,
+            &mut round_limits.subnet_available_memory,
             &subnet_memory_saturation,
             round_limits.compute_allocation_used,
             subnet_size,
@@ -1515,21 +1504,6 @@ impl CanisterManager {
             true, // New canister: resize always needed.
             None,
         )?;
-        let new_usage = new_canister.memory_usage();
-        let new_mem = new_canister
-            .system_state
-            .memory_allocation
-            .allocated_bytes(new_usage);
-
-        round_limits
-            .subnet_available_memory
-            .try_decrement(new_mem, NumBytes::from(0), NumBytes::from(0))
-            .map_err(|err| CanisterManagerError::InvalidSettings {
-                message: format!(
-                    "Decrementing subnet available memory failed unexpectedly after settings validation: {:?}",
-                    err
-                ),
-            })?;
 
         round_limits.compute_allocation_used = round_limits
             .compute_allocation_used
