@@ -162,15 +162,33 @@ pub fn get_node_certification_share_height(node: &IcNodeSnapshot, logger: &Logge
         .map(|m| m.certification_share_height.get())
 }
 
-/// Select a node with highest certification share height in the given subnet snapshot
-pub fn node_with_highest_certification_share_height(
+pub struct NodeHeights {
+    pub node: IcNodeSnapshot,
+    pub cup: u64,
+    pub cert_share: u64,
+}
+
+/// Select a node with highest certification share height among the nodes with highest CUP height
+pub fn node_with_highest_cup_and_cert_share_heights(
     subnet: &SubnetSnapshot,
     logger: &Logger,
-) -> (IcNodeSnapshot, u64) {
+) -> NodeHeights {
     subnet
         .nodes()
-        .filter_map(|n| get_node_certification_share_height(&n, logger).map(|h| (n, h)))
-        .max_by_key(|&(_, cert_height)| cert_height)
+        .filter_map(|node| {
+            block_on(get_node_metrics(logger, &node.get_ip_addr())).map(|m| NodeHeights {
+                node,
+                cup: m.catch_up_package_height.get(),
+                cert_share: m.certification_share_height.get(),
+            })
+        })
+        .max_by_key(
+            |NodeHeights {
+                 node: _,
+                 cup,
+                 cert_share,
+             }| (*cup, *cert_share),
+        )
         .expect("No healthy node found")
 }
 
@@ -406,6 +424,7 @@ pub mod local {
             download_pool_node,
             download_state_method: _, // ignored to choose "local" in local recoveries, see below
             keep_downloaded_state,
+            download_state_height,
             upload_method: _, // ignored to choose "local" in local recoveries, see below
             wait_for_cup_node,
             chain_key_subnet_id,
@@ -461,6 +480,7 @@ pub mod local {
         // We are doing a local recovery, so we override the download method to "local"
         let download_state_method_cli = r#"--download-state-method "local" "#.to_string();
         let keep_downloaded_state_cli = opt_cli_arg!(keep_downloaded_state);
+        let download_state_height_cli = opt_cli_arg!(download_state_height);
         // We are doing a local recovery, so we override the upload method to "local"
         let upload_method_cli = r#"--upload-method "local" "#.to_string();
         let wait_for_cup_node_cli = opt_cli_arg!(wait_for_cup_node);
@@ -485,6 +505,7 @@ pub mod local {
             {download_pool_node_cli} \
             {download_state_method_cli} \
             {keep_downloaded_state_cli} \
+            {download_state_height_cli} \
             {upload_method_cli} \
             {wait_for_cup_node_cli} \
             {chain_key_subnet_id_cli} \
@@ -526,6 +547,7 @@ pub mod local {
             download_pool_node,
             admin_access_location: _, // ignored to choose "local" in local recoveries, see below
             keep_downloaded_state,
+            download_state_height,
             wait_for_cup_node,
             backup_key_file,
             output_dir: _, // ignored to choose a different directory in local recoveries, see below
@@ -560,6 +582,7 @@ pub mod local {
         // We are doing a local recovery, so we override the admin access location to "local"
         let admin_access_location_cli = r#"--admin-access-location "local" "#.to_string();
         let keep_downloaded_state_cli = opt_cli_arg!(keep_downloaded_state);
+        let download_state_height_cli = opt_cli_arg!(download_state_height);
         let wait_for_cup_node_cli = opt_cli_arg!(wait_for_cup_node);
         let backup_key_file_cli = upload_ssh_key_and_return_cli_arg(
             session,
@@ -587,6 +610,7 @@ pub mod local {
             {download_pool_node_cli} \
             {admin_access_location_cli} \
             {keep_downloaded_state_cli} \
+            {download_state_height_cli} \
             {wait_for_cup_node_cli} \
             {backup_key_file_cli} \
             {output_dir_cli} \

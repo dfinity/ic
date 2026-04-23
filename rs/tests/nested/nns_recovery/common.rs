@@ -2,9 +2,10 @@ use anyhow::bail;
 use candid::Principal;
 use ic_agent::Agent;
 use ic_consensus_system_test_subnet_recovery::utils::{
-    BACKUP_USERNAME, SshKeys, assert_subnet_is_broken, break_nodes, get_ssh_keys_for_user,
+    BACKUP_USERNAME, NodeHeights, SshKeys, assert_subnet_is_broken, break_nodes,
+    get_ssh_keys_for_user,
     local::{NNS_RECOVERY_OUTPUT_DIR_REMOTE_PATH, nns_subnet_recovery_same_nodes_local_cli_args},
-    node_with_highest_certification_share_height, remote_recovery,
+    node_with_highest_cup_and_cert_share_heights, remote_recovery,
 };
 use ic_consensus_system_test_utils::{
     impersonate_upstreams,
@@ -474,9 +475,12 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         );
     }
 
-    // Download pool from the node with the highest certification share height
-    let (download_pool_node, highest_cert_share) =
-        node_with_highest_certification_share_height(&nns_subnet, &logger);
+    // Download pool from the node with the highest certification share and CUP heights
+    let NodeHeights {
+        node: download_pool_node,
+        cup: highest_cup,
+        cert_share: highest_cert_share,
+    } = node_with_highest_cup_and_cert_share_heights(&nns_subnet, &logger);
     info!(
         logger,
         "Selected node {} ({:?}) as download pool with certification share height {}",
@@ -582,6 +586,10 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         download_pool_node: Some(download_pool_node.get_ip_addr()),
         admin_access_location: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
         keep_downloaded_state: Some(false),
+        // If the state height to download was computed to be 0 (i.e. the subnet stalled in its
+        // first DKG interval), there is no checkpoint yet and we should actually not provide a
+        // height to the recovery tool
+        download_state_height: (highest_cup != 0).then_some(highest_cup),
         wait_for_cup_node: (!cfg.fix_dfinity_owned_node_like_np)
             .then_some(dfinity_owned_node.get_ip_addr()),
         backup_key_file: Some(ssh_backup_priv_key_path),

@@ -46,8 +46,8 @@ pub enum StepType {
     /// replica bug and not due to malicious actors, this step should not reveal any problems.
     MergeCertificationPools,
     /// In this step we will download all finalized consensus artifacts. For that we should use a
-    /// node, that is up to date with the highest finalization height because this node will contain
-    /// all required artifacts for the recovery.
+    /// node, that is up to date with the highest finalization and CUP height because this node
+    /// will contain all required artifacts for the recovery.
     DownloadConsensusPool,
     /// In this step we will download the subnet state from a node that is sufficiently up to date
     /// with the rest of the subnet, i.e. not behind by more than 1 DKG interval. To avoid
@@ -170,6 +170,10 @@ pub struct AppSubnetRecoveryArgs {
     /// If the downloaded state should be backed up locally
     #[clap(long)]
     pub keep_downloaded_state: Option<bool>,
+
+    /// Height of the checkpoint to download. If not provided, the latest checkpoint is used.
+    #[clap(long)]
+    pub download_state_height: Option<u64>,
 
     /// The method of uploading state. Possible values are either `local` (for a
     /// local recovery on the admin node) or the ipv6 address of the target node.
@@ -306,8 +310,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
 
             StepType::DownloadConsensusPool => {
                 if self.params.download_pool_node.is_none() {
-                    // We could pick a node with highest finalization height automatically, but we
-                    // might have a preference between nodes of the same finalization height.
+                    // We could pick a node with highest finalization and CUP height automatically,
+                    // but we might have a preference between nodes of same heights.
                     print_height_info(
                         &self.logger,
                         &self.recovery.registry_helper,
@@ -335,6 +339,13 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                         &self.logger,
                         "Preserve original downloaded state locally?",
                     ));
+                }
+
+                if self.params.download_state_height.is_none() {
+                    self.params.download_state_height = read_optional(
+                        &self.logger,
+                        "Enter the height of the checkpoint to download (leave empty for latest checkpoint):",
+                    );
                 }
             }
 
@@ -453,9 +464,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
             }
 
             StepType::DownloadState => match self.params.download_state_method {
-                Some(DataLocation::Local) => {
-                    Ok(Box::new(self.recovery.get_copy_local_state_step()))
-                }
+                Some(DataLocation::Local) => Ok(Box::new(
+                    self.recovery
+                        .get_copy_local_state_step(self.params.download_state_height)?,
+                )),
                 Some(DataLocation::Remote(node_ip)) => {
                     let (ssh_user, key_file) = if self.params.readonly_pub_key.is_some() {
                         (SshUser::Readonly, self.params.readonly_key_file.clone())
@@ -468,6 +480,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                         ssh_user,
                         key_file,
                         self.params.keep_downloaded_state == Some(true),
+                        self.params.download_state_height,
                     )?))
                 }
                 None => Err(RecoveryError::StepSkipped),

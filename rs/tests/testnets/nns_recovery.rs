@@ -37,7 +37,7 @@
 
 use anyhow::Result;
 use ic_consensus_system_test_subnet_recovery::utils::{
-    break_nodes, node_with_highest_certification_share_height,
+    break_nodes, node_with_highest_cup_and_cert_share_heights,
 };
 use ic_limits::DKG_INTERVAL_HEIGHT;
 use ic_nested_nns_recovery_common::SetupConfig;
@@ -133,10 +133,11 @@ fn log_instructions(env: TestEnv) {
     };
 
     loop {
-        let (_, highest_cert_share) = node_with_highest_certification_share_height(
+        let highest_cert_share = node_with_highest_cup_and_cert_share_heights(
             &env.topology_snapshot().root_subnet(),
             &logger,
-        );
+        )
+        .cert_share;
 
         if highest_cert_share >= break_at_height {
             info!(

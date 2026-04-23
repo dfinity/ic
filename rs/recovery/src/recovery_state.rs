@@ -130,7 +130,6 @@ mod tests {
     use std::{fs, str::FromStr};
 
     use crate::app_subnet_recovery::AppSubnetRecoveryArgs;
-    use crate::error::GracefulExpect;
 
     use super::*;
     use ic_base_types::{PrincipalId, SubnetId};
@@ -148,7 +147,7 @@ mod tests {
         assert!(tmp.path().join("recovery/recovery_state.json").exists());
 
         let deserialized_state =
-            RecoveryState::read(tmp.path()).expect_graceful("Failed to deserialize the state");
+            RecoveryState::read(tmp.path()).expect("Failed to deserialize the state");
 
         assert_eq!(deserialized_state, Some(state));
     }
@@ -194,6 +193,7 @@ mod tests {
                 download_pool_node: None,
                 download_state_method: None,
                 keep_downloaded_state: Some(false),
+                download_state_height: None,
                 upload_method: None,
                 wait_for_cup_node: None,
                 chain_key_subnet_id: Some(fake_subnet_id()),
