@@ -2080,6 +2080,18 @@ pub struct TakeCanisterSnapshotOk {
     pub snapshot_id: Vec<u8>,
 }
 
+impl From<CreateCanisterAndInstallCodeOk> for SuccessfulProposalExecutionValue {
+    fn from(ok: CreateCanisterAndInstallCodeOk) -> Self {
+        Self::CreateCanisterAndInstallCode(ok)
+    }
+}
+
+impl From<TakeCanisterSnapshotOk> for SuccessfulProposalExecutionValue {
+    fn from(ok: TakeCanisterSnapshotOk) -> Self {
+        Self::TakeCanisterSnapshot(ok)
+    }
+}
+
 /// Network economics contains the parameters for several operations related
 /// to the economy of the network. When submitting a NetworkEconomics proposal
 /// default values (0) are considered unchanged, so a valid proposal only needs
