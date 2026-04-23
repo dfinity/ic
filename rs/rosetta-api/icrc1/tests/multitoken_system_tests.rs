@@ -1843,7 +1843,11 @@ fn test_construction_submit() {
                             ic_icrc1::Operation::Burn { .. } => None,
                             ic_icrc1::Operation::FeeCollector { .. } => None,
                             ic_icrc1::Operation::AuthorizedMint { .. }
-                            | ic_icrc1::Operation::AuthorizedBurn { .. } => None,
+                            | ic_icrc1::Operation::AuthorizedBurn { .. }
+                            | ic_icrc1::Operation::FreezeAccount { .. }
+                            | ic_icrc1::Operation::UnfreezeAccount { .. }
+                            | ic_icrc1::Operation::FreezePrincipal { .. }
+                            | ic_icrc1::Operation::UnfreezePrincipal { .. } => None,
                         };
 
                         if matches!(

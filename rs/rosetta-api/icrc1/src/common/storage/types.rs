@@ -9,6 +9,10 @@ use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use icrc_ledger_types::icrc3::blocks::GenericBlock;
 use icrc_ledger_types::icrc107::schema::BTYPE_107;
 use icrc_ledger_types::icrc122::schema::{BTYPE_122_BURN, BTYPE_122_MINT};
+use icrc_ledger_types::icrc123::schema::{
+    BTYPE_123_FREEZE_ACCOUNT, BTYPE_123_FREEZE_PRINCIPAL, BTYPE_123_UNFREEZE_ACCOUNT,
+    BTYPE_123_UNFREEZE_PRINCIPAL,
+};
 use icrc_ledger_types::{
     icrc::generic_value::Value,
     icrc1::{account::Account, transfer::Memo},
@@ -141,7 +145,11 @@ impl RosettaBlock {
                 IcrcOperation::Burn { fee, .. } => fee,
                 IcrcOperation::FeeCollector { .. }
                 | IcrcOperation::AuthorizedMint { .. }
-                | IcrcOperation::AuthorizedBurn { .. } => None,
+                | IcrcOperation::AuthorizedBurn { .. }
+                | IcrcOperation::FreezeAccount { .. }
+                | IcrcOperation::UnfreezeAccount { .. }
+                | IcrcOperation::FreezePrincipal { .. }
+                | IcrcOperation::UnfreezePrincipal { .. } => None,
             }))
     }
 
@@ -395,6 +403,30 @@ pub enum IcrcOperation {
         mthd: Option<String>,
         reason: Option<String>,
     },
+    FreezeAccount {
+        account: Account,
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+    },
+    UnfreezeAccount {
+        account: Account,
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+    },
+    FreezePrincipal {
+        principal: Principal,
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+    },
+    UnfreezePrincipal {
+        principal: Principal,
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+    },
 }
 
 impl TryFrom<(Option<String>, BTreeMap<String, Value>)> for IcrcOperation {
@@ -501,6 +533,14 @@ impl TryFrom<(Option<String>, BTreeMap<String, Value>)> for IcrcOperation {
                         mthd,
                         reason,
                     })
+                }
+                found
+                    if found == BTYPE_123_FREEZE_ACCOUNT
+                        || found == BTYPE_123_UNFREEZE_ACCOUNT
+                        || found == BTYPE_123_FREEZE_PRINCIPAL
+                        || found == BTYPE_123_UNFREEZE_PRINCIPAL =>
+                {
+                    panic!("freeze/unfreeze not yet supported in Rosetta")
                 }
                 found => {
                     bail!(
@@ -638,6 +678,12 @@ impl From<IcrcOperation> for BTreeMap<String, Value> {
                 if let Some(reason) = reason {
                     map.insert("reason".to_string(), Value::text(reason));
                 }
+            }
+            Op::FreezeAccount { .. }
+            | Op::UnfreezeAccount { .. }
+            | Op::FreezePrincipal { .. }
+            | Op::UnfreezePrincipal { .. } => {
+                panic!("freeze/unfreeze not yet supported in Rosetta")
             }
         }
         map
@@ -787,6 +833,12 @@ where
                 mthd,
                 reason,
             },
+            Op::FreezeAccount { .. }
+            | Op::UnfreezeAccount { .. }
+            | Op::FreezePrincipal { .. }
+            | Op::UnfreezePrincipal { .. } => {
+                panic!("freeze/unfreeze not yet supported in Rosetta")
+            }
         }
     }
 }

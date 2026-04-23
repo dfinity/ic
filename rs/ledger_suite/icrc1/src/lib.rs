@@ -17,6 +17,10 @@ use ic_ledger_core::{
 use ic_ledger_hash_of::HashOf;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc122::schema::{BTYPE_122_BURN, BTYPE_122_MINT};
+use icrc_ledger_types::icrc123::schema::{
+    BTYPE_123_FREEZE_ACCOUNT, BTYPE_123_FREEZE_PRINCIPAL, BTYPE_123_UNFREEZE_ACCOUNT,
+    BTYPE_123_UNFREEZE_PRINCIPAL,
+};
 use icrc_ledger_types::{icrc1::transfer::Memo, icrc3::transactions::TRANSACTION_FEE_COLLECTOR};
 use serde::{Deserialize, Serialize};
 
@@ -65,6 +69,30 @@ pub enum Operation<Tokens: TokensType> {
     AuthorizedBurn {
         from: Account,
         amount: Tokens,
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+    },
+    FreezeAccount {
+        account: Account,
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+    },
+    UnfreezeAccount {
+        account: Account,
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+    },
+    FreezePrincipal {
+        principal: Principal,
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
+    },
+    UnfreezePrincipal {
+        principal: Principal,
         caller: Option<Principal>,
         mthd: Option<String>,
         reason: Option<String>,
@@ -141,6 +169,15 @@ struct FlattenedTransaction<Tokens: TokensType> {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(with = "compact_account::opt")]
+    account: Option<Account>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    principal: Option<Principal>,
 }
 
 impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<Tokens> {
@@ -197,6 +234,38 @@ impl<Tokens: TokensType> TryFrom<(Option<String>, FlattenedTransaction<Tokens>)>
                 amount: value
                     .amount
                     .ok_or("`amount` required for `122burn` block")?,
+                caller: value.caller,
+                mthd: value.mthd,
+                reason: value.reason,
+            },
+            Some(BTYPE_123_FREEZE_ACCOUNT) => Operation::FreezeAccount {
+                account: value
+                    .account
+                    .ok_or("`account` field required for `123freezeaccount` block")?,
+                caller: value.caller,
+                mthd: value.mthd,
+                reason: value.reason,
+            },
+            Some(BTYPE_123_UNFREEZE_ACCOUNT) => Operation::UnfreezeAccount {
+                account: value
+                    .account
+                    .ok_or("`account` field required for `123unfreezeaccount` block")?,
+                caller: value.caller,
+                mthd: value.mthd,
+                reason: value.reason,
+            },
+            Some(BTYPE_123_FREEZE_PRINCIPAL) => Operation::FreezePrincipal {
+                principal: value
+                    .principal
+                    .ok_or("`principal` field required for `123freezeprincipal` block")?,
+                caller: value.caller,
+                mthd: value.mthd,
+                reason: value.reason,
+            },
+            Some(BTYPE_123_UNFREEZE_PRINCIPAL) => Operation::UnfreezePrincipal {
+                principal: value
+                    .principal
+                    .ok_or("`principal` field required for `123unfreezeprincipal` block")?,
                 caller: value.caller,
                 mthd: value.mthd,
                 reason: value.reason,
@@ -280,18 +349,37 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 Mint { .. } => Some("mint".to_string()),
                 Transfer { .. } => Some("xfer".to_string()),
                 Approve { .. } => Some("approve".to_string()),
-                FeeCollector { .. } | AuthorizedMint { .. } | AuthorizedBurn { .. } => None,
+                FeeCollector { .. }
+                | AuthorizedMint { .. }
+                | AuthorizedBurn { .. }
+                | FreezeAccount { .. }
+                | UnfreezeAccount { .. }
+                | FreezePrincipal { .. }
+                | UnfreezePrincipal { .. } => None,
             },
             from: match &t.operation {
                 Transfer { from, .. }
                 | Burn { from, .. }
                 | Approve { from, .. }
                 | AuthorizedBurn { from, .. } => Some(*from),
-                Mint { .. } | FeeCollector { .. } | AuthorizedMint { .. } => None,
+                Mint { .. }
+                | FeeCollector { .. }
+                | AuthorizedMint { .. }
+                | FreezeAccount { .. }
+                | UnfreezeAccount { .. }
+                | FreezePrincipal { .. }
+                | UnfreezePrincipal { .. } => None,
             },
             to: match &t.operation {
                 Mint { to, .. } | Transfer { to, .. } | AuthorizedMint { to, .. } => Some(*to),
-                Burn { .. } | Approve { .. } | FeeCollector { .. } | AuthorizedBurn { .. } => None,
+                Burn { .. }
+                | Approve { .. }
+                | FeeCollector { .. }
+                | AuthorizedBurn { .. }
+                | FreezeAccount { .. }
+                | UnfreezeAccount { .. }
+                | FreezePrincipal { .. }
+                | UnfreezePrincipal { .. } => None,
             },
             spender: match &t.operation {
                 Transfer { spender, .. } | Burn { spender, .. } => spender.to_owned(),
@@ -299,7 +387,11 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 Mint { .. }
                 | FeeCollector { .. }
                 | AuthorizedMint { .. }
-                | AuthorizedBurn { .. } => None,
+                | AuthorizedBurn { .. }
+                | FreezeAccount { .. }
+                | UnfreezeAccount { .. }
+                | FreezePrincipal { .. }
+                | UnfreezePrincipal { .. } => None,
             },
             amount: match &t.operation {
                 Burn { amount, .. }
@@ -308,14 +400,24 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 | Approve { amount, .. }
                 | AuthorizedMint { amount, .. }
                 | AuthorizedBurn { amount, .. } => Some(amount.clone()),
-                FeeCollector { .. } => None,
+                FeeCollector { .. }
+                | FreezeAccount { .. }
+                | UnfreezeAccount { .. }
+                | FreezePrincipal { .. }
+                | UnfreezePrincipal { .. } => None,
             },
             fee: match &t.operation {
                 Transfer { fee, .. }
                 | Approve { fee, .. }
                 | Mint { fee, .. }
                 | Burn { fee, .. } => fee.to_owned(),
-                FeeCollector { .. } | AuthorizedMint { .. } | AuthorizedBurn { .. } => None,
+                FeeCollector { .. }
+                | AuthorizedMint { .. }
+                | AuthorizedBurn { .. }
+                | FreezeAccount { .. }
+                | UnfreezeAccount { .. }
+                | FreezePrincipal { .. }
+                | UnfreezePrincipal { .. } => None,
             },
             expected_allowance: match &t.operation {
                 Approve {
@@ -326,7 +428,11 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 | Burn { .. }
                 | FeeCollector { .. }
                 | AuthorizedMint { .. }
-                | AuthorizedBurn { .. } => None,
+                | AuthorizedBurn { .. }
+                | FreezeAccount { .. }
+                | UnfreezeAccount { .. }
+                | FreezePrincipal { .. }
+                | UnfreezePrincipal { .. } => None,
             },
             expires_at: match &t.operation {
                 Approve { expires_at, .. } => expires_at.to_owned(),
@@ -335,7 +441,11 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 | Burn { .. }
                 | FeeCollector { .. }
                 | AuthorizedMint { .. }
-                | AuthorizedBurn { .. } => None,
+                | AuthorizedBurn { .. }
+                | FreezeAccount { .. }
+                | UnfreezeAccount { .. }
+                | FreezePrincipal { .. }
+                | UnfreezePrincipal { .. } => None,
             },
             fee_collector: match &t.operation {
                 FeeCollector { fee_collector, .. } => fee_collector.to_owned(),
@@ -344,27 +454,70 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 | Burn { .. }
                 | Approve { .. }
                 | AuthorizedMint { .. }
-                | AuthorizedBurn { .. } => None,
+                | AuthorizedBurn { .. }
+                | FreezeAccount { .. }
+                | UnfreezeAccount { .. }
+                | FreezePrincipal { .. }
+                | UnfreezePrincipal { .. } => None,
             },
             caller: match &t.operation {
                 FeeCollector { caller, .. }
                 | AuthorizedMint { caller, .. }
-                | AuthorizedBurn { caller, .. } => caller.to_owned(),
+                | AuthorizedBurn { caller, .. }
+                | FreezeAccount { caller, .. }
+                | UnfreezeAccount { caller, .. }
+                | FreezePrincipal { caller, .. }
+                | UnfreezePrincipal { caller, .. } => caller.to_owned(),
                 Mint { .. } | Transfer { .. } | Burn { .. } | Approve { .. } => None,
             },
             mthd: match &t.operation {
                 FeeCollector { mthd, .. }
                 | AuthorizedMint { mthd, .. }
-                | AuthorizedBurn { mthd, .. } => mthd.to_owned(),
+                | AuthorizedBurn { mthd, .. }
+                | FreezeAccount { mthd, .. }
+                | UnfreezeAccount { mthd, .. }
+                | FreezePrincipal { mthd, .. }
+                | UnfreezePrincipal { mthd, .. } => mthd.to_owned(),
                 Mint { .. } | Transfer { .. } | Burn { .. } | Approve { .. } => None,
             },
             reason: match &t.operation {
-                AuthorizedMint { reason, .. } | AuthorizedBurn { reason, .. } => reason.to_owned(),
+                AuthorizedMint { reason, .. }
+                | AuthorizedBurn { reason, .. }
+                | FreezeAccount { reason, .. }
+                | UnfreezeAccount { reason, .. }
+                | FreezePrincipal { reason, .. }
+                | UnfreezePrincipal { reason, .. } => reason.to_owned(),
                 Mint { .. }
                 | Transfer { .. }
                 | Burn { .. }
                 | Approve { .. }
                 | FeeCollector { .. } => None,
+            },
+            account: match &t.operation {
+                FreezeAccount { account, .. } | UnfreezeAccount { account, .. } => Some(*account),
+                Mint { .. }
+                | Transfer { .. }
+                | Burn { .. }
+                | Approve { .. }
+                | FeeCollector { .. }
+                | AuthorizedMint { .. }
+                | AuthorizedBurn { .. }
+                | FreezePrincipal { .. }
+                | UnfreezePrincipal { .. } => None,
+            },
+            principal: match &t.operation {
+                FreezePrincipal { principal, .. } | UnfreezePrincipal { principal, .. } => {
+                    Some(*principal)
+                }
+                Mint { .. }
+                | Transfer { .. }
+                | Burn { .. }
+                | Approve { .. }
+                | FeeCollector { .. }
+                | AuthorizedMint { .. }
+                | AuthorizedBurn { .. }
+                | FreezeAccount { .. }
+                | UnfreezeAccount { .. } => None,
             },
         }
     }
@@ -565,6 +718,10 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
             Operation::FeeCollector { .. } => {
                 panic!("FeeCollector107 not implemented")
             }
+            Operation::FreezeAccount { .. }
+            | Operation::UnfreezeAccount { .. }
+            | Operation::FreezePrincipal { .. }
+            | Operation::UnfreezePrincipal { .. } => {}
         }
         Ok(())
     }
@@ -752,6 +909,10 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
         let btype = match &transaction.operation {
             Operation::AuthorizedMint { .. } => Some(BTYPE_122_MINT.to_string()),
             Operation::AuthorizedBurn { .. } => Some(BTYPE_122_BURN.to_string()),
+            Operation::FreezeAccount { .. } => Some(BTYPE_123_FREEZE_ACCOUNT.to_string()),
+            Operation::UnfreezeAccount { .. } => Some(BTYPE_123_UNFREEZE_ACCOUNT.to_string()),
+            Operation::FreezePrincipal { .. } => Some(BTYPE_123_FREEZE_PRINCIPAL.to_string()),
+            Operation::UnfreezePrincipal { .. } => Some(BTYPE_123_UNFREEZE_PRINCIPAL.to_string()),
             _ => None,
         };
         let effective_fee = match &transaction.operation {
@@ -763,7 +924,11 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
             Operation::Mint { .. }
             | Operation::Burn { .. }
             | Operation::AuthorizedMint { .. }
-            | Operation::AuthorizedBurn { .. } => None,
+            | Operation::AuthorizedBurn { .. }
+            | Operation::FreezeAccount { .. }
+            | Operation::UnfreezeAccount { .. }
+            | Operation::FreezePrincipal { .. }
+            | Operation::UnfreezePrincipal { .. } => None,
         };
         let (fee_collector, fee_collector_block_index) = match fee_collector {
             Some(FeeCollector {
