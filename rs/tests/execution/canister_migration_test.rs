@@ -6,7 +6,7 @@ use anyhow::{Result, bail};
 use candid::{CandidType, Decode, Deserialize, Encode, Principal, Reserved};
 use canister_test::Canister;
 use futures::future::join_all;
-use ic_agent::Agent;
+use ic_agent::{Agent, AgentError};
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, MIGRATION_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_nns_test_utils::governance::{pause_canister_migrations, unpause_canister_migrations};
@@ -21,7 +21,7 @@ use ic_system_test_driver::driver::{
     test_env::TestEnv,
 };
 use ic_system_test_driver::util::*;
-use ic_system_test_driver::{retry_with_msg_async, systest};
+use ic_system_test_driver::{retry_agent_on_transport_errors, retry_with_msg_async, systest};
 use ic_universal_canister::{call_args, wasm};
 use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::ManagementCanister;
@@ -391,12 +391,17 @@ async fn test_async(env: TestEnv) {
 
     info!(logger, "Calling migrate_canister on paused canister");
 
-    let result = nns_agent
-        .update(&migration_canister_id, "migrate_canister")
-        .with_arg(args.clone())
-        .call_and_wait()
-        .await
-        .expect("Failed to call migrate_canister.");
+    let result = retry_agent_on_transport_errors!(
+        "migrate_canister (paused)",
+        &logger,
+        nns_agent
+            .update(&migration_canister_id, "migrate_canister")
+            .with_arg(args.clone())
+            .call_and_wait()
+    )
+    .await
+    .expect("Failed to call migrate_canister after retries.")
+    .expect("Failed to call migrate_canister.");
 
     let decoded_result = Decode!(&result, Result<(), Option<ValidationError>>)
         .expect("Failed to decode reponse from migrate_canister.");
@@ -412,19 +417,29 @@ async fn test_async(env: TestEnv) {
 
     info!(logger, "Calling migrate_canister on unpaused canister");
 
-    let result = nns_agent
-        .update(&migration_canister_id, "migrate_canister")
-        .with_arg(args.clone())
-        .call_and_wait()
-        .await
-        .expect("Failed to call migrate_canister.");
+    let result = retry_agent_on_transport_errors!(
+        "migrate_canister (unpaused, args)",
+        &logger,
+        nns_agent
+            .update(&migration_canister_id, "migrate_canister")
+            .with_arg(args.clone())
+            .call_and_wait()
+    )
+    .await
+    .expect("Failed to call migrate_canister after retries.")
+    .expect("Failed to call migrate_canister.");
 
-    let _result = nns_agent
-        .update(&migration_canister_id, "migrate_canister")
-        .with_arg(args2.clone())
-        .call_and_wait()
-        .await
-        .expect("Failed to call migrate_canister.");
+    let _result = retry_agent_on_transport_errors!(
+        "migrate_canister (unpaused, args2)",
+        &logger,
+        nns_agent
+            .update(&migration_canister_id, "migrate_canister")
+            .with_arg(args2.clone())
+            .call_and_wait()
+    )
+    .await
+    .expect("Failed to call migrate_canister after retries.")
+    .expect("Failed to call migrate_canister.");
 
     let decoded_result = Decode!(&result, Result<(), Option<ValidationError>>)
         .expect("Failed to decode reponse from migrate_canister.");
@@ -440,12 +455,19 @@ async fn test_async(env: TestEnv) {
         Duration::from_secs(420),
         Duration::from_secs(10),
         || async {
-            let status = nns_agent
+            let status = match nns_agent
                 .update(&migration_canister_id, "migration_status")
                 .with_arg(args.clone())
                 .call_and_wait()
                 .await
-                .expect("Failed to call migration_status.");
+            {
+                Ok(s) => s,
+                // Retry only on transport errors.
+                Err(AgentError::TransportError(e)) => {
+                    bail!("transport error calling migration_status: {e}")
+                }
+                Err(e) => panic!("Failed to call migration_status: {e}"),
+            };
             let decoded_status = Decode!(&status, Option<MigrationStatus>)
                 .expect("Failed to decode response from migration_status.")
                 .expect("There should be a migration status available.");
