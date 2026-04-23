@@ -622,6 +622,7 @@ impl ExecutionEnvironment {
             Some(canister) => {
                 let saved_canister = canister.clone();
                 let saved_round_limits = round_limits.clone();
+                let saved_msg = msg.clone();
                 match op(canister, msg, round_limits, &mut consumed_cycles) {
                     Ok(response) => self.process_canister_manager_result(
                         Ok(response),
@@ -632,6 +633,7 @@ impl ExecutionEnvironment {
                     Err(err) => {
                         *canister = saved_canister;
                         *round_limits = saved_round_limits;
+                        *msg = saved_msg;
                         consumed_cycles.apply(
                             canister,
                             round_limits,

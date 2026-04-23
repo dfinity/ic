@@ -1468,11 +1468,13 @@ fn stop_canister_not_controller_no_orphan_stop_canister_call() {
     let canister_id = test
         .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
         .unwrap();
-    assert!(!test
-        .canister_state(canister_id)
-        .system_state
-        .controllers
-        .contains(&caller_canister.get()));
+    assert!(
+        !test
+            .canister_state(canister_id)
+            .system_state
+            .controllers
+            .contains(&caller_canister.get())
+    );
 
     test.inject_call_to_ic00(
         Method::StopCanister,
