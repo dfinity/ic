@@ -85,7 +85,6 @@ lazy_static = { workspace = true }
 maplit = "1.0.2"
 mockall = { workspace = true }
 num-traits = { workspace = true }
-pretty_assertions = { workspace = true }
 prometheus-parse = { workspace = true }
 prost = { workspace = true }
 rust_decimal = "1.36.0"
@@ -124,6 +123,7 @@ ic-nns-governance = { path = ".", features = ["test"] }
 ic-nns-governance-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 local_key = { path = "../../tla_instrumentation/local_key" }
+pretty_assertions = { workspace = true }
 proptest = { workspace = true }
 tempfile = { workspace = true }
 tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation" }

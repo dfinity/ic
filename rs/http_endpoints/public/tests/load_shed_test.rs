@@ -109,8 +109,7 @@ fn test_load_shedding_query(
 /// 2. We make two concurrent polls. We expect the last poll request to hit the load shedder.
 #[rstest]
 fn test_load_shedding_read_state(
-    #[values(read_state::canister::Version::V2, read_state::canister::Version::V3)]
-    version: read_state::canister::Version,
+    #[values(read_state::Version::V2, read_state::Version::V3)] version: read_state::Version,
 ) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
