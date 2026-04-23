@@ -6,7 +6,7 @@ use ic_interfaces::{
     validation::ValidationResult,
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateManager;
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
@@ -32,7 +32,7 @@ pub fn validate_payload(
     dkg_pool: &dyn DkgPool,
     parent: Block,
     payload: &BlockPayload,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
     validation_context: &ValidationContext,
     metrics: &IntCounterVec,
     log: &ReplicaLogger,
@@ -66,7 +66,7 @@ pub fn validate_payload(
                 last_dkg_summary,
                 &parent,
                 registry_version,
-                state_manager,
+                state_reader,
                 validation_context,
                 log.clone(),
             )?;
@@ -124,7 +124,7 @@ pub fn validate_payload(
                 &data_payload.dkg,
                 max_dealings_per_block,
                 &parent,
-                state_manager,
+                state_reader,
                 validation_context,
                 log,
                 metrics,
@@ -143,7 +143,7 @@ fn validate_dealings_payload(
     dealings: &DkgDataPayload,
     max_dealings_per_payload: usize,
     parent: &Block,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
     validation_context: &ValidationContext,
     log: &ReplicaLogger,
     metrics: &IntCounterVec,
@@ -207,7 +207,7 @@ fn validate_dealings_payload(
             crypto,
             parent,
             last_summary,
-            state_manager,
+            state_reader,
             validation_context,
             log.clone(),
         )?;

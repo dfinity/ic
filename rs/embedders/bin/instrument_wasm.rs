@@ -14,7 +14,7 @@ use ic_embedders::{
     wasm_utils::{decoding::decode_wasm, validate_and_instrument_for_testing},
 };
 
-#[derive(Debug, Copy, Clone, ValueEnum)]
+#[derive(Copy, Clone, Debug, ValueEnum)]
 pub enum Artifact {
     /// In instrumented Wasm module.
     InstrumentedWasm,

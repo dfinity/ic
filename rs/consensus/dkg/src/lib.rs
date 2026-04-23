@@ -32,6 +32,8 @@ use std::{
 pub mod dkg_key_manager;
 pub mod payload_builder;
 pub mod payload_validator;
+#[allow(dead_code)]
+pub(crate) mod remote;
 
 pub use crate::utils::get_vetkey_public_keys;
 

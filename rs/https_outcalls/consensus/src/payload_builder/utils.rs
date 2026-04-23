@@ -341,7 +341,7 @@ pub(crate) enum FlexibleFindResult {
 /// If enough OK responses are gathered, returns [`FlexibleFindResult::OkResponses`].
 ///
 /// Otherwise checks for error conditions:
-/// - **TooManyRequestErrors**: more nodes returned rejects than the slack
+/// - **TooManyRejects**: more nodes returned rejects than the slack
 ///   allows (`committee.len() - min_responses`).
 /// - **ResponsesTooLarge**: even the smallest `min_responses` many OK responses
 ///   (approximated by `count_bytes()`) exceed [`MAX_CANISTER_HTTP_PAYLOAD_SIZE`].
@@ -424,7 +424,7 @@ pub(crate) fn find_flexible_result(
 
     // 2. Too many nodes returned rejects (so that we can never reach min_responses OK responses)?
     if reject_responses.len() > committee.len().saturating_sub(min_responses) {
-        let error = FlexibleCanisterHttpError::TooManyRequestErrors {
+        let error = FlexibleCanisterHttpError::TooManyRejects {
             callback_id,
             reject_responses: reject_responses
                 .into_iter()
@@ -458,6 +458,8 @@ pub(crate) fn find_flexible_result(
             let error = FlexibleCanisterHttpError::ResponsesTooLarge {
                 callback_id,
                 all_seen_shares,
+                total_requests: committee.len() as u32,
+                min_responses: min_responses as u32,
             };
             let error_size = error.count_bytes();
             return FlexibleFindResult::Error(error, error_size);

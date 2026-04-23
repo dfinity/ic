@@ -37,7 +37,7 @@ const fn from_ca(ca: ComputeAllocation) -> AccumulatedPriority {
 }
 
 /// Round metrics required to prioritize a canister.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub(super) struct CanisterRoundState {
     /// Copy of canister ID.
     canister_id: CanisterId,
