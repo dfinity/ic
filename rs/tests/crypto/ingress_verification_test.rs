@@ -869,11 +869,10 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                             response
                         };
 
+                    let response = response.with_request_id(request_id);
+
                     if include_mgmt_canister_id {
                         response.expect_update_ok(api_ver);
-                        if api_ver >= 3 {
-                            response.verify_update_certificate(&request_id);
-                        }
                     } else {
                         assert_eq!(response.status(), 400);
                         response.expect_text_error(
@@ -928,11 +927,11 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                         let response = if response.status() == 202 {
                             await_ingress_via_read_state(&test_info, sender, &request_id).await
                         } else {
-                            assert_eq!(response.status(), 200);
                             response
                         };
 
-                        response.verify_update_certificate(&request_id);
+                        let response = response.with_request_id(request_id.clone());
+                        response.expect_update_ok(3);
 
                         request_id
                     };
@@ -1623,11 +1622,19 @@ enum ResponseBody {
 struct ReplicaResponse {
     status: StatusCode,
     body: ResponseBody,
+    /// Set for responses to `call` (update) requests so `expect_update_ok`
+    /// can verify the returned certificate references this request id.
+    request_id: Option<MessageId>,
 }
 
 impl ReplicaResponse {
     fn status(&self) -> StatusCode {
         self.status
+    }
+
+    fn with_request_id(mut self, request_id: MessageId) -> Self {
+        self.request_id = Some(request_id);
+        self
     }
 
     fn expect_read_state_ok(&self, _api_ver: usize) {
@@ -1647,6 +1654,10 @@ impl ReplicaResponse {
         } else {
             assert_eq!(self.status(), 200);
             self.expect_certificate();
+            let request_id = self.request_id.as_ref().expect(
+                "expect_update_ok requires request_id to be set on the response for api v3+",
+            );
+            self.verify_update_certificate(request_id);
         }
     }
 
@@ -1837,7 +1848,11 @@ async fn send_request<C: serde::ser::Serialize>(
         }
     };
 
-    ReplicaResponse { status, body }
+    ReplicaResponse {
+        status,
+        body,
+        request_id: None,
+    }
 }
 
 /// Parsed ingress request status from a read_state certificate.
@@ -1934,6 +1949,7 @@ async fn await_ingress_via_read_state(
                     return ReplicaResponse {
                         status: StatusCode::OK,
                         body: ResponseBody::Cbor(body),
+                        request_id: Some(request_id),
                     };
                 }
                 Some(IngressStatus::Rejected {
@@ -2125,13 +2141,7 @@ async fn perform_update_call_with_delegations(
         response
     };
 
-    // For v3+ successful responses, verify the certificate contains the
-    // correct request_status for our request.
-    if api_ver >= 3 && response.status() == 200 {
-        response.verify_update_certificate(&request_id);
-    }
-
-    response
+    response.with_request_id(request_id)
 }
 
 async fn perform_read_state_call_with_delegations(
@@ -2189,9 +2199,8 @@ async fn perform_read_state_call_with_delegations(
             response
         };
 
-        if response.status() == 200 {
-            response.verify_update_certificate(&request_id);
-        }
+        let response = response.with_request_id(request_id.clone());
+        response.expect_update_ok(3);
 
         request_id
     };
@@ -2299,11 +2308,7 @@ async fn perform_update_with_expiry(
         response
     };
 
-    if api_ver >= 3 && response.status() == 200 {
-        response.verify_update_certificate(&request_id);
-    }
-
-    response
+    response.with_request_id(request_id)
 }
 
 async fn perform_read_state_call_with_expiry(
