@@ -1583,7 +1583,7 @@ fn clean_in_progress_stop_canister_calls_from_subnet_call_context_manager() {
     );
 }
 
-// Verifies that `process_stopping_canisters` removes `StopCanisterCall`s from
+// Verifies that `remove_orphaned_stop_canister_calls` removes `StopCanisterCall`s from
 // `SubnetCallContextManager` that have no corresponding `StopCanisterContext`
 // in the target canister, simulating the bug fixed in commit 52e7b89.
 #[test]
@@ -1614,9 +1614,9 @@ fn cleanup_orphaned_stop_canister_calls() {
         1
     );
 
-    // process_stopping_canisters should remove the orphaned call since there
+    // remove_orphaned_stop_canister_calls should remove the orphaned call since there
     // is no matching StopCanisterContext in the target canister.
-    test.process_stopping_canisters();
+    test.state_mut().remove_orphaned_stop_canister_calls();
 
     assert_eq!(
         test.state()
