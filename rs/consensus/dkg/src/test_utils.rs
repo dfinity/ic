@@ -26,7 +26,7 @@ use ic_types::{
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 pub(super) fn make_setup_initial_dkg_context(
@@ -59,6 +59,23 @@ pub(super) fn make_reshare_chain_key_context(
     })
 }
 
+fn clone_subnet_call_context(context: &SubnetCallContext) -> SubnetCallContext {
+    match context {
+        SubnetCallContext::SetupInitialDKG(c) => SubnetCallContext::SetupInitialDKG(c.clone()),
+        SubnetCallContext::CanisterHttpRequest(c) => {
+            SubnetCallContext::CanisterHttpRequest(c.clone())
+        }
+        SubnetCallContext::ReshareChainKey(c) => SubnetCallContext::ReshareChainKey(c.clone()),
+        SubnetCallContext::BitcoinGetSuccessors(c) => {
+            SubnetCallContext::BitcoinGetSuccessors(c.clone())
+        }
+        SubnetCallContext::BitcoinSendTransactionInternal(c) => {
+            SubnetCallContext::BitcoinSendTransactionInternal(c.clone())
+        }
+        SubnetCallContext::SignWithThreshold(c) => SubnetCallContext::SignWithThreshold(c.clone()),
+    }
+}
+
 /// Set up the state manager mock to return an initial state containing the
 /// given subnet call contexts.
 pub(super) fn complement_state_manager_with_dkg_contexts(
@@ -73,13 +90,53 @@ pub(super) fn complement_state_manager_with_dkg_contexts(
             .subnet_call_context_manager
             .push_context(context);
     }
+    let state = Arc::new(state);
     let mut mock = state_manager.get_mut();
     let expectation = mock
         .expect_get_state_at()
-        .return_const(Ok(Labeled::new(Height::new(0), Arc::new(state))));
+        .return_const(Ok(Labeled::new(Height::new(0), state.clone())));
     if let Some(times) = times {
         expectation.times(times);
     }
+
+    mock.expect_get_latest_certified_state()
+        .return_const(Some(Labeled::new(Height::new(0), state.clone())));
+}
+
+/// Set up the state manager mock to return an initial state built from a
+/// mutable context vector on every call.
+pub(super) fn complement_state_manager_with_dkg_contexts_mut(
+    state_manager: Arc<RefMockStateManager>,
+    contexts: Arc<Mutex<Vec<SubnetCallContext>>>,
+    times: Option<usize>,
+) {
+    let mut mock = state_manager.get_mut();
+    let state_for_get_state_at = contexts.clone();
+    let expectation = mock.expect_get_state_at().returning(move |_| {
+        let mut state = ic_test_utilities_state::get_initial_state(0, 0);
+        for context in state_for_get_state_at.lock().unwrap().iter() {
+            state
+                .metadata
+                .subnet_call_context_manager
+                .push_context(clone_subnet_call_context(context));
+        }
+        Ok(Labeled::new(Height::new(0), Arc::new(state)))
+    });
+    if let Some(times) = times {
+        expectation.times(times);
+    }
+
+    let state_for_latest_certified = contexts;
+    mock.expect_get_latest_certified_state().returning(move || {
+        let mut state = ic_test_utilities_state::get_initial_state(0, 0);
+        for context in state_for_latest_certified.lock().unwrap().iter() {
+            state
+                .metadata
+                .subnet_call_context_manager
+                .push_context(clone_subnet_call_context(context));
+        }
+        Some(Labeled::new(Height::new(0), Arc::new(state)))
+    });
 }
 
 pub(super) fn complement_state_manager_with_setup_initial_dkg_request(
