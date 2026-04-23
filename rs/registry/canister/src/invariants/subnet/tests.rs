@@ -292,7 +292,21 @@ fn cloud_engine_subnets_must_have_type4_nodes() {
 
     // Sad case: CloudEngine subnet with nodes that have a non-Type4 reward type.
     for reward_type in NodeRewardType::iter()
-        .filter(|reward_type| *reward_type != NodeRewardType::Type4)
+        .filter(|reward_type| match reward_type {
+            NodeRewardType::Unspecified
+            | NodeRewardType::Type0
+            | NodeRewardType::Type1
+            | NodeRewardType::Type2
+            | NodeRewardType::Type3
+            | NodeRewardType::Type3dot1
+            | NodeRewardType::Type1dot1 => true,
+            NodeRewardType::Type4
+            | NodeRewardType::Type4dot1
+            | NodeRewardType::Type4dot2
+            | NodeRewardType::Type4dot3
+            | NodeRewardType::Type4dot4
+            | NodeRewardType::Type4dot5 => false,
+        })
         .map(Some)
         .chain(std::iter::once(None))
     {

@@ -57,7 +57,10 @@ use ic_types::{
         },
     },
     ingress::WasmResult,
-    messages::{Blob, Certificate, CertificateDelegation},
+    messages::{
+        Blob, Certificate, CertificateDelegation, HttpReadState, HttpReadStateContent,
+        HttpRequestEnvelope,
+    },
     signature::ThresholdSignature,
     time::current_time,
 };
@@ -175,8 +178,7 @@ fn test_healthy_behind() {
 // with different canister ids should be rejected.
 #[rstest]
 fn test_unauthorized_controller(
-    #[values(read_state::canister::Version::V2, read_state::canister::Version::V3)]
-    version: read_state::canister::Version,
+    #[values(read_state::Version::V2, read_state::Version::V3)] version: read_state::Version,
 ) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
@@ -671,8 +673,7 @@ fn test_graceful_shutdown_of_the_endpoint() {
 /// If a requested path is too long, the endpoint should return early with 404 (NOT FOUND) status code.
 #[rstest]
 fn test_too_long_paths_are_rejected(
-    #[values(read_state::canister::Version::V2, read_state::canister::Version::V3)]
-    version: read_state::canister::Version,
+    #[values(read_state::Version::V2, read_state::Version::V3)] version: read_state::Version,
 ) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
@@ -740,8 +741,7 @@ fn test_query_endpoint_returns_service_unavailable_on_missing_state(
 
 #[rstest]
 fn can_retrieve_subnet_metrics(
-    #[values(read_state::subnet::Version::V2, read_state::subnet::Version::V3)]
-    version: read_state::subnet::Version,
+    #[values(read_state::Version::V2, read_state::Version::V3)] version: read_state::Version,
 ) {
     use ic_crypto_tree_hash::MatchPatternPath;
 
@@ -883,8 +883,8 @@ fn can_retrieve_subnet_metrics(
             wait_for_status_healthy(&addr).await.unwrap();
             let client = Client::builder(TokioExecutor::new()).build_http();
             let version_str = match version {
-                read_state::subnet::Version::V2 => "v2",
-                read_state::subnet::Version::V3 => "v3",
+                read_state::Version::V2 => "v2",
+                read_state::Version::V3 => "v3",
             };
 
             let req = Request::builder()
@@ -900,7 +900,7 @@ fn can_retrieve_subnet_metrics(
         })
     };
 
-    let sender = Sender::from_principal_id(user_test_id(1).get());
+    let sender = Sender::from_principal_id(PrincipalId::new_anonymous());
     let body = prepare_read_state(
         &sender,
         &[Path::new(vec![
@@ -927,8 +927,7 @@ fn can_retrieve_subnet_metrics(
 
 #[rstest]
 fn subnet_metrics_not_supported_via_canister_read_state(
-    #[values(read_state::canister::Version::V2, read_state::canister::Version::V3)]
-    version: read_state::canister::Version,
+    #[values(read_state::Version::V2, read_state::Version::V3)] version: read_state::Version,
 ) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
@@ -947,8 +946,8 @@ fn subnet_metrics_not_supported_via_canister_read_state(
             wait_for_status_healthy(&addr).await.unwrap();
             let client = Client::builder(TokioExecutor::new()).build_http();
             let version_str = match version {
-                read_state::canister::Version::V2 => "v2",
-                read_state::canister::Version::V3 => "v3",
+                read_state::Version::V2 => "v2",
+                read_state::Version::V3 => "v3",
             };
 
             let req = Request::builder()
@@ -978,6 +977,69 @@ fn subnet_metrics_not_supported_via_canister_read_state(
 
     let response = request(body.as_ref().to_vec());
     assert_eq!(StatusCode::NOT_FOUND, response.status());
+}
+
+/// Regression test: all four read_state endpoints (canister/subnet × V2/V3) validate
+/// request signatures. A non-anonymous sender without a signature must be rejected.
+#[rstest]
+fn test_read_state_rejects_missing_signature(
+    #[values(read_state::Version::V2, read_state::Version::V3)] version: read_state::Version,
+    #[values(read_state::Target::Canister, read_state::Target::Subnet)] target: read_state::Target,
+) {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+
+    let ingress_expiry = (current_time() + Duration::from_secs(300)).as_nanos_since_unix_epoch();
+
+    let content = HttpReadStateContent::ReadState {
+        read_state: HttpReadState {
+            sender: Blob(user_test_id(1).get().into_vec()),
+            paths: vec![Path::new(vec![Label::from("time")])],
+            nonce: None,
+            ingress_expiry,
+        },
+    };
+
+    let envelope: HttpRequestEnvelope<HttpReadStateContent> = HttpRequestEnvelope {
+        content,
+        sender_pubkey: None,
+        sender_sig: None,
+        sender_delegation: None,
+    };
+
+    let body = serde_cbor::to_vec(&envelope).unwrap();
+
+    let target_segment = match target {
+        read_state::Target::Canister => "canister/223xb-saaaa-aaaaf-arlqa-cai".to_string(),
+        read_state::Target::Subnet => format!("subnet/{}", subnet_test_id(1)),
+    };
+    let version_str = match version {
+        read_state::Version::V2 => "v2",
+        read_state::Version::V3 => "v3",
+    };
+
+    rt.block_on(async move {
+        wait_for_status_healthy(&addr).await.unwrap();
+
+        let client = Client::builder(TokioExecutor::new()).build_http();
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri(format!(
+                "http://{addr}/api/{version_str}/{target_segment}/read_state"
+            ))
+            .header("Content-Type", "application/cbor")
+            .body(Body::from(body))
+            .expect("request builder");
+
+        let response = client.request(req).await.unwrap();
+        assert_eq!(StatusCode::BAD_REQUEST, response.status());
+    });
 }
 
 /// Assert that the endpoint accepts HTTP/2 requests.

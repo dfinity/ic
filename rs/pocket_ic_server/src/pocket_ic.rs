@@ -45,8 +45,8 @@ use ic_doge_interface::{
 };
 use ic_http_endpoints_public::query;
 use ic_http_endpoints_public::{
-    CanisterReadStateServiceBuilder, IngressValidatorBuilder, QueryServiceBuilder,
-    SubnetReadStateServiceBuilder, call_async, call_sync, metrics::HttpHandlerMetrics, read_state,
+    IngressValidatorBuilder, QueryServiceBuilder, ReadStateServiceBuilder, call_async, call_sync,
+    metrics::HttpHandlerMetrics, read_state,
 };
 use ic_https_outcalls_adapter::{
     Config as HttpsOutcallsConfig, IncomingSource as CanisterHttpIncomingSource,
@@ -4887,7 +4887,7 @@ impl Operation for QueryRequest {
 pub struct CanisterReadStateRequest {
     pub effective_canister_id: CanisterId,
     pub bytes: Bytes,
-    pub version: read_state::canister::Version,
+    pub version: read_state::Version,
 }
 
 impl Operation for CanisterReadStateRequest {
@@ -4920,7 +4920,7 @@ impl Operation for CanisterReadStateRequest {
                 let metrics = HttpHandlerMetrics::new(&MetricsRegistry::new());
                 let mainnet_root_of_trust =
                     IcRootOfTrust::from(icp_mainnet_root_public_key_for_testing());
-                let svc = CanisterReadStateServiceBuilder::builder(
+                let svc = ReadStateServiceBuilder::builder(
                     subnet.replica_logger.clone(),
                     metrics,
                     subnet.state_manager.clone(),
@@ -4929,6 +4929,7 @@ impl Operation for CanisterReadStateRequest {
                     NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     nns_subnet_id,
                     self.version,
+                    read_state::Target::Canister,
                 )
                 .with_malicious_flags(pic.malicious_flags.clone())
                 .with_time_source(subnet.time_source.clone())
@@ -4936,8 +4937,8 @@ impl Operation for CanisterReadStateRequest {
                 .build_service();
 
                 let version_str = match self.version {
-                    read_state::canister::Version::V2 => "v2",
-                    read_state::canister::Version::V3 => "v3",
+                    read_state::Version::V2 => "v2",
+                    read_state::Version::V3 => "v3",
                 };
 
                 let request = axum::http::Request::builder()
@@ -4976,7 +4977,7 @@ impl Operation for CanisterReadStateRequest {
 pub struct SubnetReadStateRequest {
     pub subnet_id: SubnetId,
     pub bytes: Bytes,
-    pub version: read_state::subnet::Version,
+    pub version: read_state::Version,
 }
 
 impl Operation for SubnetReadStateRequest {
@@ -4985,6 +4986,12 @@ impl Operation for SubnetReadStateRequest {
             Err(e) => OpOut::Error(PocketIcError::SubnetRequestRoutingError(e)),
             Ok(subnet) => {
                 let subnet_id = subnet.get_subnet_id();
+                let nns_subnet_id = pic
+                    .nns_subnet()
+                    .map(|subnet| subnet.get_subnet_id())
+                    .expect(
+                        "The NNS subnet should already exist if we are already executing requests",
+                    );
                 let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
                 let builder = delegation.map(|delegation| {
                     NNSDelegationBuilder::try_new(
@@ -4996,25 +5003,28 @@ impl Operation for SubnetReadStateRequest {
                 });
                 let (_, delegation_rx) = watch::channel(builder);
                 subnet.certify_latest_state();
-                let nns_subnet_id = pic
-                    .nns_subnet()
-                    .map(|subnet| subnet.get_subnet_id())
-                    .expect(
-                        "The NNS subnet should already exist if we are already executing requests",
-                    );
                 let metrics = HttpHandlerMetrics::new(&MetricsRegistry::new());
-                let svc = SubnetReadStateServiceBuilder::builder(
+                let mainnet_root_of_trust =
+                    IcRootOfTrust::from(icp_mainnet_root_public_key_for_testing());
+                let svc = ReadStateServiceBuilder::builder(
+                    subnet.replica_logger.clone(),
                     metrics,
-                    NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     subnet.state_manager.clone(),
+                    subnet.registry_client.clone(),
+                    Arc::new(StandaloneIngressSigVerifier),
+                    NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     nns_subnet_id,
                     self.version,
+                    read_state::Target::Subnet,
                 )
+                .with_malicious_flags(pic.malicious_flags.clone())
+                .with_time_source(subnet.time_source.clone())
+                .with_additional_root_of_trust(mainnet_root_of_trust)
                 .build_service();
 
                 let version_str = match self.version {
-                    read_state::subnet::Version::V2 => "v2",
-                    read_state::subnet::Version::V3 => "v3",
+                    read_state::Version::V2 => "v2",
+                    read_state::Version::V3 => "v3",
                 };
 
                 let request = axum::http::Request::builder()

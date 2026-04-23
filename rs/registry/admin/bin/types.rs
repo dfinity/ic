@@ -9,7 +9,7 @@ use ic_nns_governance_api::ProposalActionRequest;
 use ic_protobuf::registry::{
     node::v1::{IPv4InterfaceConfig, NodeRewardType},
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
-    subnet::v1::SubnetRecord as SubnetRecordProto,
+    subnet::v1::{CanisterCyclesCostSchedule, SubnetRecord as SubnetRecordProto},
 };
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -63,6 +63,7 @@ pub(crate) struct SubnetRecord {
     pub nodes: IndexMap<PrincipalId, NodeDetails>,
     pub max_ingress_bytes_per_message: u64,
     pub max_ingress_messages_per_block: u64,
+    pub max_ingress_bytes_per_block: u64,
     pub max_block_payload_size: u64,
     pub unit_delay_millis: u64,
     pub initial_notary_delay_millis: u64,
@@ -71,12 +72,17 @@ pub(crate) struct SubnetRecord {
     pub dkg_dealings_per_block: u64,
     pub start_as_nns: bool,
     pub subnet_type: SubnetType,
+    pub is_halted: bool,
+    pub halt_at_cup_height: bool,
     pub features: SubnetFeatures,
     pub resource_limits: ResourceLimits,
     pub max_number_of_canisters: u64,
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
     pub chain_key_config: Option<ChainKeyConfig>,
+    pub canister_cycles_cost_schedule: CanisterCyclesCostSchedule,
+    pub subnet_admins: Vec<String>,
+    pub recalled_replica_version_ids: Vec<String>,
 }
 
 impl SubnetRecord {
@@ -95,41 +101,87 @@ impl SubnetRecord {
     }
 }
 
-impl From<&SubnetRecordProto> for SubnetRecord {
+impl From<SubnetRecordProto> for SubnetRecord {
     /// Convert a v1::SubnetRecord to a SubnetRecord. Most data is passed
     /// through unchanged, except the `membership` list, which is converted
     /// to a `Vec<String>` for nicer display.
-    fn from(value: &SubnetRecordProto) -> Self {
+    fn from(value: SubnetRecordProto) -> Self {
+        // Exhaustive destructuring (no `..`) so that adding a field to the
+        // proto forces the compiler to flag this conversion.
+        let SubnetRecordProto {
+            membership,
+            max_ingress_bytes_per_message,
+            unit_delay_millis,
+            initial_notary_delay_millis,
+            replica_version_id,
+            dkg_interval_length,
+            start_as_nns,
+            subnet_type,
+            dkg_dealings_per_block,
+            is_halted,
+            max_ingress_messages_per_block,
+            max_ingress_bytes_per_block,
+            max_block_payload_size,
+            features,
+            max_number_of_canisters,
+            ssh_readonly_access,
+            ssh_backup_access,
+            halt_at_cup_height,
+            chain_key_config,
+            canister_cycles_cost_schedule,
+            subnet_admins,
+            recalled_replica_version_ids,
+            resource_limits,
+        } = value;
+
+        let membership = membership
+            .into_iter()
+            .map(|n| {
+                PrincipalId::try_from(&n[..])
+                    .expect("could not create PrincipalId from membership entry")
+                    .to_string()
+            })
+            .collect();
+        let subnet_type = SubnetType::try_from(subnet_type).unwrap();
+        let features = features.unwrap_or_default().into();
+        let resource_limits = resource_limits.unwrap_or_default().into();
+        let chain_key_config = chain_key_config.map(|c| c.try_into().unwrap());
+        let canister_cycles_cost_schedule =
+            CanisterCyclesCostSchedule::try_from(canister_cycles_cost_schedule).unwrap();
+        let subnet_admins = subnet_admins
+            .into_iter()
+            .map(|p| {
+                PrincipalId::try_from(&p.raw[..])
+                    .expect("could not create PrincipalId from subnet_admins entry")
+                    .to_string()
+            })
+            .collect();
+
         Self {
-            membership: value
-                .membership
-                .iter()
-                .map(|n| {
-                    PrincipalId::try_from(&n[..])
-                        .expect("could not create PrincipalId from membership entry")
-                        .to_string()
-                })
-                .collect(),
+            membership,
             nodes: IndexMap::default(),
-            max_ingress_bytes_per_message: value.max_ingress_bytes_per_message,
-            max_ingress_messages_per_block: value.max_ingress_messages_per_block,
-            max_block_payload_size: value.max_block_payload_size,
-            unit_delay_millis: value.unit_delay_millis,
-            initial_notary_delay_millis: value.initial_notary_delay_millis,
-            replica_version_id: value.replica_version_id.clone(),
-            dkg_interval_length: value.dkg_interval_length,
-            dkg_dealings_per_block: value.dkg_dealings_per_block,
-            start_as_nns: value.start_as_nns,
-            subnet_type: SubnetType::try_from(value.subnet_type).unwrap(),
-            features: value.features.unwrap_or_default().into(),
-            resource_limits: value.resource_limits.unwrap_or_default().into(),
-            max_number_of_canisters: value.max_number_of_canisters,
-            ssh_readonly_access: value.ssh_readonly_access.clone(),
-            ssh_backup_access: value.ssh_backup_access.clone(),
-            chain_key_config: value
-                .chain_key_config
-                .as_ref()
-                .map(|c| c.clone().try_into().unwrap()),
+            max_ingress_bytes_per_message,
+            max_ingress_messages_per_block,
+            max_ingress_bytes_per_block,
+            max_block_payload_size,
+            unit_delay_millis,
+            initial_notary_delay_millis,
+            replica_version_id,
+            dkg_interval_length,
+            dkg_dealings_per_block,
+            start_as_nns,
+            subnet_type,
+            is_halted,
+            halt_at_cup_height,
+            features,
+            resource_limits,
+            max_number_of_canisters,
+            ssh_readonly_access,
+            ssh_backup_access,
+            chain_key_config,
+            canister_cycles_cost_schedule,
+            subnet_admins,
+            recalled_replica_version_ids,
         }
     }
 }
