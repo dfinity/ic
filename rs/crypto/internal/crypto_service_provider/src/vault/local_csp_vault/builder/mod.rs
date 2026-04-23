@@ -149,8 +149,8 @@ where
 
     /// Installs an externally-managed rayon pool used for NIDKG work.
     ///
-    /// If not called, `build` creates a small default pool — see
-    /// [`super::NIDKG_THREAD_POOL_SIZE`]. Prod callers that already own a
+    /// If not called, `build` uses the process-wide singleton returned by
+    /// [`super::default_nidkg_thread_pool`]. Prod callers that already own a
     /// NIDKG pool (e.g., the remote vault server) should inject it here so
     /// that a single pool is shared across the RPC dispatch layer and the
     /// vault's internal `par_iter` calls.
@@ -179,7 +179,7 @@ where
             logger: self.logger,
             thread_pool_nidkg: self
                 .thread_pool_nidkg
-                .unwrap_or_else(super::new_nidkg_thread_pool),
+                .unwrap_or_else(super::default_nidkg_thread_pool),
         }
     }
 
