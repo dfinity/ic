@@ -88,7 +88,7 @@ fn main() {
 
     group.bench_function("iteration", |bench| {
         bench.iter(|| {
-            round_schedule.start_iteration(&mut state, current_round, true, &metrics, &log);
+            round_schedule.start_iteration(&mut state, true, &metrics, &log);
             round_schedule.end_iteration(
                 &mut state,
                 &executed_canisters,
@@ -100,7 +100,7 @@ fn main() {
     });
 
     // Populate the subnet schedule, even if the iteration benchmark is not run.
-    round_schedule.start_iteration(&mut state, current_round, true, &metrics, &log);
+    round_schedule.start_iteration(&mut state, true, &metrics, &log);
     round_schedule.end_iteration(
         &mut state,
         &executed_canisters,

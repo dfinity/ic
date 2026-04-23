@@ -1047,7 +1047,7 @@ impl SchedulerImpl {
             .iter()
             .filter_map(|(canister_id, canister)| {
                 if canister.has_paused_execution() {
-                    let canister_priority = subnet_schedule.get_mut(*canister_id);
+                    let canister_priority = subnet_schedule.get(canister_id);
                     Some(CanisterRoundState::new(canister, canister_priority))
                 } else {
                     None
@@ -2216,8 +2216,9 @@ fn abort_canister(
 ) {
     if exec_env.abort_canister(canister, log, cost_schedule) {
         // Reset `executed_slices` to zero.
-        let canister_priority = subnet_schedule.get_mut(canister.canister_id());
-        canister_priority.executed_slices = 0;
+        subnet_schedule
+            .get_mut(canister.canister_id())
+            .executed_slices = 0;
     }
 }
 

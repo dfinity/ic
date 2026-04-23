@@ -63,7 +63,7 @@ pub(super) struct CanisterRoundState {
 }
 
 impl CanisterRoundState {
-    pub fn new(canister: &CanisterState, canister_priority: &mut CanisterPriority) -> Self {
+    pub fn new(canister: &CanisterState, canister_priority: &CanisterPriority) -> Self {
         // Ensure that `long_execution_start_round` matches the canister state.
         debug_assert_eq!(
             canister.has_long_execution(),
@@ -195,7 +195,7 @@ pub struct RoundSchedule {
 
     /// Canisters that were scheduled.
     scheduled_canisters: BTreeSet<CanisterId>,
-    /// Canisters that had a long execution at round start.
+    /// Canisters that executed a long execution slice this round.
     long_execution_canisters: BTreeSet<CanisterId>,
     /// Canisters that advanced or completed a message execution.
     executed_canisters: BTreeSet<CanisterId>,
