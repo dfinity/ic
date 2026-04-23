@@ -1,5 +1,6 @@
 use candid::{Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId, SnapshotId};
+use ic_crypto_sha2::Sha256;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_management_canister_types_private::CanisterSnapshotResponse;
 use ic_nervous_system_common::E8;
@@ -588,4 +589,84 @@ fn extract_proposal_id(ic_admin_output: &str) -> u64 {
         panic!("Expected proposal response in ic-admin output:\n{ic_admin_output}")
     });
     u64::from_str(&captures[1]).unwrap()
+}
+
+/// Verifies the `--snapshot-before`` flag in `ic-admin` when upgrading
+/// (via `propose-to-change-nns-canister`).
+#[tokio::test]
+async fn test_snapshot_before_nns_canister_upgrade() {
+    // Step 1: Prepare the world.
+
+    let mut pocket_ic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_sns_subnet()
+        .build_async()
+        .await;
+
+    let mut nns_installer = NnsInstaller::default();
+    nns_installer.with_current_nns_canister_versions();
+    nns_installer.install(&pocket_ic).await;
+
+    let endpoint = pocket_ic.make_live(None).await;
+    let nns_url = endpoint.as_ref();
+    let neuron_id = TEST_NEURON_1_ID.to_string();
+
+    // Step 2: Call the code under test.
+
+    // Step 2.1: Prepare proposal ingredients.
+    let target_canister_id = LEDGER_CANISTER_ID;
+    let wasm_path =
+        env::var("LEDGER_CANISTER_WASM_PATH").expect("LEDGER_CANISTER_WASM_PATH not set");
+    let wasm_bytes = std::fs::read(&wasm_path).expect("Failed to read Ledger wasm");
+    let wasm_sha256 = hex::encode(Sha256::hash(&wasm_bytes));
+
+    // Step 2.2: Submit the proposal, crucially, via `ic-admin`.`
+    let ic_admin_output = run_ic_admin(
+        nns_url,
+        vec![
+            "propose-to-change-nns-canister".to_string(),
+            "--snapshot-before".to_string(), // <-- THIS IS THE INTERESTING PART RIGHT HERE!
+            "--proposer".to_string(),
+            neuron_id,
+            "--canister-id".to_string(),
+            target_canister_id.to_string(),
+            "--mode".to_string(),
+            "upgrade".to_string(),
+            "--wasm-module-path".to_string(),
+            wasm_path,
+            "--wasm-module-sha256".to_string(),
+            wasm_sha256,
+            "--summary".to_string(),
+            "Snapshot Ledger then upgrade it.".to_string(),
+        ],
+    );
+    let proposal_id = extract_proposal_id(&ic_admin_output);
+
+    // Step 3: Verify results.
+
+    // Step 3.1: Proposal claims to be successfully executed.
+    let proposal_info = nns::governance::wait_for_proposal_execution(&pocket_ic, proposal_id)
+        .await
+        .unwrap();
+    assert_eq!(
+        ProposalStatus::try_from(proposal_info.status),
+        Ok(ProposalStatus::Executed),
+        "{proposal_info:#?}",
+    );
+    // DO NOT MERGE - Also look at success_value.
+
+    // Step 3.2: Verify the snapshot was created.
+    // This is the INTERESTING assert.
+    let snapshots: Vec<CanisterSnapshotResponse> = management::list_canister_snapshots(
+        &pocket_ic,
+        target_canister_id,
+        ROOT_CANISTER_ID.into(),
+    )
+    .await;
+    assert_eq!(snapshots.len(), 1, "{snapshots:#?}");
+    assert_eq!(
+        snapshots[0].id.get_canister_id(),
+        target_canister_id,
+        "{snapshots:#?}",
+    );
 }
