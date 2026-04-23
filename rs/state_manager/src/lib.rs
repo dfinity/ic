@@ -89,7 +89,6 @@ use std::{
     sync::Mutex,
 };
 use tempfile::tempfile;
-use tokio::sync::watch;
 use uuid::Uuid;
 
 /// The number of threads that state manager starts to construct checkpoints.
@@ -943,7 +942,7 @@ pub struct StateManagerImpl {
     // Cached latest state height.  We cache it separately because it's
     // requested quite often and this causes high contention on the lock.
     latest_state_height: Arc<AtomicU64>,
-    latest_certified_height: Arc<AtomicU64>,
+    latest_certified_height: AtomicU64,
     fast_forward_height: AtomicU64,
     persist_metadata_guard: Arc<Mutex<()>>,
     tip_channel: Sender<TipRequest>,
@@ -955,7 +954,6 @@ pub struct StateManagerImpl {
     latest_height_update_time: Arc<Mutex<Instant>>,
     /// The height at which this StateManager was started. Set once during initialization and never modified.
     started_height: Height,
-    max_certified_height_tx: Arc<watch::Sender<Height>>,
 }
 
 #[cfg(debug_assertions)]
@@ -1322,7 +1320,6 @@ impl StateManagerImpl {
         config: &Config,
         starting_height: Option<Height>,
         malicious_flags: MaliciousFlags,
-        max_certified_height_tx: watch::Sender<Height>,
     ) -> Self {
         let metrics = StateManagerMetrics::new(metrics_registry, log.clone());
 
@@ -1512,7 +1509,7 @@ impl StateManagerImpl {
         );
 
         let latest_state_height = Arc::new(AtomicU64::new(0));
-        let latest_certified_height = Arc::new(AtomicU64::new(0));
+        let latest_certified_height = AtomicU64::new(0);
         let fast_forward_height = AtomicU64::new(0);
 
         let initial_snapshot = Snapshot {
@@ -1640,7 +1637,6 @@ impl StateManagerImpl {
             malicious_flags,
             latest_height_update_time,
             started_height,
-            max_certified_height_tx: Arc::new(max_certified_height_tx),
         }
     }
 
@@ -2620,24 +2616,6 @@ impl StateManagerImpl {
     }
 }
 
-fn update_latest_certified_height(
-    latest_certified_height: &AtomicU64,
-    metrics: &StateManagerMetrics,
-    max_certified_height_tx: &watch::Sender<Height>,
-    height: Height,
-) {
-    let latest_certified = update_latest_height(latest_certified_height, height);
-    metrics.latest_certified_height.set(latest_certified as i64);
-    max_certified_height_tx.send_if_modified(|h| {
-        if height > *h {
-            *h = height;
-            true
-        } else {
-            false
-        }
-    });
-}
-
 fn initial_state(own_subnet_id: SubnetId, own_subnet_type: SubnetType) -> Labeled<ReplicatedState> {
     Labeled::new(
         StateManagerImpl::INITIAL_STATE_HEIGHT,
@@ -3073,12 +3051,11 @@ impl StateManager for StateManagerImpl {
                 );
             }
 
-            update_latest_certified_height(
-                &self.latest_certified_height,
-                &self.metrics,
-                &self.max_certified_height_tx,
-                certification_height,
-            );
+            let latest_certified =
+                update_latest_height(&self.latest_certified_height, certification.height);
+            self.metrics
+                .latest_certified_height
+                .set(latest_certified as i64);
 
             if let Some((_, certification_requested_at)) = metadata.hash_tree {
                 self.metrics
@@ -3438,13 +3415,11 @@ impl StateManager for StateManagerImpl {
             state: Arc::clone(&state),
             states: Arc::clone(&self.states),
             latest_state_height: Arc::clone(&self.latest_state_height),
-            latest_certified_height: Arc::clone(&self.latest_certified_height),
             height,
             latest_height_update_time: Arc::clone(&self.latest_height_update_time),
             reference_certification: Box::new(maybe_delivered_certification),
             scope: scope.clone(),
             state_layout: Box::new(self.state_layout.clone()),
-            max_certified_height_tx: Arc::clone(&self.max_certified_height_tx),
         };
         self.hash_channel.send(hash_req).unwrap();
 
@@ -3559,7 +3534,6 @@ enum HashRequest {
         state: Arc<ReplicatedState>,
         states: Arc<parking_lot::RwLock<SharedState>>,
         latest_state_height: Arc<AtomicU64>,
-        latest_certified_height: Arc<AtomicU64>,
         height: Height,
         latest_height_update_time: Arc<Mutex<Instant>>,
         /// A certification from consensus. If `Some`, we compare it with the state hash
@@ -3570,7 +3544,6 @@ enum HashRequest {
         scope: CertificationScope,
         /// Boxed so that variants have similar size and we don't waste space when sending `HashRequest::Wait`.
         state_layout: Box<StateLayout>,
-        max_certified_height_tx: Arc<watch::Sender<Height>>,
     },
     /// Wait for the message to be executed and notify back via `sender`.
     Wait { sender: Sender<()> },
@@ -3592,13 +3565,11 @@ fn spawn_hash_thread(
                             state,
                             states,
                             latest_state_height,
-                            latest_certified_height,
                             height,
                             latest_height_update_time,
                             reference_certification,
                             scope,
                             state_layout,
-                            max_certified_height_tx,
                         } => {
                             let mut certification_metadata =
                                 StateManagerImpl::compute_certification_metadata(
@@ -3664,8 +3635,6 @@ fn spawn_hash_thread(
                                     .make_contiguous()
                                     .sort_by_key(|snapshot| snapshot.height);
 
-                                let has_certification =
-                                    certification_metadata.certification.is_some();
                                 states
                                     .certifications_metadata
                                     .insert(height, certification_metadata);
@@ -3682,19 +3651,6 @@ fn spawn_hash_thread(
                                         .height_update_time_seconds
                                         .observe((now - *last_height_update_time).as_secs_f64());
                                     *last_height_update_time = now;
-                                }
-                                // Only update the certified height and notify the channel if the
-                                // certification is actually being stored. We must not fire the channel
-                                // when the snapshot already existed (e.g., due to state sync), because
-                                // in that case `certification_metadata` is never inserted and the
-                                // certified state at this height would not be available.
-                                if has_certification {
-                                    update_latest_certified_height(
-                                        &latest_certified_height,
-                                        &metrics,
-                                        &max_certified_height_tx,
-                                        height,
-                                    );
                                 }
                             }
                         }
