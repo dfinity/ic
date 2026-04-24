@@ -12,7 +12,7 @@ use ic_nervous_system_integration_tests::pocket_ic_helpers::{
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::pb::v1::ProposalStatus;
 use ic_nns_governance_api::{
-    MakeProposalRequest, Motion, ProposalActionRequest, SuccessfulProposalExecutionValue,
+    BatchOk, MakeProposalRequest, Motion, ProposalActionRequest, SuccessfulProposalExecutionValue,
     TakeCanisterSnapshotOk,
 };
 use icp_ledger::{AccountIdentifier, DEFAULT_TRANSFER_FEE, Tokens};
@@ -573,17 +573,7 @@ async fn test_governance_canister_snapshot() {
     );
 }
 
-/// Parses the proposal ID from ic-admin's stderr output, which looks like
-/// "response: Ok(proposal 3)".
-fn extract_proposal_id(ic_admin_output: &str) -> u64 {
-    let re = regex::Regex::new(r"proposal (\d+)").unwrap();
-    let captures = re.captures(ic_admin_output).unwrap_or_else(|| {
-        panic!("Expected proposal response in ic-admin output:\n{ic_admin_output}")
-    });
-    u64::from_str(&captures[1]).unwrap()
-}
-
-/// Verifies the `--snapshot-before`` flag in `ic-admin` when upgrading
+/// Verifies the `--snapshot-before` flag in `ic-admin` when upgrading
 /// (via `propose-to-change-nns-canister`).
 #[tokio::test]
 async fn test_snapshot_before_nns_canister_upgrade() {
@@ -597,6 +587,7 @@ async fn test_snapshot_before_nns_canister_upgrade() {
 
     let mut nns_installer = NnsInstaller::default();
     nns_installer.with_current_nns_canister_versions();
+    nns_installer.with_test_governance_canister();
     nns_installer.install(&pocket_ic).await;
 
     let endpoint = pocket_ic.make_live(None).await;
@@ -643,10 +634,13 @@ async fn test_snapshot_before_nns_canister_upgrade() {
         Ok(ProposalStatus::Executed),
         "{proposal_info:#?}",
     );
-    // DO NOT MERGE - Also look at success_value.
 
-    // Step 3A.2: Verify the snapshot was created.
-    // This is the INTERESTING assert.
+    // Step 3A.2: success_value carries the new snapshot's ID.
+    let no_replace_snapshot_id_bytes =
+        assert_snapshot_before_upgrade_success_value(&proposal_info.success_value);
+    let no_replace_snapshot_snapshot_id_hex = hex::encode(&no_replace_snapshot_id_bytes);
+
+    // Step 3A.3: Verify the snapshot was created (corroborate success_value via list_canister_snapshots).
     let snapshots: Vec<CanisterSnapshotResponse> = management::list_canister_snapshots(
         &pocket_ic,
         target_canister_id,
@@ -659,7 +653,11 @@ async fn test_snapshot_before_nns_canister_upgrade() {
         target_canister_id,
         "{snapshots:#?}",
     );
-    let no_replace_snapshot_snapshot_id_hex = hex::encode(snapshots[0].snapshot_id().as_slice());
+    assert_eq!(
+        snapshots[0].snapshot_id().as_slice(),
+        no_replace_snapshot_id_bytes,
+        "{snapshots:#?}",
+    );
 
     // Scenario B: Replace existing snapshot, using
     // --snapshot-before=replace=${OLD_SNAPSHOT_ID}
@@ -694,7 +692,17 @@ async fn test_snapshot_before_nns_canister_upgrade() {
         "{replace_snapshot_proposal_info:#?}",
     );
 
-    // Still only 1 snapshot (the first was replaced).
+    // success_value carries the replacement snapshot's ID.
+    let replace_snapshot_id_bytes =
+        assert_snapshot_before_upgrade_success_value(&replace_snapshot_proposal_info.success_value);
+
+    // The replacement snapshot is a new one — the original was clobbered.
+    assert_ne!(
+        replace_snapshot_id_bytes, no_replace_snapshot_id_bytes,
+        "{replace_snapshot_proposal_info:#?}",
+    );
+
+    // Corroborate via list_canister_snapshots: still only 1 snapshot, with the new ID.
     let snapshots: Vec<CanisterSnapshotResponse> = management::list_canister_snapshots(
         &pocket_ic,
         target_canister_id,
@@ -702,11 +710,40 @@ async fn test_snapshot_before_nns_canister_upgrade() {
     )
     .await;
     assert_eq!(snapshots.len(), 1, "{snapshots:#?}");
-
-    // The surviving snapshot is a new one — the original was clobbered.
-    let second_snapshot_id_hex = hex::encode(snapshots[0].snapshot_id().as_slice());
-    assert_ne!(
-        second_snapshot_id_hex, no_replace_snapshot_snapshot_id_hex,
+    assert_eq!(
+        snapshots[0].snapshot_id().as_slice(),
+        replace_snapshot_id_bytes,
         "{snapshots:#?}",
     );
+}
+
+/// Parses the proposal ID from ic-admin's stderr output, which looks like
+/// "response: Ok(proposal 3)".
+fn extract_proposal_id(ic_admin_output: &str) -> u64 {
+    let re = regex::Regex::new(r"proposal (\d+)").unwrap();
+    let captures = re.captures(ic_admin_output).unwrap_or_else(|| {
+        panic!("Expected proposal response in ic-admin output:\n{ic_admin_output}")
+    });
+    u64::from_str(&captures[1]).unwrap()
+}
+
+/// Asserts that `success_value` has the shape expected from a
+/// `Batch([TakeCanisterSnapshot, InstallCode])` proposal, and returns the
+/// snapshot ID bytes from the `TakeCanisterSnapshot` sub-result.
+#[track_caller]
+fn assert_snapshot_before_upgrade_success_value(
+    success_value: &Option<SuccessfulProposalExecutionValue>,
+) -> Vec<u8> {
+    let sub_results = match success_value {
+        Some(SuccessfulProposalExecutionValue::Batch(BatchOk { sub_results })) => sub_results,
+        other => panic!("Expected Batch success_value, got: {other:#?}"),
+    };
+    assert_eq!(sub_results.len(), 2, "{sub_results:#?}");
+    assert_eq!(sub_results[1], None, "{sub_results:#?}"); // InstallCode produces no value.
+    match sub_results[0].as_ref() {
+        Some(SuccessfulProposalExecutionValue::TakeCanisterSnapshot(TakeCanisterSnapshotOk {
+            snapshot_id,
+        })) => snapshot_id.clone(),
+        other => panic!("Expected TakeCanisterSnapshot sub-result, got: {other:#?}"),
+    }
 }
