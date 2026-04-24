@@ -295,6 +295,16 @@ pub const NEURON_MINIMUM_DISSOLVE_DELAY_TO_PROPOSE_SECONDS: u64 = 6 * ONE_MONTH_
 pub const MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70: u64 = 8 * ONE_YEAR_SECONDS;
 pub const MAX_DISSOLVE_DELAY_SECONDS_POST_MISSION_70: u64 = 2 * ONE_YEAR_SECONDS;
 
+// Minimum dissolve delay that qualifies a neuron to be a member of the eight year gang
+// during a second round of induction.
+pub const RELAXED_EIGHT_YEAR_GANG_MIN_DISSOLVE_DELAY_SECONDS: u64 =
+    MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70 - 2 * ONE_DAY_SECONDS;
+
+// To avoid giving the eight year gang bonus to newly staked ICP, for a neuron
+// to qualify in the second round of induction into the eight year gang,
+// its ICP must not be newly staked. This defines "sufficiently old staked ICP".
+pub const RELAXED_EIGHT_YEAR_GANG_MAX_AGING_SINCE_TIMESTAMP_SECONDS: u64 = 1_774_828_800;
+
 /// Returns the maximum dissolve delay allowed for a neuron. After the flag is enabled, we can
 /// replace `max_dissolve_delay_seconds()` with `MAX_DISSOLVE_DELAY_SECONDS` and set
 /// `MAX_DISSOLVE_DELAY_SECONDS` to `MAX_DISSOLVE_DELAY_SECONDS_POST_MISSION_70`.
@@ -1376,14 +1386,30 @@ impl Governance {
     }
 
     fn maybe_set_eight_year_gang_bonus_base(&mut self) {
-        if self.heap_data.eight_year_gang_bonus_migration_done {
+        let strict_done = &mut self.heap_data.eight_year_gang_bonus_migration_done;
+        if *strict_done {
+            self.maybe_set_relaxed_eight_year_gang_bonus_base_e8s_or_panic();
             return;
         }
 
         self.neuron_store
             .set_eight_year_gang_bonus_base_e8s_for_all_neurons_or_panic();
 
-        self.heap_data.eight_year_gang_bonus_migration_done = true;
+        *strict_done = true;
+    }
+
+    fn maybe_set_relaxed_eight_year_gang_bonus_base_e8s_or_panic(&mut self) {
+        let relaxed_done = &mut self.heap_data.relaxed_eight_year_gang_bonus_migration_done;
+        if *relaxed_done {
+            return;
+        }
+
+        self.neuron_store
+            .set_relaxed_eight_year_gang_bonus_base_e8s_or_panic(
+                &self.heap_data.neuron_id_to_pre_clamp_dissolve_state,
+            );
+
+        *relaxed_done = true;
     }
 
     /// After calling this method, the proto and neuron_store (the heap neurons at least)

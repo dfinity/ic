@@ -2295,6 +2295,9 @@ message Governance {
   // dissolve delay. Enables restoring original dissolve states if the maximum is reversed.
   map<uint64, NeuronDissolveStateSnapshot> neuron_id_to_pre_clamp_dissolve_state = 32;
 
+  // Whether the relaxed eight year gang member induction is done.
+  bool relaxed_eight_year_gang_bonus_migration_done = 33;
+
   reserved 30;
   reserved "first_proposal_id_to_record_voting_history";
 

@@ -3264,6 +3264,9 @@ pub struct Governance {
     #[prost(map = "uint64, message", tag = "32")]
     pub neuron_id_to_pre_clamp_dissolve_state:
         ::std::collections::HashMap<u64, NeuronDissolveStateSnapshot>,
+    /// Whether the relaxed eight year gang member induction is done.
+    #[prost(bool, tag = "33")]
+    pub relaxed_eight_year_gang_bonus_migration_done: bool,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
