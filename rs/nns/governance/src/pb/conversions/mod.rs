@@ -1771,23 +1771,18 @@ impl From<api::DerivedProposalInformation> for pb::DerivedProposalInformation {
     }
 }
 
-impl From<pb::SuccessfulProposalExecutionValue> for api::SuccessfulProposalExecutionValue {
+impl From<pb::SuccessfulProposalExecutionValue> for Option<api::SuccessfulProposalExecutionValue> {
     fn from(item: pb::SuccessfulProposalExecutionValue) -> Self {
-        match item.proposal_type {
-            Some(ProposalType::CreateCanisterAndInstallCode(ok)) => {
+        let result = match item.proposal_type? {
+            ProposalType::CreateCanisterAndInstallCode(ok) => {
                 api::SuccessfulProposalExecutionValue::CreateCanisterAndInstallCode(ok.into())
             }
-            Some(ProposalType::TakeCanisterSnapshot(ok)) => {
+            ProposalType::TakeCanisterSnapshot(ok) => {
                 api::SuccessfulProposalExecutionValue::TakeCanisterSnapshot(ok.into())
             }
-            None => {
-                // This shouldn't happen, but if it does, we need a fallback.
-                // Use a CreateCanisterAndInstallCode with None canister_id.
-                api::SuccessfulProposalExecutionValue::CreateCanisterAndInstallCode(
-                    api::CreateCanisterAndInstallCodeOk { canister_id: None },
-                )
-            }
-        }
+        };
+
+        Some(result)
     }
 }
 
