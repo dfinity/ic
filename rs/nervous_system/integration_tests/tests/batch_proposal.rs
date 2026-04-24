@@ -28,6 +28,8 @@ async fn test_batch_of_two_create_canister_and_install_code_proposals() {
     // Step 1.2: Install NNS.
     let mut nns_installer = NnsInstaller::default();
     nns_installer.with_current_nns_canister_versions();
+    // Required to enable the Batch proposal feature flag.
+    nns_installer.with_test_governance_canister();
     nns_installer.install(&pocket_ic).await;
 
     // Step 2: Call the code under test.

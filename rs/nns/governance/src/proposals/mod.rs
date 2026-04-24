@@ -1,4 +1,5 @@
 use crate::{
+    are_batch_proposals_enabled,
     governance::{Environment, LOG_PREFIX},
     pb::v1::{
         ApproveGenesisKyc, Batch, BlessAlternativeGuestOsVersion, CreateCanisterAndInstallCode,
@@ -155,6 +156,13 @@ impl TryFrom<Option<Action>> for ValidProposalAction {
 }
 
 fn try_into_valid_batch(batch: Batch) -> Result<Vec<ValidProposalAction>, GovernanceError> {
+    if !are_batch_proposals_enabled() {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "Batch proposals are not enabled yet.",
+        ));
+    }
+
     // Validate length.
     if batch.actions.is_empty() {
         return Err(GovernanceError::new_with_message(
