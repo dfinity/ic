@@ -477,9 +477,9 @@ fn generate_dkg_response_payload(
                 high_threshold_transcript.dkg_id
             );
             let low_threshold_transcript_record =
-                InitialNiDkgTranscriptRecord::from(low_threshold_transcript.clone());
+                InitialNiDkgTranscriptRecord::from(low_threshold_transcript);
             let high_threshold_transcript_record =
-                InitialNiDkgTranscriptRecord::from(high_threshold_transcript.clone());
+                InitialNiDkgTranscriptRecord::from(high_threshold_transcript);
 
             let threshold_sig_pk = match ThresholdSigPublicKey::try_from(high_threshold_transcript)
             {
