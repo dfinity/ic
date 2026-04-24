@@ -611,43 +611,47 @@ async fn test_snapshot_before_nns_canister_upgrade() {
     let nns_url = endpoint.as_ref();
     let neuron_id = TEST_NEURON_1_ID.to_string();
 
-    // Step 2: Call the code under test.
+    // Scenario A: Snapshot before upgrading without replacing an old snapshot
+    // (since there are none yet).
 
-    // Step 2.1: Prepare proposal ingredients.
+    // Step 2A: Call the code under test.
+
+    // Step 2A.1: Prepare proposal ingredients.
     let target_canister_id = LEDGER_CANISTER_ID;
     let wasm_path =
         env::var("LEDGER_CANISTER_WASM_PATH").expect("LEDGER_CANISTER_WASM_PATH not set");
     let wasm_bytes = std::fs::read(&wasm_path).expect("Failed to read Ledger wasm");
     let wasm_sha256 = hex::encode(Sha256::hash(&wasm_bytes));
 
-    // Step 2.2: Submit the proposal, crucially, via `ic-admin`.`
+    // Step 2A.2: Submit the proposal, crucially, via `ic-admin`.`
     let ic_admin_output = run_ic_admin(
         nns_url,
         vec![
             "propose-to-change-nns-canister".to_string(),
             "--snapshot-before".to_string(), // <-- THIS IS THE INTERESTING PART RIGHT HERE!
             "--proposer".to_string(),
-            neuron_id,
+            neuron_id.clone(),
             "--canister-id".to_string(),
             target_canister_id.to_string(),
             "--mode".to_string(),
             "upgrade".to_string(),
             "--wasm-module-path".to_string(),
-            wasm_path,
+            wasm_path.clone(),
             "--wasm-module-sha256".to_string(),
-            wasm_sha256,
+            wasm_sha256.clone(),
             "--summary".to_string(),
             "Snapshot Ledger then upgrade it.".to_string(),
         ],
     );
-    let proposal_id = extract_proposal_id(&ic_admin_output);
+    let no_replace_snapshot_proposal_id = extract_proposal_id(&ic_admin_output);
 
-    // Step 3: Verify results.
+    // Step 3A: Verify results.
 
-    // Step 3.1: Proposal claims to be successfully executed.
-    let proposal_info = nns::governance::wait_for_proposal_execution(&pocket_ic, proposal_id)
-        .await
-        .unwrap();
+    // Step 3A.1: Proposal claims to be successfully executed.
+    let proposal_info =
+        nns::governance::wait_for_proposal_execution(&pocket_ic, no_replace_snapshot_proposal_id)
+            .await
+            .unwrap();
     assert_eq!(
         ProposalStatus::try_from(proposal_info.status),
         Ok(ProposalStatus::Executed),
@@ -655,7 +659,7 @@ async fn test_snapshot_before_nns_canister_upgrade() {
     );
     // DO NOT MERGE - Also look at success_value.
 
-    // Step 3.2: Verify the snapshot was created.
+    // Step 3A.2: Verify the snapshot was created.
     // This is the INTERESTING assert.
     let snapshots: Vec<CanisterSnapshotResponse> = management::list_canister_snapshots(
         &pocket_ic,
@@ -667,6 +671,62 @@ async fn test_snapshot_before_nns_canister_upgrade() {
     assert_eq!(
         snapshots[0].id.get_canister_id(),
         target_canister_id,
+        "{snapshots:#?}",
+    );
+    let no_replace_snapshot_snapshot_id_hex = hex::encode(snapshots[0].snapshot_id().as_slice());
+
+    // Scenario B: Replace existing snapshot, using
+    // --snapshot-before=replace=${OLD_SNAPSHOT_ID}
+
+    // Step 2B: Run code under test.
+
+    let ic_admin_output = run_ic_admin(
+        nns_url,
+        vec![
+            "propose-to-change-nns-canister".to_string(),
+            // THE INTERESTING PART IS HERE vvv
+            format!("--snapshot-before=replace={no_replace_snapshot_snapshot_id_hex}"),
+            "--proposer".to_string(),
+            neuron_id,
+            "--canister-id".to_string(),
+            target_canister_id.to_string(),
+            "--mode".to_string(),
+            "upgrade".to_string(),
+            "--wasm-module-path".to_string(),
+            wasm_path,
+            "--wasm-module-sha256".to_string(),
+            wasm_sha256,
+            "--summary".to_string(),
+            "Snapshot Ledger (replacing first snapshot) then upgrade it.".to_string(),
+        ],
+    );
+    let replace_snapshot_proposal_id = extract_proposal_id(&ic_admin_output);
+    let replace_snapshot_proposal_info =
+        nns::governance::wait_for_proposal_execution(&pocket_ic, replace_snapshot_proposal_id)
+            .await
+            .unwrap();
+
+    // Step 3B: Verify results.
+
+    assert_eq!(
+        ProposalStatus::try_from(replace_snapshot_proposal_info.status),
+        Ok(ProposalStatus::Executed),
+        "{replace_snapshot_proposal_info:#?}",
+    );
+
+    // Still only 1 snapshot (the first was replaced).
+    let snapshots: Vec<CanisterSnapshotResponse> = management::list_canister_snapshots(
+        &pocket_ic,
+        target_canister_id,
+        ROOT_CANISTER_ID.into(),
+    )
+    .await;
+    assert_eq!(snapshots.len(), 1, "{snapshots:#?}");
+
+    // The surviving snapshot is a new one — the original was clobbered.
+    let second_snapshot_id_hex = hex::encode(snapshots[0].snapshot_id().as_slice());
+    assert_ne!(
+        second_snapshot_id_hex, no_replace_snapshot_snapshot_id_hex,
         "{snapshots:#?}",
     );
 }
