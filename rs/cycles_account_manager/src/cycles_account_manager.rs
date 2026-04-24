@@ -14,7 +14,7 @@ use ic_types::{
     SubnetId,
     canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
     canister_log::MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES,
-    messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, Request, SignedIngress},
+    messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, SignedIngress},
 };
 use ic_types_cycles::{
     CanisterCreation, CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase,
@@ -348,7 +348,7 @@ impl CyclesAccountManager {
             cost_schedule,
             canister.system_state.reserved_balance(),
         );
-        if canister.has_paused_execution() || canister.has_paused_install_code() {
+        if canister.has_paused_execution_or_install_code() {
             if canister.system_state.debited_balance() < cycles + threshold {
                 return Err(CanisterOutOfCyclesError {
                     canister_id: canister.canister_id(),
@@ -498,6 +498,37 @@ impl CyclesAccountManager {
         .map(|_| cost)
     }
 
+    /// Checks whether the canister has enough cycles to prepay the execution of a
+    /// message with the given maximum number of instructions while respecting the
+    /// freezing threshold.
+    ///
+    /// Returns a `CanisterOutOfCyclesError` if the balance is insufficient.
+    pub fn can_prepay_execution_cycles(
+        &self,
+        canister: &CanisterState,
+        max_instructions: NumInstructions,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Result<(), CanisterOutOfCyclesError> {
+        let execution_mode = canister
+            .execution_state
+            .as_ref()
+            .map_or(WasmExecutionMode::Wasm32, |es| es.wasm_execution_mode);
+        let execution_cost =
+            self.execution_cost(max_instructions, subnet_size, cost_schedule, execution_mode);
+
+        self.can_withdraw_cycles_with_threshold(
+            &canister.system_state,
+            execution_cost.real(),
+            canister.memory_usage(),
+            canister.message_memory_usage(),
+            canister.system_state.reserved_balance(),
+            subnet_size,
+            cost_schedule,
+            false,
+        )
+    }
+
     /// Refunds some part of the prepaid execution cost based on the number of
     /// actually executed instructions.
     pub fn refund_unused_execution_cycles(
@@ -532,7 +563,7 @@ impl CyclesAccountManager {
                 cost_schedule,
             )
             .min(prepaid_execution_cycles);
-        system_state.add_cycles(cycles_to_refund);
+        system_state.refund_cycles(prepaid_execution_cycles, cycles_to_refund);
     }
 
     /// Returns the cost of compute allocation for the given duration.
@@ -747,32 +778,18 @@ impl CyclesAccountManager {
         canister_current_memory_usage: NumBytes,
         canister_current_message_memory_usage: MessageMemoryUsage,
         canister_compute_allocation: ComputeAllocation,
-        request: &Request,
         prepayment_for_response_execution: CompoundCycles<Instructions>,
-        prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
+        prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
         reserved_balance: Cycles,
         reveal_top_up: bool,
-    ) -> Result<
-        (
-            CompoundCycles<Instructions>,
-            CompoundCycles<RequestAndResponseTransmission>,
-        ),
-        CanisterOutOfCyclesError,
-    > {
+    ) -> Result<(), CanisterOutOfCyclesError> {
         // The total amount charged consists of:
-        // the fee to do the xnet call (request + response),
-        // the fee to send the request (by size),
-        // the fee for the largest possible response,
-        let transmission_fee = self.xnet_total_transmission_fee(
-            request.payload_size_bytes(),
-            subnet_size,
-            cost_schedule,
-            prepayment_for_response_transmission,
-        );
+        // the total fee for transmitting the call (includes both request and largest allowed response)
         // and the fee for executing the largest allowed response when it eventually arrives.
-        let fee = transmission_fee.real() + prepayment_for_response_execution.real();
+        let fee =
+            prepayment_for_call_transmission.real() + prepayment_for_response_execution.real();
 
         self.withdraw_with_threshold(
             canister_id,
@@ -791,7 +808,7 @@ impl CyclesAccountManager {
             reveal_top_up,
         )?;
 
-        Ok((prepayment_for_response_execution, transmission_fee))
+        Ok(())
     }
 
     /// The total amount for an xnet call transmission. Includes response transmission, but
@@ -801,11 +818,10 @@ impl CyclesAccountManager {
         payload_size: NumBytes,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
-        prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
     ) -> CompoundCycles<RequestAndResponseTransmission> {
         self.xnet_call_performed_fee(subnet_size, cost_schedule)
             + self.xnet_call_bytes_transmitted_fee(payload_size, subnet_size, cost_schedule)
-            + prepayment_for_response_transmission
+            + self.prepayment_for_response_transmission(subnet_size, cost_schedule)
     }
 
     /// The total fee for an xnet call, including payload size, transmission (both ways)
@@ -815,22 +831,15 @@ impl CyclesAccountManager {
     pub fn xnet_call_total_fee(
         &self,
         payload_size: NumBytes,
+        subnet_size: usize,
         execution_mode: WasmExecutionMode,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Cycles {
-        let subnet_size = self.config.reference_subnet_size;
-        let prepayment_for_response_transmission =
-            self.prepayment_for_response_transmission(subnet_size, cost_schedule);
         // response execution might be free depending on cost_schedule
         let prepayment_for_response_execution =
             self.prepayment_for_response_execution(subnet_size, cost_schedule, execution_mode);
-        self.xnet_total_transmission_fee(
-            payload_size,
-            subnet_size,
-            cost_schedule,
-            prepayment_for_response_transmission,
-        )
-        .real()
+        self.xnet_total_transmission_fee(payload_size, subnet_size, cost_schedule)
+            .real()
             + prepayment_for_response_execution.real()
     }
 
@@ -987,7 +996,7 @@ impl CyclesAccountManager {
         )?;
 
         debug_assert_ne!(use_case, CyclesUseCase::NonConsumed);
-        system_state.remove_cycles(cycles);
+        system_state.consume_cycles(cycles);
         Ok(())
     }
 
@@ -1149,6 +1158,25 @@ impl CyclesAccountManager {
         self.scale_cost(
             self.config.update_message_execution_fee
                 + self.convert_instructions_to_cycles(num_instructions, execution_mode),
+            subnet_size,
+            cost_schedule,
+        )
+    }
+
+    /// Returns the variable part of the execution cost (no fixed per-message fee)
+    /// for the given number of instructions. This matches exactly what
+    /// `refund_unused_execution_cycles` refunds, so callers can compute the net
+    /// charge as `prepaid - variable_execution_cost(instructions_to_refund)`.
+    #[doc(hidden)]
+    pub fn variable_execution_cost(
+        &self,
+        num_instructions: NumInstructions,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+        execution_mode: WasmExecutionMode,
+    ) -> CompoundCycles<Instructions> {
+        self.scale_cost(
+            self.convert_instructions_to_cycles(num_instructions, execution_mode),
             subnet_size,
             cost_schedule,
         )

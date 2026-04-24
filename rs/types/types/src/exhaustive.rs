@@ -903,7 +903,6 @@ impl ExhaustiveSet for QuadrupleInCreation {
 #[derive(Clone)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct DerivedIDkgPayload {
-    pub signature_agreements: BTreeMap<PseudoRandomId, CompletedSignature>,
     pub available_pre_signatures: BTreeMap<PreSigId, PreSignatureRef>,
     pub pre_signatures_in_creation: BTreeMap<PreSigId, PreSignatureInCreation>,
     pub uid_generator: IDkgUIDGenerator,
@@ -918,7 +917,7 @@ impl ExhaustiveSet for IDkgPayload {
         DerivedIDkgPayload::exhaustive_set(rng)
             .into_iter()
             .map(|payload| IDkgPayload {
-                signature_agreements: payload.signature_agreements,
+                signature_agreements: BTreeMap::new(),
                 available_pre_signatures: payload.available_pre_signatures,
                 pre_signatures_in_creation: payload.pre_signatures_in_creation,
                 uid_generator: payload.uid_generator,

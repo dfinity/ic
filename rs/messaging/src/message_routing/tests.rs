@@ -38,7 +38,7 @@ use ic_test_utilities_types::{
 };
 use ic_types::batch::BlockmakerMetrics;
 use ic_types::xnet::{StreamIndexedQueue, StreamSlice};
-use ic_types::{CanisterId, ReplicaVersion};
+use ic_types::{CanisterId, ExecutionRound, ReplicaVersion};
 use ic_types::{
     NodeId, PrincipalId, Randomness,
     batch::{Batch, BatchMessages},
@@ -794,12 +794,12 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
                 curve: EcdsaCurve::Secp256k1,
                 name: "key 1".to_string(),
             })
-            => Valid(vec![subnet_test_id(1009), subnet_test_id(1013)]),
+            => Valid(vec![own_subnet_id, other_subnet_id]),
             MasterPublicKeyId::Ecdsa(EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
                 name: "key 2".to_string(),
             })
-            => Valid(vec![subnet_test_id(1019)]),
+            => Valid(vec![other_subnet_id]),
         };
         let mut routing_table = RoutingTable::new();
         routing_table_insert_subnet(&mut routing_table, own_subnet_id).unwrap();
@@ -2121,12 +2121,12 @@ fn process_batch_updates_subnet_metrics() {
                 curve: EcdsaCurve::Secp256k1,
                 name: "key 1".to_string(),
             })
-            => Valid(vec![subnet_test_id(1009), subnet_test_id(1013)]),
+            => Valid(vec![own_subnet_id, other_subnet_id]),
             MasterPublicKeyId::Ecdsa(EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
                 name: "key 2".to_string(),
             })
-            => Valid(vec![subnet_test_id(1019)]),
+            => Valid(vec![other_subnet_id]),
         };
         let mut routing_table = RoutingTable::new();
         routing_table_insert_subnet(&mut routing_table, own_subnet_id).unwrap();
@@ -2289,6 +2289,7 @@ fn test_demux_delivers_certified_stream_slices() {
             &self,
             _: &mut ReplicatedState,
             _: Vec<ic_types::messages::SignedIngress>,
+            _: ic_types::ExecutionRound,
         ) {
             // do nothing
         }
@@ -2386,6 +2387,7 @@ fn test_demux_delivers_certified_stream_slices() {
 
         demux.process_payload(
             dst_state,
+            ExecutionRound::from(0),
             BatchMessages {
                 certified_stream_slices,
                 ..Default::default()

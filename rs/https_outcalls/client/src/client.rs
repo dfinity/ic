@@ -135,7 +135,6 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             // Destruct canister http request to avoid partial moves of the canister http request.
             let CanisterHttpRequest {
                 id: request_id,
-                timeout: request_timeout,
                 context:
                     CanisterHttpRequestContext {
                         request:
@@ -166,7 +165,6 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 );
                 let _ = permit.send(CanisterHttpResponse {
                     id: request_id,
-                    timeout: request_timeout,
                     canister_id: request_sender,
                     content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
                         reject_code: RejectCode::SysFatal,
@@ -355,7 +353,6 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             // Drive created future to completion and make response available on the channel.
             permit.send(CanisterHttpResponse {
                 id: request_id,
-                timeout: request_timeout,
                 canister_id: request_sender,
                 content: match adapter_canister_http_response.await {
                     Ok(resp) => {
@@ -522,7 +519,7 @@ mod tests {
         MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion, RefundStatus, Replication, Transform,
     };
     use ic_types::{
-        Time, canister_http::CanisterHttpMethod, messages::CallbackId, time::UNIX_EPOCH,
+        canister_http::CanisterHttpMethod, messages::CallbackId, time::UNIX_EPOCH,
         time::current_time,
     };
     use std::convert::TryFrom;
@@ -590,12 +587,10 @@ mod tests {
 
     fn build_mock_canister_http_request(
         request_id: u64,
-        request_timeout: Time,
         transform_method: Option<String>,
     ) -> CanisterHttpRequest {
         CanisterHttpRequest {
             id: CallbackId::from(request_id),
-            timeout: request_timeout,
             context: CanisterHttpRequestContext {
                 request: RequestBuilder::default()
                     .receiver(CanisterId::from(1))
@@ -621,13 +616,11 @@ mod tests {
 
     fn build_mock_canister_http_response_reject(
         request_id: u64,
-        request_timeout: Time,
         reject_code: RejectCode,
         reject_message: String,
     ) -> CanisterHttpResponse {
         CanisterHttpResponse {
             id: CallbackId::from(request_id),
-            timeout: request_timeout,
             canister_id: ic_types::CanisterId::from(1),
             content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
                 reject_code,
@@ -638,14 +631,12 @@ mod tests {
 
     fn build_mock_canister_http_response_success(
         request_id: u64,
-        request_timeout: Time,
         status: u128,
         headers: Vec<HttpHeader>,
         body: Vec<u8>,
     ) -> CanisterHttpResponse {
         CanisterHttpResponse {
             id: CallbackId::from(request_id),
-            timeout: request_timeout,
             canister_id: ic_types::CanisterId::from(1),
             content: CanisterHttpResponseContent::Success(
                 Encode!(
@@ -741,7 +732,7 @@ mod tests {
         assert_eq!(client.try_receive(), Err(TryReceiveError::Empty));
         // Send request to client without any transform function specified.
         assert_eq!(
-            client.send(build_mock_canister_http_request(420, UNIX_EPOCH, None)),
+            client.send(build_mock_canister_http_request(420, None)),
             Ok(())
         );
         // Yield to execute the request on the client.
@@ -753,7 +744,6 @@ mod tests {
                         r,
                         build_mock_canister_http_response_success(
                             420,
-                            UNIX_EPOCH,
                             200,
                             adapter_headers,
                             adapter_body
@@ -791,7 +781,7 @@ mod tests {
         );
 
         assert_eq!(
-            client.send(build_mock_canister_http_request(420, UNIX_EPOCH, None)),
+            client.send(build_mock_canister_http_request(420, None)),
             Ok(())
         );
         // Yield to execute the request on the client.
@@ -803,7 +793,6 @@ mod tests {
                         r,
                         build_mock_canister_http_response_reject(
                             420,
-                            UNIX_EPOCH,
                             RejectCode::SysTransient,
                             "adapter unavailable".to_string()
                         )
@@ -853,7 +842,6 @@ mod tests {
         assert_eq!(
             client.send(build_mock_canister_http_request(
                 420,
-                UNIX_EPOCH,
                 Some("transform".to_string())
             )),
             Ok(())
@@ -867,7 +855,6 @@ mod tests {
                         r,
                         build_mock_canister_http_response_reject(
                             420,
-                            UNIX_EPOCH,
                             RejectCode::SysFatal,
                             format!(
                                 "Transformed http response exceeds limit: \
@@ -909,7 +896,7 @@ mod tests {
         );
 
         assert_eq!(
-            client.send(build_mock_canister_http_request(420, UNIX_EPOCH, None)),
+            client.send(build_mock_canister_http_request(420, None)),
             Ok(())
         );
         // Yield to execute the request on the client.
@@ -921,7 +908,6 @@ mod tests {
                         r,
                         build_mock_canister_http_response_reject(
                             420,
-                            UNIX_EPOCH,
                             RejectCode::SysFatal,
                             "adapter invalid argument".to_string()
                         )
@@ -997,7 +983,6 @@ mod tests {
         assert_eq!(
             client.send(build_mock_canister_http_request(
                 420,
-                UNIX_EPOCH,
                 Some("transform".to_string())
             )),
             Ok(())
@@ -1012,7 +997,6 @@ mod tests {
                         r,
                         build_mock_canister_http_response_success(
                             420,
-                            UNIX_EPOCH,
                             200,
                             adapter_headers,
                             adapter_body
@@ -1069,7 +1053,6 @@ mod tests {
         assert_eq!(
             client.send(build_mock_canister_http_request(
                 420,
-                UNIX_EPOCH,
                 Some("transform".to_string())
             )),
             Ok(())
@@ -1083,7 +1066,6 @@ mod tests {
                         r,
                         build_mock_canister_http_response_reject(
                             420,
-                            UNIX_EPOCH,
                             RejectCode::SysTransient,
                             QueryExecutionError::CertifiedStateUnavailable.to_string(),
                         )
@@ -1121,19 +1103,17 @@ mod tests {
 
         assert_eq!(client.try_receive(), Err(TryReceiveError::Empty));
         assert_eq!(
-            client.send(build_mock_canister_http_request(420, UNIX_EPOCH, None)),
+            client.send(build_mock_canister_http_request(420, None)),
             Ok(())
         );
         assert_eq!(
-            client.send(build_mock_canister_http_request(421, UNIX_EPOCH, None)),
+            client.send(build_mock_canister_http_request(421, None)),
             Ok(())
         );
         // Make a request on a already full channel.
         assert_eq!(
-            client.send(build_mock_canister_http_request(422, UNIX_EPOCH, None)),
-            Err(SendError::Full(build_mock_canister_http_request(
-                422, UNIX_EPOCH, None
-            )))
+            client.send(build_mock_canister_http_request(422, None)),
+            Err(SendError::Full(build_mock_canister_http_request(422, None)))
         );
 
         // We must yield in order to allow the client to execute the request.
@@ -1145,7 +1125,6 @@ mod tests {
                         r,
                         build_mock_canister_http_response_reject(
                             420,
-                            UNIX_EPOCH,
                             RejectCode::SysTransient,
                             "adapter unavailable".to_string()
                         )
@@ -1156,7 +1135,7 @@ mod tests {
         }
 
         assert_eq!(
-            client.send(build_mock_canister_http_request(423, UNIX_EPOCH, None)),
+            client.send(build_mock_canister_http_request(423, None)),
             Ok(())
         );
         // We must yield in order to allow the client to execute the request.
@@ -1168,7 +1147,6 @@ mod tests {
                         r,
                         build_mock_canister_http_response_reject(
                             421,
-                            UNIX_EPOCH,
                             RejectCode::SysTransient,
                             "adapter unavailable".to_string()
                         )
@@ -1185,7 +1163,6 @@ mod tests {
                         r,
                         build_mock_canister_http_response_reject(
                             423,
-                            UNIX_EPOCH,
                             RejectCode::SysTransient,
                             "adapter unavailable".to_string()
                         )
@@ -1221,7 +1198,6 @@ mod tests {
         }
         let x = build_mock_canister_http_response_success(
             420,
-            UNIX_EPOCH,
             200,
             headers,
             vec![

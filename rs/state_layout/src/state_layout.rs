@@ -34,7 +34,7 @@ use std::fs::OpenOptions;
 use std::io::{Error, Write};
 
 /// Result of marking files readonly, containing counts for monitoring
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct ReadonlyMarkingResult {
     pub files_traversed: usize,
     pub files_made_readonly: usize,
@@ -211,7 +211,6 @@ pub struct CanisterStateBits {
     pub next_canister_log_record_idx: u64,
     pub wasm_memory_limit: Option<NumBytes>,
     pub next_snapshot_id: u64,
-    pub snapshots_memory_usage: NumBytes,
     pub task_queue: TaskQueue,
     pub environment_variables: BTreeMap<String, String>,
 }
@@ -3033,7 +3032,7 @@ struct CopyAndSyncFile {
     dst: PathBuf,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Eq, PartialEq)]
 enum CopyInstruction {
     /// The file doesn't need to be copied
     Skip,

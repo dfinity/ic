@@ -29,7 +29,7 @@ use ic_types::{
     CanisterLog, CanisterTimer, Height, MemoryAllocation, NumInstructions, Time,
     messages::CanisterCall,
 };
-use ic_types_cycles::{CompoundCycles, Cycles};
+use ic_types_cycles::{CompoundCycles, Cycles, Instructions};
 use ic_wasm_types::WasmHash;
 
 use crate::{
@@ -267,7 +267,7 @@ impl InstallCodeHelper {
                 .replay_step(state_change, original, round)
                 .map_err(|err| (err, paused_instructions_left, helper.take_canister_log()))?;
         }
-        assert_eq!(paused_instructions_left, helper.instructions_left());
+        debug_assert_eq!(paused_instructions_left, helper.instructions_left());
         Ok(helper)
     }
 
@@ -288,7 +288,7 @@ impl InstallCodeHelper {
         // The balance should not change because `install_code` cannot accept or
         // send cycles. The execution cycles have already been accounted for in
         // the clean canister state.
-        assert_eq!(
+        debug_assert_eq!(
             clean_canister.system_state.balance(),
             self.canister.system_state.balance()
         );
@@ -303,7 +303,7 @@ impl InstallCodeHelper {
             &mut self.canister.system_state,
             instructions_left,
             message_instruction_limit,
-            CompoundCycles::new(original.prepaid_execution_cycles, round.cost_schedule),
+            original.prepaid_execution_cycles,
             round.counters.execution_refund_error,
             original.subnet_size,
             round.cost_schedule,
@@ -825,7 +825,7 @@ pub(crate) struct OriginalContext {
     pub config: CanisterMgrConfig,
     pub message: CanisterCall,
     pub call_id: InstallCodeCallId,
-    pub prepaid_execution_cycles: Cycles,
+    pub prepaid_execution_cycles: CompoundCycles<Instructions>,
     pub time: Time,
     pub compilation_cost_handling: CompilationCostHandling,
     pub subnet_size: usize,
@@ -885,7 +885,7 @@ pub(crate) fn finish_err(
         &mut new_canister.system_state,
         instructions_left,
         message_instruction_limit,
-        CompoundCycles::new(original.prepaid_execution_cycles, round.cost_schedule),
+        original.prepaid_execution_cycles,
         round.counters.execution_refund_error,
         original.subnet_size,
         round.cost_schedule,

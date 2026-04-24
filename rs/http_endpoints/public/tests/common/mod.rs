@@ -4,13 +4,16 @@ use hyper::{
     client::conn::http1::{SendRequest, handshake},
 };
 use hyper_util::rt::TokioIo;
+use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
+use ic_canonical_state_tree_hash::hash_tree::hash_lazy_tree;
+use ic_canonical_state_tree_hash::lazy_tree::materialize::materialize_partial;
 use ic_config::http_handler::Config;
 use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
 use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
 use ic_crypto_tree_hash::{Digest, LabeledTree, MatchPatternPath, MixedHashTree, Witness};
-use ic_http_endpoints_public::start_server;
+use ic_http_endpoints_public::{query, start_server};
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     execution_environment::{
@@ -43,10 +46,9 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterQueues, NetworkTopology, RefundPool, ReplicatedState, SystemMetadata,
 };
-use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
-    CryptoHashOfPartialState, Height, RegistryVersion,
+    CanisterId, CryptoHashOfPartialState, Height, PrincipalId, RegistryVersion,
     artifact::UnvalidatedArtifactMutation,
     batch::RawQueryStats,
     consensus::certification::{Certification, CertificationContent},
@@ -64,7 +66,13 @@ use ic_types::{
 };
 use mockall::{mock, predicate::*};
 use prost::Message;
-use std::{collections::BTreeMap, convert::Infallible, net::SocketAddr, sync::Arc, sync::RwLock};
+use std::{
+    collections::BTreeMap,
+    convert::Infallible,
+    net::SocketAddr,
+    sync::RwLock,
+    sync::{Arc, Mutex},
+};
 use tokio::{
     net::{TcpSocket, TcpStream},
     sync::{
@@ -78,6 +86,55 @@ use tower_test::mock::Handle;
 
 pub type IngressFilterHandle = Handle<IngressFilterInput, IngressFilterResponse>;
 pub type QueryExecutionHandle = Handle<QueryExecutionInput, QueryExecutionResponse>;
+
+/// Unified endpoint type used to parameterise tests that cover both the canister and subnet
+/// synchronous call paths.
+#[derive(Copy, Clone, Debug)]
+pub enum UpdateEndpoint {
+    Canister(ic_http_endpoints_test_agent::Call),
+    Subnet(ic_http_endpoints_test_agent::CallSubnet),
+}
+
+impl UpdateEndpoint {
+    pub async fn call(
+        self,
+        addr: SocketAddr,
+        message: ic_http_endpoints_test_agent::IngressMessage,
+    ) -> reqwest::Response {
+        match self {
+            UpdateEndpoint::Canister(c) => c.call(addr, message).await,
+            UpdateEndpoint::Subnet(s) => s.call(addr, message).await,
+        }
+    }
+
+    pub fn default_ingress_message(&self) -> ic_http_endpoints_test_agent::IngressMessage {
+        match self {
+            UpdateEndpoint::Canister(_) => ic_http_endpoints_test_agent::IngressMessage::default(),
+            UpdateEndpoint::Subnet(_) => ic_http_endpoints_test_agent::IngressMessage::default()
+                .with_canister_id(CanisterId::ic_00().get(), CanisterId::ic_00().get())
+                .with_method_name("create_canister".to_string()),
+        }
+    }
+}
+
+pub async fn query_endpoint(version: query::Version, addr: SocketAddr) -> reqwest::Response {
+    match version {
+        query::Version::V2 | query::Version::V3 => {
+            ic_http_endpoints_test_agent::Query::new(
+                PrincipalId::default(),
+                PrincipalId::default(),
+                version,
+            )
+            .query(addr)
+            .await
+        }
+        query::Version::SubnetV3 => {
+            ic_http_endpoints_test_agent::Query::new_subnet(subnet_test_id(1).get())
+                .query(addr)
+                .await
+        }
+    }
+}
 
 fn setup_query_execution_mock() -> (QueryExecutionService, QueryExecutionHandle) {
     let (service, handle) = tower_test::mock::pair::<QueryExecutionInput, QueryExecutionResponse>();
@@ -121,16 +178,20 @@ pub fn setup_ingress_filter_mock() -> (IngressFilterService, IngressFilterHandle
 }
 
 pub fn default_read_certified_state(
-    _labeled_tree: &LabeledTree<()>,
+    labeled_tree: &LabeledTree<()>,
+    latest_state: Labeled<Arc<ReplicatedState>>,
 ) -> Option<(
     Arc<ReplicatedState>,
     ic_crypto_tree_hash::MixedHashTree,
     ic_types::consensus::certification::Certification,
 )> {
-    let rs: Arc<ReplicatedState> = Arc::new(ReplicatedStateBuilder::new().build());
-    let mht = MixedHashTree::Leaf(Vec::new());
+    let height = latest_state.height();
+    let lazy_tree = replicated_state_as_lazy_tree(latest_state.get_ref(), height);
+    let hash_tree = hash_lazy_tree(&lazy_tree).unwrap();
+    let partial_tree = materialize_partial(&lazy_tree, labeled_tree, None);
+    let mht = hash_tree.witness::<MixedHashTree>(&partial_tree).unwrap();
     let cert = Certification {
-        height: Height::from(1),
+        height,
         height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
         signed: Signed {
             signature: ThresholdSignature {
@@ -146,11 +207,12 @@ pub fn default_read_certified_state(
         },
     };
 
-    Some((rs, mht, cert))
+    Some((latest_state.get_ref().clone(), mht, cert))
 }
 
-pub fn default_certified_state_reader()
--> Option<Box<dyn CertifiedStateSnapshot<State = ReplicatedState> + 'static>> {
+pub fn default_certified_state_reader(
+    latest_state: Labeled<Arc<ReplicatedState>>,
+) -> Option<Box<dyn CertifiedStateSnapshot<State = ReplicatedState> + 'static>> {
     struct FakeCertifiedStateSnapshot(Arc<ReplicatedState>, MixedHashTree, Certification);
 
     impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
@@ -173,7 +235,8 @@ pub fn default_certified_state_reader()
         }
     }
 
-    let (state, hash_tree, certification) = default_read_certified_state(&LabeledTree::Leaf(()))?;
+    let (state, hash_tree, certification) =
+        default_read_certified_state(&LabeledTree::Leaf(()), latest_state)?;
     Some(Box::new(FakeCertifiedStateSnapshot(
         state,
         hash_tree,
@@ -210,31 +273,35 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
     )
 }
 
-pub fn default_latest_certified_height() -> Height {
-    Height::from(1)
-}
-
 /// Basic state manager with one subnet (nns) at height 1.
-fn basic_state_manager_mock() -> MockStateManager {
+pub fn basic_state_manager_mock() -> (MockStateManager, Arc<Mutex<Labeled<Arc<ReplicatedState>>>>) {
     let mut mock_state_manager = MockStateManager::new();
 
+    let state = Arc::new(Mutex::new(default_get_latest_state()));
+
+    let state_clone = state.clone();
     mock_state_manager
         .expect_get_latest_state()
-        .returning(default_get_latest_state);
+        .returning(move || state_clone.lock().unwrap().clone());
 
+    let state_clone = state.clone();
     mock_state_manager
         .expect_read_certified_state()
-        .returning(default_read_certified_state);
+        .returning(move |labeled_tree| {
+            default_read_certified_state(labeled_tree, state_clone.lock().unwrap().clone())
+        });
 
+    let state_clone = state.clone();
     mock_state_manager
         .expect_latest_certified_height()
-        .returning(default_latest_certified_height);
+        .returning(move || state_clone.lock().unwrap().height());
 
+    let state_clone = state.clone();
     mock_state_manager
         .expect_get_certified_state_snapshot()
-        .returning(default_certified_state_reader);
+        .returning(move || default_certified_state_reader(state_clone.lock().unwrap().clone()));
 
-    mock_state_manager
+    (mock_state_manager, state)
 }
 
 // Basic mock consensus pool cache at height 1.
@@ -386,7 +453,7 @@ impl HttpEndpointBuilder {
         Self {
             rt_handle,
             config,
-            state_manager: Arc::new(basic_state_manager_mock()),
+            state_manager: Arc::new(basic_state_manager_mock().0),
             consensus_cache: Arc::new(basic_consensus_pool_cache()),
             registry_client: Arc::new(basic_registry_client()),
             ingress_pool_throttler: Arc::new(RwLock::new(basic_ingress_pool_throttler())),

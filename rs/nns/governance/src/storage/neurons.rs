@@ -1,15 +1,19 @@
 use crate::{
-    governance::MAX_DISSOLVE_DELAY_SECONDS,
+    governance::{
+        LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70,
+        RELAXED_EIGHT_YEAR_GANG_MAX_AGING_SINCE_TIMESTAMP_SECONDS,
+    },
     neuron::{DecomposedNeuron, Neuron},
     neuron_store::NeuronStoreError,
     pb::v1::{
         AbridgedNeuron, BallotInfo, Followees, KnownNeuronData, MaturityDisbursement,
-        NeuronStakeTransfer, Topic, abridged_neuron::DissolveState,
+        NeuronDissolveStateSnapshot, NeuronStakeTransfer, Topic, abridged_neuron::DissolveState,
     },
     storage::validate_stable_btree_map,
 };
 use candid::Principal;
 use ic_base_types::PrincipalId;
+use ic_cdk::println;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_stable_structures::{StableBTreeMap, Storable, storable::Bound};
 use itertools::Itertools;
@@ -768,7 +772,7 @@ where
             self.with_main_part_mut(neuron_id, |abridged_neuron| {
                 let has_maximum_dissolve_delay = abridged_neuron.dissolve_state
                     == Some(DissolveState::DissolveDelaySeconds(
-                        MAX_DISSOLVE_DELAY_SECONDS,
+                        MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70,
                     ));
                 abridged_neuron.eight_year_gang_bonus_base_e8s = if has_maximum_dissolve_delay {
                     abridged_neuron
@@ -781,6 +785,62 @@ where
             })
             .expect("Failed to set eight year gang bonus base for neuron");
         }
+    }
+
+    pub fn set_relaxed_eight_year_gang_bonus_base_e8s_or_panic(
+        &mut self,
+        neuron_ids_with_sufficiently_large_dissolve_delay: Vec<u64>,
+    ) {
+        for neuron_id in neuron_ids_with_sufficiently_large_dissolve_delay {
+            let neuron_id = NeuronId { id: neuron_id };
+            self.with_main_part_mut(neuron_id, |abridged_neuron| {
+                // Don't modify neurons that are already members of the eight year gang.
+                if abridged_neuron.eight_year_gang_bonus_base_e8s != 0 {
+                    println!(
+                        "{}WARNING: Neuron ID {} was passed as having a dissolve delay
+                        that was in the right range (< 8 * 365.25 days, but >= 8 * 365
+                        days), but it is already a member of the eight year gang??
+                        Skipping...",
+                        LOG_PREFIX, neuron_id.id,
+                    );
+                    return;
+                }
+
+                // This is to avoid newly staked ICP from receiving the eight year
+                // gang bonus.
+                if abridged_neuron.aging_since_timestamp_seconds
+                    > RELAXED_EIGHT_YEAR_GANG_MAX_AGING_SINCE_TIMESTAMP_SECONDS
+                {
+                    return;
+                }
+
+                abridged_neuron.eight_year_gang_bonus_base_e8s = abridged_neuron
+                    .cached_neuron_stake_e8s
+                    .saturating_sub(abridged_neuron.neuron_fees_e8s)
+                    .saturating_add(abridged_neuron.staked_maturity_e8s_equivalent.unwrap_or(0));
+            })
+            .expect("Failed to set relaxed eight year gang bonus base for neuron");
+        }
+    }
+
+    pub fn clamp_dissolve_delay_for_all_neurons_or_panic(
+        &mut self,
+        now_seconds: u64,
+    ) -> HashMap<u64, NeuronDissolveStateSnapshot> {
+        let neuron_ids = self.main.keys().collect::<Vec<NeuronId>>();
+        let mut pre_clamp_dissolve_states = HashMap::new();
+        for neuron_id in neuron_ids {
+            let mut snapshot = None;
+            self.with_main_part_mut(neuron_id, |abridged_neuron| {
+                snapshot = Some(abridged_neuron.clamp_dissolve_delay_or_panic(now_seconds));
+            })
+            .expect("Failed to clamp dissolve delay for neuron");
+            pre_clamp_dissolve_states.insert(
+                neuron_id.id,
+                snapshot.expect("snapshot must be set inside with_main_part_mut"),
+            );
+        }
+        pre_clamp_dissolve_states
     }
 }
 

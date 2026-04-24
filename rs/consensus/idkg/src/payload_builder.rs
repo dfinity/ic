@@ -10,7 +10,7 @@ use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto::retrieve_mega_public_key_from_registry;
 use ic_interfaces::idkg::IDkgPool;
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateManager;
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::ChainKeyConfig;
@@ -135,6 +135,7 @@ pub fn make_bootstrap_summary_with_initial_dealings(
             None => {
                 // Leave the feature disabled if the initial dealings are incorrect.
                 warn!(
+                    every_n_seconds => 10,
                     log,
                     "make_idkg_genesis_summary(): failed to unpack initial dealings"
                 );
@@ -482,7 +483,7 @@ pub fn create_data_payload(
     registry_client: &dyn RegistryClient,
     pool_reader: &PoolReader<'_>,
     idkg_pool: Arc<RwLock<dyn IDkgPool>>,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
     context: &ValidationContext,
     parent_block: &Block,
     idkg_payload_metrics: &IDkgPayloadMetrics,
@@ -534,8 +535,9 @@ pub fn create_data_payload(
         &summary_block,
         &block_reader,
         &transcript_builder,
-        state_manager,
+        state_reader,
         registry_client,
+        Some(idkg_payload_metrics),
         log,
     )?;
 
@@ -573,8 +575,9 @@ pub(crate) fn create_data_payload_helper(
     summary_block: &Block,
     block_reader: &dyn IDkgBlockReader,
     transcript_builder: &dyn IDkgTranscriptBuilder,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
     registry_client: &dyn RegistryClient,
+    idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
     log: &ReplicaLogger,
 ) -> Result<Option<IDkgPayload>, IDkgPayloadError> {
     let height = parent_block.height().increment();
@@ -598,7 +601,7 @@ pub(crate) fn create_data_payload_helper(
     };
 
     let receivers = get_subnet_nodes(registry_client, next_interval_registry_version, subnet_id)?;
-    let state = state_manager.get_state_at(context.certified_height)?;
+    let state = state_reader.get_state_at(context.certified_height)?;
 
     let reshare_contexts = state.get_ref().reshare_chain_key_contexts();
     let idkg_dealings_contexts = filter_idkg_reshare_chain_key_contexts(reshare_contexts);
@@ -608,12 +611,14 @@ pub(crate) fn create_data_payload_helper(
         &mut idkg_payload,
         height,
         &chain_key_config,
+        context.registry_version,
         next_interval_registry_version,
         &receivers,
         &idkg_dealings_contexts,
         total_pre_signatures,
         block_reader,
         transcript_builder,
+        idkg_payload_metrics,
         log,
     )?;
 
@@ -624,12 +629,14 @@ pub(crate) fn create_data_payload_helper_2(
     idkg_payload: &mut IDkgPayload,
     height: Height,
     chain_key_config: &ChainKeyConfig,
+    validation_context_registry_version: RegistryVersion,
     next_interval_registry_version: RegistryVersion,
     receivers: &[NodeId],
     idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingContext<'_>>,
     total_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, usize>,
     block_reader: &dyn IDkgBlockReader,
     transcript_builder: &dyn IDkgTranscriptBuilder,
+    idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
     log: &ReplicaLogger,
 ) -> Result<(), IDkgPayloadError> {
     // Check if we are creating a new key, if so, start using it immediately.
@@ -654,6 +661,7 @@ pub(crate) fn create_data_payload_helper_2(
             idkg_payload,
             transcript_builder,
             height,
+            idkg_payload_metrics,
             log,
         )?,
         key_transcript::update_next_key_transcripts(
@@ -691,11 +699,17 @@ pub(crate) fn create_data_payload_helper_2(
         idkg_dealings_contexts,
         block_reader,
         transcript_builder,
+        idkg_payload_metrics,
         log,
     );
     resharing::initiate_reshare_requests(
         idkg_payload,
-        resharing::get_reshare_requests(idkg_dealings_contexts),
+        resharing::get_reshare_requests(
+            idkg_dealings_contexts,
+            validation_context_registry_version,
+        ),
+        idkg_payload_metrics,
+        log,
     );
     Ok(())
 }
@@ -866,12 +880,14 @@ mod tests {
             Height::from(5),
             &chain_key_config,
             RegistryVersion::from(9),
+            RegistryVersion::from(9),
             &[node_test_id(0)],
             &BTreeMap::default(),
             // The state and previous payloads contain 2 pre-signatures
             BTreeMap::from([(key_id.clone(), 2)]),
             &TestIDkgBlockReader::new(),
             &TestIDkgTranscriptBuilder::new(),
+            None,
             &ic_logger::replica_logger::no_op_logger(),
         )
         .unwrap();
@@ -1019,6 +1035,7 @@ mod tests {
                 &mut idkg_payload,
                 &transcript_builder,
                 parent_block_height,
+                None,
                 &no_op_logger(),
             )
             .unwrap();
@@ -1278,6 +1295,7 @@ mod tests {
                 &mut idkg_payload,
                 &transcript_builder,
                 parent_block_height,
+                None,
                 &no_op_logger(),
             )
             .unwrap();
@@ -1875,11 +1893,13 @@ mod tests {
                 Height::from(3),
                 &chain_key_config,
                 next_key_transcript.registry_version(),
+                next_key_transcript.registry_version(),
                 &node_ids,
                 &BTreeMap::default(),
                 BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
+                None,
                 &no_op_logger(),
             )
             .unwrap();
@@ -1898,11 +1918,13 @@ mod tests {
                 Height::from(4),
                 &chain_key_config,
                 next_key_transcript.registry_version(),
+                next_key_transcript.registry_version(),
                 &node_ids,
                 &BTreeMap::default(),
                 BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
+                None,
                 &no_op_logger(),
             )
             .unwrap();
@@ -1980,11 +2002,13 @@ mod tests {
                 Height::from(2),
                 &chain_key_config,
                 registry_version,
+                registry_version,
                 &node_ids,
                 &BTreeMap::default(),
                 BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
+                None,
                 &no_op_logger(),
             );
             assert!(result.is_ok());
@@ -2051,6 +2075,64 @@ mod tests {
                 idkg::KeyTranscriptCreation::RandomTranscriptParams(_)
             );
         })
+    }
+
+    #[test]
+    fn test_create_data_payload_only_initiates_reached_reshare_contexts() {
+        let key_id = fake_ecdsa_idkg_master_public_key_id();
+        let (mut idkg_payload, _env) = set_up_idkg_payload_with_keys(vec![key_id.clone()]);
+        let block_reader = TestIDkgBlockReader::new();
+        let transcript_builder = TestIDkgTranscriptBuilder::new();
+        let chain_key_config = ChainKeyConfig {
+            key_configs: vec![KeyConfig {
+                key_id: key_id.clone().into(),
+                pre_signatures_to_create_in_advance: Some(1),
+                max_queue_size: 1,
+            }],
+            ..ChainKeyConfig::default()
+        };
+        let validation_context_registry_version = RegistryVersion::from(10);
+        let reached_request = create_reshare_request(key_id.clone(), 1, 10);
+        let future_request = create_reshare_request(key_id.clone(), 2, 11);
+        let contexts = BTreeMap::from([
+            (
+                ic_types::messages::CallbackId::from(1),
+                dealings_context_from_reshare_request(reached_request.clone()),
+            ),
+            (
+                ic_types::messages::CallbackId::from(2),
+                dealings_context_from_reshare_request(future_request.clone()),
+            ),
+        ]);
+        let contexts = filter_idkg_reshare_chain_key_contexts(&contexts);
+
+        create_data_payload_helper_2(
+            &mut idkg_payload,
+            Height::from(5),
+            &chain_key_config,
+            validation_context_registry_version,
+            validation_context_registry_version,
+            &[node_test_id(0)],
+            &contexts,
+            BTreeMap::default(),
+            &block_reader,
+            &transcript_builder,
+            None,
+            &no_op_logger(),
+        )
+        .unwrap();
+
+        assert!(
+            idkg_payload
+                .ongoing_xnet_reshares
+                .contains_key(&reached_request)
+        );
+        assert!(
+            !idkg_payload
+                .ongoing_xnet_reshares
+                .contains_key(&future_request)
+        );
+        assert_eq!(idkg_payload.ongoing_xnet_reshares.len(), 1);
     }
 
     #[test]
@@ -2147,11 +2229,13 @@ mod tests {
                 Height::from(2),
                 &chain_key_config,
                 registry_version,
+                registry_version,
                 &node_ids,
                 &BTreeMap::default(),
                 BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
+                None,
                 &no_op_logger(),
             );
             assert!(result.is_ok());
@@ -2171,11 +2255,13 @@ mod tests {
                 Height::from(3),
                 &chain_key_config,
                 registry_version,
+                registry_version,
                 &node_ids,
                 &BTreeMap::default(),
                 BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
+                None,
                 &no_op_logger(),
             );
             assert!(result.is_ok());
@@ -2193,11 +2279,13 @@ mod tests {
                 Height::from(3),
                 &chain_key_config,
                 registry_version,
+                registry_version,
                 &node_ids,
                 &BTreeMap::default(),
                 BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
+                None,
                 &no_op_logger(),
             );
             assert!(result.is_ok());

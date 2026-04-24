@@ -67,7 +67,7 @@ fn state_sync_clears_paused_execution_registry() {
     // state with the clean copy. The registry still holds the orphaned paused
     // execution entry.
     test.state_mut().put_canister_state(clean_canister);
-    assert!(!test.canister_state(canister).has_paused_execution());
+    assert!(!test.canister_state(canister).has_long_execution());
 
     // Execute another round. The scheduler detects that no canister has a paused
     // execution and calls `abandon_paused_executions()` to clear the paused
@@ -174,7 +174,7 @@ fn consensus_queue_is_emptied() {
         test.inject_call_to_ic00(
             Method::SignWithECDSA,
             ecdsa_payload.clone(),
-            test.ecdsa_signature_fee(),
+            test.ecdsa_signature_fee().real(),
             canister_id,
             InputQueueType::RemoteSubnet,
         );
@@ -467,6 +467,7 @@ fn test_maybe_add_heartbeat_or_global_timer_tasks() {
                 method_payload: vec![1_u8],
                 message_id: message_test_id(555),
                 expiry_time: expiry_time_from_now(),
+                sender_info: None,
             });
         }
         while canister.get_next_scheduled_method() != next_scheduled_method {

@@ -85,7 +85,7 @@ enum CallCycles {
 ///
 /// Payloads for the UC encode `Ops` representing what instructions to
 /// execute.
-#[derive(Default, Clone)]
+#[derive(Clone, Default)]
 pub struct PayloadBuilder(Vec<u8>);
 
 impl PayloadBuilder {
@@ -659,6 +659,18 @@ impl PayloadBuilder {
         self = self.push_int(offset);
         self = self.push_int(size);
         self.0.push(Ops::MsgCallerCopy as u8);
+        self
+    }
+
+    /// Pushes the caller info data blob onto the stack.
+    pub fn msg_caller_info_data(mut self) -> Self {
+        self.0.push(Ops::MsgCallerInfoData as u8);
+        self
+    }
+
+    /// Pushes the caller info signer blob onto the stack.
+    pub fn msg_caller_info_signer(mut self) -> Self {
+        self.0.push(Ops::MsgCallerInfoSigner as u8);
         self
     }
 

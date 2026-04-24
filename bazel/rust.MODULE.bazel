@@ -538,6 +538,10 @@ crate.spec(
     version = "^0.4.1",
 )
 crate.spec(
+    package = "hickory-resolver",
+    version = "0.25.2",
+)
+crate.spec(
     package = "hkdf",
     version = "^0.12",
 )
@@ -865,7 +869,7 @@ crate.spec(
         "mutex",
     ],
     package = "libcryptsetup-rs",
-    version = "^0.13.2",
+    version = "0.15",
 )
 crate.spec(
     package = "libflate",
@@ -1006,10 +1010,6 @@ crate.spec(
     features = ["prime"],
     package = "num-bigint-dig",
     version = "^0.9",
-)
-crate.spec(
-    package = "num-rational",
-    version = "^0.2.2",
 )
 crate.spec(
     default_features = False,
@@ -1865,7 +1865,7 @@ crate.spec(
         "wasmparser",
     ],
     package = "wasm-encoder",
-    version = "^0.244.0",
+    version = "^0.245.0",
 )
 crate.spec(
     default_features = False,
@@ -1873,15 +1873,15 @@ crate.spec(
         "wasmparser",
     ],
     package = "wasm-smith",
-    version = "^0.244.0",
+    version = "^0.245.0",
 )
 crate.spec(
     package = "wasmparser",
-    version = "^0.244.0",
+    version = "^0.245.0",
 )
 crate.spec(
     package = "wasmprinter",
-    version = "^0.244.0",
+    version = "^0.245.0",
 )
 crate.spec(
     default_features = False,
@@ -1893,7 +1893,7 @@ crate.spec(
         "runtime",
     ],
     package = "wasmtime",
-    version = "^42.0.1",
+    version = "^43.0.1",
 )
 crate.spec(
     package = "wast",
@@ -1901,7 +1901,11 @@ crate.spec(
 )
 crate.spec(
     package = "wat",
-    version = "~1.244.0",
+    version = "~1.245.0",
+)
+crate.spec(
+    package = "webpki-roots",
+    version = "1.0.6",
 )
 crate.spec(
     package = "which",
@@ -2047,6 +2051,11 @@ crate.annotation(
     # Patch for determinism issues
     patch_args = ["-p1"],
     patches = ["@@//bazel:libssh2-sys.patch"],
+)
+crate.annotation(
+    crate = "libcryptsetup-rs",
+    patch_args = ["-p1"],
+    patches = ["@@//bazel:libcryptsetup-rs.patch"],
 )
 crate.annotation(
     crate = "libz-sys",

@@ -5,8 +5,7 @@ use crate::{
     registry_helper::RegistryHelper,
 };
 use ic_config::firewall::{
-    BoundaryNodeConfig as BoundaryNodeFirewallConfig, FIREWALL_FILE_DEFAULT_PATH,
-    ReplicaConfig as ReplicaFirewallConfig,
+    BoundaryNodeConfig as BoundaryNodeFirewallConfig, ReplicaConfig as ReplicaFirewallConfig,
 };
 use ic_logger::{ReplicaLogger, debug, info, warn};
 use ic_protobuf::registry::{
@@ -22,7 +21,6 @@ use std::{
     collections::BTreeSet,
     convert::TryFrom,
     net::IpAddr,
-    path::PathBuf,
     sync::{Arc, RwLock},
 };
 
@@ -55,8 +53,6 @@ pub(crate) struct Firewall {
     last_applied_version: Arc<RwLock<RegistryVersion>>,
     /// If true, write the file content even if no change was detected in registry, i.e. first time
     must_write: bool,
-    /// If false, do not update the firewall rules (test mode)
-    enabled: bool,
     node_id: NodeId,
 }
 
@@ -70,18 +66,6 @@ impl Firewall {
         local_cup_reader: LocalCUPReader,
         logger: ReplicaLogger,
     ) -> Self {
-        // Disable if the config is the default one (e.g if we're in a test)
-        let enabled = replica_config
-            .config_file
-            .ne(&PathBuf::from(FIREWALL_FILE_DEFAULT_PATH));
-
-        if !enabled {
-            warn!(
-                logger,
-                "Firewall configuration not found. Orchestrator does not update firewall rules."
-            );
-        }
-
         Self {
             registry,
             metrics,
@@ -92,7 +76,6 @@ impl Firewall {
             compiled_config: Default::default(),
             last_applied_version: Default::default(),
             must_write: true,
-            enabled,
             node_id,
         }
     }
@@ -237,7 +220,12 @@ impl Firewall {
                 | NodeRewardType::Type1dot1,
             ) => true,
             (
-                NodeRewardType::Type4,
+                NodeRewardType::Type4
+                | NodeRewardType::Type4dot1
+                | NodeRewardType::Type4dot2
+                | NodeRewardType::Type4dot3
+                | NodeRewardType::Type4dot4
+                | NodeRewardType::Type4dot5,
                 NodeRewardType::Unspecified
                 | NodeRewardType::Type0
                 | NodeRewardType::Type1
@@ -245,7 +233,12 @@ impl Firewall {
                 | NodeRewardType::Type3
                 | NodeRewardType::Type3dot1
                 | NodeRewardType::Type1dot1
-                | NodeRewardType::Type4,
+                | NodeRewardType::Type4
+                | NodeRewardType::Type4dot1
+                | NodeRewardType::Type4dot2
+                | NodeRewardType::Type4dot3
+                | NodeRewardType::Type4dot4
+                | NodeRewardType::Type4dot5,
             ) => true,
             (
                 NodeRewardType::Unspecified
@@ -255,7 +248,12 @@ impl Firewall {
                 | NodeRewardType::Type3
                 | NodeRewardType::Type3dot1
                 | NodeRewardType::Type1dot1,
-                NodeRewardType::Type4,
+                NodeRewardType::Type4
+                | NodeRewardType::Type4dot1
+                | NodeRewardType::Type4dot2
+                | NodeRewardType::Type4dot3
+                | NodeRewardType::Type4dot4
+                | NodeRewardType::Type4dot5,
             ) => false,
         }
     }
@@ -582,9 +580,6 @@ impl Firewall {
     /// Checks for new firewall config, and if found, update local firewall
     /// rules
     pub fn check_and_update(&mut self) {
-        if !self.enabled {
-            return;
-        }
         let registry_version = self.registry.get_latest_version();
         debug!(
             self.logger,
@@ -822,7 +817,10 @@ fn split_ips_by_address_family(ips: &BTreeSet<IpAddr>) -> (Vec<String>, Vec<Stri
 
 #[cfg(test)]
 mod tests {
-    use std::{io::Write, path::Path};
+    use std::{
+        io::Write,
+        path::{Path, PathBuf},
+    };
 
     use config_tool::guestos::generate_ic_config;
     use ic_config::{ConfigOptional, ConfigSource};
@@ -841,7 +839,7 @@ mod tests {
         SubnetRecordBuilder, add_single_subnet_record, add_subnet_list_record,
     };
     use ic_test_utilities_types::ids::{SUBNET_1, node_test_id, subnet_test_id};
-    use rstest::rstest;
+    use strum::IntoEnumIterator;
 
     use super::*;
 
@@ -983,28 +981,22 @@ mod tests {
         );
     }
 
-    #[rstest]
-    fn nftables_golden_assigned_replica_test(
+    #[test]
+    fn nftables_golden_assigned_replica_test() {
         // For assigned replicas, only Type4 (cloud engine) nodes have a different firewall
-        #[values(
-            None,
-            Some(NodeRewardType::Unspecified),
-            Some(NodeRewardType::Type0),
-            Some(NodeRewardType::Type1),
-            Some(NodeRewardType::Type2),
-            Some(NodeRewardType::Type3),
-            Some(NodeRewardType::Type3dot1),
-            Some(NodeRewardType::Type1dot1)
-        )]
-        reward_type: Option<NodeRewardType>,
-    ) {
-        golden_test(
-            Role::AssignedReplica(SUBNET_ID),
-            node_test_id(0),
-            reward_type,
-            NFTABLES_ASSIGNED_REPLICA_GOLDEN_BYTES,
-            "assigned_replica",
-        );
+        for reward_type in NodeRewardType::iter()
+            .filter(|reward_type| !is_cloud_engine_reward_type(*reward_type))
+            .map(Some)
+            .chain(std::iter::once(None))
+        {
+            golden_test(
+                Role::AssignedReplica(SUBNET_ID),
+                node_test_id(0),
+                reward_type,
+                NFTABLES_ASSIGNED_REPLICA_GOLDEN_BYTES,
+                "assigned_replica",
+            );
+        }
     }
 
     #[test]
@@ -1018,28 +1010,22 @@ mod tests {
         );
     }
 
-    #[rstest]
-    fn nftables_unassigned_replica_golden_test(
+    #[test]
+    fn nftables_unassigned_replica_golden_test() {
         // For unassigned replicas, only Type4 (cloud engine) nodes have a different firewall
-        #[values(
-            None,
-            Some(NodeRewardType::Unspecified),
-            Some(NodeRewardType::Type0),
-            Some(NodeRewardType::Type1),
-            Some(NodeRewardType::Type2),
-            Some(NodeRewardType::Type3),
-            Some(NodeRewardType::Type3dot1),
-            Some(NodeRewardType::Type1dot1)
-        )]
-        reward_type: Option<NodeRewardType>,
-    ) {
-        golden_test(
-            Role::UnassignedReplica,
-            node_test_id(0),
-            reward_type,
-            NFTABLES_UNASSIGNED_REPLICA_GOLDEN_BYTES,
-            "unassigned_replica",
-        );
+        for reward_type in NodeRewardType::iter()
+            .filter(|reward_type| !is_cloud_engine_reward_type(*reward_type))
+            .map(Some)
+            .chain(std::iter::once(None))
+        {
+            golden_test(
+                Role::UnassignedReplica,
+                node_test_id(0),
+                reward_type,
+                NFTABLES_UNASSIGNED_REPLICA_GOLDEN_BYTES,
+                "unassigned_replica",
+            );
+        }
     }
 
     #[test]
@@ -1053,64 +1039,66 @@ mod tests {
         );
     }
 
-    #[rstest]
-    fn nftables_golden_boundary_node_system_subnet_test(
-        // For boundary nodes, the node reward type has no effect on the firewall
-        #[values(
-            None,
-            Some(NodeRewardType::Unspecified),
-            Some(NodeRewardType::Type0),
-            Some(NodeRewardType::Type1),
-            Some(NodeRewardType::Type2),
-            Some(NodeRewardType::Type3),
-            Some(NodeRewardType::Type3dot1),
-            Some(NodeRewardType::Type1dot1),
-            Some(NodeRewardType::Type4)
-        )]
-        reward_type: Option<NodeRewardType>,
-    ) {
+    #[test]
+    fn nftables_golden_boundary_node_system_subnet_test() {
         // pick the node id such that the API BN's SOCKS proxy serves system subnet nodes
         // the assert checks that
         let api_bn_id_for_system_subnet = node_test_id(0);
         assert!(api_bn_id_for_system_subnet < node_test_id(API_BOUNDARY_NODE_ID));
 
-        golden_test(
-            Role::BoundaryNode,
-            api_bn_id_for_system_subnet,
-            reward_type,
-            NFTABLES_BOUNDARY_NODE_SYSTEM_SUBNET_GOLDEN_BYTES,
-            "boundary_node_system_subnet",
-        );
+        // For boundary nodes, the node reward type has no effect on the firewall
+        for reward_type in NodeRewardType::iter()
+            .map(Some)
+            .chain(std::iter::once(None))
+        {
+            golden_test(
+                Role::BoundaryNode,
+                api_bn_id_for_system_subnet,
+                reward_type,
+                NFTABLES_BOUNDARY_NODE_SYSTEM_SUBNET_GOLDEN_BYTES,
+                "boundary_node_system_subnet",
+            );
+        }
     }
 
-    #[rstest]
-    fn nftables_golden_boundary_node_app_subnet_test(
-        // For boundary nodes, the node reward type has no effect on the firewall
-        #[values(
-            None,
-            Some(NodeRewardType::Unspecified),
-            Some(NodeRewardType::Type0),
-            Some(NodeRewardType::Type1),
-            Some(NodeRewardType::Type2),
-            Some(NodeRewardType::Type3),
-            Some(NodeRewardType::Type3dot1),
-            Some(NodeRewardType::Type1dot1),
-            Some(NodeRewardType::Type4)
-        )]
-        reward_type: Option<NodeRewardType>,
-    ) {
+    #[test]
+    fn nftables_golden_boundary_node_app_subnet_test() {
         // pick the node id such that the API BN's SOCKS proxy serves app subnet nodes
         // the assert checks that
         let api_bn_id_for_app_subnet = node_test_id(1234);
         assert!(api_bn_id_for_app_subnet > node_test_id(API_BOUNDARY_NODE_ID));
 
-        golden_test(
-            Role::BoundaryNode,
-            api_bn_id_for_app_subnet,
-            reward_type,
-            NFTABLES_BOUNDARY_NODE_APP_SUBNET_GOLDEN_BYTES,
-            "boundary_node_app_subnet",
-        );
+        // For boundary nodes, the node reward type has no effect on the firewall
+        for reward_type in NodeRewardType::iter()
+            .map(Some)
+            .chain(std::iter::once(None))
+        {
+            golden_test(
+                Role::BoundaryNode,
+                api_bn_id_for_app_subnet,
+                reward_type,
+                NFTABLES_BOUNDARY_NODE_APP_SUBNET_GOLDEN_BYTES,
+                "boundary_node_app_subnet",
+            );
+        }
+    }
+
+    fn is_cloud_engine_reward_type(reward_type: NodeRewardType) -> bool {
+        match reward_type {
+            NodeRewardType::Unspecified
+            | NodeRewardType::Type0
+            | NodeRewardType::Type1
+            | NodeRewardType::Type2
+            | NodeRewardType::Type3
+            | NodeRewardType::Type3dot1
+            | NodeRewardType::Type1dot1 => false,
+            NodeRewardType::Type4
+            | NodeRewardType::Type4dot1
+            | NodeRewardType::Type4dot2
+            | NodeRewardType::Type4dot3
+            | NodeRewardType::Type4dot4
+            | NodeRewardType::Type4dot5 => true,
+        }
     }
 
     /// Runs [`Firewall::check_for_firewall_config`] and compares the output against the specified

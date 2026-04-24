@@ -303,6 +303,7 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
         let idkg_key_rotation_period_ms = Some(12345);
         let max_parallel_pre_signature_transcripts_in_creation = Some(12345);
         let payload = CreateSubnetPayload {
+            initial_dkg_subnet_id: Some(system_subnet_id),
             chain_key_config: Some(InitialChainKeyConfig {
                 key_configs: vec![KeyConfigRequest {
                     key_config: Some(KeyConfig {
@@ -405,6 +406,7 @@ fn make_create_subnet_payload(node_ids: Vec<NodeId>) -> CreateSubnetPayload {
     CreateSubnetPayload {
         node_ids,
         subnet_id_override: None,
+        initial_dkg_subnet_id: None,
         max_ingress_bytes_per_message: 60 * 1024 * 1024,
         max_ingress_bytes_per_block: None,
         max_ingress_messages_per_block: 1000,

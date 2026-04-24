@@ -2729,6 +2729,10 @@ impl StateManager for StateManagerImpl {
             .unwrap_or(Err(StateHashError::Transient(HashNotComputedYet(height))))
     }
 
+    fn tip_height(&self) -> Height {
+        self.states.read().tip_height
+    }
+
     fn take_tip(&self) -> (Height, ReplicatedState) {
         let _timer = self
             .metrics

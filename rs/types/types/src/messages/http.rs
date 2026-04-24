@@ -199,6 +199,8 @@ pub struct HttpUserQuery {
     // Do not include omitted fields in MessageId calculation
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nonce: Option<Blob>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sender_info: Option<RawSignedSenderInfo>,
 }
 
 /// Describes the contents of a /api/v2/canister/_/query request.
@@ -269,7 +271,13 @@ impl HttpUserQuery {
             self.ingress_expiry,
             &self.sender.0,
             self.nonce.as_ref().map(|x| x.0.as_ref()),
-            None,
+            self.sender_info
+                .as_ref()
+                .map(|sender_info| RawSignedSenderInfoSlices {
+                    info: &sender_info.info.0,
+                    signer: &sender_info.signer.0,
+                    sig: &sender_info.sig.0,
+                }),
         )
     }
 }
@@ -323,6 +331,20 @@ pub struct SignedSenderInfo {
     pub info: Vec<u8>,
     pub signer: CanisterId,
     pub sig: Vec<u8>,
+}
+
+/// The content bytes of a sender_info field, used as the signable message
+/// for canister signature verification of sender info.
+///
+/// The signing canister (e.g. Internet Identity) signs the `info` blob
+/// using a canister signature with the domain separator `"ic-sender-info"`.
+#[derive(Clone, Debug)]
+pub struct SenderInfoContent(pub Vec<u8>);
+
+impl crate::crypto::SignedBytesWithoutDomainSeparator for SenderInfoContent {
+    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
+        self.0.clone()
+    }
 }
 
 /// Common attributes that all HTTP request contents should have.
@@ -403,7 +425,10 @@ impl HttpRequestContent for Query {
     }
 
     fn sender_info(&self) -> Option<&SignedSenderInfo> {
-        None
+        match &self.source {
+            QuerySource::User { sender_info, .. } => sender_info.as_ref(),
+            QuerySource::System => None,
+        }
     }
 }
 

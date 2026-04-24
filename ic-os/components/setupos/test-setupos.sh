@@ -67,6 +67,13 @@ function test_detect_hardware_generation() {
     test_detect_hardware_generation_helper 0 "type3" "2"
     test_detect_hardware_generation_helper 0 "type3.1" "2"
     test_detect_hardware_generation_helper 0 "type3.5" "2"
+    # Gen3 test
+    test_detect_hardware_generation_helper 0 "type4" "3"
+    test_detect_hardware_generation_helper 0 "type4.1" "3"
+    test_detect_hardware_generation_helper 0 "type4.2" "3"
+    test_detect_hardware_generation_helper 0 "type4.3" "3"
+    test_detect_hardware_generation_helper 0 "type4.4" "3"
+    test_detect_hardware_generation_helper 0 "type4.5" "3"
 
     test_detect_hardware_generation_helper 1 "type5" "fail"
     test_detect_hardware_generation_helper 1 "type33" "fail"

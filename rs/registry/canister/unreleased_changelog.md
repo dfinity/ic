@@ -9,12 +9,10 @@ on the process that this file is part of, see
 
 ## Added
 
-* Subnet deletion endpoint. Limited to CloudEngine subnets. 
-* Implemented the `do_split_subnet` method
-* Added an optional field `maximum_state_delta` to `ResourceLimits` in `CreateSubnetPayload` which, when present,
-  sets a soft limit on the maximum (replicated) state *delta* (kept in main memory) in bytes.
-* Added an optional field `resource_limits` to `UpdateSubnetPayload` which, when present,
-  sets all subnet resource limits to the provided values.
+* Added an optional field `initial_dkg_subnet_id` to `CreateSubnetPayload` and `RecoverSubnetPayload`
+  which, when present, determines the subnet to which the resulting `SetupInitialDKG` management
+  canister call should be routed.
+* Added type4.1 through type4.5 node reward types for cloud-engine sub-variants.
 
 ## Changed
 

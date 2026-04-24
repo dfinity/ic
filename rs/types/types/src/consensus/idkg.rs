@@ -889,7 +889,7 @@ impl IDkgMessage {
         }
     }
 
-    pub fn sig_share_dedup_key(&self) -> Option<(RequestId, NodeId)> {
+    pub fn sig_share_request_id_and_signer(&self) -> Option<(RequestId, NodeId)> {
         match self {
             IDkgMessage::EcdsaSigShare(x) => Some((x.request_id, x.signer_id)),
             IDkgMessage::SchnorrSigShare(x) => Some((x.request_id, x.signer_id)),

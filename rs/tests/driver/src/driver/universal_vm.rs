@@ -18,6 +18,7 @@ use anyhow::{Result, bail};
 use chrono::Duration;
 use chrono::Utc;
 use slog::info;
+use ssh2::Session;
 use std::fs::{self, File};
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr};
@@ -356,7 +357,7 @@ until ipv4=$(ip -j address show dev enp2s0 \
             | jq -r -e \
             '.[0].addr_info | map(select(.scope == "global")) | .[0].local'); \
 do
-  if [ "$count" -ge 120 ]; then
+  if [ "$count" -ge 300 ]; then
     echo "Timed out waiting for IPv4 address!" >&2
     exit 1
   fi
@@ -367,6 +368,16 @@ echo "$ipv4"
 "#;
 
 impl RetrieveIpv4Addr for DeployedUniversalVm {
+    fn block_on_ipv4_from_session(&self, session: &Session) -> Result<Ipv4Addr> {
+        use anyhow::Context;
+        let ipv4_string =
+            self.block_on_bash_script_from_session(session, IPV4_RETRIEVE_SH_SCRIPT)?;
+        ipv4_string
+            .trim()
+            .parse::<Ipv4Addr>()
+            .context("ipv4 retrieval")
+    }
+
     fn block_on_ipv4(&self) -> Result<Ipv4Addr> {
         use anyhow::Context;
         let ipv4_string = self.block_on_bash_script(IPV4_RETRIEVE_SH_SCRIPT)?;

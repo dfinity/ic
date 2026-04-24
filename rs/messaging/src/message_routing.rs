@@ -44,8 +44,8 @@ use ic_types::registry::RegistryClientError;
 use ic_types::state_manager::StateManagerError;
 use ic_types::xnet::{StreamHeader, StreamIndex};
 use ic_types::{
-    Height, NodeId, NumBytes, PrincipalId, PrincipalIdBlobParseError, RegistryVersion, SubnetId,
-    Time,
+    ExecutionRound, Height, NodeId, NumBytes, PrincipalId, PrincipalIdBlobParseError,
+    RegistryVersion, SubnetId, Time,
 };
 use ic_types_cycles::CanisterCyclesCostSchedule;
 use ic_utils_thread::JoinOnDrop;
@@ -1165,7 +1165,12 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 .map(|(range, id)| (*range, *id))
                 .collect::<BTreeMap<_, _>>()
                 .try_into()
-                .unwrap_or_default();
+                .map_err(|err| {
+                    Persistent(format!(
+                        "'filtered routing table for CloudEngine subnet {}', err: {:?}",
+                        own_subnet_id, err
+                    ))
+                })?;
             (subnets, routing_table)
         } else {
             // Non-engine subnets see every subnet that is *not* a CloudEngine.
@@ -1180,7 +1185,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 .map(|(range, id)| (*range, *id))
                 .collect::<BTreeMap<_, _>>()
                 .try_into()
-                .unwrap_or_default();
+                .map_err(|err| Persistent(format!("'filtered routing table', err: {:?}", err)))?;
             (subnets, routing_table)
         };
         let canister_migrations = self
@@ -1195,11 +1200,24 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .map_err(|err| registry_error("NNS subnet ID", None, err))?
             .ok_or_else(|| not_found_error("NNS subnet ID", None))?;
 
-        let chain_key_enabled_subnets = self
+        let chain_key_enabled_subnets: BTreeMap<_, _> = self
             .registry
             .get_chain_key_enabled_subnets(registry_version)
             .map_err(|err| registry_error("chain key signing subnets", None, err))?
-            .unwrap_or_default();
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|(key, subnet_ids)| {
+                let filtered: Vec<_> = subnet_ids
+                    .into_iter()
+                    .filter(|id| subnets.contains_key(id))
+                    .collect();
+                if filtered.is_empty() {
+                    None
+                } else {
+                    Some((key, filtered))
+                }
+            })
+            .collect();
 
         // Only the NNS subnet needs the full (unfiltered) topology so that its
         // certified state tree contains entries for every subnet (including
@@ -1600,9 +1618,10 @@ impl BatchProcessor for FakeBatchProcessorImpl {
             )
         });
 
+        let current_round = ExecutionRound::from(batch.batch_number.get());
         for (msg_id, status) in all_ingress_execution_results {
             self.ingress_history_writer
-                .set_status(&mut state, msg_id, status);
+                .set_status(&mut state, msg_id, status, current_round);
         }
 
         state.prune_ingress_history();
@@ -1863,6 +1882,9 @@ impl SyncMessageRouting {
     }
 
     pub fn expected_batch_height(&self) -> Height {
-        self.state_manager.latest_state_height().increment()
+        self.state_manager
+            .latest_state_height()
+            .increment()
+            .max(self.state_manager.tip_height().increment())
     }
 }

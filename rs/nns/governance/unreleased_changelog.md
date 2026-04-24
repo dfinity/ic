@@ -9,12 +9,18 @@ on the process that this file is part of, see
 
 ## Added
 
-- Support for `snapshot_visibility` in `UpdateCanisterSettings` proposals.
-- Tag neurons that have the maximum dissolve delay of 8 years with their bonus base
-  (`eight_year_gang_bonus_base_e8s`), in preparation for the dissolve delay bonus
-  grandfathering when the maximum dissolve delay is reduced to 2 years.
+* `TakeCanisterSnapshot` proposals now store the new snapshot ID in the
+  `success_value` field.
 
 ## Changed
+
+* Relax eight year gang membership requirement(s): Instead of needing to have dissolve
+  delay >= 8 * 365.25 days (8 "years"), which is exactly 252_460_800 seconds, a second
+  round of induction requires only that neurons had dissolve delay >= 8 * 365 days,
+  which is exactly 252_288_000 seconds. This is less than a 0.07% difference.
+  Additionally, to avoid bonusing newly staked ICP, the neuron must currently be aging
+  since before March 30 (midnight UTC). (Furthermore, neurons that are already members
+  will not have their eight year gang bonus base re-assessed.)
 
 ## Deprecated
 

@@ -16,6 +16,7 @@ use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use icrc_ledger_types::icrc107::schema::BTYPE_107;
+use icrc_ledger_types::icrc122::schema::{BTYPE_122_BURN, BTYPE_122_MINT};
 use num_traits::cast::ToPrimitive;
 use proptest::prelude::*;
 use proptest::sample::select;
@@ -132,6 +133,7 @@ fn operation_strategy<Tokens: TokensType>(
                 fee,
             });
         let approve_amount = amount.clone();
+        let approve_expected_allowance = amount.clone();
         let approve_strategy = (
             account_strategy(),
             account_strategy(),
@@ -148,7 +150,7 @@ fn operation_strategy<Tokens: TokensType>(
                 from,
                 spender,
                 amount: approve_amount.clone(),
-                expected_allowance: Some(amount.clone()),
+                expected_allowance: Some(approve_expected_allowance.clone()),
                 expires_at,
                 fee,
             });
@@ -170,12 +172,47 @@ fn operation_strategy<Tokens: TokensType>(
                 },
             );
 
+        let authorized_mint_amount = amount.clone();
+        let authorized_mint_strategy = (
+            account_strategy(),
+            prop::option::of(principal_strategy()),
+            prop::option::of(Just("152mint".to_string())),
+            prop::option::of("[a-z]{3,10}".prop_map(|s| s)),
+        )
+            .prop_map(
+                move |(to, caller, mthd, reason)| Operation::AuthorizedMint {
+                    to,
+                    amount: authorized_mint_amount.clone(),
+                    caller,
+                    mthd,
+                    reason,
+                },
+            );
+
+        let authorized_burn_strategy = (
+            account_strategy(),
+            prop::option::of(principal_strategy()),
+            prop::option::of(Just("152burn".to_string())),
+            prop::option::of("[a-z]{3,10}".prop_map(|s| s)),
+        )
+            .prop_map(
+                move |(from, caller, mthd, reason)| Operation::AuthorizedBurn {
+                    from,
+                    amount: amount.clone(),
+                    caller,
+                    mthd,
+                    reason,
+                },
+            );
+
         prop_oneof![
             mint_strategy,
             burn_strategy,
             transfer_strategy,
             approve_strategy,
             fee_collector_strategy,
+            authorized_mint_strategy,
+            authorized_burn_strategy,
         ]
     })
 }
@@ -259,10 +296,14 @@ pub fn blocks_strategy<Tokens: TokensType>(
                 Operation::Approve { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
                 Operation::Burn { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
                 Operation::Mint { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
-                Operation::FeeCollector { .. } => None,
+                Operation::FeeCollector { .. }
+                | Operation::AuthorizedMint { .. }
+                | Operation::AuthorizedBurn { .. } => None,
             };
             let btype = match transaction.operation {
                 Operation::FeeCollector { .. } => Some(BTYPE_107.to_string()),
+                Operation::AuthorizedMint { .. } => Some(BTYPE_122_MINT.to_string()),
+                Operation::AuthorizedBurn { .. } => Some(BTYPE_122_BURN.to_string()),
                 _ => None,
             };
 
@@ -625,6 +666,12 @@ impl TransactionsAndBalances {
             Operation::FeeCollector { .. } => {
                 panic!("FeeCollector107 not implemented")
             }
+            Operation::AuthorizedMint { to, amount, .. } => {
+                self.credit(to, amount.get_e8s());
+            }
+            Operation::AuthorizedBurn { from, amount, .. } => {
+                self.debit(from, amount.get_e8s());
+            }
         };
         self.transactions.push(tx);
 
@@ -654,6 +701,12 @@ impl TransactionsAndBalances {
             }
             Operation::FeeCollector { .. } => {
                 panic!("FeeCollector107 not implemented")
+            }
+            Operation::AuthorizedMint { to, .. } => {
+                self.check_and_update_account_validity(*to, default_fee);
+            }
+            Operation::AuthorizedBurn { from, .. } => {
+                self.check_and_update_account_validity(*from, default_fee);
             }
         }
     }

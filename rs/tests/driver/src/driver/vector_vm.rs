@@ -312,6 +312,11 @@ docker run -d --name vector \
             self.container_running = true;
 
             emit_kibana_url_event(&log, &infra_group_name, &self.start_time);
+        } else {
+            info!(log, "Issuing command to reload vector configuration.");
+            deployed_vm
+                .block_on_bash_script_from_session(&session, "docker kill --signal=HUP vector")
+                .unwrap();
         }
 
         info!(log, "Vector targets sync complete.");

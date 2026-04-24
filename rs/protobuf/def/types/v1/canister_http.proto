@@ -18,17 +18,19 @@ message CanisterHttpRequest {
 
 message CanisterHttpResponse {
   uint64 id = 1;
-  uint64 timeout = 2;
+  reserved 2;
   types.v1.CanisterId canister_id = 4;
   CanisterHttpResponseContent content = 3;
 }
 
 message CanisterHttpResponseMetadata {
   uint64 id = 1;
-  uint64 timeout = 2;
+  reserved 2;
   bytes content_hash = 3;
   uint64 registry_version = 4;
   string replica_version = 5;
+  uint32 content_size = 6;
+  bool is_reject = 7;
 }
 
 message CanisterHttpResponseContent {
@@ -60,6 +62,8 @@ message CanisterHttpResponseWithConsensus {
   reserved 5;
   reserved 6;
   repeated CanisterHttpResponseSignature signatures = 7;
+  uint32 content_size = 9;
+  bool is_reject = 10;
 }
 
 message CanisterHttpShare {
@@ -81,12 +85,34 @@ message FlexibleCanisterHttpResponses {
   repeated FlexibleCanisterHttpResponseWithProof responses = 2;
 }
 
+message FlexibleCanisterHttpTimeout {}
+
+message FlexibleCanisterHttpResponsesTooLarge {
+  repeated CanisterHttpShare all_seen_shares = 1;
+  uint32 total_requests = 2;
+  uint32 min_responses = 3;
+}
+
+message FlexibleCanisterHttpTooManyRejects {
+  repeated FlexibleCanisterHttpResponseWithProof reject_responses = 1;
+}
+
+message FlexibleCanisterHttpError {
+  uint64 callback_id = 1;
+  oneof error_details {
+    FlexibleCanisterHttpTimeout timeout = 2;
+    FlexibleCanisterHttpResponsesTooLarge responses_too_large = 3;
+    FlexibleCanisterHttpTooManyRejects too_many_rejects = 4;
+  }
+}
+
 message CanisterHttpResponseMessage {
   oneof message_type {
     CanisterHttpResponseWithConsensus response = 1;
     uint64 timeout = 2;
     CanisterHttpResponseDivergence divergence_response = 3;
     FlexibleCanisterHttpResponses flexible_responses = 4;
+    FlexibleCanisterHttpError flexible_error = 5;
   }
 }
 

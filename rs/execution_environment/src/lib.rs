@@ -43,6 +43,7 @@ use ic_query_stats::QueryStatsPayloadBuilderParams;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{CallOrigin, NetworkTopology, ReplicatedState};
+use ic_types::messages::SenderInfo;
 use ic_types::{
     Height, SubnetId,
     messages::{CallContextId, MessageId},
@@ -51,7 +52,7 @@ pub use metrics::IngressFilterMetrics;
 pub use query_handler::{DataCertificateWithDelegationMetadata, InternalHttpQueryHandler};
 use query_handler::{HttpQueryHandler, QueryScheduler};
 use scheduler::SchedulerImpl;
-pub use scheduler::{RoundSchedule, abort_all_paused_executions};
+pub use scheduler::{RoundSchedule, SchedulerMetrics, abort_all_paused_executions};
 use std::{path::Path, sync::Arc};
 use tokio::sync::mpsc::Sender;
 
@@ -82,8 +83,14 @@ pub enum QueryExecutionType {
 #[doc(hidden)]
 #[derive(Clone, Eq, PartialEq)]
 pub enum NonReplicatedQueryKind {
-    Stateful { call_origin: CallOrigin },
-    Pure { caller: PrincipalId },
+    Stateful {
+        call_origin: CallOrigin,
+        sender_info: Option<SenderInfo>,
+    },
+    Pure {
+        caller: PrincipalId,
+        sender_info: Option<SenderInfo>,
+    },
 }
 
 // This struct holds public facing components that are created by Execution.
@@ -338,7 +345,6 @@ fn setup_execution_helper(
         logger.clone(),
         metrics_registry,
         completed_execution_messages_tx,
-        Arc::clone(&state_reader),
     ));
     let ingress_history_reader = Box::new(IngressHistoryReaderImpl::new(Arc::clone(&state_reader)));
 
@@ -372,7 +378,6 @@ fn setup_execution_helper(
         canister_manager_config,
         Arc::clone(&cycles_account_manager),
         Arc::clone(&fd_factory),
-        config.environment_variables,
     ));
 
     let exec_env = Arc::new(ExecutionEnvironment::new(

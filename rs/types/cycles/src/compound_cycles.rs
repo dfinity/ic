@@ -4,6 +4,8 @@ use crate::{
     cycles_use_case::{CyclesUseCase, CyclesUseCaseKind},
     nominal_cycles::NominalCycles,
 };
+use ic_protobuf::{proxy::ProxyDecodeError, state::queues::v1::CompoundCycles as PbCompoundCycles};
+use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 
@@ -72,7 +74,7 @@ use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 /// let total = cc_instructions + cc_memory;
 /// assert_eq!(total.real(), Cycles::new(30));
 /// ```
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
 pub struct CompoundCycles<T: CyclesUseCaseKind> {
     real: Cycles,
     nominal: NominalCycles,
@@ -82,7 +84,8 @@ pub struct CompoundCycles<T: CyclesUseCaseKind> {
 impl<T: CyclesUseCaseKind> CompoundCycles<T> {
     pub fn new(amount: Cycles, cost_schedule: CanisterCyclesCostSchedule) -> Self {
         let use_case = T::cycles_use_case();
-        let amount = match (use_case, cost_schedule) {
+        let nominal = NominalCycles::new_private(amount.get());
+        let real = match (use_case, cost_schedule) {
             (_, CanisterCyclesCostSchedule::Normal)
             // NonConsumed represents the amounts attached on inter-canister
             // calls and it's removed from a canister's balance regardless of
@@ -111,8 +114,8 @@ impl<T: CyclesUseCaseKind> CompoundCycles<T> {
             | (CyclesUseCase::VetKd, CanisterCyclesCostSchedule::Free) => Cycles::zero(),
         };
         Self {
-            real: amount,
-            nominal: NominalCycles::new_private(amount.get()),
+            real,
+            nominal,
             _cycles_use_case_marker: PhantomData,
         }
     }
@@ -123,6 +126,12 @@ impl<T: CyclesUseCaseKind> CompoundCycles<T> {
 
     pub fn nominal(&self) -> NominalCycles {
         self.nominal
+    }
+
+    // Returns true if both the real and nominal parts of this `CompoundCycles`
+    // are zero.
+    pub fn is_zero(&self) -> bool {
+        self.real.is_zero() && self.nominal.is_zero()
     }
 }
 
@@ -185,5 +194,34 @@ impl<T: CyclesUseCaseKind> Div<u128> for CompoundCycles<T> {
             nominal: self.nominal / rhs,
             _cycles_use_case_marker: self._cycles_use_case_marker,
         }
+    }
+}
+
+impl<T: CyclesUseCaseKind> From<CompoundCycles<T>> for PbCompoundCycles {
+    fn from(item: CompoundCycles<T>) -> Self {
+        Self {
+            real: Some(item.real().into()),
+            nominal: Some((&item.nominal()).into()),
+        }
+    }
+}
+
+impl<T: CyclesUseCaseKind> TryFrom<PbCompoundCycles> for CompoundCycles<T> {
+    type Error = ProxyDecodeError;
+
+    fn try_from(compound_cycles: PbCompoundCycles) -> Result<Self, Self::Error> {
+        let real = compound_cycles
+            .real
+            .ok_or(ProxyDecodeError::MissingField("CompoundCycles::real"))?;
+        let nominal = NominalCycles::try_from(
+            compound_cycles
+                .nominal
+                .ok_or(ProxyDecodeError::MissingField("CompoundCycles::nominal"))?,
+        )?;
+        Ok(CompoundCycles {
+            real: Cycles::from(real),
+            nominal,
+            _cycles_use_case_marker: PhantomData,
+        })
     }
 }
