@@ -339,11 +339,11 @@ pub struct SignedSenderInfo {
 /// The signing canister (e.g. Internet Identity) signs the `info` blob
 /// using a canister signature with the domain separator `"ic-sender-info"`.
 #[derive(Clone, Debug)]
-pub struct SenderInfoContent(pub Vec<u8>);
+pub struct SenderInfoContent<'a>(pub &'a [u8]);
 
-impl crate::crypto::SignedBytesWithoutDomainSeparator for SenderInfoContent {
+impl crate::crypto::SignedBytesWithoutDomainSeparator for SenderInfoContent<'_> {
     fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        self.0.clone()
+        self.0.to_vec()
     }
 }
 
