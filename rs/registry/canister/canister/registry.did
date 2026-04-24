@@ -8,6 +8,11 @@
 // test_implementated_interface_matches_declared_interface_exactly (defined in
 // ./tests.rs) ensures that the implementation stays in sync with this file.
 
+type AddAiNodesPayload = record {
+  node_ids : vec principal;
+  subnet_id : opt principal;
+};
+
 type AddApiBoundaryNodesPayload = record {
   version : text;
   node_ids : vec principal;
@@ -315,6 +320,8 @@ type RecoverSubnetPayload = record {
   time_ns : nat64;
 };
 
+type RemoveAiNodesPayload = record { node_ids : vec principal };
+
 type RemoveApiBoundaryNodesPayload = record { node_ids : vec principal };
 
 type RemoveFirewallRulesPayload = record {
@@ -372,6 +379,16 @@ type SubnetFeatures = record {
 };
 
 type SubnetType = variant { application; verified_application; system; cloud_engine };
+
+type UpdateAiNodeSubnetPayload = record {
+  node_id : principal;
+  subnet_id : opt principal;
+};
+
+type GetAiNodeIdsResponse = variant {
+  Ok : vec principal;
+  Err : text;
+};
 
 type UpdateApiBoundaryNodesVersionPayload = record {
   version : text;
@@ -561,6 +578,7 @@ type UpdateSubnetAdminsPayload = record {
 };
 
 service : {
+  add_ai_nodes : (AddAiNodesPayload) -> ();
   add_api_boundary_nodes : (AddApiBoundaryNodesPayload) -> ();
   add_firewall_rules : (AddFirewallRulesPayload) -> ();
   add_node : (AddNodePayload) -> (principal);
@@ -580,6 +598,7 @@ service : {
   ) -> ();
   deploy_guestos_to_some_api_boundary_nodes : (DeployGuestosToSomeApiBoundaryNodes) -> ();
   deploy_hostos_to_some_nodes : (DeployHostosToSomeNodes) -> ();
+  get_ai_node_ids : () -> (GetAiNodeIdsResponse) query;
   get_api_boundary_node_ids : (GetApiBoundaryNodeIdsRequest) -> (GetApiBoundaryNodeIdsResponse) query;
   get_build_metadata : () -> (text) query;
   get_chunk : (GetChunkRequest) -> (GetChunkResponse) query;
@@ -590,6 +609,7 @@ service : {
   migrate_node_operator_directly : (MigrateNodeOperatorPayload) -> ();
   prepare_canister_migration : (PrepareCanisterMigrationPayload) -> ();
   recover_subnet : (RecoverSubnetPayload) -> ();
+  remove_ai_nodes : (RemoveAiNodesPayload) -> ();
   remove_api_boundary_nodes : (RemoveApiBoundaryNodesPayload) -> ();
   remove_firewall_rules : (RemoveFirewallRulesPayload) -> ();
   remove_node_directly : (RemoveNodeDirectlyPayload) -> ();
@@ -601,6 +621,7 @@ service : {
   revise_elected_replica_versions : (ReviseElectedGuestosVersionsPayload) -> ();
   set_firewall_config : (SetFirewallConfigPayload) -> ();
   set_subnet_operational_level : (SetSubnetOperationalLevelPayload) -> ();
+  update_ai_node_subnet : (UpdateAiNodeSubnetPayload) -> ();
   update_api_boundary_nodes_version : (UpdateApiBoundaryNodesVersionPayload) -> ();
   update_elected_hostos_versions : (UpdateElectedHostosVersionsPayload) -> ();
   revise_elected_hostos_versions : (ReviseElectedHostosVersionsPayload) -> ();
