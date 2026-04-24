@@ -659,7 +659,7 @@ mockall::mock! {
 
         pub fn idkg_create_transcript(
             &self, params: &IDkgTranscriptParams,
-            dealings: &BatchSignedIDkgDealings,
+            dealings: BatchSignedIDkgDealings,
         ) -> Result<IDkgTranscript, IDkgCreateTranscriptError>;
 
         pub fn idkg_verify_transcript(
@@ -898,7 +898,7 @@ impl IDkgProtocol for MockCrypto {
     fn create_transcript(
         &self,
         params: &IDkgTranscriptParams,
-        dealings: &BatchSignedIDkgDealings,
+        dealings: BatchSignedIDkgDealings,
     ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
         self.idkg_create_transcript(params, dealings)
     }

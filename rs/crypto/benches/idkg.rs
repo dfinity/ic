@@ -303,7 +303,7 @@ fn bench_create_transcript<M: Measurement, R: RngCore + CryptoRng>(
             },
             |(receiver, dealings)| {
                 let (_, _, params) = bench_context.get().unwrap();
-                create_transcript_or_panic(receiver, params, dealings)
+                create_transcript_or_panic(receiver, params, dealings.clone())
             },
             SmallInput,
         )
@@ -336,7 +336,7 @@ fn bench_verify_transcript<M: Measurement, R: RngCore + CryptoRng>(
                     .nodes
                     .random_filtered_by_receivers(params.receivers(), rng);
                 let transcript =
-                    create_transcript_or_panic(receiver, params, &dealings_with_receivers_support);
+                    create_transcript_or_panic(receiver, params, dealings_with_receivers_support);
                 let other_receiver = other_receiver_or_same_if_only_one(
                     params.receivers(),
                     receiver,
@@ -380,7 +380,7 @@ fn bench_load_transcript<M: Measurement, R: RngCore + CryptoRng>(
                     .nodes
                     .random_filtered_by_receivers(params.receivers(), rng);
                 let transcript =
-                    create_transcript_or_panic(receiver, params, &dealings_with_receivers_support);
+                    create_transcript_or_panic(receiver, params, dealings_with_receivers_support);
                 let other_receiver = other_receiver_or_same_if_only_one(
                     params.receivers(),
                     receiver,

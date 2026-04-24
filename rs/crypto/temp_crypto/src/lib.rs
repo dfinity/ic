@@ -593,7 +593,7 @@ pub mod internal {
         fn create_transcript(
             &self,
             params: &IDkgTranscriptParams,
-            dealings: &BatchSignedIDkgDealings,
+            dealings: BatchSignedIDkgDealings,
         ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
             IDkgProtocol::create_transcript(&self.crypto_component, params, dealings)
         }
