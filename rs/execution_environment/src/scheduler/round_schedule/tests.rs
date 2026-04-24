@@ -189,7 +189,6 @@ impl RoundScheduleFixture {
 
     /// Returns true if the canister has an explicit scheduling priority, false
     /// otherwise.
-    #[allow(dead_code)]
     fn has_canister_priority(&self, canister_id: &CanisterId) -> bool {
         self.state
             .metadata
@@ -327,12 +326,10 @@ impl RoundScheduleFixture {
         &self.round_schedule.long_execution_canisters
     }
 
-    #[allow(dead_code)]
     fn executed_canisters(&self) -> &BTreeSet<CanisterId> {
         &self.round_schedule.executed_canisters
     }
 
-    #[allow(dead_code)]
     fn canisters_with_completed_messages(&self) -> &BTreeSet<CanisterId> {
         &self.round_schedule.canisters_with_completed_messages
     }
@@ -371,20 +368,15 @@ impl RoundScheduleFixture {
 struct RoundScheduleBuilder {
     cores: usize,
     heap_delta_rate_limit: NumBytes,
-    rate_limiting_of_heap_delta: FlagStatus,
     install_code_rate_limit: NumInstructions,
-    rate_limiting_of_instructions: FlagStatus,
 }
 
-#[allow(dead_code)]
 impl RoundScheduleBuilder {
     fn new() -> Self {
         Self {
             cores: 4,
             heap_delta_rate_limit: NumBytes::new(u64::MAX / 2),
-            rate_limiting_of_heap_delta: FlagStatus::Enabled,
             install_code_rate_limit: NumInstructions::new(u64::MAX / 2),
-            rate_limiting_of_instructions: FlagStatus::Enabled,
         }
     }
 
@@ -398,18 +390,13 @@ impl RoundScheduleBuilder {
         self
     }
 
-    fn disable_rate_limiting_of_heap_delta(mut self) -> Self {
-        self.rate_limiting_of_heap_delta = FlagStatus::Disabled;
-        self
-    }
-
     fn build(self) -> RoundSchedule {
         RoundSchedule::new(
             self.cores,
             self.heap_delta_rate_limit,
-            self.rate_limiting_of_heap_delta,
+            FlagStatus::Enabled,
             self.install_code_rate_limit,
-            self.rate_limiting_of_instructions,
+            FlagStatus::Enabled,
         )
     }
 }
@@ -1091,7 +1078,7 @@ const HEAP_DELTA_RATE_LIMIT: NumBytes = NumBytes::new(1000);
 /// execution, the canister produces `limited_rounds` worth of heap delta. This
 /// results in a cycle length of `unlimited_rounds + limited_rounds`, where
 /// the canister is executed for `unlimited_rounds` and skipped for the next
-/// `limited_rounds` where it would otherwise be executed.
+/// `limited_rounds` where it would otherwise be scheduled first.
 #[derive(Clone, Debug)]
 struct RateLimitPattern {
     /// Number of consecutive rate-limited potential full rounds.
@@ -1276,13 +1263,16 @@ prop_compose! {
 }
 
 /// Runs a multi-round simulation using `RoundScheduleFixture`, returning the
-/// per-canister simulation state after all rounds.
+/// resulting replicated state and per-canister simulation states.
+///
+/// Only does one iteration per round. And one message or slice per canister.
+/// But this is sufficient to approximate the full range of scheduler behavior.
 fn run_multi_round_simulation(
     scheduler_cores: usize,
     num_rounds: usize,
     archetypes: &[(CanisterArchetype, usize)],
     debug_canister_idx: Option<usize>,
-) -> (RoundScheduleFixture, Vec<CanisterSim>) {
+) -> (ReplicatedState, Vec<CanisterSim>) {
     let mut fixture = RoundScheduleFixture::new();
 
     let mut sims: Vec<CanisterSim> = Vec::new();
@@ -1467,16 +1457,17 @@ fn run_multi_round_simulation(
         }
     }
 
-    (fixture, sims)
+    (fixture.state, sims)
 }
 
 /// Asserts the post-simulation invariants.
 fn assert_multi_round_invariants(
-    fixture: &RoundScheduleFixture,
+    state: &ReplicatedState,
     sims: &[CanisterSim],
     scheduler_cores: usize,
     num_rounds: usize,
     total_compute_allocation: usize,
+    expected_long_execution_efficiency_percent: usize,
 ) -> Result<(), TestCaseError> {
     println!(
         "executed rounds: {:?}",
@@ -1485,8 +1476,7 @@ fn assert_multi_round_invariants(
     println!(
         "canister priorities: {:?}",
         sims.iter()
-            .map(|sim| fixture
-                .state
+            .map(|sim| state
                 .canister_priority(&sim.canister_id)
                 .accumulated_priority
                 .get()
@@ -1494,12 +1484,23 @@ fn assert_multi_round_invariants(
             .collect::<Vec<_>>()
     );
 
+    // The sum of accumulated priorities should be zero (or slightly positive, in
+    // case e.g. we just distributed compute allocation after not having executed
+    // anything this round).
+    let sum_ap: i64 = state
+        .metadata
+        .subnet_schedule
+        .iter()
+        .map(|(_, p)| p.accumulated_priority.get())
+        .sum();
+    prop_assert!(sum_ap / sims.len() as i64 >= 0, "final sum(AP) = {sum_ap}");
+
     // Accumulated priority decays exponentially outside the `[AP_ROUNDS_MIN,
     // AP_ROUNDS_MAX]` range. Expect at most 5 extra rounds at either end.
     const AP_UPPER_BOUND: i64 = (AP_ROUNDS_MAX + 5) * 100 * MULTIPLIER;
     const AP_LOWER_BOUND: i64 = (AP_ROUNDS_MIN - 5) * 100 * MULTIPLIER;
     for (i, sim) in sims.iter().enumerate() {
-        let canister_priority = fixture.state.metadata.subnet_schedule.get(&sim.canister_id);
+        let canister_priority = state.metadata.subnet_schedule.get(&sim.canister_id);
         assert!(
             canister_priority.accumulated_priority.get() <= AP_UPPER_BOUND
                 && canister_priority.accumulated_priority.get() >= AP_LOWER_BOUND,
@@ -1519,10 +1520,15 @@ fn assert_multi_round_invariants(
     // their compute allocation and rate limiting.
     for (i, sim) in sims.iter().enumerate() {
         let canister_id = sim.canister_id;
-        let canister_priority = fixture.state.metadata.subnet_schedule.get(&canister_id);
+        let canister_priority = state.metadata.subnet_schedule.get(&canister_id);
 
         // If (and only if) the canister has a backlog, check that it got executed as
         // much as its compute allocation and rate limiting allow.
+        //
+        // Note that we only count full execution rounds, because that is what the
+        // scheduler accounts for. Any free "tail executions" (when the canister was not
+        // scheduled first and did not consume all its messages) either result in the
+        // canister consuming all its inputs; or else don't count for fairness.
         if sim.inputs.len() > 1 {
             let executed_rounds = sim.full_rounds;
             let credit_rounds = canister_priority.accumulated_priority.get() / MULTIPLIER / 100;
@@ -1532,23 +1538,8 @@ fn assert_multi_round_invariants(
                 .expected_full_rounds(num_rounds, free_compute_per_canister);
 
             if sim.archetype.has_long_execution {
-                // Because long executions are prioritized for throughput (in-progress ones are
-                // prioritized over new ones); combined with AP bounding, long executions are
-                // scheduled less efficiently.
-                expected_rounds = expected_rounds * 9 / 10;
-                // } else {
-                //     // We have one core that is not part of the scheduler capacity. The combination
-                //     // of this extra capacity and the inefficiencies described above, gives us in
-                //     // practice the equivlent of another 20 compute capacity.
-                //     if sims.len() >= scheduler_cores {
-                //         expected_rounds =
-                //             expected_rounds * (scheduler_cores * 10 - 8) / (scheduler_cores * 10 - 10);
-                //     }
-                //     // The capacity resulting from the extra core only applies up to the rate limit.
-                //     // If a canister can only run 50% of the time due to rate limiting, it will do
-                //     // so regardless of extra compute capacity.
-                //     expected_rounds =
-                //         expected_rounds.min(sim.archetype.max_rounds_from_rate_limiting(num_rounds));
+                expected_rounds =
+                    expected_rounds * expected_long_execution_efficiency_percent / 100;
             }
 
             prop_assert!(
@@ -1564,7 +1555,7 @@ fn assert_multi_round_invariants(
 #[test_strategy::proptest(ProptestConfig { cases: 40, max_shrink_iters: 0, ..ProptestConfig::default() })]
 fn multi_round_priority_invariants(
     #[strategy(2..6_usize)] scheduler_cores: usize,
-    #[strategy(200..800_usize)] _num_rounds: usize,
+    #[strategy(200..800_usize)] num_rounds: usize,
     #[strategy(proptest::collection::vec(arb_archetype_with_count(), 2..=5))]
     archetype_configs: Vec<(CanisterArchetype, usize)>,
 ) {
@@ -1575,26 +1566,34 @@ fn multi_round_priority_invariants(
     let capacity = (scheduler_cores - 1) * 100;
     prop_assume!(total_compute_allocation < capacity);
 
-    let num_rounds = 1000;
-    let (fixture, sims) =
+    let (state, sims) =
         run_multi_round_simulation(scheduler_cores, num_rounds, &archetype_configs, None);
+
+    // Expect 90%+ efficient scheduling of long executions.
+    //
+    // Because long executions are prioritized for throughput (in-progress ones are
+    // prioritized over new ones); and due to AP exponential decay; long executions
+    // are scheduled less efficiently.
+    let expected_long_execution_efficiency_percent = 90;
     assert_multi_round_invariants(
-        &fixture,
+        &state,
         &sims,
         scheduler_cores,
         num_rounds,
         total_compute_allocation,
+        expected_long_execution_efficiency_percent,
     )?;
 }
 
-#[test_strategy::proptest(ProptestConfig { cases: 20, max_shrink_iters: 0, ..ProptestConfig::default() })]
-fn multi_round_all_active_proportional_scheduling(
-    #[strategy(2..6_usize)] scheduler_cores: usize,
-    #[strategy(proptest::collection::vec(0..50_u64, 2..=10))] allocations: Vec<u64>,
+#[test_strategy::proptest(ProptestConfig { cases: 40, max_shrink_iters: 0, ..ProptestConfig::default() })]
+fn multi_round_all_active_short_executions(
+    #[strategy(proptest::collection::vec(-100..100_i64, 2..=10))] raw_allocations: Vec<i64>,
 ) {
-    let total: u64 = allocations.iter().sum();
-    let capacity = ((scheduler_cores - 1) * 100) as u64;
-    prop_assume!(total < capacity);
+    let allocations: Vec<u64> = raw_allocations.iter().map(|&a| a.max(0) as u64).collect();
+
+    // Minimum number of scheduler cores to accomodate the total compute allocation.
+    let total_compute_allocation: u64 = allocations.iter().sum();
+    let scheduler_cores = total_compute_allocation as usize / 100 + 2;
 
     let archetype_configs: Vec<(CanisterArchetype, usize)> = allocations
         .into_iter()
@@ -1602,10 +1601,10 @@ fn multi_round_all_active_proportional_scheduling(
             (
                 CanisterArchetype {
                     compute_allocation: ca,
-                    active_rounds: 1,
+                    active_rounds: 1_000,
                     inactive_rounds: 0,
                     has_long_execution: false,
-                    consumes_all_inputs: true,
+                    consumes_all_inputs: false,
                     rate_limiting: None,
                     low_cycles: false,
                 },
@@ -1614,21 +1613,18 @@ fn multi_round_all_active_proportional_scheduling(
         })
         .collect();
 
-    let num_canisters = archetype_configs.len();
-    let num_rounds = num_canisters * 10;
-
-    let (fixture, _sims) =
+    let num_rounds = 100;
+    let (state, sims) =
         run_multi_round_simulation(scheduler_cores, num_rounds, &archetype_configs, None);
 
-    let sum_ap: i64 = fixture
-        .state
-        .metadata
-        .subnet_schedule
-        .iter()
-        .map(|(_, p)| p.accumulated_priority.get())
-        .sum();
-    prop_assert!(
-        sum_ap.abs() <= num_canisters as i64,
-        "final sum(AP) = {sum_ap}"
-    );
+    // No-op, we already expect 100% efficient scheduling of short executions.
+    let expected_long_execution_efficiency_percent = 100;
+    assert_multi_round_invariants(
+        &state,
+        &sims,
+        scheduler_cores,
+        num_rounds,
+        total_compute_allocation as usize,
+        expected_long_execution_efficiency_percent,
+    )?;
 }

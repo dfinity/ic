@@ -19,7 +19,7 @@ use ic_state_layout::{
     PageMapLayout, ReadOnly, SnapshotLayout, error::LayoutError, try_mmap_wasm_file,
 };
 use ic_types::batch::RawQueryStats;
-use ic_types::{CanisterTimer, ExecutionRound, Height, Time};
+use ic_types::{CanisterTimer, Height, Time};
 use ic_utils::thread::maybe_parallel_map;
 use ic_validate_eq::ValidateEq;
 use std::collections::BTreeMap;
@@ -890,13 +890,13 @@ pub fn load_canister_state(
     };
     let priority = CanisterPriority {
         accumulated_priority: canister_state_bits.accumulated_priority,
-        executed_slices: canister_state_bits.priority_credit.get() / 100_000_000,
-        long_execution_start_round: match canister_state_bits.long_execution_mode {
-            ic_types::LongExecutionMode::Prioritized => {
-                // FIXME: We must persist and restore enqueue_round.
-                Some(ExecutionRound::new(0))
-            }
-            ic_types::LongExecutionMode::Opportunistic => None,
+        // We can only be loading an aborted execution, so zero executed slices.
+        executed_slices: 0,
+        // Set a long execution start round where necessary.
+        long_execution_start_round: if canister_state.has_long_execution() {
+            Some(0.into())
+        } else {
+            None
         },
         last_full_execution_round: canister_state_bits.last_full_execution_round,
     };

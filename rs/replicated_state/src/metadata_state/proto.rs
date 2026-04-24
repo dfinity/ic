@@ -408,6 +408,14 @@ impl
             &dyn CheckpointLoadingMetrics,
         ),
     ) -> Result<Self, Self::Error> {
+        let mut streams = BTreeMap::<SubnetId, Stream>::new();
+        for entry in item.streams {
+            streams.insert(
+                subnet_id_try_from_option(entry.subnet_id, "SystemMetadata::streams::K")?,
+                try_from_option_field(entry.subnet_stream, "SystemMetadata::streams::V")?,
+            );
+        }
+
         let subnet_schedule = if !item.subnet_schedule.is_empty() {
             let mut priorities = BTreeMap::new();
             for entry in &item.subnet_schedule {
@@ -432,13 +440,6 @@ impl
         } else {
             fallback_subnet_schedule
         };
-        let mut streams = BTreeMap::<SubnetId, Stream>::new();
-        for entry in item.streams {
-            streams.insert(
-                subnet_id_try_from_option(entry.subnet_id, "SystemMetadata::streams::K")?,
-                try_from_option_field(entry.subnet_stream, "SystemMetadata::streams::V")?,
-            );
-        }
 
         let canister_allocation_ranges: CanisterIdRanges = match item.canister_allocation_ranges {
             Some(canister_allocation_ranges) => canister_allocation_ranges.try_into()?,

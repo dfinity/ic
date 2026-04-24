@@ -67,7 +67,11 @@ impl CanisterRoundState {
         // Ensure that `long_execution_start_round` matches the canister state.
         debug_assert_eq!(
             canister.has_long_execution(),
-            canister_priority.long_execution_start_round.is_some()
+            canister_priority.long_execution_start_round.is_some(),
+            "canister: {:?}, task_queue: {:?}, canister_priority: {:?}",
+            canister.canister_id(),
+            canister.system_state.task_queue,
+            canister_priority,
         );
 
         let compute_allocation = from_ca(canister.compute_allocation());
@@ -255,9 +259,10 @@ impl RoundSchedule {
         logger: &ReplicaLogger,
     ) -> IterationSchedule {
         // Sum of all scheduled canisters' compute allocations.
+        // This corresponds to |a| in Scheduler Analysis.
         let mut total_compute_allocation = ZERO;
         let mut long_executions_count = 0;
-        // Sum of all long executions' compute allocations.
+        // Sum of all long execution canisters' compute allocations.
         let mut long_executions_compute_allocation = ZERO;
 
         let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
@@ -425,7 +430,10 @@ impl RoundSchedule {
             .extend(canisters_with_completed_messages);
 
         // If a canister has completed a long execution, clear its start round.
-        for canister_id in canisters_with_completed_messages {
+        //
+        // A canister may run out of cycles while in a long execution (e.g. if making
+        // calls). Also include low cycle balance canisters.
+        for canister_id in canisters_with_completed_messages.union(low_cycle_balance_canisters) {
             state
                 .canister_priority_mut(*canister_id)
                 .long_execution_start_round = None;
@@ -463,9 +471,11 @@ impl RoundSchedule {
 
     /// Updates canister priorities at the end of the round.
     ///
-    /// * Grants canisters their compute allocations; charges for full executions;
-    ///   then calculates the subnet-wide free compute and distributes it.
-    /// * Applies the priority credit where possible (no long execution).
+    /// * Charges for completed executions (and the first round of long executions).
+    /// * Grants heap delta and install code credits.
+    /// * Grants canisters their compute allocations.
+    /// * Applies an exponential decay to large AP values, to limit runaway APs.
+    /// * Calculates and distributes the subnet-wide free compute.
     /// * Observes round-level metrics.
     pub fn finish_round(
         &self,
@@ -503,7 +513,7 @@ impl RoundSchedule {
             // Add the canister to the subnet schedule, if not already there.
             let canister_priority = subnet_schedule.get_mut(*canister_id);
 
-            // Charge for the first slice of every execution immediately, to properly
+            // Charge for the first slice of every long execution immediately, to properly
             // account for newly started long executions (scheduled as new executions).
             if canister_priority.executed_slices == 1
                 && canister_priority.long_execution_start_round == Some(current_round)
@@ -520,11 +530,6 @@ impl RoundSchedule {
                 canister_priority.accumulated_priority -=
                     ONE_HUNDRED_PERCENT * (canister_priority.executed_slices - 1).max(1);
                 canister_priority.executed_slices = 0;
-                canister_priority.long_execution_start_round = if canister.has_long_execution() {
-                    Some(current_round)
-                } else {
-                    None
-                };
             }
 
             Arc::make_mut(canister)
@@ -589,7 +594,7 @@ impl RoundSchedule {
             // systematic accumulation of more AP than can be spent.
             //
             // However, if there is more than 100 priority per canister to distribute (e.g.
-            // because we have applied a lot of priority credit this round), then simply
+            // because we have charged for a lot of long executions this round), then simply
             // grant every canister an equal share of that (including the CA we already
             // granted above).
             let canister_count = compute_allocations.len() as i64;
