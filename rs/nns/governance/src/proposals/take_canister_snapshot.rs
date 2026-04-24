@@ -54,7 +54,7 @@ impl CallCanisterReply for TakeCanisterSnapshotOk {
     fn try_decode(encoded_reply: &[u8]) -> Result<Option<Self>, GovernanceError> {
         let response = Decode!(encoded_reply, TakeCanisterSnapshotResponse).map_err(|err| {
             GovernanceError::new_with_message(
-                crate::pb::v1::governance_error::ErrorType::External,
+                ErrorType::External,
                 format!("Failed to decode TakeCanisterSnapshotResponse: {err}"),
             )
         })?;

@@ -508,11 +508,9 @@ async fn test_governance_canister_snapshot() {
     let optimistic_snapshot_id = SnapshotId::from((CanisterId::from_u64(0), 0_u64)).to_vec();
     assert_eq!(
         take_canister_snapshot_proposal_info.success_value.unwrap(),
-        SuccessfulProposalExecutionValue::from(
-            TakeCanisterSnapshotOk {
-                snapshot_id: optimistic_snapshot_id,
-            }
-        ),
+        SuccessfulProposalExecutionValue::from(TakeCanisterSnapshotOk {
+            snapshot_id: optimistic_snapshot_id,
+        }),
     );
 
     // Change Governance's state by creating ANOTHER (Motion) proposal.
