@@ -1,14 +1,23 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:tracing",
+    "@crate_index//:tracing-journald",
+    "@crate_index//:tracing-subscriber",
+]
 
 rust_library(
     name = "logging",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_os_logging",
-    deps = [
-        # Keep sorted.
-        "@crate_index//:tracing-journald",
-        "@crate_index//:tracing-subscriber",
-    ],
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "logging_test",
+    crate = ":logging",
+    deps = DEPENDENCIES,
 )

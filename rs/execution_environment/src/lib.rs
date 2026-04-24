@@ -345,7 +345,6 @@ fn setup_execution_helper(
         logger.clone(),
         metrics_registry,
         completed_execution_messages_tx,
-        Arc::clone(&state_reader),
     ));
     let ingress_history_reader = Box::new(IngressHistoryReaderImpl::new(Arc::clone(&state_reader)));
 
@@ -379,7 +378,6 @@ fn setup_execution_helper(
         canister_manager_config,
         Arc::clone(&cycles_account_manager),
         Arc::clone(&fd_factory),
-        config.environment_variables,
     ));
 
     let exec_env = Arc::new(ExecutionEnvironment::new(

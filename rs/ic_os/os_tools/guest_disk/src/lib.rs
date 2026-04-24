@@ -3,6 +3,7 @@ use std::path::Path;
 
 pub mod crypt;
 pub mod generated_key;
+pub mod metrics;
 pub mod sev;
 
 pub const DEFAULT_PREVIOUS_SEV_KEY_PATH: &str = "/var/alternative_store.keyfile";

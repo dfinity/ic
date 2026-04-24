@@ -45,6 +45,8 @@ impl LoadCanisterSnapshot {
 }
 
 impl CallCanister for LoadCanisterSnapshot {
+    type Reply = ();
+
     fn canister_and_function(&self) -> Result<(CanisterId, &str), GovernanceError> {
         Ok((ROOT_CANISTER_ID, "load_canister_snapshot"))
     }

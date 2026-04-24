@@ -7,19 +7,19 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-xnet-slo-test-lib = { path = "../xnet/slo_test_lib" }
 anyhow = { workspace = true }
-ic_consensus_system_test_utils = { path = "../../consensus/utils" }
-ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
-ic-system-test-driver = { path = "../../driver" }
-slog = { workspace = true }
-ic-types = { path = "../../../types/types" }
-tokio = { workspace = true }
-systest-message-routing-common = { path = "../common" }
 canister-test = { path = "../../../rust_canisters/canister_test" }
 ic-agent = { workspace = true }
 ic-error-types = { path = "../../../../packages/ic-error-types" }
+ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+ic-system-test-driver = { path = "../../driver" }
+ic-types = { path = "../../../types/types" }
 ic-universal-canister = { path = "../../../universal_canister/lib" }
+ic_consensus_system_test_utils = { path = "../../consensus/utils" }
+slog = { workspace = true }
+systest-message-routing-common = { path = "../common" }
+tokio = { workspace = true }
+xnet-slo-test-lib = { path = "../xnet/slo_test_lib" }
 
 [[bin]]
 name = "xnet_compatibility"

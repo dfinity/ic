@@ -46,8 +46,8 @@ pub enum StepType {
     /// replica bug and not due to malicious actors, this step should not reveal any problems.
     MergeCertificationPools,
     /// In this step we will download all finalized consensus artifacts. For that we should use a
-    /// node, that is up to date with the highest finalization height because this node will contain
-    /// all required artifacts for the recovery.
+    /// node, that is up to date with the highest finalization and CUP height because this node
+    /// will contain all required artifacts for the recovery.
     DownloadConsensusPool,
     /// In this step we will download the subnet state from a node that is sufficiently up to date
     /// with the rest of the subnet, i.e. not behind by more than 1 DKG interval. To avoid
@@ -171,6 +171,10 @@ pub struct AppSubnetRecoveryArgs {
     #[clap(long)]
     pub keep_downloaded_state: Option<bool>,
 
+    /// Height of the checkpoint to download. If not provided, the latest checkpoint is used.
+    #[clap(long)]
+    pub download_state_height: Option<u64>,
+
     /// The method of uploading state. Possible values are either `local` (for a
     /// local recovery on the admin node) or the ipv6 address of the target node.
     /// Local recoveries allow us to skip a potentially expensive data transfer.
@@ -184,6 +188,11 @@ pub struct AppSubnetRecoveryArgs {
     /// Id of the chain key subnet used for resharing chain keys to the subnet to be recovered
     #[clap(long, value_parser=crate::util::subnet_id_from_str)]
     pub chain_key_subnet_id: Option<SubnetId>,
+
+    /// Optional subnet used to run `setup_initial_dkg` during recovery CUP proposal.
+    /// If not set, the request is handled by the NNS subnet.
+    #[clap(long, value_parser=crate::util::subnet_id_from_str)]
+    pub initial_dkg_subnet_id: Option<SubnetId>,
 
     /// If present the tool will start execution for the provided step, skipping the initial ones
     #[clap(long = "resume")]
@@ -306,8 +315,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
 
             StepType::DownloadConsensusPool => {
                 if self.params.download_pool_node.is_none() {
-                    // We could pick a node with highest finalization height automatically, but we
-                    // might have a preference between nodes of the same finalization height.
+                    // We could pick a node with highest finalization and CUP height automatically,
+                    // but we might have a preference between nodes of same heights.
                     print_height_info(
                         &self.logger,
                         &self.recovery.registry_helper,
@@ -336,6 +345,13 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                         "Preserve original downloaded state locally?",
                     ));
                 }
+
+                if self.params.download_state_height.is_none() {
+                    self.params.download_state_height = read_optional(
+                        &self.logger,
+                        "Enter the height of the checkpoint to download (leave empty for latest checkpoint):",
+                    );
+                }
             }
 
             StepType::ICReplay => {
@@ -362,6 +378,12 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                     self.params.chain_key_subnet_id = read_optional_subnet_id(
                         &self.logger,
                         "Enter ID of subnet to reshare Chain keys from: ",
+                    );
+                }
+                if self.params.initial_dkg_subnet_id.is_none() {
+                    self.params.initial_dkg_subnet_id = read_optional_subnet_id(
+                        &self.logger,
+                        "Enter ID of subnet to setup initial DKG on (default: NNS): ",
                     );
                 }
             }
@@ -401,20 +423,18 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                     vec![]
                 };
 
-                if let Some((node_id, pub_key)) = self.params.write_node_id_and_pub_key.clone() {
-                    Ok(Box::new(self.recovery.take_subnet_offline_for_repairs(
+                Ok(Box::new(
+                    self.recovery.take_subnet_offline_for_repairs(
                         self.params.subnet_id,
                         &subnet_readonly_keys,
-                        &BTreeMap::from([(node_id, vec![pub_key])]),
-                    )))
-                } else {
-                    // TODO (CON-1637): Remove this branch and only use `take_subnet_offline_for_repairs`
-                    Ok(Box::new(self.recovery.halt_subnet(
-                        self.params.subnet_id,
-                        true,
-                        &subnet_readonly_keys,
-                    )))
-                }
+                        &self
+                            .params
+                            .write_node_id_and_pub_key
+                            .clone()
+                            .map(|(node_id, pub_key)| BTreeMap::from([(node_id, vec![pub_key])]))
+                            .unwrap_or_default(),
+                    ),
+                ))
             }
 
             StepType::DownloadCertifications => {
@@ -455,9 +475,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
             }
 
             StepType::DownloadState => match self.params.download_state_method {
-                Some(DataLocation::Local) => {
-                    Ok(Box::new(self.recovery.get_copy_local_state_step()))
-                }
+                Some(DataLocation::Local) => Ok(Box::new(
+                    self.recovery
+                        .get_copy_local_state_step(self.params.download_state_height)?,
+                )),
                 Some(DataLocation::Remote(node_ip)) => {
                     let (ssh_user, key_file) = if self.params.readonly_pub_key.is_some() {
                         (SshUser::Readonly, self.params.readonly_key_file.clone())
@@ -470,6 +491,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                         ssh_user,
                         key_file,
                         self.params.keep_downloaded_state == Some(true),
+                        self.params.download_state_height,
                     )?))
                 }
                 None => Err(RecoveryError::StepSkipped),
@@ -568,6 +590,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                     state_params.hash,
                     self.params.replacement_nodes.as_ref().unwrap_or(&default),
                     None,
+                    self.params.initial_dkg_subnet_id,
                     self.params.chain_key_subnet_id,
                 )?))
             }
@@ -580,22 +603,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 }
             }
 
-            StepType::Unhalt => {
-                if self.params.write_node_id_and_pub_key.is_some() {
-                    Ok(Box::new(
-                        self.recovery
-                            .bring_subnet_back_online_after_repairs(self.params.subnet_id),
-                    ))
-                } else {
-                    // TODO (CON-1637): Remove this branch and only use
-                    // `bring_subnet_back_online_after_repairs`
-                    Ok(Box::new(self.recovery.halt_subnet(
-                        self.params.subnet_id,
-                        false,
-                        &["".to_string()],
-                    )))
-                }
-            }
+            StepType::Unhalt => Ok(Box::new(
+                self.recovery
+                    .bring_subnet_back_online_after_repairs(self.params.subnet_id),
+            )),
 
             StepType::Cleanup => Ok(Box::new(self.recovery.get_cleanup_step())),
         }

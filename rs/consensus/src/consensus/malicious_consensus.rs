@@ -138,7 +138,7 @@ impl ConsensusImpl {
     ) -> Option<BlockProposal> {
         let height = parent.height().increment();
         let mut context = parent.as_ref().context.clone();
-        context.certified_height = self.state_manager.latest_certified_height();
+        context.certified_height = self.state_reader.latest_certified_height();
 
         // Note that we will skip blockmaking if registry versions or replica_versions
         // are missing or temporarily not retrievable.

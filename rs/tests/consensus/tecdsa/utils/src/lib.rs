@@ -1079,6 +1079,7 @@ pub async fn create_new_subnet_with_keys(
     let payload = CreateSubnetPayload {
         node_ids,
         subnet_id_override: None,
+        initial_dkg_subnet_id: None,
         max_ingress_bytes_per_message: config.max_ingress_bytes_per_message,
         max_ingress_bytes_per_block: Some(config.max_ingress_bytes_per_block),
         max_ingress_messages_per_block: config.max_ingress_messages_per_block,

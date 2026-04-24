@@ -161,6 +161,11 @@ jobs:
           echo "skip_buf_checks=$skip_buf_checks" >> "$GITHUB_OUTPUT"
           echo "| \`skip_buf_checks\` | \`$skip_buf_checks\` |" >> "$GITHUB_STEP_SUMMARY"
 
+  infer-bazel-targets:
+    name: Infer Bazel Targets
+    runs-on: ubuntu-latest
+    needs: [config]
+    steps:
       # calculate which bazel targets may need to be rebuilt
       - *checkout
       - name: Infer Targets
@@ -168,13 +173,13 @@ jobs:
         with:
           run: |
             targets_args=()
-            if [[ '${{ steps.config.outputs.skip_long_tests }}' == 'true' ]]; then
+            if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
               targets_args+=("--skip_long_tests")
             fi
-            if [[ '${{ steps.config.outputs.skip_buf_checks }}' == 'true' ]]; then
+            if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
               targets_args+=("--exclude_tags=buf")
             fi
-            if [[ '${{ steps.config.outputs.diff-only }}' == 'true' ]]; then
+            if [[ '${{ needs.config.outputs.diff-only }}' == 'true' ]]; then
               targets_args+=(
                 '--base=${{ github.event.pull_request.base.sha }}'
                 '--head=${{ github.event.pull_request.head.sha }}'
@@ -196,7 +201,7 @@ jobs:
 
   bazel-test-all:
     name: Bazel Test All
-    needs: [config]
+    needs: [config, infer-bazel-targets]
     environment:
       # The `Upload artifacts` step below only executes if `release-build == 'true'` which is the case on protected branches.
       # It also requires the AWS and CF secrets which are only available in the `upload-artifacts` environment.
@@ -306,7 +311,7 @@ jobs:
     name: Bazel Test arm64-${{ matrix.os }}
     runs-on: ${{ matrix.profile }}
     timeout-minutes: 120
-    needs: config
+    needs: [config]
     if: github.repository == 'dfinity/ic' # only run on public repo, not private since Namespace runners are not configured there, so these CI jobs get stuck otherwise.
     steps:
       - name: Set up Bazel cache
@@ -500,7 +505,7 @@ jobs:
           REPO_NAME: ${{ github.repository }}
 
   build-ic:
-    needs: [config]
+    needs: [config, infer-bazel-targets]
     name: Build IC
     runs-on: *dind-large-setup
     container: *container-setup
