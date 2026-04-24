@@ -33,6 +33,7 @@ ic-ledger-suite-state-machine-tests-constants = { path = "constants" }
 ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
+ic-types-cycles = { path = "../../../types/cycles" }
 ic-types = { path = "../../../types/types" }
 ic-universal-canister = { path = "../../../universal_canister/lib" }
 icp-ledger = { path = "../../icp" }
@@ -42,6 +43,7 @@ icrc1-test-suite = { git = "https://github.com/dfinity/ICRC-1", rev = "26a80d777
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 proptest = { workspace = true }
+serde = { workspace = true }
 serde_bytes = { workspace = true }
 
 [features]

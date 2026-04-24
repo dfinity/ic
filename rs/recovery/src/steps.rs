@@ -10,7 +10,7 @@ use crate::{
     registry_helper::RegistryHelper,
     replay_helper,
     ssh_helper::SshHelper,
-    util::{SshUser, block_on, parse_hex_str},
+    util::{ExecutionMode, SshUser, block_on, parse_hex_str},
 };
 use core::convert::From;
 use ic_artifact_pool::certification_pool::CertificationPoolImpl;
@@ -21,13 +21,7 @@ use ic_metrics::MetricsRegistry;
 use ic_replay::cmd::{GetRecoveryCupCmd, SubCommand};
 use ic_types::{Height, SubnetId, consensus::certification::CertificationMessage};
 use slog::{Logger, debug, info, warn};
-use std::{
-    collections::HashMap,
-    net::IpAddr,
-    path::{Path, PathBuf},
-    process::Command,
-    thread, time,
-};
+use std::{collections::HashMap, net::IpAddr, path::PathBuf, process::Command, thread, time};
 
 /// Subnet recovery is composed of several steps. Each recovery step comprises a
 /// certain input state of which both its execution, and its description is
@@ -67,7 +61,7 @@ impl Step for AdminStep {
     }
 }
 
-pub struct DownloadCertificationsStep {
+pub(crate) struct DownloadCertificationsStep {
     pub logger: Logger,
     pub subnet_id: SubnetId,
     pub registry_helper: RegistryHelper,
@@ -143,7 +137,7 @@ impl Step for DownloadCertificationsStep {
     }
 }
 
-pub struct MergeCertificationPoolsStep {
+pub(crate) struct MergeCertificationPoolsStep {
     pub logger: Logger,
     pub work_dir: PathBuf,
 }
@@ -280,7 +274,7 @@ impl Step for MergeCertificationPoolsStep {
     }
 }
 
-pub struct DownloadIcDataStep {
+pub(crate) struct DownloadIcDataStep {
     pub logger: Logger,
     pub ssh_helper: SshHelper,
     pub backup_dir: PathBuf,
@@ -370,10 +364,11 @@ impl Step for DownloadIcDataStep {
     }
 }
 
-pub struct CopyLocalIcStateStep {
+pub(crate) struct CopyLocalIcStateStep {
     pub logger: Logger,
     pub working_dir: PathBuf,
     pub require_confirmation: bool,
+    pub data_includes: Vec<PathBuf>,
 }
 
 impl Step for CopyLocalIcStateStep {
@@ -390,8 +385,7 @@ impl Step for CopyLocalIcStateStep {
         let log = self.require_confirmation.then_some(&self.logger);
 
         // State
-        let includes = Recovery::get_ic_state_includes(None)?;
-        for include in includes.iter() {
+        for include in self.data_includes.iter() {
             let src = PathBuf::from(IC_DATA_PATH).join(include);
             let dst_parent = self
                 .working_dir
@@ -426,7 +420,7 @@ pub struct ReplaySubCmd {
     pub descr: String,
 }
 
-pub struct ReplayStep {
+pub(crate) struct ReplayStep {
     pub logger: Logger,
     pub subnet_id: SubnetId,
     pub work_dir: PathBuf,
@@ -503,7 +497,7 @@ impl Step for ReplayStep {
     }
 }
 
-pub struct ValidateReplayStep {
+pub(crate) struct ValidateReplayStep {
     pub logger: Logger,
     pub subnet_id: SubnetId,
     pub registry_helper: RegistryHelper,
@@ -574,32 +568,10 @@ pub struct UploadStateAndRestartStep {
 
 impl UploadStateAndRestartStep {
     const CMD_STOP_REPLICA: &str = "sudo systemctl stop ic-replica;";
-    // Note that on older versions of IC-OS this service does not exist.
-    // So try this operation, but ignore possible failure if service
-    // does not exist on the affected version.
     const CMD_RESTART_REPLICA: &str = "\
-        (sudo systemctl restart setup-permissions || true);\
+        sudo systemctl restart setup-permissions;\
         sudo systemctl start ic-replica;\
         sudo systemctl status ic-replica;";
-
-    /// Sets the right state permissions on `target`, by copying the
-    /// permissions of the src path, removing executable permission and
-    /// giving read permissions for the target path to group and others.
-    fn cmd_set_permissions<S: AsRef<Path>, T: AsRef<Path>>(src: S, target: T) -> String {
-        let src = src.as_ref().display();
-        let target = target.as_ref().display();
-
-        let mut set_permissions = String::new();
-        set_permissions.push_str(&format!("sudo chmod -R --reference={src} {target};"));
-        set_permissions.push_str(&format!("sudo chown -R --reference={src} {target};"));
-        set_permissions.push_str(&format!(
-            r"sudo find {target} -type f -exec chmod a-x {{}} \;;"
-        ));
-        set_permissions.push_str(&format!(
-            r"sudo find {target} -type f -exec chmod go+r {{}} \;;"
-        ));
-        set_permissions
-    }
 }
 impl Step for UploadStateAndRestartStep {
     fn descr(&self) -> String {
@@ -655,11 +627,10 @@ impl Step for UploadStateAndRestartStep {
             let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
             // path of latest checkpoint on upload node
             let copy_from = ic_checkpoints_path.join(
-                Recovery::get_maybe_latest_checkpoint_name_remotely(
-                    &ssh_helper,
-                    &ic_checkpoints_path,
-                )?
-                .unwrap_or_default(),
+                ExecutionMode::Remote(&ssh_helper)
+                    .get_maybe_latest_checkpoint_name_and_height(&ic_checkpoints_path)?
+                    .unwrap_or_default()
+                    .0,
             );
             // path and name of checkpoint after replay
             let copy_to = upload_dir.join(CHECKPOINTS).join(max_checkpoint);
@@ -689,7 +660,6 @@ impl Step for UploadStateAndRestartStep {
                 &ssh_helper.remote_path(upload_dir.join("")),
             )?;
 
-            let cmd_set_permissions = Self::cmd_set_permissions(&ic_state_path, &upload_dir);
             let cmd_replace_state = format!(
                 "sudo rm -r {ic_state_path}; sudo mv {upload_dir} {ic_state_path};",
                 ic_state_path = ic_state_path.display(),
@@ -698,7 +668,6 @@ impl Step for UploadStateAndRestartStep {
 
             info!(self.logger, "Restarting replica...");
             ssh_helper.ssh(Self::CMD_STOP_REPLICA.to_string())?;
-            ssh_helper.ssh(cmd_set_permissions)?;
             ssh_helper.ssh(cmd_replace_state)?;
             ssh_helper.ssh(Self::CMD_RESTART_REPLICA.to_string())?;
         } else {
@@ -708,10 +677,6 @@ impl Step for UploadStateAndRestartStep {
                 Command::new("bash").arg("-c").arg(Self::CMD_STOP_REPLICA),
                 log,
             )?;
-
-            info!(self.logger, "Setting file permissions...");
-            let cmd_set_permissions = Self::cmd_set_permissions(&ic_state_path, &self.data_src);
-            confirm_exec_cmd(Command::new("bash").arg("-c").arg(cmd_set_permissions), log)?;
 
             // For local recoveries we first backup the original state, and
             // then simply `mv` the new state to the upload directory. No
@@ -747,7 +712,7 @@ impl Step for UploadStateAndRestartStep {
     }
 }
 
-pub struct WaitForCUPStep {
+pub(crate) struct WaitForCUPStep {
     pub logger: Logger,
     pub node_ip: IpAddr,
     pub work_dir: PathBuf,
@@ -775,7 +740,7 @@ impl Step for WaitForCUPStep {
     }
 }
 
-pub struct CleanupStep {
+pub(crate) struct CleanupStep {
     pub recovery_dir: PathBuf,
 }
 
@@ -789,7 +754,7 @@ impl Step for CleanupStep {
     }
 }
 
-pub struct StopReplicaStep {
+pub(crate) struct StopReplicaStep {
     pub logger: Logger,
     pub node_ip: IpAddr,
     pub require_confirmation: bool,
@@ -814,7 +779,7 @@ impl Step for StopReplicaStep {
     }
 }
 
-pub struct UpdateLocalStoreStep {
+pub(crate) struct UpdateLocalStoreStep {
     pub subnet_id: SubnetId,
     pub work_dir: PathBuf,
     pub skip_prompts: bool,
@@ -844,7 +809,7 @@ impl Step for UpdateLocalStoreStep {
     }
 }
 
-pub struct GetRecoveryCUPStep {
+pub(crate) struct GetRecoveryCUPStep {
     pub subnet_id: SubnetId,
     pub config: PathBuf,
     pub state_hash: String,
@@ -885,7 +850,7 @@ impl Step for GetRecoveryCUPStep {
     }
 }
 
-pub struct CreateRegistryTarStep {
+pub(crate) struct CreateRegistryTarStep {
     pub logger: Logger,
     pub store_tar_cmd: Command,
 }
@@ -905,9 +870,8 @@ impl Step for CreateRegistryTarStep {
     }
 }
 
-pub struct UploadCUPAndTarStep {
+pub(crate) struct UploadCUPAndTarStep {
     pub logger: Logger,
-    pub registry_helper: RegistryHelper,
     pub node_ip: IpAddr,
     pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,
@@ -915,7 +879,7 @@ pub struct UploadCUPAndTarStep {
 }
 
 impl UploadCUPAndTarStep {
-    pub fn get_restart_commands(&self) -> String {
+    fn get_restart_commands(&self) -> String {
         format!(
             r#"
 cd {};
@@ -930,7 +894,7 @@ sudo chown -R "$OWNER_UID:$GROUP_UID" cup.proto;
 sudo systemctl stop ic-replica;
 sudo rsync -a --delete ic_registry_local_store/ /var/lib/ic/data/ic_registry_local_store/;
 sudo cp cup.proto /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb;
-sudo systemctl restart setup-permissions || true ;
+sudo systemctl restart setup-permissions;
 sudo systemctl start ic-replica;
 sudo systemctl status ic-replica;
 "#,
@@ -938,7 +902,7 @@ sudo systemctl status ic-replica;
         )
     }
 
-    pub fn get_upload_dir_name() -> PathBuf {
+    fn get_upload_dir_name() -> PathBuf {
         PathBuf::from("/tmp").join("subnet_recovery")
     }
 }
@@ -1076,7 +1040,7 @@ impl Step for CreateNNSRecoveryTarStep {
     }
 }
 
-pub struct DownloadRegistryStoreStep {
+pub(crate) struct DownloadRegistryStoreStep {
     pub logger: Logger,
     pub node_ip: IpAddr,
     pub original_nns_id: SubnetId,
@@ -1140,7 +1104,7 @@ impl Step for DownloadRegistryStoreStep {
     }
 }
 
-pub struct UploadAndHostTarStep {
+pub(crate) struct UploadAndHostTarStep {
     pub logger: Logger,
     pub aux_user: SshUser,
     pub aux_ip: IpAddr,
@@ -1150,7 +1114,7 @@ pub struct UploadAndHostTarStep {
 }
 
 impl UploadAndHostTarStep {
-    pub fn get_upload_dir_name() -> PathBuf {
+    fn get_upload_dir_name() -> PathBuf {
         PathBuf::from("/tmp").join("recovery_registry")
     }
 }

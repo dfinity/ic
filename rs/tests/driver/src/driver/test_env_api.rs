@@ -196,7 +196,7 @@ use slog::{Logger, debug, info, warn};
 use ssh2::Session;
 use std::{
     cmp::max,
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     convert::TryFrom,
     fs,
     future::Future,
@@ -207,7 +207,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::{runtime::Runtime as Rt, sync::Mutex as TokioMutex};
+use tokio::sync::Mutex as TokioMutex;
 use url::Url;
 
 pub use super::ic_images::*;
@@ -829,10 +829,17 @@ impl SubnetSnapshot {
     }
 
     pub fn raw_subnet_record(&self) -> pb_subnet::SubnetRecord {
+        self.raw_subnet_record_at_version(self.registry_version)
+    }
+
+    pub fn raw_subnet_record_at_version(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> pb_subnet::SubnetRecord {
         self.local_registry
-            .get_subnet_record(self.subnet_id, self.registry_version)
+            .get_subnet_record(self.subnet_id, registry_version)
             .unwrap_result(
-                self.registry_version,
+                registry_version,
                 &format!("subnet_record(subnet_id={})", self.subnet_id),
             )
     }
@@ -1039,6 +1046,24 @@ impl IcNodeSnapshot {
         }
     }
 
+    pub fn canister_installer<'a>(&'a self, wasm_name: &str) -> CanisterInstaller<'a> {
+        CanisterInstaller::new(self, wasm_name)
+    }
+
+    pub fn canister_installer_from_env<'a>(&'a self, env_name: &str) -> CanisterInstaller<'a> {
+        CanisterInstaller::new(
+            self,
+            std::env::var(env_name).unwrap_or_else(|err| panic!("{env_name} not set: {err}")),
+        )
+    }
+
+    pub fn canister_installer_with_raw_wasm<'a>(
+        &'a self,
+        raw_wasm: Vec<u8>,
+    ) -> CanisterInstaller<'a> {
+        CanisterInstaller::new_with_raw_wasm(self, raw_wasm)
+    }
+
     /// Load wasm binary from the artifacts directory (see [HasArtifacts]) and
     /// install it on the target node.
     ///
@@ -1051,65 +1076,10 @@ impl IcNodeSnapshot {
         name: &str,
         arg: Option<Vec<u8>>,
     ) -> Principal {
-        self.create_and_install_canister_with_arg_and_cycles(name, arg, None)
-    }
-
-    pub fn install_canister_with_arg(
-        &self,
-        canister_id: Principal,
-        name: &str,
-        arg: Option<Vec<u8>>,
-    ) {
-        let canister_bytes = load_wasm(name);
-        self.with_default_agent(move |agent| async move {
-            // Create a canister.
-            let mgr = ManagementCanister::create(&agent);
-
-            let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
-            if let Some(arg) = arg {
-                install_code = install_code.with_raw_arg(arg)
-            }
-            install_code
-                .call_and_wait()
-                .await
-                .map_err(|err| format!("Couldn't install canister: {err}"))?;
-            Ok::<_, String>(canister_id)
-        })
-        .expect("Could not install canister");
-    }
-
-    pub fn create_and_install_canister_with_arg_and_cycles(
-        &self,
-        name: &str,
-        arg: Option<Vec<u8>>,
-        cycles_amount: Option<u128>,
-    ) -> Principal {
-        let canister_bytes = load_wasm(name);
-        let effective_canister_id = self.effective_canister_id();
-
-        self.with_default_agent(move |agent| async move {
-            // Create a canister.
-            let mgr = ManagementCanister::create(&agent);
-            let canister_id = mgr
-                .create_canister()
-                .as_provisional_create_with_amount(cycles_amount)
-                .with_effective_canister_id(effective_canister_id)
-                .call_and_wait()
-                .await
-                .map_err(|err| format!("Couldn't create canister with provisional API: {err}"))?
-                .0;
-
-            let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
-            if let Some(arg) = arg {
-                install_code = install_code.with_raw_arg(arg)
-            }
-            install_code
-                .call_and_wait()
-                .await
-                .map_err(|err| format!("Couldn't install canister: {err}"))?;
-            Ok::<_, String>(canister_id)
-        })
-        .expect("Could not install canister")
+        self.canister_installer(name)
+            .with_optional_arg(arg)
+            .block_on_install()
+            .expect("Could not install install the canister")
     }
 
     pub fn wait_for_orchestrator_fw_rule(&self, logger: &Logger) -> Result<()> {
@@ -1125,13 +1095,14 @@ impl IcNodeSnapshot {
     }
 
     fn wait_for_orchestrator_fw_rule_once(&self, logger: &Logger) -> Result<()> {
-        // This checks that the rule "meta skuid ic-http-adapter ip6 daddr ::1" was applied
-        // This is a hardcoded rule that is applied regardless of what is in the registry
-        // Hence a change in the registry won't affect this check
+        // This checks that the rule to block access from the ic-http-adapter to
+        // all locally-configured addressess was applied.
+        // This is a hardcoded rule that is applied regardless of what is in the registry.
+        // Hence a change in the registry won't affect this check.
         let script = r#"
             set -e
             ADAPTER_UID=$(id -u ic-http-adapter)
-            RULE_PATTERN="meta skuid $ADAPTER_UID ip6 daddr ::1"
+            RULE_PATTERN="meta skuid $ADAPTER_UID fib daddr type local"
 
             sudo nft list chain ip6 filter OUTPUT | grep -qF "$RULE_PATTERN"
         "#;
@@ -1188,7 +1159,7 @@ impl IcNodeSnapshot {
         ))
     }
 
-    pub fn assert_no_metrics_errors(&self, metrics_to_check: Vec<String>, port: u16) {
+    pub fn assert_metrics_values(&self, metrics_to_check: &BTreeMap<&str, u64>, port: u16) {
         if metrics_to_check.is_empty() {
             return;
         }
@@ -1196,7 +1167,7 @@ impl IcNodeSnapshot {
         block_on(async {
             let metrics_fetcher = MetricsFetcher::new_with_port(
                 std::iter::once(self.clone()),
-                metrics_to_check,
+                metrics_to_check.keys().map(ToString::to_string).collect(),
                 port,
             );
             let metrics = match metrics_fetcher.fetch::<u64>().await {
@@ -1215,42 +1186,96 @@ impl IcNodeSnapshot {
                 self.node_id
             );
             for (name, value) in metrics {
-                assert_eq!(
-                    value[0], 0,
-                    "The metric `{name}` on node {} has non-zero value. \
-                    If the metric is allowed to be non-zero in the test, \
-                    create `SystemTestGroup` with `remove_metrics_to_check(\"{name}\")`",
+                let max_value = metrics_to_check
+                    .get(name.split('(').next().unwrap())
+                    .copied()
+                    .unwrap_or_default();
+                assert!(
+                    value[0] <= max_value,
+                    "The metric `{name}` on node {} exceeded the maximum allowed value: \
+                    {} > {max_value}. \
+                    If this is expected to happen in the test, \
+                    create `SystemTestGroup` with `remove_metrics_to_check(\"{name}\")` or \
+                    with `update_orchestrator_metrics_to_check(\"{name}\", $max_value)`",
                     self.node_id,
+                    value[0],
                 );
             }
         });
     }
+}
 
-    pub fn assert_no_replica_restarts(&self) {
-        block_on(async {
-            let orchestrator_metric_name = "orchestrator_replica_process_start_attempts_total";
-            let orchestrator_metrics_fetcher = MetricsFetcher::new_with_port(
-                std::iter::once(self.clone()),
-                vec![orchestrator_metric_name.to_string()],
-                ORCHESTRATOR_METRICS_PORT,
-            );
-            let orchestrator_metrics_result = orchestrator_metrics_fetcher.fetch::<u64>().await;
-            let orchestrator_metrics = match orchestrator_metrics_result {
-                Ok(orchestrator_metrics) => orchestrator_metrics,
-                Err(e) => {
-                    info!(
-                        self.env.logger(),
-                        "Could not fetch orchestrator metrics for node {}: {e:?}", self.node_id
-                    );
-                    return;
-                }
-            };
-            assert_eq!(
-                orchestrator_metrics[orchestrator_metric_name][0], 1,
-                "The replica process on node {} was restarted during test. Create `SystemTestGroup` using `without_assert_no_replica_restarts` if replica restarts are expected in your test",
-                self.node_id
-            );
-        });
+pub struct CanisterInstaller<'a> {
+    node: &'a IcNodeSnapshot,
+    wasm: Vec<u8>,
+    arg: Option<Vec<u8>>,
+    cycles_amount: Option<u128>,
+    effective_canister_id: PrincipalId,
+}
+
+impl<'a> CanisterInstaller<'a> {
+    pub fn new<P>(node: &'a IcNodeSnapshot, wasm_name: P) -> Self
+    where
+        P: AsRef<Path>,
+    {
+        Self::new_with_raw_wasm(node, load_wasm(wasm_name))
+    }
+
+    pub fn new_with_raw_wasm(node: &'a IcNodeSnapshot, wasm: Vec<u8>) -> Self {
+        Self {
+            wasm,
+            arg: None,
+            cycles_amount: None,
+            effective_canister_id: node.effective_canister_id(),
+            node,
+        }
+    }
+
+    pub fn with_optional_arg(mut self, arg: Option<Vec<u8>>) -> Self {
+        self.arg = arg;
+
+        self
+    }
+
+    pub fn with_cycles_amount(mut self, cycles_amount: u128) -> Self {
+        self.cycles_amount = Some(cycles_amount);
+
+        self
+    }
+
+    pub fn with_effective_canister_id(mut self, effective_canister_id: PrincipalId) -> Self {
+        self.effective_canister_id = effective_canister_id;
+
+        self
+    }
+
+    pub fn block_on_install(self) -> Result<Principal> {
+        block_on(self.install())
+    }
+
+    pub async fn install(self) -> Result<Principal> {
+        let agent = self.node.build_default_agent_async().await;
+        // Create a canister.
+        let mgr = ManagementCanister::create(&agent);
+        let canister_id = mgr
+            .create_canister()
+            .as_provisional_create_with_amount(self.cycles_amount)
+            .with_effective_canister_id(self.effective_canister_id)
+            .call_and_wait()
+            .await
+            .map_err(|err| anyhow!("Couldn't create canister with provisional API: {err}"))?
+            .0;
+
+        let mut install_code = mgr.install_code(&canister_id, &self.wasm);
+        if let Some(arg) = self.arg {
+            install_code = install_code.with_raw_arg(arg)
+        }
+        install_code
+            .call_and_wait()
+            .await
+            .map_err(|err| anyhow!("Couldn't install canister: {err}"))?;
+
+        Ok(canister_id)
     }
 }
 
@@ -1615,7 +1640,7 @@ pub fn load_wasm<P: AsRef<Path>>(p: P) -> Vec<u8> {
     wasm_bytes
 }
 
-fn execute_bash_script_from_session(session: &Session, script: &str) -> Result<String> {
+pub fn execute_bash_script_from_session(session: &Session, script: &str) -> Result<String> {
     let mut channel = session.channel_session()?;
     channel.exec("bash").map_err(|e| {
         anyhow::anyhow!("Failed to execute bash on SSH channel: {:?}. This may occur during system reboot or network instability.", e)
@@ -1726,6 +1751,9 @@ pub trait SshSession: HasTestEnv {
 }
 
 pub trait RetrieveIpv4Addr {
+    /// Try a number of times to retrieve the IPv4 address from the machine referenced from self.
+    fn block_on_ipv4_from_session(&self, session: &Session) -> Result<Ipv4Addr>;
+
     /// Try a number of times to retrieve the IPv4 address from the machine referenced from self.
     fn block_on_ipv4(&self) -> Result<Ipv4Addr>;
 }
@@ -1853,11 +1881,20 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     }
 
     async fn await_status_is_healthy_async(&self) -> Result<()> {
+        self.await_status_is_healthy_with_retries_async(READY_WAIT_TIMEOUT, RETRY_BACKOFF)
+            .await
+    }
+
+    async fn await_status_is_healthy_with_retries_async(
+        &self,
+        timeout: Duration,
+        backoff: Duration,
+    ) -> Result<()> {
         retry_with_msg_async!(
             &format!("await_status_is_healthy of {}", self.get_public_url()),
             &self.test_env().logger(),
-            READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
+            timeout,
+            backoff,
             || async {
                 self.status_is_healthy_async()
                     .await
@@ -1949,8 +1986,7 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     }
 
     fn build_default_agent(&self) -> Agent {
-        let rt = Rt::new().expect("Could not create runtime");
-        rt.block_on(async move { self.build_default_agent_async().await })
+        block_on(self.build_default_agent_async())
     }
 
     fn with_default_agent<F, Fut, R>(&self, op: F) -> R
@@ -1958,8 +1994,7 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
         F: FnOnce(Agent) -> Fut + 'static,
         Fut: Future<Output = R>,
     {
-        let rt = Rt::new().expect("Could not create runtime");
-        rt.block_on(async move {
+        block_on(async move {
             let agent = self.build_default_agent_async().await;
             op(agent).await
         })
@@ -2297,11 +2332,18 @@ pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
     let tcp = TcpStream::connect_timeout(&SocketAddr::new(ip, 22), TCP_CONNECT_TIMEOUT)?;
     let mut sess = Session::new()?;
     sess.set_tcp_stream(tcp);
+    // Set a timeout for the SSH handshake and authentication to prevent
+    // indefinite hangs when the remote host accepts TCP but stalls during
+    // the SSH protocol exchange.
+    sess.set_timeout(30_000);
     sess.handshake()?;
     let priv_key_path = env
         .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
         .join(SSH_USERNAME);
     sess.userauth_pubkey_file(SSH_USERNAME, None, priv_key_path.as_path(), None)?;
+    // Clear the timeout so subsequent operations on this session
+    // (e.g. long-running commands) are not subject to the handshake timeout.
+    sess.set_timeout(0);
     Ok(sess)
 }
 
@@ -2412,6 +2454,27 @@ macro_rules! retry_with_msg_async_quiet {
             $timeout,
             $backoff,
             $f,
+        )
+    };
+}
+
+#[macro_export]
+macro_rules! retry_agent_on_transport_errors {
+    ($msg:expr, $log:expr, $timeout:expr, $backoff:expr, $f:expr) => {
+        $crate::retry_with_msg_async!($msg, $log, $timeout, $backoff, || async {
+            match $f.await {
+                Err(AgentError::TransportError(e)) => Err(anyhow::anyhow!("transport error: {e}")),
+                other => Ok(other),
+            }
+        })
+    };
+    ($msg:expr, $log:expr, $f:expr) => {
+        $crate::retry_agent_on_transport_errors!(
+            $msg,
+            $log,
+            std::time::Duration::from_secs(120),
+            std::time::Duration::from_secs(5),
+            $f
         )
     };
 }
@@ -2831,6 +2894,10 @@ pub fn scp_recv_from(
         || {
             let (mut remote_file, scp_file_stat) = session.scp_recv(from_remote)?;
             let size = scp_file_stat.size();
+            info!(
+                log,
+                "scp-ing remote {from_remote:?} of {size:?} B to local {to_local:?} ..."
+            );
             let mut to_file = std::fs::File::create(to_local)?;
             std::io::copy(&mut remote_file, &mut to_file)?;
             remote_file.send_eof()?;

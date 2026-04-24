@@ -21,9 +21,9 @@ use wasmparser::*;
 
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_test_utilities_types::ids::user_test_id;
-use ic_types::Cycles;
 use ic_types::messages::CallContextId;
 use ic_types::time::UNIX_EPOCH;
+use ic_types_cycles::Cycles;
 
 lazy_static! {
     static ref SYSTEM_API_IMPORTS_WASM32: SystemApiImportStore =
@@ -468,6 +468,7 @@ pub fn get_system_api_type_for_wasm_method(wasm_method: WasmMethod) -> ApiType {
             Cycles::zero(),
             user_test_id(1).get(),
             CallContextId::from(1),
+            None,
         ),
         WasmMethod::Query(_) => ApiType::non_replicated_query(
             UNIX_EPOCH,
@@ -475,6 +476,7 @@ pub fn get_system_api_type_for_wasm_method(wasm_method: WasmMethod) -> ApiType {
             subnet_test_id(1),
             vec![],
             Some(vec![1]),
+            None,
         ),
         WasmMethod::CompositeQuery(_) => ApiType::composite_query(
             UNIX_EPOCH,
@@ -483,6 +485,7 @@ pub fn get_system_api_type_for_wasm_method(wasm_method: WasmMethod) -> ApiType {
             vec![],
             Some(vec![1]),
             CallContextId::from(1),
+            None,
         ),
         WasmMethod::System(_) => unimplemented!(),
     }

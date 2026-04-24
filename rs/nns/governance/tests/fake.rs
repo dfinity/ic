@@ -468,7 +468,7 @@ impl RandomnessGenerator for FakeDriver {
     }
 
     fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
-        let mut bytes = [0u8; 32];
+        let mut bytes = [0_u8; 32];
         self.state.try_lock().unwrap().rng.fill_bytes(&mut bytes);
         Ok(bytes)
     }
@@ -661,7 +661,7 @@ impl Environment for FakeDriver {
         }
 
         if method_name == "raw_rand" {
-            let mut bytes = [0u8; 32];
+            let mut bytes = [0_u8; 32];
             self.state.try_lock().unwrap().rng.fill_bytes(&mut bytes);
             return Ok(Encode!(&bytes).unwrap());
         }

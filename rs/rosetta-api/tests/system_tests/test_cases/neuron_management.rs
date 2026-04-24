@@ -32,7 +32,7 @@ fn test_create_neuron() {
             .await;
 
         // Stake the minimum amount 100 million e8s
-        let staked_amount = 100_000_000u64;
+        let staked_amount = 100_000_000_u64;
         let neuron_index = 0;
         let from_subaccount = [0; 32];
 

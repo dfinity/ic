@@ -6,11 +6,7 @@
 # CI only tests bazel targets which have modified inputs
 # and excludes tests tagged as 'long_test'.
 #
-# This is problematic for targets that don't explicitly depend
-# on modified inputs like the shell format check //pre-commit:shfmt-check
-# for example which implicitly depends on the whole workspace.
-#
-# Furthermore, from experience we know that modifications to certain
+# From experience we know that modifications to certain
 # files or directories have a high risk of breaking certain long_tests.
 # In those cases folks have traditionally labelled their PRs with CI_ALL_BAZEL_TARGETS
 # to run *all* long_tests. This however is often overkill and often forgotten.
@@ -42,11 +38,6 @@
 # and to check the correctness of this file. This is also run automatically by
 # the check-pull-request-bazel-targets job on CI.
 
-*.sh        //pre-commit:shfmt-check
-*.py        //pre-commit:ruff-lint
-*.proto     //pre-commit:protobuf-format-check
-            //pre-commit:buf-breaking
-
 mainnet-icos-revisions.json
   //rs/tests/consensus/backup:backup_manager_downgrade_test_colocate
   //rs/tests/consensus/backup:backup_manager_upgrade_test_colocate
@@ -70,8 +61,7 @@ ic-os/guestos/context/docker-base.* //rs/tests/node:kill_start_long_test
 rs/nns/cmc/*.rs //rs/tests/nns:nns_cycles_minting_test
 
 *nns_delegation* //rs/tests/networking:nns_delegation_branch_nns_version_test
-# TODO(NET-1784): add this back
-# //rs/tests/networking:nns_delegation_mainnet_nns_version_test
+                 //rs/tests/networking:nns_delegation_mainnet_nns_version_test
 
 rs/backup/*.rs //rs/tests/consensus/backup/...
 

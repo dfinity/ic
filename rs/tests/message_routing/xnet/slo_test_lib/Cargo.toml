@@ -14,8 +14,8 @@ ic-registry-subnet-type = { path = "../../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../../driver" }
 slog = { workspace = true }
 systest-message-routing-common = { path = "../../common" }
-xnet-test = { path = "../../../../rust_canisters/xnet_test" }
 tokio = { workspace = true }
+xnet-test = { path = "../../../../rust_canisters/xnet_test" }
 
 [lib]
 name = "xnet_slo_test_lib"

@@ -3,6 +3,7 @@ use command_runner::RealCommandRunner;
 use grub::BootCycle;
 use ic_device::mount::{FileSystem, GptPartitionProvider, MountOptions, PartitionSelector};
 use std::process::Command;
+use tracing::info;
 use uuid::Uuid;
 
 const GUESTOS_DEVICE: &str = "/dev/hostlvm/guestos";
@@ -116,7 +117,7 @@ fn swap_guestos_alternative_impl(
     target_boot_alternative: Option<grub::BootAlternative>,
     command_runner: &dyn command_runner::CommandRunner,
 ) -> Result<()> {
-    println!("Stopping GuestOS service...");
+    info!("Stopping GuestOS service...");
     command_runner
         .status(Command::new("systemctl").args([
             "stop",
@@ -125,17 +126,17 @@ fn swap_guestos_alternative_impl(
         ]))
         .context("Failed to stop guestos.service and upgrade-guestos.service")?;
 
-    println!("Swapping GuestOS boot alternative...");
+    info!("Swapping GuestOS boot alternative...");
     let target_boot_alternative = update_grubenv(partition_provider, target_boot_alternative);
 
-    println!("Restarting GuestOS...");
+    info!("Restarting GuestOS...");
     command_runner
         .status(Command::new("systemctl").args(["start", "guestos.service"]))
         .context("Failed to restart guestos.service after swapping GuestOS boot alternative")?;
 
     match target_boot_alternative {
         Ok(alternative) => {
-            println!("Successfully swapped GuestOS boot alternative to {alternative}")
+            info!("Successfully swapped GuestOS boot alternative to {alternative}")
         }
         Err(e) => return Err(e.context("Failed to swap GuestOS boot alternative")),
     }

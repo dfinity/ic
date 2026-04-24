@@ -13,6 +13,8 @@ pub struct CallContext {
     pub instructions_executed: u64,
     #[prost(message, optional, tag = "11")]
     pub metadata: ::core::option::Option<super::super::queues::v1::RequestMetadata>,
+    #[prost(message, optional, tag = "14")]
+    pub sender_info: ::core::option::Option<super::super::ingress::v1::SenderInfo>,
     #[prost(oneof = "call_context::CallOrigin", tags = "1, 2, 4, 7, 12")]
     pub call_origin: ::core::option::Option<call_context::CallOrigin>,
 }
@@ -100,6 +102,17 @@ pub struct Callback {
     /// If non-zero, this is a best-effort call.
     #[prost(uint32, tag = "10")]
     pub deadline_seconds: u32,
+    /// To replace `prepayment_for_response_execution`.
+    #[prost(message, optional, tag = "11")]
+    pub prepayment_for_response_execution_compound:
+        ::core::option::Option<super::super::queues::v1::CompoundCycles>,
+    /// To replace `prepayment_for_response_transmission`.
+    #[prost(message, optional, tag = "12")]
+    pub prepayment_for_response_transmission_compound:
+        ::core::option::Option<super::super::queues::v1::CompoundCycles>,
+    #[prost(message, optional, tag = "13")]
+    pub prepayment_for_call_transmission:
+        ::core::option::Option<super::super::queues::v1::CompoundCycles>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CallbackEntry {
@@ -314,6 +327,12 @@ pub mod execution_task {
         #[prost(message, optional, tag = "4")]
         pub prepaid_execution_cycles:
             ::core::option::Option<super::super::super::queues::v1::Cycles>,
+        /// The execution cost that has already been charged from the canister.
+        /// Retried execution does not have to pay for it again.
+        /// This field will replace the existing `prepaid_execution_cycles`.
+        #[prost(message, optional, tag = "7")]
+        pub prepaid_execution_compound_cycles:
+            ::core::option::Option<super::super::super::queues::v1::CompoundCycles>,
         #[prost(oneof = "aborted_execution::Input", tags = "1, 6, 3, 5")]
         pub input: ::core::option::Option<aborted_execution::Input>,
     }
@@ -347,6 +366,12 @@ pub mod execution_task {
             ::core::option::Option<super::super::super::queues::v1::Cycles>,
         #[prost(uint64, optional, tag = "4")]
         pub call_id: ::core::option::Option<u64>,
+        /// The execution cost that has already been charged from the canister.
+        /// Retried execution does not have to pay for it again.
+        /// Will replace the existing `prepaid_execution_cycles`.
+        #[prost(message, optional, tag = "5")]
+        pub prepaid_execution_compound_cycles:
+            ::core::option::Option<super::super::super::queues::v1::CompoundCycles>,
         #[prost(oneof = "aborted_install_code::Message", tags = "1, 2")]
         pub message: ::core::option::Option<aborted_install_code::Message>,
     }
@@ -591,6 +616,28 @@ pub mod log_visibility_v2 {
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SnapshotVisibilityAllowedViewers {
+    #[prost(message, repeated, tag = "1")]
+    pub principals: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SnapshotVisibility {
+    #[prost(oneof = "snapshot_visibility::SnapshotVisibility", tags = "1, 2, 3")]
+    pub snapshot_visibility: ::core::option::Option<snapshot_visibility::SnapshotVisibility>,
+}
+/// Nested message and enum types in `SnapshotVisibility`.
+pub mod snapshot_visibility {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum SnapshotVisibility {
+        #[prost(int32, tag = "1")]
+        Controllers(i32),
+        #[prost(int32, tag = "2")]
+        Public(i32),
+        #[prost(message, tag = "3")]
+        AllowedViewers(super::SnapshotVisibilityAllowedViewers),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterLogRecord {
     #[prost(uint64, tag = "1")]
     pub idx: u64,
@@ -617,7 +664,7 @@ pub struct TaskQueue {
     #[prost(message, repeated, tag = "3")]
     pub queue: ::prost::alloc::vec::Vec<ExecutionTask>,
 }
-/// Next ID: 64
+/// Next ID: 65
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
@@ -684,6 +731,9 @@ pub struct CanisterStateBits {
     /// Canister version.
     #[prost(uint64, tag = "34")]
     pub canister_version: u64,
+    /// Consumed cycles by use case presented as gauges. When prepayments happen
+    /// the respective amount is added to the consumed amount while when a refund
+    /// happens the refund amount is subtracted from consumed amount.
     #[prost(message, repeated, tag = "36")]
     pub consumed_cycles_by_use_cases: ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
     #[prost(message, optional, tag = "37")]
@@ -721,9 +771,6 @@ pub struct CanisterStateBits {
     /// The next local snapshot ID.
     #[prost(uint64, tag = "46")]
     pub next_snapshot_id: u64,
-    /// Captures the memory usage of all snapshots associated with a canister.
-    #[prost(uint64, tag = "52")]
-    pub snapshots_memory_usage: u64,
     #[prost(int64, tag = "48")]
     pub priority_credit: i64,
     #[prost(enumeration = "LongExecutionMode", tag = "49")]
@@ -740,6 +787,9 @@ pub struct CanisterStateBits {
         ::prost::alloc::string::String,
         ::prost::alloc::string::String,
     >,
+    /// Snapshot visibility for the canister.
+    #[prost(message, optional, tag = "64")]
+    pub snapshot_visibility: ::core::option::Option<SnapshotVisibility>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }

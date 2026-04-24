@@ -288,7 +288,7 @@ impl SubnetCallContextManager {
                         info!(
                             logger,
                             "Received the response for SignWithThreshold request with id {:?} from {:?}",
-                            context.pseudo_random_id,
+                            callback_id,
                             context.request.sender
                         );
                         SubnetCallContext::SignWithThreshold(context)
@@ -402,6 +402,15 @@ impl SubnetCallContextManager {
 
     pub fn stop_canister_calls_len(&self) -> usize {
         self.canister_management_calls.stop_canister_calls_len()
+    }
+
+    pub fn iter_stop_canister_calls(
+        &self,
+    ) -> impl Iterator<Item = (&StopCanisterCallId, &StopCanisterCall)> {
+        self.canister_management_calls
+            .stop_canister_call_manager
+            .stop_canister_calls
+            .iter()
     }
 
     pub fn push_raw_rand_request(
@@ -545,55 +554,12 @@ impl ThresholdArguments {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub struct IDkgSignWithThresholdContext<'a>(&'a SignWithThresholdContext);
-
-impl<'a> TryFrom<&'a SignWithThresholdContext> for IDkgSignWithThresholdContext<'a> {
-    type Error = ();
-
-    fn try_from(val: &'a SignWithThresholdContext) -> Result<Self, Self::Error> {
-        if !val.is_idkg() {
-            Err(())
-        } else {
-            Ok(Self(val))
-        }
-    }
-}
-
-impl<'a> From<IDkgSignWithThresholdContext<'a>> for &'a SignWithThresholdContext {
-    fn from(val: IDkgSignWithThresholdContext<'a>) -> Self {
-        val.0
-    }
-}
-
-impl IDkgSignWithThresholdContext<'_> {
-    pub fn inner(&self) -> &SignWithThresholdContext {
-        self.0
-    }
-}
-
-impl std::ops::Deref for IDkgSignWithThresholdContext<'_> {
-    type Target = SignWithThresholdContext;
-
-    fn deref(&self) -> &<Self as std::ops::Deref>::Target {
-        self.inner()
-    }
-}
-
-impl std::borrow::Borrow<SignWithThresholdContext> for IDkgSignWithThresholdContext<'_> {
-    fn borrow(&self) -> &SignWithThresholdContext {
-        self.inner()
-    }
-}
-
-#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SignWithThresholdContext {
     pub request: Request,
     pub args: ThresholdArguments,
     pub derivation_path: Arc<Vec<Vec<u8>>>,
-    pub pseudo_random_id: [u8; PSEUDO_RANDOM_ID_SIZE],
+    pub deprecated_pseudo_random_id: Option<[u8; PSEUDO_RANDOM_ID_SIZE]>,
     pub batch_time: Time,
-    /// DEPRECATED: Match on `args` to use `args.pre_signature`, instead.
-    pub matched_pre_signature: Option<(PreSigId, Height)>,
     pub nonce: Option<[u8; NONCE_SIZE]>,
 }
 

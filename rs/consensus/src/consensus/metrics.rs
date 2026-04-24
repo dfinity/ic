@@ -180,6 +180,8 @@ pub(crate) struct FinalizerMetrics {
     pub canister_http_success_delivered: IntCounterVec,
     pub canister_http_timeouts_delivered: IntCounter,
     pub canister_http_divergences_delivered: IntCounter,
+    pub canister_http_flexible_candid_failures: IntCounter,
+    pub canister_http_flexible_errors_delivered: IntCounter,
     pub canister_http_payload_bytes_delivered: Histogram,
 }
 
@@ -276,6 +278,14 @@ impl FinalizerMetrics {
                 "canister_http_divergences_delivered",
                 "Total number of canister http messages delivered as divergences",
             ),
+            canister_http_flexible_candid_failures: metrics_registry.int_counter(
+                "canister_http_flexible_candid_failures",
+                "Total number of flexible canister http responses skipped due to candid encoding/decoding failures",
+            ),
+            canister_http_flexible_errors_delivered: metrics_registry.int_counter(
+                "canister_http_flexible_errors_delivered",
+                "Total number of flexible canister http errors delivered",
+            ),
             canister_http_payload_bytes_delivered: metrics_registry.histogram(
                 "canister_http_payload_bytes_delivered",
                 "Total number of bytes in the canister http payload",
@@ -304,10 +314,24 @@ impl FinalizerMetrics {
         self.canister_http_success_delivered
             .with_label_values(&["non_replicated"])
             .inc_by(batch_stats.canister_http.single_signature_responses as u64);
+        self.canister_http_success_delivered
+            .with_label_values(&["flexible"])
+            .inc_by(batch_stats.canister_http.flexible_ok_responses as u64);
         self.canister_http_timeouts_delivered
             .inc_by(batch_stats.canister_http.timeouts as u64);
         self.canister_http_divergences_delivered
             .inc_by(batch_stats.canister_http.divergence_responses as u64);
+
+        let flexible_ok_candid_failures = batch_stats
+            .canister_http
+            .flexible_ok_responses_candid_failures as u64;
+        let flexible_error_candid_failures =
+            batch_stats.canister_http.flexible_errors_candid_failures as u64;
+        self.canister_http_flexible_candid_failures
+            .inc_by(flexible_ok_candid_failures + flexible_error_candid_failures);
+
+        self.canister_http_flexible_errors_delivered
+            .inc_by(batch_stats.canister_http.flexible_errors as u64);
         self.canister_http_payload_bytes_delivered
             .observe(batch_stats.canister_http.payload_bytes as f64);
 

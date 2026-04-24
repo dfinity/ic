@@ -17,6 +17,7 @@ dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic-canonical-state = { path = "../../canonical_state" }
 ic-cdk = { workspace = true }
 ic-certification = { path = "../../certification" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
@@ -41,6 +42,7 @@ ic-system-test-driver = { path = "../driver" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
+ic-types-cycles = { path = "../../types/cycles" }
 ic-types = { path = "../../types/types" }
 ic-utils = { workspace = true }
 itertools = { workspace = true }

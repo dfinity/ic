@@ -163,7 +163,7 @@ async fn get_current_participation<C: CallCanisters>(
             icp: Some(TransferableAmount { amount_e8s, .. }),
             ..
         })) => amount_e8s,
-        _ => 0u64,
+        _ => 0_u64,
     }
 }
 

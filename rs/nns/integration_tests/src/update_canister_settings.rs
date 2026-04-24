@@ -3,11 +3,12 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_clients::canister_status::{DefiniteCanisterSettings, LogVisibility};
 use ic_nns_constants::{LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::{
-    MakeProposalRequest, ProposalActionRequest, UpdateCanisterSettings,
-    manage_neuron_response::Command,
-    update_canister_settings::{
-        CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
+    CanisterSettings, MakeProposalRequest, ProposalActionRequest, UpdateCanisterSettings,
+    canister_settings::{
+        Controllers, LogVisibility as GovernanceLogVisibility,
+        SnapshotVisibility as GovernanceSnapshotVisibility,
     },
+    manage_neuron_response::Command,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -33,11 +34,11 @@ fn test_update_canister_settings_proposal(
         controller_canister_id.get(),
         PrincipalId::new_user_test_id(1),
     ];
-    let target_memory_allocation = 1u64 << 33;
-    let target_compute_allocation = 10u64;
-    let target_freezing_threshold = 100_000u64;
-    let target_wasm_memory_limit = 1u64 << 36;
-    let target_wasm_memory_threshold = 1u64 << 34;
+    let target_memory_allocation = 1_u64 << 33;
+    let target_compute_allocation = 10_u64;
+    let target_freezing_threshold = 100_000_u64;
+    let target_wasm_memory_limit = 1_u64 << 36;
+    let target_wasm_memory_threshold = 1_u64 << 34;
     let target_log_visibility = Some(LogVisibility::Public);
     let canister_settings = || -> DefiniteCanisterSettings {
         get_canister_status(
@@ -93,6 +94,7 @@ fn test_update_canister_settings_proposal(
                         freezing_threshold: Some(target_freezing_threshold),
                         wasm_memory_limit: Some(target_wasm_memory_limit),
                         log_visibility: Some(GovernanceLogVisibility::Public as i32),
+                        snapshot_visibility: Some(GovernanceSnapshotVisibility::Public as i32),
                         wasm_memory_threshold: Some(target_wasm_memory_threshold),
                     }),
                 },

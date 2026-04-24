@@ -124,5 +124,7 @@ try_from_u8!(
         SetOnLowWasmMemoryMethod = 95,
         WasmMemoryGrow = 96,
         CostHttpRequestV2 = 97,
+        MsgCallerInfoData = 98,
+        MsgCallerInfoSigner = 99,
     }
 );

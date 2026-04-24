@@ -106,7 +106,7 @@ fn should_deposit_and_withdraw() {
         let withdrawal_id = cketh.withdrawal_id().clone();
 
         let time = cketh.setup.env.get_time().as_nanos_since_unix_epoch();
-        let max_fee_per_gas = Nat::from(33003708258u64);
+        let max_fee_per_gas = Nat::from(33003708258_u64);
         let gas_limit = Nat::from(21_000_u32);
         let max_priority_fee_per_gas = Nat::from(1_500_000_000_u32);
 
@@ -164,7 +164,7 @@ fn should_deposit_and_withdraw() {
                 transaction_receipt: TransactionReceipt {
                     block_hash: DEFAULT_BLOCK_HASH.to_string(),
                     block_number: Nat::from(DEFAULT_BLOCK_NUMBER),
-                    effective_gas_price: Nat::from(4277923390u64),
+                    effective_gas_price: Nat::from(4277923390_u64),
                     gas_used: Nat::from(21_000_u32),
                     status: TransactionStatus::Success,
                     transaction_hash:
@@ -534,7 +534,7 @@ fn should_reimburse() {
         })
     );
 
-    let max_fee_per_gas = Nat::from(33003708258u64);
+    let max_fee_per_gas = Nat::from(33003708258_u64);
     let gas_limit = Nat::from(21_000_u32);
 
     cketh
@@ -584,7 +584,7 @@ fn should_reimburse() {
                 transaction_receipt: TransactionReceipt {
                     block_hash: DEFAULT_BLOCK_HASH.to_string(),
                     block_number: Nat::from(DEFAULT_BLOCK_NUMBER),
-                    effective_gas_price: Nat::from(4277923390u64),
+                    effective_gas_price: Nat::from(4277923390_u64),
                     gas_used: Nat::from(21_000_u32),
                     status: TransactionStatus::Failure,
                     transaction_hash:
@@ -692,7 +692,7 @@ fn should_resubmit_new_transaction_when_price_increased() {
                 transaction_receipt: TransactionReceipt {
                     block_hash: DEFAULT_BLOCK_HASH.to_string(),
                     block_number: Nat::from(DEFAULT_BLOCK_NUMBER),
-                    effective_gas_price: Nat::from(4277923390u64),
+                    effective_gas_price: Nat::from(4277923390_u64),
                     gas_used: Nat::from(21_000_u32),
                     status: TransactionStatus::Success,
                     transaction_hash: format!("{resubmitted_tx_hash:?}"),
@@ -1263,7 +1263,7 @@ fn decode_ledger_memo_smoke() {
     let result = cketh.decode_ledger_memo(MemoType::Mint, buf);
     let expected: DecodeLedgerMemoResult = Ok(Some(DecodedMemo::Mint(Some(
         EndpointsMint::ReimburseWithdrawal {
-            withdrawal_id: 928313u64,
+            withdrawal_id: 928313_u64,
         },
     ))));
     assert_eq!(
@@ -1280,7 +1280,7 @@ fn decode_ledger_memo_smoke() {
     let expected: DecodeLedgerMemoResult =
         Ok(Some(DecodedMemo::Burn(Some(EndpointsBurn::Erc20GasFee {
             ckerc20_token_symbol: "ckUSDT".to_string(),
-            ckerc20_withdrawal_amount: Nat::from(24425186u64),
+            ckerc20_withdrawal_amount: Nat::from(24425186_u64),
             to_address: "0x23c68FAbD29A2E4AD98544d6c9D1992685397781".to_string(),
         }))));
     assert_eq!(

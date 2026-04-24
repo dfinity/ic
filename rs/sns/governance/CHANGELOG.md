@@ -11,6 +11,19 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-04-10: Proposal 141333
+
+http://dashboard.internetcomputer.org/proposal/141333
+
+## Added
+
+- Support for `snapshot_visibility` in `ManageDappCanisterSettings` proposals.
+
+## Removed
+
+* The Kong Swap SNS extension is no longer blessed, because they will cease operations on April 6.
+
+
 # 2026-02-11: Proposal 140317
 
 http://dashboard.internetcomputer.org/proposal/140317

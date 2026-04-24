@@ -181,20 +181,20 @@ impl ConsentMessageBuilder {
         match self.function {
             Icrc21Function::Transfer | Icrc21Function::GenericTransfer => {
                 let from_account = self.from.ok_or(Icrc21Error::GenericError {
-                    error_code: Nat::from(500u64),
+                    error_code: Nat::from(500_u64),
                     description: "From account has to be specified.".to_owned(),
                 })?;
                 let receiver_account = self.receiver.ok_or(Icrc21Error::GenericError {
-                    error_code: Nat::from(500u64),
+                    error_code: Nat::from(500_u64),
                     description: "Receiver account has to be specified.".to_owned(),
                 })?;
 
                 let token_symbol = self.token_symbol.ok_or(Icrc21Error::GenericError {
-                    error_code: Nat::from(500u64),
+                    error_code: Nat::from(500_u64),
                     description: "Token Symbol must be specified.".to_owned(),
                 })?;
                 let token_name = self.token_name.ok_or(Icrc21Error::GenericError {
-                    error_code: Nat::from(500u64),
+                    error_code: Nat::from(500_u64),
                     description: "Token Name must be specified.".to_owned(),
                 })?;
 
@@ -213,15 +213,15 @@ impl ConsentMessageBuilder {
             }
             Icrc21Function::Approve => {
                 let approver_account = self.approver.ok_or(Icrc21Error::GenericError {
-                    error_code: Nat::from(500u64),
+                    error_code: Nat::from(500_u64),
                     description: "Approver account has to be specified.".to_owned(),
                 })?;
                 let spender_account = self.spender.ok_or(Icrc21Error::GenericError {
-                    error_code: Nat::from(500u64),
+                    error_code: Nat::from(500_u64),
                     description: "Spender account has to be specified.".to_owned(),
                 })?;
                 let token_symbol = self.token_symbol.ok_or(Icrc21Error::GenericError {
-                    error_code: Nat::from(500u64),
+                    error_code: Nat::from(500_u64),
                     description: "Token symbol must be specified.".to_owned(),
                 })?;
 
@@ -251,24 +251,24 @@ impl ConsentMessageBuilder {
             }
             Icrc21Function::TransferFrom => {
                 let from_account = self.from.ok_or(Icrc21Error::GenericError {
-                    error_code: Nat::from(500u64),
+                    error_code: Nat::from(500_u64),
                     description: "From account has to be specified.".to_owned(),
                 })?;
                 let receiver_account = self.receiver.ok_or(Icrc21Error::GenericError {
-                    error_code: Nat::from(500u64),
+                    error_code: Nat::from(500_u64),
                     description: "Receiver account has to be specified.".to_owned(),
                 })?;
                 let spender_account = self.spender.ok_or(Icrc21Error::GenericError {
-                    error_code: Nat::from(500u64),
+                    error_code: Nat::from(500_u64),
                     description: "Spender account has to be specified.".to_owned(),
                 })?;
 
                 let token_symbol = self.token_symbol.ok_or(Icrc21Error::GenericError {
-                    error_code: Nat::from(500u64),
+                    error_code: Nat::from(500_u64),
                     description: "Token symbol must be specified.".to_owned(),
                 })?;
                 let token_name = self.token_name.ok_or(Icrc21Error::GenericError {
-                    error_code: Nat::from(500u64),
+                    error_code: Nat::from(500_u64),
                     description: "Token Name must be specified.".to_owned(),
                 })?;
                 message.add_intent(Icrc21Function::TransferFrom, Some(token_name));

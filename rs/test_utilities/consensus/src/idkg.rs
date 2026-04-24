@@ -202,7 +202,7 @@ fn fake_schnorr_matched_pre_signature(
     }
 }
 
-fn fake_signature_request_args(
+pub fn fake_signature_request_args(
     key_id: MasterPublicKeyId,
     height: Height,
     pre_sig_id: Option<PreSigId>,
@@ -234,7 +234,7 @@ fn fake_signature_request_args(
 
 pub fn fake_signature_request_context(
     key_id: MasterPublicKeyId,
-    pseudo_random_id: [u8; 32],
+    deprecated_pseudo_random_id: [u8; 32],
 ) -> SignWithThresholdContext {
     let rv = RegistryVersion::from(10);
     SignWithThresholdContext {
@@ -242,8 +242,7 @@ pub fn fake_signature_request_context(
         args: fake_signature_request_args(key_id, Height::from(0), None, rv),
         derivation_path: Arc::new(vec![]),
         batch_time: UNIX_EPOCH,
-        pseudo_random_id,
-        matched_pre_signature: None,
+        deprecated_pseudo_random_id: Some(deprecated_pseudo_random_id),
         nonce: None,
     }
 }
@@ -260,8 +259,7 @@ pub fn fake_signature_request_context_with_pre_sig(
         args: fake_signature_request_args(key_id.into(), height, pre_signature, rv),
         derivation_path: Arc::new(vec![]),
         batch_time: UNIX_EPOCH,
-        pseudo_random_id: [request_id.callback_id.get() as u8; 32],
-        matched_pre_signature: None,
+        deprecated_pseudo_random_id: Some([request_id.callback_id.get() as u8; 32]),
         nonce: None,
     };
     (request_id.callback_id, context)
@@ -279,8 +277,7 @@ pub fn fake_signature_request_context_from_id(
         args: fake_signature_request_args(key_id, height, Some(pre_sig_id), rv),
         derivation_path: Arc::new(vec![vec![]]),
         batch_time: UNIX_EPOCH,
-        pseudo_random_id: [request_id.callback_id.get() as u8; 32],
-        matched_pre_signature: None,
+        deprecated_pseudo_random_id: Some([request_id.callback_id.get() as u8; 32]),
         nonce: Some([0; 32]),
     };
     (request_id.callback_id, context)
@@ -336,8 +333,7 @@ pub fn fake_signature_request_context_with_registry_version(
         args: fake_signature_request_args(key_id.clone(), height, pre_sig_id, rv),
         derivation_path: Arc::new(vec![]),
         batch_time: UNIX_EPOCH,
-        pseudo_random_id: [1; 32],
-        matched_pre_signature: None,
+        deprecated_pseudo_random_id: Some([1; 32]),
         nonce: Some([0; 32]),
     }
 }

@@ -70,7 +70,7 @@ mod mint_transaction {
 
         assert!(state.events_to_mint.contains_key(&event.source()));
 
-        let block_index = LedgerMintIndex::new(1u64);
+        let block_index = LedgerMintIndex::new(1_u64);
 
         let minted_event = MintedEvent {
             deposit_event: event.clone().into(),
@@ -103,7 +103,7 @@ mod mint_transaction {
 
         assert!(state.events_to_mint.contains_key(&event.source()));
 
-        let block_index = LedgerMintIndex::new(1u64);
+        let block_index = LedgerMintIndex::new(1_u64);
 
         let minted_event = MintedEvent {
             deposit_event: event.clone().into(),
@@ -130,12 +130,12 @@ mod mint_transaction {
     fn should_allow_minting_events_with_equal_txhash() {
         let mut state = initial_state();
         let event_1 = ReceivedEthEvent {
-            log_index: LogIndex::from(1u8),
+            log_index: LogIndex::from(1_u8),
             ..received_eth_event()
         }
         .into();
         let event_2 = ReceivedEthEvent {
-            log_index: LogIndex::from(2u8),
+            log_index: LogIndex::from(2_u8),
             ..received_eth_event()
         }
         .into();
@@ -248,8 +248,8 @@ fn received_eth_event() -> ReceivedEthEvent {
         transaction_hash: "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2"
             .parse()
             .unwrap(),
-        block_number: BlockNumber::new(3960623u128),
-        log_index: LogIndex::from(29u8),
+        block_number: BlockNumber::new(3960623_u128),
+        log_index: LogIndex::from(29_u8),
         from_address: "0xdd2851cdd40ae6536831558dd46db62fac7a844d"
             .parse()
             .unwrap(),

@@ -66,7 +66,7 @@ fn bitcoin_integration_test() {
     };
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
-        .with_ii_subnet() // to have tECDSA keys available
+        .with_test_threshold_keys_subnet() // to have tECDSA keys `test_key_1` and `dfx_test_key` available
         .with_bitcoin_subnet()
         .with_application_subnet() // to deploy the test dapp
         .with_bitcoind_addr(bitcoind.p2p_socket().unwrap().into())

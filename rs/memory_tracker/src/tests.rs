@@ -1,20 +1,19 @@
 use std::io::Write;
 
+use crate::signal_mutex::SignalMutex;
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::{
     PageIndex, PageMap,
     page_map::{TestPageAllocatorFileDescriptorImpl, test_utils::base_only_storage_layout},
 };
 use ic_sys::{PAGE_SIZE, PageBytes};
-use ic_types::{Height, NumBytes, NumOsPages};
+use ic_types::{NumBytes, NumOsPages};
 use libc::c_void;
 use nix::sys::mman::{MapFlags, ProtFlags, mmap};
 use rstest::rstest;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use crate::{
     AccessKind, DirtyPageTracking, MemoryLimits, MemoryTracker, MissingPageHandlerKind,
@@ -48,7 +47,6 @@ fn setup(
     tmpfile.as_file().sync_all().unwrap();
     let mut page_map = PageMap::open(
         Box::new(base_only_storage_layout(tmpfile.path().to_path_buf())),
-        Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
     .unwrap();
@@ -86,9 +84,9 @@ fn setup(
                     page_map.clone(),
                     MemoryLimits {
                         max_memory_size: NumBytes::new((memory_pages * PAGE_SIZE) as u64),
-                        max_accessed_pages: NumOsPages::new(memory_pages as u64),
                         max_dirty_pages: NumOsPages::new(memory_pages as u64),
                     },
+                    Arc::new(SignalMutex::new(|_| {})),
                 )
                 .unwrap(),
             );
@@ -104,9 +102,9 @@ fn setup(
                     page_map.clone(),
                     MemoryLimits {
                         max_memory_size: NumBytes::new((memory_pages * PAGE_SIZE) as u64),
-                        max_accessed_pages: NumOsPages::new(memory_pages as u64),
                         max_dirty_pages: NumOsPages::new(memory_pages as u64),
                     },
+                    Arc::new(SignalMutex::new(|_| {})),
                 )
                 .unwrap(),
             );
@@ -877,7 +875,7 @@ mod random_ops {
                 // Flags copied from wasmtime:
                 // https://github.com/bytecodealliance/wasmtime/blob/0e9ce4c231b4b88ce79a1639fbbb5e8bd672d3c3/crates/runtime/src/traphandlers/unix.rs#LL35C1-L35C1
                 handler.sa_flags = libc::SA_SIGINFO | libc::SA_NODEFER | libc::SA_ONSTACK;
-                handler.sa_sigaction = sigsegv_handler as usize;
+                handler.sa_sigaction = sigsegv_handler as *const () as usize;
                 libc::sigemptyset(&mut handler.sa_mask);
                 if libc::sigaction(
                     libc::SIGSEGV,

@@ -148,14 +148,14 @@ mod tests {
     #[test]
     fn test_btreemap() {
         let mut map_0 = BTreeMap::from([
-            (1u64, A { a: 1, b: 2 }),
-            (2u64, A { a: 2, b: 2 }),
-            (3u64, A { a: 3, b: 3 }),
+            (1_u64, A { a: 1, b: 2 }),
+            (2_u64, A { a: 2, b: 2 }),
+            (3_u64, A { a: 3, b: 3 }),
         ]);
         let mut map_1 = BTreeMap::from([
-            (1u64, A { a: 1, b: 2 }),
-            (2u64, A { a: 2, b: 2 }),
-            (3u64, A { a: 3, b: 10 }),
+            (1_u64, A { a: 1, b: 2 }),
+            (2_u64, A { a: 2, b: 2 }),
+            (3_u64, A { a: 3, b: 10 }),
         ]);
 
         // b is ignored.
@@ -173,8 +173,8 @@ mod tests {
         assert!(map_0.validate_eq(&map_1).is_ok());
 
         // Different key value is an error.
-        map_0.insert(3u64, A { a: 3, b: 2 });
-        map_1.insert(4u64, A { a: 3, b: 2 });
+        map_0.insert(3_u64, A { a: 3, b: 2 });
+        map_1.insert(4_u64, A { a: 3, b: 2 });
         assert!(map_0.validate_eq(&map_1).is_err());
     }
 

@@ -7,12 +7,24 @@ use common::{
 };
 use ic_config::message_routing::TARGET_STREAM_SIZE_BYTES;
 use ic_error_types::RejectCode;
-use ic_management_canister_types_private::CanisterStatusType;
+use ic_management_canister_types_private::{
+    CanisterStatusType, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId,
+};
+use ic_protobuf::registry::crypto::v1::ChainKeyEnabledSubnetList;
+use ic_protobuf::types::v1 as pb;
+use ic_registry_keys::make_chain_key_enabled_subnet_list_key;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_registry_subnet_type::SubnetType;
+use ic_state_machine_tests::StateMachineBuilder;
 use ic_test_utilities_metrics::{HistogramStats, fetch_histogram_vec_stats, metric_vec};
+use ic_types::PrincipalId;
 use ic_types::messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, MessageId, RequestOrResponse};
+use ic_types_cycles::Cycles;
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use messaging_test::{Call, Reply};
 use messaging_test_utils::{CallConfig, arb_call};
 use proptest::prelude::*;
+use std::sync::Arc;
 
 const MAX_PAYLOAD_SIZE: usize = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize;
 const SYS_UNKNOWN_U32: u32 = RejectCode::SysUnknown as u32;
@@ -663,4 +675,67 @@ fn test_subnet_split(
     subnet1.env.stop_canister(canister1).unwrap();
     subnet2.env.stop_canister(canister3).unwrap();
     subnet3.env.stop_canister(canister2).unwrap();
+}
+
+/// Tests that a canister on a CloudEngine subnet cannot call
+/// `ic0_cost_sign_with_ecdsa` for a key that is enabled on a non-engine subnet.
+#[test]
+fn cloud_engine_cannot_cost_sign_with_ecdsa() {
+    let ecdsa_key_id = EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: "test_key".to_string(),
+    };
+    let key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id);
+
+    let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
+    let app_subnet_id = ic_types::SubnetId::from(PrincipalId::new_subnet_test_id(99));
+    let nns_subnet_id = ic_types::SubnetId::from(PrincipalId::new_subnet_test_id(1));
+
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::CloudEngine)
+        .with_nns_subnet_id(nns_subnet_id)
+        .with_registry_data_provider(registry_data_provider.clone())
+        .build();
+
+    // Register the ECDSA key as enabled on the (phantom) app subnet.
+    // Version 2 so the registry client picks it up on reload.
+    registry_data_provider
+        .add(
+            &make_chain_key_enabled_subnet_list_key(&key_id),
+            ic_types::RegistryVersion::from(2),
+            Some(ChainKeyEnabledSubnetList {
+                subnets: vec![pb::SubnetId {
+                    principal_id: Some(pb::PrincipalId {
+                        raw: app_subnet_id.get_ref().to_vec(),
+                    }),
+                }],
+            }),
+        )
+        .unwrap();
+    env.reload_registry();
+
+    let canister = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            Cycles::new(u128::MAX / 2),
+        )
+        .unwrap();
+
+    let result = env.execute_ingress(
+        canister,
+        "update",
+        wasm()
+            .cost_sign_with_ecdsa(b"test_key", 0) // 0 = Secp256k1
+            .reply()
+            .build(),
+    );
+
+    // The engine doesn't see the key, so the canister gets UnknownKey.
+    let err = result.unwrap_err();
+    assert!(
+        err.description().contains("cost_sign_with_ecdsa failed"),
+        "Unexpected error: {err}",
+    );
 }

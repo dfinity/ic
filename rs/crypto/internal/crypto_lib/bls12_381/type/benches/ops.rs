@@ -804,7 +804,7 @@ fn bls12_381_batch_sig_verification(c: &mut Criterion) {
 
     let rng = &mut reproducible_rng();
 
-    for num_args in [2usize, 4, 8, 16, 32, 64, 128] {
+    for num_args in [2_usize, 4, 8, 16, 32, 64, 128] {
         group.throughput(Throughput::Elements(num_args as u64));
         group.bench_with_input(
             BenchmarkId::new("naive", num_args),

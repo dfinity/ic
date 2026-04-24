@@ -1708,7 +1708,7 @@ fn test_one_user_cannot_claim_other_users_neuron() {
 
         let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
 
-        let nonce = 12345u64;
+        let nonce = 12345_u64;
         let to_subaccount = {
             let mut state = Sha256::new();
             state.write(&[0x0c]);

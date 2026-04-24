@@ -10,13 +10,13 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
 
     Args:
       guestos: The guestos image version. Can be a single value or a dictionary mapping tags to versions.
-        Single values: True (HEAD) | False | "malicious" | "recovery_dev" | "mainnet_latest" | "mainnet_latest_dev" | "mainnet_nns" | "mainnet_app". Default: True
+        Single values: True (HEAD) | False | "malicious" | "recovery_dev" | "mainnet_latest" | "mainnet_latest_dev" | "mainnet_nns" | "mainnet_nns_dev" | "mainnet_app". Default: True
         Dictionary: {"default": True, "my_tag": "mainnet_latest_dev"} - the "default" key works like the single value.
         Each tag generates env variables like ENV_DEPS__GUESTOS_{TAG}_DISK_IMG (uppercase tag).
-      guestos_update: The guestos update image version. Values: False | True (HEAD) | "test" | "malicious" | "mainnet_latest" | "mainnet_latest_dev" | "mainnet_nns" | "mainnet_app". Default: False
+      guestos_update: The guestos update image version. Values: False | True (HEAD) | "test" | "malicious" | "mainnet_latest" | "mainnet_latest_dev" | "mainnet_nns" | "mainnet_nns_dev" | "mainnet_app". Default: False
       hostos: The hostos image version. Values: False | True (HEAD). Default: False
       hostos_update: The hostos update image version. Values: False | True (HEAD) | "test" | "mainnet_latest" | "mainnet_latest_dev". Default: False
-      setupos: The setupos image version. Values: False | True (HEAD) | "mainnet_latest" | "mainnet_latest_dev". Default: False
+      setupos: The setupos image version. Values: False | True (HEAD) | "mainnet_latest" | "mainnet_latest_dev" | "mainnet_nns_dev". Default: False
 
     Returns:
         A struct of 'env_var_files', 'env', 'runtime_deps' and 'icos_images' to inject in the test.
@@ -44,6 +44,7 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
     def guestos_local(suffix, env):
         """Configure a GuestOS disk image (the GuestOS that the test starts with) built from the local workspace."""
         env_var_files["ENV_DEPS__GUESTOS" + suffix + "_DISK_IMG_VERSION"] = "//bazel:version.txt"
+        env_var_files["ENV_DEPS__GUESTOS" + suffix + "_ROOTFS_HASH"] = "//ic-os/guestos/envs/" + env + ":partition-root-hash"
         icos_images["ENV_DEPS__GUESTOS" + suffix + "_DISK_IMG"] = "//ic-os/guestos/envs/" + env + ":disk-img.tar.zst"
         icos_images["ENV_DEPS__GUESTOS" + suffix + "_INITIAL_UPDATE_IMG"] = "//ic-os/guestos/envs/" + env + ":update-img.tar.zst"
         runtime_deps["ENV_DEPS__GUESTOS" + suffix + "_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/" + env + ":launch-measurements.json"
@@ -61,6 +62,7 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
         """Configure a GuestOS update image (the GuestOS that the test updates to) built from the local workspace."""
         suffix = "-test" if test else ""
         env_var_files["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = "//rs/tests:version-test" if test else "//bazel:version.txt"
+        env_var_files["ENV_DEPS__GUESTOS_UPDATE_ROOTFS_HASH"] = "//ic-os/guestos/envs/" + guestos_env + ":partition-root" + suffix + "-hash"
         icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = "//ic-os/guestos/envs/" + guestos_env + ":update-img" + suffix + ".tar.zst"
         runtime_deps["ENV_DEPS__GUESTOS_UPDATE_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/" + guestos_env + ":launch-measurements" + suffix + ".json"
 
@@ -128,12 +130,16 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
             guestos_local(suffix, "dev-malicious")
         elif guestos_version == "recovery_dev":
             guestos_local(suffix, "recovery-dev")
+        elif guestos_version == "sev_recovery_dev":
+            guestos_local(suffix, "sev-recovery-dev")
         elif guestos_version == "mainnet_latest":
             guestos_mainnet(suffix, MAINNET_LATEST, "@mainnet_latest_guestos_images")
         elif guestos_version == "mainnet_latest_dev":
             guestos_mainnet(suffix, MAINNET_LATEST, "@mainnet_latest_guestos_images_dev", dev = True)
         elif guestos_version == "mainnet_nns":
             guestos_mainnet(suffix, MAINNET_NNS, "@mainnet_nns_images")
+        elif guestos_version == "mainnet_nns_dev":
+            guestos_mainnet(suffix, MAINNET_NNS, "@mainnet_nns_images_dev", dev = True)
         elif guestos_version == "mainnet_app":
             guestos_mainnet(suffix, MAINNET_APP, "@mainnet_app_images")
         elif guestos_version:
@@ -152,6 +158,8 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
         guestos_update_mainnet(MAINNET_LATEST, "@mainnet_latest_guestos_images_dev", dev = True)
     elif guestos_update == "mainnet_nns":
         guestos_update_mainnet(MAINNET_NNS, "@mainnet_nns_images")
+    elif guestos_update == "mainnet_nns_dev":
+        guestos_update_mainnet(MAINNET_NNS, "@mainnet_nns_images_dev", dev = True)
     elif guestos_update == "mainnet_app":
         guestos_update_mainnet(MAINNET_APP, "@mainnet_app_images")
     elif guestos_update:
@@ -164,7 +172,7 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
     elif setupos == "mainnet_latest":
         setupos_mainnet()
         setupos_dependencies()
-    elif setupos == "mainnet_latest_dev":
+    elif setupos == "mainnet_latest_dev" or setupos == "mainnet_nns_dev":
         setupos_mainnet(dev = True)
         setupos_dependencies()
     elif setupos:
