@@ -339,7 +339,7 @@ impl CanisterManager {
     /// paths where the resize isn't the user-facing operation (e.g. first
     /// allocation during canister creation).
     #[allow(clippy::too_many_arguments)]
-    fn check_and_update_canister_settings(
+    fn validate_and_update_canister_settings(
         &self,
         settings: CanisterSettings,
         canister: &mut CanisterState,
@@ -644,7 +644,7 @@ impl CanisterManager {
         let old_compute_allocation = canister.compute_allocation().as_percent();
         let old_log_bytes_used = canister.system_state.log_memory_store.bytes_used() as u64;
 
-        self.check_and_update_canister_settings(
+        self.validate_and_update_canister_settings(
             settings,
             canister,
             &mut round_limits.subnet_available_memory,
@@ -1467,7 +1467,7 @@ impl CanisterManager {
         // Canister creation's first-time allocation is a different event class
         // from user-triggered `log_memory_limit` resize — don't mix their
         // distributions. Pass `None` to skip observation here.
-        self.check_and_update_canister_settings(
+        self.validate_and_update_canister_settings(
             settings,
             &mut new_canister,
             &mut round_limits.subnet_available_memory,
