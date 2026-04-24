@@ -9,6 +9,9 @@ on the process that this file is part of, see
 
 ## Added
 
+* `TakeCanisterSnapshot` proposals now store the new snapshot ID in the
+  `success_value` field.
+
 ## Changed
 
 ## Deprecated

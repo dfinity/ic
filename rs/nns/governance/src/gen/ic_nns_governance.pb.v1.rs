@@ -1542,7 +1542,7 @@ pub struct ProposalData {
 pub struct SuccessfulProposalExecutionValue {
     #[prost(
         oneof = "successful_proposal_execution_value::ProposalType",
-        tags = "1"
+        tags = "1, 2"
     )]
     pub proposal_type: ::core::option::Option<successful_proposal_execution_value::ProposalType>,
 }
@@ -1560,6 +1560,8 @@ pub mod successful_proposal_execution_value {
     pub enum ProposalType {
         #[prost(message, tag = "1")]
         CreateCanisterAndInstallCode(super::CreateCanisterAndInstallCodeOk),
+        #[prost(message, tag = "2")]
+        TakeCanisterSnapshot(super::TakeCanisterSnapshotOk),
     }
 }
 #[derive(
@@ -1574,6 +1576,19 @@ pub mod successful_proposal_execution_value {
 pub struct CreateCanisterAndInstallCodeOk {
     #[prost(message, optional, tag = "1")]
     pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct TakeCanisterSnapshotOk {
+    #[prost(bytes = "vec", tag = "1")]
+    pub snapshot_id: ::prost::alloc::vec::Vec<u8>,
 }
 /// This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
 #[derive(

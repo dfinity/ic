@@ -1261,11 +1261,16 @@ message ProposalData {
 message SuccessfulProposalExecutionValue {
   oneof proposal_type {
     CreateCanisterAndInstallCodeOk create_canister_and_install_code = 1;
+    TakeCanisterSnapshotOk take_canister_snapshot = 2;
   }
 }
 
 message CreateCanisterAndInstallCodeOk {
   ic_base_types.pb.v1.PrincipalId canister_id = 1;
+}
+
+message TakeCanisterSnapshotOk {
+  bytes snapshot_id = 1;
 }
 
 // This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
