@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package registry.ai_node.v1;
+
+// A record for a node that has been promoted to an "AI node". An AiNode is an
+// extension of a regular `NodeRecord` (keyed by the same `NodeId`) and carries
+// only AI-specific data. All operational data (IPs, domain, operator, etc.) is
+// inherited from the underlying `NodeRecord`.
+message AiNodeRecord {
+  // Optional principal id (bytes) of the subnet this AI node is associated
+  // with. When `None`, the node is not associated with any subnet.
+  optional bytes subnet_id = 1;
+}

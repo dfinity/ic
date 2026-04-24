@@ -1,3 +1,4 @@
+mod ai_node;
 mod api_boundary_node;
 mod assignment;
 mod checks;
