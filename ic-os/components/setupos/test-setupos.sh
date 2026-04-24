@@ -139,7 +139,7 @@ function test_verify_cpu() {
 
     ## Intel VMX 1 socket
     test_verify_cpu_helper "verify_cpu Gen3 success Intel" "3" '[
-      {"id": "cpu:0", "product": "Foobar CPU", "capabilities": {"vmx": "true"}},
+      {"id": "cpu:0", "product": "Foobar CPU", "capabilities": {"vmx": "true"}}
     ]' 1 0
 
     ## One unpopulated socket ignored
