@@ -5,7 +5,6 @@ use attestation::attestation_package::{
 };
 use config_types::GuestOSConfig;
 use der::asn1::OctetStringRef;
-use guest_upgrade_shared::STORE_DEVICE;
 use guest_upgrade_shared::api::disk_encryption_key_exchange_service_client::DiskEncryptionKeyExchangeServiceClient;
 use guest_upgrade_shared::api::{GetDiskEncryptionKeyRequest, SignalStatusRequest};
 use guest_upgrade_shared::attestation::GetDiskEncryptionKeyTokenCustomData;
@@ -23,6 +22,7 @@ use rustls::pki_types::PrivateKeyDer;
 use rustls::version::TLS13;
 use sev_guest::attestation_package::generate_attestation_package;
 use sev_guest::firmware::SevGuestFirmware;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::net::TcpStream;
@@ -37,19 +37,29 @@ mod tls;
 const NNS_PUBLIC_KEY_PATH: &str = "/run/config/nns_public_key.pem";
 
 type ServiceClientType = DiskEncryptionKeyExchangeServiceClient<Channel>;
+
+/// (store_device, previous_key_path, store_luks_header_path, sev_firmware) -> success
 pub type CanOpenStore =
-    Box<dyn Fn(&Path, &Path, &mut dyn SevGuestFirmware) -> Result<bool> + Send + Sync>;
+    Box<dyn Fn(&Path, &Path, &Path, &mut dyn SevGuestFirmware) -> Result<bool> + Send + Sync>;
+
+/// Function to backup the LUKS header of a device (identified by device_path) to a file
+/// (identified by luks_header_path)
+/// Signature: (device_path, luks_header_path) -> Result
+pub type BackupLuksHeader = Box<dyn Fn(&Path, &Path) -> Result<()> + Send + Sync>;
 
 pub struct DiskEncryptionKeyExchangeClientAgent {
     guestos_config: GuestOSConfig,
     sev_firmware: Box<dyn SevGuestFirmware>,
     nns_registry_client: Arc<dyn RegistryClient>,
+    store_device_path: PathBuf,
     previous_key_path: PathBuf,
+    store_luks_header_path: PathBuf,
     server_port: u16,
     sev_root_certificate_verification: SevRootCertificateVerification,
     // We mock can_open_store for easier testing, in production it calls
     // guest_disk::sev::can_open_store, the signature corresponds to that function
     can_open_store: CanOpenStore,
+    backup_luks_header: BackupLuksHeader,
 }
 
 impl DiskEncryptionKeyExchangeClientAgent {
@@ -59,17 +69,23 @@ impl DiskEncryptionKeyExchangeClientAgent {
         sev_firmware: Box<dyn SevGuestFirmware>,
         nns_registry_client: Arc<dyn RegistryClient>,
         can_open_store: CanOpenStore,
+        backup_luks_header: BackupLuksHeader,
+        store_device_path: PathBuf,
         previous_key_path: PathBuf,
+        store_luks_header_path: PathBuf,
         server_port: u16,
     ) -> Self {
         DiskEncryptionKeyExchangeClientAgent {
             guestos_config,
             sev_firmware,
             nns_registry_client,
+            store_device_path,
             previous_key_path,
+            store_luks_header_path,
             server_port,
             sev_root_certificate_verification,
             can_open_store,
+            backup_luks_header,
         }
     }
 
@@ -101,13 +117,17 @@ impl DiskEncryptionKeyExchangeClientAgent {
         // (We still have to call signal_status, since the server is expecting us to signal
         // success)
         let can_open_store = (self.can_open_store)(
-            Path::new(STORE_DEVICE),
+            &self.store_device_path,
             &self.previous_key_path,
+            &self.store_luks_header_path,
             self.sev_firmware.as_mut(),
         )?;
 
         let retrieve_status = if can_open_store {
-            println!("{STORE_DEVICE} can be opened with our derived key, no need to run exchange");
+            println!(
+                "{} can be opened with our derived key, no need to run exchange",
+                self.store_device_path.display()
+            );
             Ok(())
         } else {
             self.retrieve_disk_encryption_key(
@@ -188,10 +208,46 @@ impl DiskEncryptionKeyExchangeClientAgent {
             .key
             .context("GetKeyResponse does not contain a key")?;
 
+        self.persist_disk_encryption_artifacts(
+            disk_encryption_key,
+            // This can be None when upgrading from older GuestOS-s that do not populate this field.
+            // TODO: Error on None once all GuestOS-s support detached headers
+            get_key_response.luks_header,
+        )?;
+
+        Ok(())
+    }
+
+    fn persist_disk_encryption_artifacts(
+        &self,
+        disk_encryption_key: Vec<u8>,
+        luks_header: Option<Vec<u8>>,
+    ) -> Result<()> {
         let disk_encryption_key =
             String::from_utf8(disk_encryption_key).context("Key is not valid UTF-8")?;
 
-        std::fs::write(&*self.previous_key_path, disk_encryption_key).with_context(|| {
+        match luks_header {
+            Some(luks_header) => {
+                std::fs::write(&self.store_luks_header_path, &luks_header).with_context(|| {
+                    format!(
+                        "Failed to write store LUKS header to {}",
+                        self.store_luks_header_path.display()
+                    )
+                })?;
+            }
+            None => {
+                println!(
+                    "GetKeyResponse does not contain a store LUKS header; recovering it locally from {}",
+                    self.store_device_path.display()
+                );
+                (self.backup_luks_header)(&self.store_device_path, &self.store_luks_header_path)
+                    .context(
+                    "GetKeyResponse does not contain a store LUKS header and local backup failed",
+                )?;
+            }
+        }
+
+        std::fs::write(&self.previous_key_path, disk_encryption_key).with_context(|| {
             format!(
                 "Failed to write key to {}",
                 self.previous_key_path.display()

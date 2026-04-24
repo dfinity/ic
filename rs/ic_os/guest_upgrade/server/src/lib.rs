@@ -1,11 +1,11 @@
 use crate::service::DiskEncryptionKeyExchangeServiceImpl;
 use attestation::attestation_package::SevRootCertificateVerification;
 use config_types::TrustedExecutionEnvironmentConfig;
-use guest_upgrade_shared::DEFAULT_SERVER_PORT;
 use ic_interfaces_registry::RegistryClient;
 use ic_registry_client_helpers::blessed_replica_version::BlessedReplicaVersionRegistry;
 use server::DiskEncryptionKeyExchangeServer;
 use sev_guest::firmware::SevGuestFirmware;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
@@ -39,6 +39,12 @@ pub struct DiskEncryptionKeyExchangeServerAgent {
     trusted_execution_environment_config: TrustedExecutionEnvironmentConfig,
     vsock_client: Box<dyn VSockClient + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
+    store_device_path: PathBuf,
+    store_luks_header_path: PathBuf,
+    /// If true, the server will send the Store LUKS header to the client.
+    /// Only false in unit tests testing backwards compatibility.
+    // TODO: Remove when all deployed GuestOS versions support sending the Store LUKS header.
+    send_luks_header: bool,
     port: u16,
     success_timeout: Duration,
 }
@@ -48,28 +54,12 @@ impl DiskEncryptionKeyExchangeServerAgent {
         handle: Handle,
         vsock_client: Box<dyn VSockClient + Send + Sync>,
         sev_firmware_factory: SevFirmwareFactory,
-        trusted_execution_environment_config: TrustedExecutionEnvironmentConfig,
-        registry_client: Arc<dyn RegistryClient>,
-    ) -> Self {
-        Self {
-            runtime_handle: handle,
-            vsock_client,
-            sev_firmware_factory,
-            sev_root_certificate_verification: SevRootCertificateVerification::Verify,
-            trusted_execution_environment_config,
-            registry_client,
-            port: DEFAULT_SERVER_PORT,
-            success_timeout: DEFAULT_SUCCESS_TIMEOUT,
-        }
-    }
-
-    pub fn new_for_testing(
-        handle: Handle,
-        vsock_client: Box<dyn VSockClient + Send + Sync>,
-        sev_firmware_factory: SevFirmwareFactory,
         sev_root_certificate_verification: SevRootCertificateVerification,
         trusted_execution_environment_config: TrustedExecutionEnvironmentConfig,
         registry_client: Arc<dyn RegistryClient>,
+        store_device_path: PathBuf,
+        store_luks_header_path: PathBuf,
+        send_luks_header: bool,
         port: u16,
         success_timeout: Duration,
     ) -> Self {
@@ -80,6 +70,9 @@ impl DiskEncryptionKeyExchangeServerAgent {
             sev_root_certificate_verification,
             trusted_execution_environment_config,
             registry_client,
+            store_device_path,
+            store_luks_header_path,
+            send_luks_header,
             port,
             success_timeout,
         }
@@ -110,6 +103,9 @@ impl DiskEncryptionKeyExchangeServerAgent {
             self.sev_root_certificate_verification,
             certified_key.key_pair.public_key_der(),
             self.trusted_execution_environment_config.clone(),
+            self.store_device_path.clone(),
+            self.store_luks_header_path.clone(),
+            self.send_luks_header,
             status_sender,
             blessed_measurements,
         ));

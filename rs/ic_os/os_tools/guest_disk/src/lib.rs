@@ -7,6 +7,7 @@ pub mod metrics;
 pub mod sev;
 
 pub const DEFAULT_PREVIOUS_SEV_KEY_PATH: &str = "/var/alternative_store.keyfile";
+pub const DEFAULT_STORE_LUKS_HEADER_PATH: &str = "/var/store_luks_header.bin";
 
 // We depend on the values of these constants in bash scripts and config files so be careful
 // when changing them!

@@ -5548,6 +5548,7 @@ dependencies = [
  "config_tool",
  "config_types",
  "der 0.7.10",
+ "guest_disk",
  "guest_upgrade_shared",
  "http-body-util",
  "hyper 1.8.1",
