@@ -105,11 +105,16 @@ impl Ord for CanisterRoundState {
                 .cmp(&self.accumulated_priority)
                 .then_with(|| self.canister_id.cmp(&other.canister_id)),
 
-            // Among long executions, sort by executed slices descending; AP descending;
-            // start round ascending; then break ties by canister ID.
+            // Among long executions, sort by executed slices; AP descending; start round
+            // ascending; then break ties by canister ID.
+            //
+            // An aborted execution (executed slices == 0) is considered to have the same
+            // priority as a newly started long execution (executed slices == 1). This is to
+            // avoid starvation of aborted executions.
             (Some(self_start_round), Some(other_start_round)) => other
                 .executed_slices
-                .cmp(&self.executed_slices)
+                .max(1)
+                .cmp(&self.executed_slices.max(1))
                 .then_with(|| other.accumulated_priority.cmp(&self.accumulated_priority))
                 .then_with(|| self_start_round.cmp(&other_start_round))
                 .then_with(|| self.canister_id.cmp(&other.canister_id)),
