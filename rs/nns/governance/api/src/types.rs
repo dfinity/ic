@@ -2065,12 +2065,31 @@ pub struct ProposalInfo {
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug)]
 pub enum SuccessfulProposalExecutionValue {
     CreateCanisterAndInstallCode(CreateCanisterAndInstallCodeOk),
+    TakeCanisterSnapshot(TakeCanisterSnapshotOk),
 }
 
 /// The result of a successful CreateCanisterAndInstallCode proposal execution.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug)]
 pub struct CreateCanisterAndInstallCodeOk {
     pub canister_id: Option<PrincipalId>,
+}
+
+/// The result of a successful TakeCanisterSnapshot proposal execution.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug)]
+pub struct TakeCanisterSnapshotOk {
+    pub snapshot_id: Vec<u8>,
+}
+
+impl From<CreateCanisterAndInstallCodeOk> for SuccessfulProposalExecutionValue {
+    fn from(ok: CreateCanisterAndInstallCodeOk) -> Self {
+        Self::CreateCanisterAndInstallCode(ok)
+    }
+}
+
+impl From<TakeCanisterSnapshotOk> for SuccessfulProposalExecutionValue {
+    fn from(ok: TakeCanisterSnapshotOk) -> Self {
+        Self::TakeCanisterSnapshot(ok)
+    }
 }
 
 /// Network economics contains the parameters for several operations related

@@ -1,4 +1,4 @@
-//! Module that deals with requests to /api/v2/canister/.../query
+//! Module that deals with requests to /api/v{2,3}/canister/.../query and /api/v3/subnet/.../query
 
 use crate::{
     ReplicaHealthStatus,
@@ -29,7 +29,7 @@ use ic_logger::{ReplicaLogger, error};
 use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_types::{
-    CanisterId, NodeId,
+    CanisterId, NodeId, PrincipalId, SubnetId,
     crypto::threshold_sig::IcRootOfTrust,
     ingress::WasmResult,
     malicious_flags::MaliciousFlags,
@@ -53,6 +53,8 @@ pub enum Version {
     V2,
     // Endpoint with the NNS delegation using the tree format of the canister ranges.
     V3,
+    // Subnet endpoint with no canister ranges in the NNS delegation.
+    SubnetV3,
 }
 
 #[derive(Clone)]
@@ -67,6 +69,7 @@ pub struct QueryService {
     registry_client: Arc<dyn RegistryClient>,
     additional_root_of_trust: Option<IcRootOfTrust>,
     query_execution_service: Arc<Mutex<QueryExecutionService>>,
+    subnet_id: SubnetId,
     version: Version,
 }
 
@@ -82,6 +85,7 @@ pub struct QueryServiceBuilder {
     registry_client: Arc<dyn RegistryClient>,
     additional_root_of_trust: Option<IcRootOfTrust>,
     query_execution_service: QueryExecutionService,
+    subnet_id: SubnetId,
     version: Version,
 }
 
@@ -90,6 +94,7 @@ impl QueryService {
         match version {
             Version::V2 => "/api/v2/canister/{effective_canister_id}/query",
             Version::V3 => "/api/v3/canister/{effective_canister_id}/query",
+            Version::SubnetV3 => "/api/v3/subnet/{effective_subnet_id}/query",
         }
     }
 }
@@ -103,6 +108,7 @@ impl QueryServiceBuilder {
         ingress_verifier: Arc<dyn IngressSigVerifier>,
         nns_delegation_reader: NNSDelegationReader,
         query_execution_service: QueryExecutionService,
+        subnet_id: SubnetId,
         version: Version,
     ) -> Self {
         Self {
@@ -117,6 +123,7 @@ impl QueryServiceBuilder {
             registry_client,
             additional_root_of_trust: None,
             query_execution_service,
+            subnet_id,
             version,
         }
     }
@@ -162,6 +169,7 @@ impl QueryServiceBuilder {
             registry_client: self.registry_client,
             additional_root_of_trust: self.additional_root_of_trust,
             query_execution_service: Arc::new(Mutex::new(self.query_execution_service)),
+            subnet_id: self.subnet_id,
             version: self.version,
         };
         Router::new().route_service(
@@ -179,7 +187,7 @@ impl QueryServiceBuilder {
 }
 
 pub(crate) async fn query(
-    axum::extract::Path(effective_canister_id): axum::extract::Path<CanisterId>,
+    axum::extract::Path(id): axum::extract::Path<PrincipalId>,
     State(QueryService {
         log,
         node_id,
@@ -191,6 +199,7 @@ pub(crate) async fn query(
         nns_delegation_reader,
         additional_root_of_trust,
         query_execution_service,
+        subnet_id,
         version,
     }): State<QueryService>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpQueryContent>>>,
@@ -217,12 +226,41 @@ pub(crate) async fn query(
         }
     };
     let canister_id = request.content().canister_id();
-    if canister_id != CanisterId::ic_00() && canister_id != effective_canister_id {
-        let status = StatusCode::BAD_REQUEST;
-        let text = format!(
-            "Specified CanisterId {canister_id} does not match effective canister id in URL {effective_canister_id}"
-        );
-        return (status, text).into_response();
+
+    // Validate effective destination.
+    match version {
+        Version::V2 | Version::V3 => {
+            let effective_canister_id = CanisterId::unchecked_from_principal(id);
+            if canister_id != CanisterId::ic_00() && canister_id != effective_canister_id {
+                let status = StatusCode::BAD_REQUEST;
+                let text = format!(
+                    "Specified canister ID {canister_id} does not match effective canister ID in URL {effective_canister_id}"
+                );
+                return (status, text).into_response();
+            }
+        }
+        Version::SubnetV3 => {
+            let effective_subnet_id = SubnetId::from(id);
+            if effective_subnet_id != subnet_id {
+                let status = StatusCode::BAD_REQUEST;
+                let text = format!(
+                    "Specified subnet ID {effective_subnet_id} does not match the subnet ID of this node {subnet_id}"
+                );
+                return (status, text).into_response();
+            }
+            if canister_id != CanisterId::ic_00()
+                || request.content().method_name != "list_canisters"
+            {
+                let status = StatusCode::BAD_REQUEST;
+                let text = format!(
+                    "Subnet query endpoint only accepts queries to the management canister ({}) 'list_canisters' method, got canister_id={} method_name='{}'",
+                    CanisterId::ic_00(),
+                    canister_id,
+                    request.content().method_name
+                );
+                return (status, text).into_response();
+            }
+        }
     }
 
     let root_of_trust_provider = if let Some(additional_root_of_trust) = additional_root_of_trust {
@@ -263,8 +301,12 @@ pub(crate) async fn query(
         Version::V2 => {
             nns_delegation_reader.get_delegation_with_metadata(CanisterRangesFilter::Flat)
         }
-        Version::V3 => nns_delegation_reader
-            .get_delegation_with_metadata(CanisterRangesFilter::Tree(effective_canister_id)),
+        Version::V3 => nns_delegation_reader.get_delegation_with_metadata(
+            CanisterRangesFilter::Tree(CanisterId::unchecked_from_principal(id)),
+        ),
+        Version::SubnetV3 => {
+            nns_delegation_reader.get_delegation_with_metadata(CanisterRangesFilter::None)
+        }
     };
     let query_execution_input = QueryExecutionInput {
         query: user_query.clone(),

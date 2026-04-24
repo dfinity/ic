@@ -21,7 +21,7 @@ use ic_types::{
     artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId},
     batch::IngressPayload,
     consensus::{
-        BlockProposal, ConsensusMessage,
+        BlockProposal, ConsensusMessage, ConsensusMessageHashable,
         idkg::{IDkgArtifactId, IDkgMessage},
     },
     crypto::{
@@ -371,6 +371,13 @@ pub(crate) enum AssemblyError {
     MissingIDkgNodeIndex(NodeIndex),
     #[error("The block proposal cannot be deserialized {0}")]
     DeserializationFailed(ProxyDecodeError),
+    #[error(
+        "The reconstructed block proposal id {assembled:?} does not match the claimed id {claimed:?}"
+    )]
+    MismatchedConsensusMessageId {
+        claimed: ConsensusMessageId,
+        assembled: ConsensusMessageId,
+    },
 }
 
 /// A trait keeps track of the missing artifacts in a stripped payload,
@@ -592,13 +599,15 @@ impl BlockProposalAssembler {
     /// Tries to reassemble a block.
     ///
     /// Fails if there are still some stripped messages missing,
-    /// or the assembled proposal can't be deserialized.
+    /// the assembled proposal can't be deserialized, or if the
+    /// assembled proposal has an ID that doesn't match the claimed ID.
     pub(crate) fn try_assemble(self) -> Result<BlockProposal, AssemblyError> {
         let BlockProposalAssembler {
             stripped_block_proposal,
             ingress_messages,
             signed_dealings,
         } = self;
+        let claimed_id = stripped_block_proposal.unstripped_consensus_message_id;
         let mut reconstructed_block_proposal_proto =
             stripped_block_proposal.pruned_block_proposal_proto;
 
@@ -609,9 +618,18 @@ impl BlockProposalAssembler {
             }
         }
 
-        reconstructed_block_proposal_proto
+        let reconstructed_block_proposal: BlockProposal = reconstructed_block_proposal_proto
             .try_into()
-            .map_err(AssemblyError::DeserializationFailed)
+            .map_err(AssemblyError::DeserializationFailed)?;
+        let assembled_id = reconstructed_block_proposal.get_id();
+        if assembled_id != claimed_id {
+            return Err(AssemblyError::MismatchedConsensusMessageId {
+                claimed: claimed_id,
+                assembled: assembled_id,
+            });
+        }
+
+        Ok(reconstructed_block_proposal)
     }
 }
 
@@ -1055,6 +1073,30 @@ mod tests {
                 message: ConsensusMessage::BlockProposal(block_proposal),
                 peer_id: NODE_1
             }
+        );
+    }
+
+    #[test]
+    fn try_assemble_rejects_reconstructed_block_with_mismatched_id() {
+        let block_proposal = fake_block_proposal_with_ingresses(vec![]);
+        let assembled_id = block_proposal.get_id();
+        let mismatched_claimed_id = fake_block_proposal_with_ingresses(vec![
+            fake_ingress_message_with_arg_size("fake_1", 8).0,
+        ])
+        .get_id();
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut stripped_block_proposal) =
+            ConsensusMessage::BlockProposal(block_proposal).strip()
+        else {
+            unreachable!();
+        };
+        stripped_block_proposal.unstripped_consensus_message_id = mismatched_claimed_id.clone();
+        let assembler = BlockProposalAssembler::new(stripped_block_proposal);
+        let assembly_error = assembler.try_assemble().unwrap_err();
+
+        assert_matches!(
+            assembly_error,
+            AssemblyError::MismatchedConsensusMessageId { claimed, assembled }
+                if claimed == mismatched_claimed_id && assembled == assembled_id
         );
     }
 }

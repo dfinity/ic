@@ -71,7 +71,7 @@ jobs:
               --config=flaky_retry \
               --config=stamped \
               //rs/tests/nested/nns_recovery:nr_large_with_mainnet_state \
-              --set-required-host-features=dc=zh1 \
+              --test_arg=--set-required-host-features=dc=zh1 \
               --keep_going --test_timeout=7200
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 

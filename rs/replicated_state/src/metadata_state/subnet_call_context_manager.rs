@@ -404,6 +404,15 @@ impl SubnetCallContextManager {
         self.canister_management_calls.stop_canister_calls_len()
     }
 
+    pub fn iter_stop_canister_calls(
+        &self,
+    ) -> impl Iterator<Item = (&StopCanisterCallId, &StopCanisterCall)> {
+        self.canister_management_calls
+            .stop_canister_call_manager
+            .stop_canister_calls
+            .iter()
+    }
+
     pub fn push_raw_rand_request(
         &mut self,
         request: Request,

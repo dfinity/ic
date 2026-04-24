@@ -1176,6 +1176,14 @@ impl Scheduler for SchedulerImpl {
             self.metrics.canister_ingress_queue_latencies.clone(),
         );
 
+        {
+            let _timer = self
+                .metrics
+                .remove_orphaned_stop_canister_calls_duration
+                .start_timer();
+            state.remove_orphaned_stop_canister_calls();
+        }
+
         // Round preparation.
         let mut scheduler_round_limits = {
             let _timer = self.metrics.round_preparation_duration.start_timer();
