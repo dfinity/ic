@@ -716,7 +716,15 @@ impl SystemTestGroup {
                 ("This is a bug".to_string(), BTreeSet::new()),
                 (
                     "panicked".to_string(),
-                    BTreeSet::from(["canister".to_string()]),
+                    BTreeSet::from([
+                        // Canisters are expected to panic:
+                        "canister".to_string(),
+                        // The canister_sandbox can panic due to receiving a signal which is expected in test environments:
+                        // (Note this also hides other panics from the canister_sandbox but matching on line number will be a maintenance nightmare).
+                        "rs/canister_sandbox/src/replica_controller/sandboxed_execution_controller.rs".to_string(),
+                        // For filtering out "Replica diverged at height" which is expected in malicious behavior tests:
+                        "rs/state_manager/src/lib.rs".to_string(),
+                    ]),
                 ),
             ]),
         }
