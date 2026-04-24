@@ -4637,7 +4637,7 @@ pub enum CallRequestVersion {
 }
 
 pub struct CallRequest {
-    pub effective_principal_id: CanisterId,
+    pub effective_principal_id: PrincipalId,
     pub bytes: Bytes,
     pub version: CallRequestVersion,
 }
@@ -4666,13 +4666,15 @@ impl Operation for CallRequest {
         let subnet = match self.version {
             CallRequestVersion::SubnetV4 => route(
                 pic,
-                EffectivePrincipal::SubnetId(SubnetId::from(self.effective_principal_id.get())),
+                EffectivePrincipal::SubnetId(SubnetId::from(self.effective_principal_id)),
                 false,
             )
             .map_err(PocketIcError::SubnetRequestRoutingError),
             _ => route(
                 pic,
-                EffectivePrincipal::CanisterId(self.effective_principal_id),
+                EffectivePrincipal::CanisterId(CanisterId::unchecked_from_principal(
+                    self.effective_principal_id,
+                )),
                 is_provisional_create_canister,
             )
             .map_err(PocketIcError::CanisterRequestRoutingError),
@@ -4754,10 +4756,9 @@ impl Operation for CallRequest {
                 };
 
                 let uri = match self.version {
-                    CallRequestVersion::SubnetV4 => format!(
-                        "/api/v4/subnet/{}/call",
-                        PrincipalId(self.effective_principal_id.get().into())
-                    ),
+                    CallRequestVersion::SubnetV4 => {
+                        format!("/api/v4/subnet/{}/call", self.effective_principal_id)
+                    }
                     _ => format!(
                         "/api/{}/canister/{}/call",
                         match self.version {
@@ -4766,7 +4767,7 @@ impl Operation for CallRequest {
                             CallRequestVersion::V4 => "v4",
                             CallRequestVersion::SubnetV4 => unreachable!(),
                         },
-                        PrincipalId(self.effective_principal_id.get().into())
+                        self.effective_principal_id
                     ),
                 };
 
@@ -4808,7 +4809,7 @@ impl Operation for CallRequest {
 }
 
 pub struct QueryRequest {
-    pub effective_principal_id: CanisterId,
+    pub effective_principal_id: PrincipalId,
     pub bytes: Bytes,
     pub version: query::Version,
 }
@@ -4832,13 +4833,15 @@ impl Operation for QueryRequest {
         let subnet = match self.version {
             query::Version::SubnetV3 => route(
                 pic,
-                EffectivePrincipal::SubnetId(SubnetId::from(self.effective_principal_id.get())),
+                EffectivePrincipal::SubnetId(SubnetId::from(self.effective_principal_id)),
                 false,
             )
             .map_err(PocketIcError::SubnetRequestRoutingError),
             _ => route(
                 pic,
-                EffectivePrincipal::CanisterId(self.effective_principal_id),
+                EffectivePrincipal::CanisterId(CanisterId::unchecked_from_principal(
+                    self.effective_principal_id,
+                )),
                 false,
             )
             .map_err(PocketIcError::CanisterRequestRoutingError),
@@ -4879,10 +4882,9 @@ impl Operation for QueryRequest {
                 .build_service();
 
                 let uri = match self.version {
-                    query::Version::SubnetV3 => format!(
-                        "/api/v3/subnet/{}/query",
-                        PrincipalId(self.effective_principal_id.get().into())
-                    ),
+                    query::Version::SubnetV3 => {
+                        format!("/api/v3/subnet/{}/query", self.effective_principal_id)
+                    }
                     _ => format!(
                         "/api/{}/canister/{}/query",
                         match self.version {
@@ -4890,7 +4892,7 @@ impl Operation for QueryRequest {
                             query::Version::V3 => "v3",
                             query::Version::SubnetV3 => unreachable!(),
                         },
-                        PrincipalId(self.effective_principal_id.get().into())
+                        self.effective_principal_id
                     ),
                 };
 
