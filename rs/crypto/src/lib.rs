@@ -232,7 +232,9 @@ impl CryptoComponentImpl<Csp> {
         crypto_component.collect_and_store_key_count_metrics(latest_registry_version);
         crypto_component
     }
+}
 
+impl<C: CryptoServiceProvider, R: CryptoComponentRng> CryptoComponentImpl<C, R> {
     /// Returns the `NodeId` of this crypto component.
     pub fn get_node_id(&self) -> NodeId {
         self.node_id
