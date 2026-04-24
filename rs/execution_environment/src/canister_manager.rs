@@ -354,7 +354,9 @@ impl CanisterManager {
         // Resolve current canister state and effective new settings. The
         // freeze-threshold cycles requirement (`threshold`) depends jointly on
         // memory allocation, compute allocation, and freezing threshold, so we
-        // compute it once here and reuse it across the per-setting checks below.
+        // compute it once here and reuse it across all checks below. Storage
+        // cycle reservation (which would change the reserved balance and
+        // invalidate `threshold`) is deferred to the end of this function.
         let canister_memory_usage = canister.memory_usage();
         let canister_message_memory_usage = canister.message_memory_usage();
         let canister_memory_allocation = canister.memory_allocation();
@@ -410,8 +412,8 @@ impl CanisterManager {
             }
         }
 
-        // Reserved cycles limit: validate and apply before memory reservation so
-        // that reserve_cycles below respects the new limit.
+        // Reserved cycles limit: validate and apply before the deferred
+        // reserve_cycles call at the end so that it respects the new limit.
         let reserved_balance_limit = settings
             .reserved_cycles_limit()
             .or(canister_reserved_balance_limit);
@@ -427,8 +429,7 @@ impl CanisterManager {
             canister.system_state.set_reserved_balance_limit(limit);
         }
 
-        // Memory allocation: validate subnet capacity and cycle balance, reserve
-        // storage cycles, and apply.
+        // Memory allocation: validate subnet capacity and cycle balance, and apply.
         let old_memory_bytes = canister_memory_allocation.allocated_bytes(canister_memory_usage);
         let new_memory_bytes = new_memory_allocation.allocated_bytes(canister_memory_usage);
         if new_memory_bytes >= old_memory_bytes {
@@ -476,26 +477,6 @@ impl CanisterManager {
                 cost_schedule,
             )
             .real();
-        canister
-            .system_state
-            .reserve_cycles(reservation_cycles)
-            .map_err(|err| match err {
-                ReservationError::InsufficientCycles {
-                    requested,
-                    available,
-                } => CanisterManagerError::InsufficientCyclesInMemoryAllocation {
-                    memory_allocation: new_memory_allocation,
-                    available,
-                    threshold: requested,
-                },
-                ReservationError::ReservedLimitExceed { requested, limit } => {
-                    CanisterManagerError::ReservedCyclesLimitExceededInMemoryAllocation {
-                        memory_allocation: new_memory_allocation,
-                        requested,
-                        limit,
-                    }
-                }
-            })?;
         if let Some(memory_allocation) = settings.memory_allocation() {
             canister.system_state.memory_allocation = memory_allocation;
         }
@@ -619,6 +600,29 @@ impl CanisterManager {
         if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
             canister.system_state.wasm_memory_limit = Some(wasm_memory_limit);
         }
+
+        // Memory allocation: reserve storage cycles now that all checks have
+        // passed, so that `threshold` above remained valid throughout.
+        canister
+            .system_state
+            .reserve_cycles(reservation_cycles)
+            .map_err(|err| match err {
+                ReservationError::InsufficientCycles {
+                    requested,
+                    available,
+                } => CanisterManagerError::InsufficientCyclesInMemoryAllocation {
+                    memory_allocation: new_memory_allocation,
+                    available,
+                    threshold: requested,
+                },
+                ReservationError::ReservedLimitExceed { requested, limit } => {
+                    CanisterManagerError::ReservedCyclesLimitExceededInMemoryAllocation {
+                        memory_allocation: new_memory_allocation,
+                        requested,
+                        limit,
+                    }
+                }
+            })?;
 
         Ok(())
     }
