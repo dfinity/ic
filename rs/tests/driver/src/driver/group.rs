@@ -344,11 +344,13 @@ fn check_unallowed_log_patterns(env: &TestEnv, patterns: &BTreeSet<String>) {
         return;
     }
 
+    let logger = env.logger();
+
     let group_setup = match GroupSetup::try_read_attribute(env) {
         Ok(g) => g,
         Err(e) => {
             info!(
-                env.logger(),
+                logger,
                 "GroupSetup attribute is not available ({e:?}) \
                  => skipping unallowed log pattern check."
             );
@@ -360,7 +362,7 @@ fn check_unallowed_log_patterns(env: &TestEnv, patterns: &BTreeSet<String>) {
         Ok(g) => g.0,
         Err(e) => {
             info!(
-                env.logger(),
+                logger,
                 "GroupStartTime attribute is not available ({e:?}) \
                  => skipping unallowed log pattern check."
             );
@@ -394,6 +396,11 @@ fn check_unallowed_log_patterns(env: &TestEnv, patterns: &BTreeSet<String>) {
 
     let url = "https://elasticsearch.testnet.dfinity.network/testnet-vector-push-*/_search?filter_path=hits.hits";
 
+    info!(
+        logger,
+        "Querying {url} for unallowed log patterns with body: {body} ..."
+    );
+
     let client = match reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(60))
@@ -402,7 +409,7 @@ fn check_unallowed_log_patterns(env: &TestEnv, patterns: &BTreeSet<String>) {
         Ok(c) => c,
         Err(e) => {
             info!(
-                env.logger(),
+                logger,
                 "Failed to build reqwest client for ES query ({e:?}) \
                  => skipping unallowed log pattern check."
             );
@@ -425,7 +432,7 @@ fn check_unallowed_log_patterns(env: &TestEnv, patterns: &BTreeSet<String>) {
         Ok(v) => v,
         Err(e) => {
             info!(
-                env.logger(),
+                logger,
                 "Failed to query ElasticSearch for unallowed log patterns ({e:?}) \
                  => skipping unallowed log pattern check."
             );
