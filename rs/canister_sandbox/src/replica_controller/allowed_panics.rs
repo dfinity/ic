@@ -1,4 +1,4 @@
-/// This module contains panics that are allowed by default to occur in logs in system-tests.
+//! This module contains panics that are allowed by default to occur in logs in system-tests.
 
 pub(crate) fn panic_launcher_exited_due_to_signal(pid: u32) -> ! {
     panic!(
