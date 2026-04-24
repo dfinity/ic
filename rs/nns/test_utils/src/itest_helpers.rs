@@ -826,7 +826,7 @@ pub async fn set_up_migration_canister(runtime: &'_ Runtime) -> Canister<'_> {
     canister
 }
 
-/// Runs a test in a StateMachine in a way that is (mostly) compatible with local_test_on_nns_subnet
+/// Runs a test in a StateMachine in a way that is (mostly) compatible with local_test_on_nns_subnet_with_mutations
 pub fn state_machine_test_on_nns_subnet<Fut, Out, F>(run: F) -> Out
 where
     Fut: Future<Output = Result<Out, String>>,
