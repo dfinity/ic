@@ -1,5 +1,6 @@
 use candid::{Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId, SnapshotId};
+use ic_crypto_sha2::Sha256;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_management_canister_types_private::CanisterSnapshotResponse;
 use ic_nervous_system_common::E8;
@@ -11,7 +12,7 @@ use ic_nervous_system_integration_tests::pocket_ic_helpers::{
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::pb::v1::ProposalStatus;
 use ic_nns_governance_api::{
-    MakeProposalRequest, Motion, ProposalActionRequest, SuccessfulProposalExecutionValue,
+    BatchOk, MakeProposalRequest, Motion, ProposalActionRequest, SuccessfulProposalExecutionValue,
     TakeCanisterSnapshotOk,
 };
 use icp_ledger::{AccountIdentifier, DEFAULT_TRANSFER_FEE, Tokens};
@@ -105,12 +106,9 @@ async fn test_canister_snapshot() {
         nns_url,
         vec![
             "propose-to-take-canister-snapshot".to_string(),
-            "--proposer".to_string(),
-            neuron_id.clone(),
-            "--canister-id".to_string(),
-            target_canister_id.to_string(),
-            "--summary".to_string(),
-            "Take a snapshot of the Ledger canister.".to_string(),
+            format!("--proposer={neuron_id}"),
+            format!("--canister-id={target_canister_id}"),
+            "--summary=Take a snapshot of the Ledger canister.".to_string(),
         ],
     );
     let first_proposal_id = extract_proposal_id(&ic_admin_output);
@@ -204,14 +202,13 @@ async fn test_canister_snapshot() {
         nns_url,
         vec![
             "propose-to-take-canister-snapshot".to_string(),
-            "--proposer".to_string(),
-            neuron_id.clone(),
-            "--canister-id".to_string(),
-            target_canister_id.to_string(),
-            "--replace-snapshot".to_string(),
-            hex::encode(first_snapshot.snapshot_id().as_slice()),
-            "--summary".to_string(),
-            "Take another snapshot and replace the first.".to_string(),
+            format!("--proposer={neuron_id}"),
+            format!("--canister-id={target_canister_id}"),
+            format!(
+                "--replace-snapshot={}",
+                hex::encode(first_snapshot.snapshot_id().as_slice())
+            ),
+            "--summary=Take another snapshot and replace the first.".to_string(),
         ],
     );
     let replace_proposal_id = extract_proposal_id(&stderr);
@@ -359,14 +356,14 @@ async fn test_canister_snapshot() {
         nns_url,
         vec![
             "propose-to-load-canister-snapshot".to_string(),
-            "--proposer".to_string(),
-            neuron_id,
-            "--canister-id".to_string(),
-            target_canister_id.to_string(),
-            "--snapshot-id".to_string(),
-            hex::encode(second_snapshot.snapshot_id().as_slice()),
-            "--summary".to_string(),
-            "Restore the Ledger canister to snapshot 2, rolling back the ICP transfer.".to_string(),
+            format!("--proposer={neuron_id}"),
+            format!("--canister-id={target_canister_id}"),
+            format!(
+                "--snapshot-id={}",
+                hex::encode(second_snapshot.snapshot_id().as_slice())
+            ),
+            "--summary=Restore the Ledger canister to snapshot 2, rolling back the ICP transfer."
+                .to_string(),
         ],
     );
     let load_canister_snapshot_proposal_id = extract_proposal_id(&stderr);
@@ -465,12 +462,9 @@ async fn test_governance_canister_snapshot() {
         nns_url,
         vec![
             "propose-to-take-canister-snapshot".to_string(),
-            "--proposer".to_string(),
-            neuron_id.clone(),
-            "--canister-id".to_string(),
-            target_canister_id.to_string(),
-            "--summary".to_string(),
-            "Take a snapshot of the Governance canister.".to_string(),
+            format!("--proposer={neuron_id}"),
+            format!("--canister-id={target_canister_id}"),
+            "--summary=Take a snapshot of the Governance canister.".to_string(),
         ],
     );
     let take_canister_snapshot_proposal_id = extract_proposal_id(&output);
@@ -543,14 +537,13 @@ async fn test_governance_canister_snapshot() {
         nns_url,
         vec![
             "propose-to-load-canister-snapshot".to_string(),
-            "--proposer".to_string(),
-            neuron_id,
-            "--canister-id".to_string(),
-            target_canister_id.to_string(),
-            "--snapshot-id".to_string(),
-            hex::encode(snapshot.snapshot_id().as_slice()),
-            "--summary".to_string(),
-            "Load the Governance snapshot, rolling back state.".to_string(),
+            format!("--proposer={neuron_id}"),
+            format!("--canister-id={target_canister_id}"),
+            format!(
+                "--snapshot-id={}",
+                hex::encode(snapshot.snapshot_id().as_slice())
+            ),
+            "--summary=Load the Governance snapshot, rolling back state.".to_string(),
         ],
     );
     let _load_proposal_id = extract_proposal_id(&output);
@@ -580,6 +573,150 @@ async fn test_governance_canister_snapshot() {
     );
 }
 
+/// Verifies the `--snapshot-before` flag in `ic-admin` when upgrading
+/// (via `propose-to-change-nns-canister`).
+#[tokio::test]
+async fn test_snapshot_before_nns_canister_upgrade() {
+    // Step 1: Prepare the world.
+
+    let mut pocket_ic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_sns_subnet()
+        .build_async()
+        .await;
+
+    let mut nns_installer = NnsInstaller::default();
+    nns_installer.with_current_nns_canister_versions();
+    nns_installer.with_test_governance_canister();
+    nns_installer.install(&pocket_ic).await;
+
+    let endpoint = pocket_ic.make_live(None).await;
+    let nns_url = endpoint.as_ref();
+    let neuron_id = TEST_NEURON_1_ID.to_string();
+
+    // Scenario A: Snapshot before upgrading without replacing an old snapshot
+    // (since there are none yet).
+
+    // Step 2A: Call the code under test.
+
+    // Step 2A.1: Prepare proposal ingredients.
+    let target_canister_id = LEDGER_CANISTER_ID;
+    let wasm_path =
+        env::var("LEDGER_CANISTER_WASM_PATH").expect("LEDGER_CANISTER_WASM_PATH not set");
+    let wasm_bytes = std::fs::read(&wasm_path).expect("Failed to read Ledger wasm");
+    let wasm_sha256 = hex::encode(Sha256::hash(&wasm_bytes));
+
+    // Step 2A.2: Submit the proposal, crucially, via `ic-admin`.`
+    let ic_admin_output = run_ic_admin(
+        nns_url,
+        vec![
+            "propose-to-change-nns-canister".to_string(),
+            "--snapshot-before".to_string(), // <-- THIS IS THE INTERESTING PART RIGHT HERE!
+            format!("--proposer={neuron_id}"),
+            format!("--canister-id={target_canister_id}"),
+            "--mode=upgrade".to_string(),
+            format!("--wasm-module-path={wasm_path}"),
+            format!("--wasm-module-sha256={wasm_sha256}"),
+            "--summary=Snapshot Ledger then upgrade it.".to_string(),
+        ],
+    );
+    let no_replace_snapshot_proposal_id = extract_proposal_id(&ic_admin_output);
+
+    // Step 3A: Verify results.
+
+    // Step 3A.1: Proposal claims to be successfully executed.
+    let proposal_info =
+        nns::governance::wait_for_proposal_execution(&pocket_ic, no_replace_snapshot_proposal_id)
+            .await
+            .unwrap();
+    assert_eq!(
+        ProposalStatus::try_from(proposal_info.status),
+        Ok(ProposalStatus::Executed),
+        "{proposal_info:#?}",
+    );
+
+    // Step 3A.2: success_value carries the new snapshot's ID.
+    let no_replace_snapshot_id_bytes =
+        assert_snapshot_before_upgrade_success_value(&proposal_info.success_value);
+    let no_replace_snapshot_snapshot_id_hex = hex::encode(&no_replace_snapshot_id_bytes);
+
+    // Step 3A.3: Verify the snapshot was created (corroborate success_value via list_canister_snapshots).
+    let snapshots: Vec<CanisterSnapshotResponse> = management::list_canister_snapshots(
+        &pocket_ic,
+        target_canister_id,
+        ROOT_CANISTER_ID.into(),
+    )
+    .await;
+    assert_eq!(snapshots.len(), 1, "{snapshots:#?}");
+    assert_eq!(
+        snapshots[0].id.get_canister_id(),
+        target_canister_id,
+        "{snapshots:#?}",
+    );
+    assert_eq!(
+        snapshots[0].snapshot_id().as_slice(),
+        no_replace_snapshot_id_bytes,
+        "{snapshots:#?}",
+    );
+
+    // Scenario B: Replace existing snapshot, using
+    // --snapshot-before=replace=${OLD_SNAPSHOT_ID}
+
+    // Step 2B: Run code under test.
+
+    let ic_admin_output = run_ic_admin(
+        nns_url,
+        vec![
+            "propose-to-change-nns-canister".to_string(),
+            // THE INTERESTING PART IS HERE vvv
+            format!("--snapshot-before=replace={no_replace_snapshot_snapshot_id_hex}"),
+            format!("--proposer={neuron_id}"),
+            format!("--canister-id={target_canister_id}"),
+            "--mode=upgrade".to_string(),
+            format!("--wasm-module-path={wasm_path}"),
+            format!("--wasm-module-sha256={wasm_sha256}"),
+            "--summary=Snapshot Ledger (replacing first snapshot) then upgrade it.".to_string(),
+        ],
+    );
+    let replace_snapshot_proposal_id = extract_proposal_id(&ic_admin_output);
+    let replace_snapshot_proposal_info =
+        nns::governance::wait_for_proposal_execution(&pocket_ic, replace_snapshot_proposal_id)
+            .await
+            .unwrap();
+
+    // Step 3B: Verify results.
+
+    assert_eq!(
+        ProposalStatus::try_from(replace_snapshot_proposal_info.status),
+        Ok(ProposalStatus::Executed),
+        "{replace_snapshot_proposal_info:#?}",
+    );
+
+    // success_value carries the replacement snapshot's ID.
+    let replace_snapshot_id_bytes =
+        assert_snapshot_before_upgrade_success_value(&replace_snapshot_proposal_info.success_value);
+
+    // The replacement snapshot is a new one — the original was clobbered.
+    assert_ne!(
+        replace_snapshot_id_bytes, no_replace_snapshot_id_bytes,
+        "{replace_snapshot_proposal_info:#?}",
+    );
+
+    // Corroborate via list_canister_snapshots: still only 1 snapshot, with the new ID.
+    let snapshots: Vec<CanisterSnapshotResponse> = management::list_canister_snapshots(
+        &pocket_ic,
+        target_canister_id,
+        ROOT_CANISTER_ID.into(),
+    )
+    .await;
+    assert_eq!(snapshots.len(), 1, "{snapshots:#?}");
+    assert_eq!(
+        snapshots[0].snapshot_id().as_slice(),
+        replace_snapshot_id_bytes,
+        "{snapshots:#?}",
+    );
+}
+
 /// Parses the proposal ID from ic-admin's stderr output, which looks like
 /// "response: Ok(proposal 3)".
 fn extract_proposal_id(ic_admin_output: &str) -> u64 {
@@ -588,4 +725,25 @@ fn extract_proposal_id(ic_admin_output: &str) -> u64 {
         panic!("Expected proposal response in ic-admin output:\n{ic_admin_output}")
     });
     u64::from_str(&captures[1]).unwrap()
+}
+
+/// Asserts that `success_value` has the shape expected from a
+/// `Batch([TakeCanisterSnapshot, InstallCode])` proposal, and returns the
+/// snapshot ID bytes from the `TakeCanisterSnapshot` sub-result.
+#[track_caller]
+fn assert_snapshot_before_upgrade_success_value(
+    success_value: &Option<SuccessfulProposalExecutionValue>,
+) -> Vec<u8> {
+    let sub_results = match success_value {
+        Some(SuccessfulProposalExecutionValue::Batch(BatchOk { sub_results })) => sub_results,
+        other => panic!("Expected Batch success_value, got: {other:#?}"),
+    };
+    assert_eq!(sub_results.len(), 2, "{sub_results:#?}");
+    assert_eq!(sub_results[1], None, "{sub_results:#?}"); // InstallCode produces no value.
+    match sub_results[0].as_ref() {
+        Some(SuccessfulProposalExecutionValue::TakeCanisterSnapshot(TakeCanisterSnapshotOk {
+            snapshot_id,
+        })) => snapshot_id.clone(),
+        other => panic!("Expected TakeCanisterSnapshot sub-result, got: {other:#?}"),
+    }
 }

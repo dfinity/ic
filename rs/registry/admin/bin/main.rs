@@ -14,6 +14,7 @@ use helpers::{
     parse_proposal_url, shortened_pid_string, shortened_subnet_string,
 };
 use ic_admin::get_routing_table;
+use ic_base_types::SnapshotId;
 use ic_btc_interface::{Fees, Flag, SetConfigRequest};
 use ic_canister_client::{Agent, Sender};
 use ic_canister_client_sender::SigKeys;
@@ -40,10 +41,11 @@ use ic_nervous_system_root::change_canister::{
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::{
-    AddOrRemoveNodeProvider, CanisterSettings, CreateServiceNervousSystem, GovernanceError,
-    InstallCodeRequest, LoadCanisterSnapshot, MakeProposalRequest, ManageNeuronCommandRequest,
-    ManageNeuronRequest, NnsFunction, NodeProvider, ProposalActionRequest, RewardNodeProviders,
-    StopOrStartCanister, TakeCanisterSnapshot, UpdateCanisterSettings,
+    AddOrRemoveNodeProvider, BatchRequest, CanisterSettings, CreateServiceNervousSystem,
+    GovernanceError, InstallCodeRequest, LoadCanisterSnapshot, MakeProposalRequest,
+    ManageNeuronCommandRequest, ManageNeuronRequest, NnsFunction, NodeProvider,
+    ProposalActionRequest, RewardNodeProviders, StopOrStartCanister, TakeCanisterSnapshot,
+    UpdateCanisterSettings,
     add_or_remove_node_provider::Change,
     bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
     canister_settings::{
@@ -1392,6 +1394,15 @@ struct ProposeToChangeNnsCanisterCmd {
     /// The sha256 of the arg binary file.
     #[clap(long)]
     arg_sha256: Option<String>,
+
+    /// If set, a canister snapshot is taken before installing the new wasm.
+    /// The proposal becomes a Batch: [TakeCanisterSnapshot, InstallCode].
+    ///
+    /// Optionally, an existing snapshot can be replaced:
+    ///   --snapshot-before                   (no replace)
+    ///   --snapshot-before=replace=<hex-id>  (replace that snapshot)
+    #[clap(long, num_args = 0..=1, default_missing_value = "")]
+    snapshot_before: Option<String>,
 }
 
 #[async_trait]
@@ -1473,8 +1484,46 @@ impl ProposalAction for ProposeToChangeNnsCanisterCmd {
             wasm_module,
             arg,
         };
+        let install_code = ProposalActionRequest::InstallCode(install_code);
 
-        ProposalActionRequest::InstallCode(install_code)
+        let Some(ref snapshot_before) = self.snapshot_before else {
+            return install_code;
+        };
+
+        let replace_snapshot = match snapshot_before.as_str() {
+            "" => None,
+            // If the argument to --snapshot-before is not empty, then it must be of the form
+            // replace=${snapshot_id}, which is handled here.
+            snapshot_before => {
+                let replace_snapshot = snapshot_before.strip_prefix("replace=").unwrap_or_else(|| {
+                    panic!("--snapshot-before expected \"replace=<hex-id>\", got {snapshot_before:?}")
+                });
+
+                assert!(
+                    !replace_snapshot.is_empty(),
+                    "--snapshot-before: replace= requires a non-empty snapshot ID"
+                );
+
+                let replace_snapshot = hex::decode(replace_snapshot).unwrap_or_else(|e| {
+                    panic!("--snapshot-before: invalid hex snapshot ID {replace_snapshot:?}: {e}")
+                });
+
+                SnapshotId::try_from(&replace_snapshot)
+                    .unwrap_or_else(|e| panic!("--snapshot-before: {e:?}"));
+
+                Some(replace_snapshot)
+            }
+        };
+
+        let take_snapshot = TakeCanisterSnapshot {
+            canister_id,
+            replace_snapshot,
+        };
+        let take_snapshot = ProposalActionRequest::TakeCanisterSnapshot(take_snapshot);
+
+        ProposalActionRequest::Batch(BatchRequest {
+            actions: Some(vec![take_snapshot, install_code]),
+        })
     }
 }
 
