@@ -321,8 +321,9 @@ fn get_or_create_env(gctx: GroupContext, task_id: TaskId) -> Result<TestEnv> {
     process_ctx.group_context.create_test_env(&task_id.name())
 }
 
-/// Query ElasticSearch for IC log lines produced by the Farm group of the current test that
-/// contain any of the provided unallowed patterns (as substrings of the `MESSAGE` field).
+/// Query ElasticSearch for IC log lines produced by the Farm group of the current test whose
+/// `MESSAGE` field matches any of the provided unallowed patterns using ElasticSearch phrase
+/// matching semantics (`match_phrase`).
 /// Panics if at least one matching log line is found. Transport / parse errors are logged
 /// and treated as a soft-skip, matching the behaviour of the metrics teardown.
 fn check_unallowed_log_patterns(
@@ -373,6 +374,22 @@ fn check_unallowed_log_patterns(
 
     let url = "https://elasticsearch.testnet.dfinity.network/testnet-vector-push-*/_search?filter_path=hits.hits";
 
+    let client = match reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(60))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            info!(
+                env.logger(),
+                "Failed to build reqwest client for ES query ({e:?}) \
+                 => skipping unallowed log pattern check."
+            );
+            return;
+        }
+    };
+
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -389,7 +406,7 @@ fn check_unallowed_log_patterns(
     };
 
     let response: Result<serde_json::Value, reqwest::Error> = rt.block_on(async {
-        reqwest::Client::new()
+        client
             .post(url)
             .json(&body)
             .send()
@@ -445,32 +462,57 @@ fn check_unallowed_log_patterns(
         }
     }
 
-    if matches_by_pattern.is_empty() {
-        return;
-    }
-
     const MAX_SAMPLES_PER_PATTERN: usize = 3;
     let mut report = String::new();
-    for (pattern, lines) in &matches_by_pattern {
+    if matches_by_pattern.is_empty() {
         report.push_str(&format!(
-            "\n- Pattern `{pattern}`: {} match(es)\n",
-            lines.len()
+            "\n- ElasticSearch returned {} hit(s), but none could be attributed via local MESSAGE substring matching.\n",
+            hits.len()
         ));
-        for line in lines.iter().take(MAX_SAMPLES_PER_PATTERN) {
-            report.push_str(&format!("    {line}\n"));
+        for hit in hits.iter().take(MAX_SAMPLES_PER_PATTERN) {
+            let source = match hit.get("_source") {
+                Some(s) => s,
+                None => {
+                    report.push_str("    [missing _source]\n");
+                    continue;
+                }
+            };
+            let message = source.get("MESSAGE").and_then(|m| m.as_str()).unwrap_or("");
+            let timestamp = source
+                .get("timestamp")
+                .and_then(|t| t.as_str())
+                .unwrap_or("");
+            let node = source.get("ic_node").and_then(|n| n.as_str()).unwrap_or("");
+            report.push_str(&format!("    [{timestamp} {node}] {message}\n"));
         }
-        if lines.len() > MAX_SAMPLES_PER_PATTERN {
+        if hits.len() > MAX_SAMPLES_PER_PATTERN {
             report.push_str(&format!(
-                "    ... and {} more\n",
-                lines.len() - MAX_SAMPLES_PER_PATTERN
+                "    ... and {} more raw hit(s)\n",
+                hits.len() - MAX_SAMPLES_PER_PATTERN
             ));
+        }
+    } else {
+        for (pattern, lines) in &matches_by_pattern {
+            report.push_str(&format!(
+                "\n- Pattern `{pattern}`: {} match(es)\n",
+                lines.len()
+            ));
+            for line in lines.iter().take(MAX_SAMPLES_PER_PATTERN) {
+                report.push_str(&format!("    {line}\n"));
+            }
+            if lines.len() > MAX_SAMPLES_PER_PATTERN {
+                report.push_str(&format!(
+                    "    ... and {} more\n",
+                    lines.len() - MAX_SAMPLES_PER_PATTERN
+                ));
+            }
         }
     }
 
     panic!(
         "Found unallowed log patterns in IC logs for group `{group_name}`:{report}\n\
          If these patterns are expected in the test, create `SystemTestGroup` with \
-         `remove_unallowed_log_patterns(\"<pattern>\")` or `remove_all_unallowed_log_patterns()`.",
+         `remove_unallowed_log_pattern(\"<pattern>\")` or `remove_all_unallowed_log_patterns()`.",
     );
 }
 
@@ -704,7 +746,7 @@ impl SystemTestGroup {
 
     /// Remove a single unallowed log pattern previously registered (either by default in
     /// `SystemTestGroup::new` or via `add_unallowed_log_pattern`).
-    pub fn remove_unallowed_log_patterns(mut self, pattern: &str) -> Self {
+    pub fn remove_unallowed_log_pattern(mut self, pattern: &str) -> Self {
         self.unallowed_log_patterns.remove(pattern);
         self
     }
@@ -943,19 +985,22 @@ impl SystemTestGroup {
                 None
             };
 
-        let assert_no_unallowed_log_patterns_fn: Option<(String, Box<dyn PotSetupFn>)> =
-            if self.with_farm && !self.unallowed_log_patterns.is_empty() {
-                let unallowed_log_patterns = self.unallowed_log_patterns.clone();
-                let teardown_fn = move |env: TestEnv| {
-                    check_unallowed_log_patterns(&env, &unallowed_log_patterns, start_time);
-                };
-                Some((
-                    ASSERT_NO_UNALLOWED_LOG_PATTERNS_TASK_NAME.to_string(),
-                    Box::new(teardown_fn),
-                ))
-            } else {
-                None
+        let assert_no_unallowed_log_patterns_fn: Option<(String, Box<dyn PotSetupFn>)> = if self
+            .with_farm
+            && group_ctx.logs_enabled
+            && !self.unallowed_log_patterns.is_empty()
+        {
+            let unallowed_log_patterns = self.unallowed_log_patterns.clone();
+            let teardown_fn = move |env: TestEnv| {
+                check_unallowed_log_patterns(&env, &unallowed_log_patterns, start_time);
             };
+            Some((
+                ASSERT_NO_UNALLOWED_LOG_PATTERNS_TASK_NAME.to_string(),
+                Box::new(teardown_fn),
+            ))
+        } else {
+            None
+        };
 
         let teardown_plan: Vec<Plan<Box<dyn Task>>> = self
             .teardowns
