@@ -1012,7 +1012,7 @@ pub mod internal {
         fn create_transcript(
             &self,
             config: &NiDkgConfig,
-            verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
+            verified_dealings: BTreeMap<NodeId, NiDkgDealing>,
         ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
             NiDkgAlgorithm::create_transcript(&self.crypto_component, config, verified_dealings)
         }

@@ -253,12 +253,13 @@ pub(super) fn create_summary_payload(
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
 ) -> Result<DkgSummary, DkgPayloadCreationError> {
-    let (all_dealings, _) = utils::get_dkg_dealings(pool_reader, parent);
+    let (mut all_dealings, _) = utils::get_dkg_dealings(pool_reader, parent);
     let mut transcripts_for_remote_subnets = BTreeMap::new();
     let mut next_transcripts = BTreeMap::new();
     // Try to create transcripts from the last round.
     for (dkg_id, config) in last_summary.configs.iter() {
-        match create_transcript(crypto, config, &all_dealings, &logger) {
+        let dealings = all_dealings.remove(dkg_id).unwrap_or_default();
+        match create_transcript(crypto, config, dealings) {
             Ok(transcript) => {
                 let previous_value_found = if dkg_id.target_subnet == NiDkgTargetSubnet::Local {
                     next_transcripts
@@ -381,12 +382,8 @@ pub(super) fn create_summary_payload(
 fn create_transcript(
     crypto: &dyn ConsensusCrypto,
     config: &NiDkgConfig,
-    all_dealings: &BTreeMap<NiDkgId, BTreeMap<NodeId, NiDkgDealing>>,
-    _logger: &ReplicaLogger,
+    dealings: BTreeMap<NodeId, NiDkgDealing>,
 ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
-    let no_dealings = BTreeMap::new();
-    let dealings = all_dealings.get(config.dkg_id()).unwrap_or(&no_dealings);
-
     ic_interfaces::crypto::NiDkgAlgorithm::create_transcript(crypto, config, dealings)
 }
 

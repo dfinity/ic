@@ -23,9 +23,9 @@ mod creation {
     pub fn create_transcript<C: NiDkgCspClient>(
         ni_dkg_csp_client: &C,
         config: &NiDkgConfig,
-        verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
+        verified_dealings: BTreeMap<NodeId, NiDkgDealing>,
     ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
-        let verified_dealings = NiDkgDealings::new(verified_dealings.clone())?;
+        let verified_dealings = NiDkgDealings::new(verified_dealings)?;
         ensure_sufficiently_many_dealings(config, &verified_dealings)?;
         ensure_dealing_node_ids_in_dealers(config.dealers(), &verified_dealings);
         let csp_transcript = create_csp_transcript(ni_dkg_csp_client, config, verified_dealings)?;

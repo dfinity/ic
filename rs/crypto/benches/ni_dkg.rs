@@ -153,7 +153,12 @@ fn bench_create_transcript<M: Measurement, R: Rng + CryptoRng>(
                 (config, dealings, creator_node_id, &env.crypto_components)
             },
             |(config, dealings, creator_node_id, crypto_components)| {
-                create_transcript(config, crypto_components, dealings, **creator_node_id)
+                create_transcript(
+                    config,
+                    crypto_components,
+                    dealings.clone(),
+                    **creator_node_id,
+                )
             },
             SmallInput,
         )

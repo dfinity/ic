@@ -625,7 +625,7 @@ mockall::mock! {
 
         pub fn ni_dkg_create_transcript(
             &self, config: &NiDkgConfig,
-            verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
+            verified_dealings: BTreeMap<NodeId, NiDkgDealing>,
         ) -> Result<NiDkgTranscript, DkgCreateTranscriptError>;
 
         pub fn ni_dkg_load_transcript(
@@ -847,7 +847,7 @@ impl NiDkgAlgorithm for MockCrypto {
     fn create_transcript(
         &self,
         config: &NiDkgConfig,
-        verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
+        verified_dealings: BTreeMap<NodeId, NiDkgDealing>,
     ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
         self.ni_dkg_create_transcript(config, verified_dealings)
     }

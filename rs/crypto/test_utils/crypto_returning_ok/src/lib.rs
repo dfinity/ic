@@ -217,7 +217,7 @@ impl NiDkgAlgorithm for CryptoReturningOk {
     fn create_transcript(
         &self,
         config: &NiDkgConfig,
-        _verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
+        _verified_dealings: BTreeMap<NodeId, NiDkgDealing>,
     ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
         let mut transcript = dummy_transcript_for_tests_with_params(
             config.receivers().get().clone().into_iter().collect(),
