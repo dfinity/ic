@@ -1,4 +1,5 @@
 use crate::{
+    ai_node::AiNodeManager,
     args::OrchestratorArgs,
     boundary_node::BoundaryNodeManager,
     catch_up_package_provider::{CatchUpPackageProvider, LocalCUPReader},
@@ -80,6 +81,7 @@ pub struct Orchestrator {
     registration: Option<NodeRegistration>,
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     ipv4_configurator: Option<Ipv4Configurator>,
+    ai_node_manager: Option<AiNodeManager>,
     task_tracker: TaskTracker,
 }
 
@@ -347,7 +349,7 @@ impl Orchestrator {
         let ipv4_configurator = Ipv4Configurator::new(
             Arc::clone(&registry),
             Arc::clone(&metrics),
-            ic_binary_directory,
+            ic_binary_directory.clone(),
             logger.clone(),
         );
 
@@ -355,6 +357,13 @@ impl Orchestrator {
             Arc::clone(&registry),
             Arc::clone(&metrics),
             node_id,
+            logger.clone(),
+        );
+
+        let ai_node_manager = AiNodeManager::new(
+            Arc::clone(&registry),
+            node_id,
+            ic_binary_directory,
             logger.clone(),
         );
 
@@ -385,6 +394,7 @@ impl Orchestrator {
             registration: Some(registration),
             subnet_assignment,
             ipv4_configurator: Some(ipv4_configurator),
+            ai_node_manager: Some(ai_node_manager),
             task_tracker,
         })
     }
@@ -565,6 +575,7 @@ impl Orchestrator {
             mut ssh_access_manager: SshAccessManager,
             mut firewall: Firewall,
             mut ipv4_configurator: Ipv4Configurator,
+            mut ai_node_manager: AiNodeManager,
             cancellation_token: CancellationToken,
         ) {
             loop {
@@ -588,6 +599,8 @@ impl Orchestrator {
                 firewall.check_and_update();
                 // Check and update the network configuration
                 ipv4_configurator.check_and_update().await;
+                // Check if this node should be running ollama based on AiNodeRecord
+                ai_node_manager.check_and_update().await;
                 tokio::select! {
                     _ = tokio::time::sleep(CHECK_INTERVAL_SECS) => {}
                     _ = cancellation_token.cancelled() => break
@@ -623,10 +636,11 @@ impl Orchestrator {
             );
         }
 
-        if let (Some(ssh), Some(firewall), Some(ipv4_configurator)) = (
+        if let (Some(ssh), Some(firewall), Some(ipv4_configurator), Some(ai_node_manager)) = (
             self.ssh_access_manager.take(),
             self.firewall.take(),
             self.ipv4_configurator.take(),
+            self.ai_node_manager.take(),
         ) {
             self.task_tracker.spawn(
                 "ssh_key_firewall_rules_ipv4_config",
@@ -635,6 +649,7 @@ impl Orchestrator {
                     ssh,
                     firewall,
                     ipv4_configurator,
+                    ai_node_manager,
                     cancellation_token.clone(),
                 ),
             );

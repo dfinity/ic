@@ -56,6 +56,7 @@ def component_files(mode):
         # Dockerfile keeps it off. Start it on demand with:
         #   systemctl enable --now ollama.service
         Label("guestos/ollama/ollama.service"): "/etc/systemd/system/ollama.service",
+        Label("guestos/ollama/manage-ollama.sh"): "/opt/ic/bin/manage-ollama.sh",
         Label("guestos/remote-attestation-server.service"): "/etc/systemd/system/remote-attestation-server.service",
         Label("guestos/generate-ic-config/generate-ic-config.service"): "/etc/systemd/system/generate-ic-config.service",
         Label("guestos/share/ic-boundary.env"): "/opt/ic/share/ic-boundary.env",
