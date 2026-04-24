@@ -1814,9 +1814,7 @@ impl From<pb::SuccessfulProposalExecutionValue> for Option<api::SuccessfulPropos
             ProposalType::TakeCanisterSnapshot(ok) => {
                 api::SuccessfulProposalExecutionValue::TakeCanisterSnapshot(ok.into())
             }
-            ProposalType::Batch(ok) => {
-                api::SuccessfulProposalExecutionValue::Batch(ok.into())
-            }
+            ProposalType::Batch(ok) => api::SuccessfulProposalExecutionValue::Batch(ok.into()),
         };
 
         Some(result)
