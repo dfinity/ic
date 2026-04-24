@@ -39,7 +39,11 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use slog::{Logger, debug, info, trace};
 use std::path::PathBuf;
-use std::{collections::BTreeMap, iter::once, time::Duration};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    iter::once,
+    time::Duration,
+};
 use tokio::runtime::{Builder, Handle, Runtime};
 
 const DEFAULT_TIMEOUT_PER_TEST: Duration = Duration::from_secs(60 * 10); // 10 minutes
@@ -51,6 +55,7 @@ const SETUP_TASK_NAME: &str = "setup";
 const TEARDOWN_TASK_NAME: &str = "teardown";
 const ASSERT_NO_METRICS_ERRORS_TASK_NAME: &str = "assert_no_metrics_errors";
 const ASSERT_NO_REPLICA_RESTARTS_TASK_NAME: &str = "assert_no_replica_restarts";
+const ASSERT_NO_UNALLOWED_LOG_PATTERNS_TASK_NAME: &str = "assert_no_unallowed_log_patterns";
 const LIFETIME_GUARD_TASK_PREFIX: &str = "lifetime_guard_";
 
 #[derive(Debug, Parser)]
@@ -316,6 +321,159 @@ fn get_or_create_env(gctx: GroupContext, task_id: TaskId) -> Result<TestEnv> {
     process_ctx.group_context.create_test_env(&task_id.name())
 }
 
+/// Query ElasticSearch for IC log lines produced by the Farm group of the current test that
+/// contain any of the provided unallowed patterns (as substrings of the `MESSAGE` field).
+/// Panics if at least one matching log line is found. Transport / parse errors are logged
+/// and treated as a soft-skip, matching the behaviour of the metrics teardown.
+fn check_unallowed_log_patterns(
+    env: &TestEnv,
+    patterns: &BTreeSet<String>,
+    start_time: chrono::DateTime<Utc>,
+) {
+    if patterns.is_empty() {
+        return;
+    }
+
+    let group_setup = match GroupSetup::try_read_attribute(env) {
+        Ok(g) => g,
+        Err(e) => {
+            info!(
+                env.logger(),
+                "GroupSetup attribute is not available ({e:?}) \
+                 => skipping unallowed log pattern check."
+            );
+            return;
+        }
+    };
+    let group_name = group_setup.infra_group_name;
+    let end_time = Utc::now();
+
+    let should: Vec<serde_json::Value> = patterns
+        .iter()
+        .map(|p| serde_json::json!({ "match_phrase": { "MESSAGE": p } }))
+        .collect();
+
+    let body = serde_json::json!({
+        "size": 100,
+        "query": {
+            "bool": {
+                "must": [
+                    { "match_phrase": { "ic": group_name } },
+                    { "range": { "timestamp": {
+                        "gte": start_time.to_rfc3339(),
+                        "lte": end_time.to_rfc3339(),
+                    }}},
+                ],
+                "should": should,
+                "minimum_should_match": 1,
+            }
+        },
+        "_source": ["timestamp", "ic_node", "MESSAGE"],
+    });
+
+    let url = "https://elasticsearch.testnet.dfinity.network/testnet-vector-push-*/_search?filter_path=hits.hits";
+
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(e) => {
+            info!(
+                env.logger(),
+                "Failed to build tokio runtime for ES query ({e:?}) \
+                 => skipping unallowed log pattern check."
+            );
+            return;
+        }
+    };
+
+    let response: Result<serde_json::Value, reqwest::Error> = rt.block_on(async {
+        reqwest::Client::new()
+            .post(url)
+            .json(&body)
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<serde_json::Value>()
+            .await
+    });
+
+    let value = match response {
+        Ok(v) => v,
+        Err(e) => {
+            info!(
+                env.logger(),
+                "Failed to query ElasticSearch for unallowed log patterns ({e:?}) \
+                 => skipping unallowed log pattern check."
+            );
+            return;
+        }
+    };
+
+    let hits = value
+        .get("hits")
+        .and_then(|h| h.get("hits"))
+        .and_then(|h| h.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    if hits.is_empty() {
+        return;
+    }
+
+    // Group each hit to the pattern(s) it contains.
+    let mut matches_by_pattern: BTreeMap<&String, Vec<String>> = BTreeMap::new();
+    for hit in &hits {
+        let source = match hit.get("_source") {
+            Some(s) => s,
+            None => continue,
+        };
+        let message = source.get("MESSAGE").and_then(|m| m.as_str()).unwrap_or("");
+        let timestamp = source
+            .get("timestamp")
+            .and_then(|t| t.as_str())
+            .unwrap_or("");
+        let node = source.get("ic_node").and_then(|n| n.as_str()).unwrap_or("");
+        for pattern in patterns {
+            if message.contains(pattern) {
+                matches_by_pattern
+                    .entry(pattern)
+                    .or_default()
+                    .push(format!("[{timestamp} {node}] {message}"));
+            }
+        }
+    }
+
+    if matches_by_pattern.is_empty() {
+        return;
+    }
+
+    const MAX_SAMPLES_PER_PATTERN: usize = 3;
+    let mut report = String::new();
+    for (pattern, lines) in &matches_by_pattern {
+        report.push_str(&format!(
+            "\n- Pattern `{pattern}`: {} match(es)\n",
+            lines.len()
+        ));
+        for line in lines.iter().take(MAX_SAMPLES_PER_PATTERN) {
+            report.push_str(&format!("    {line}\n"));
+        }
+        if lines.len() > MAX_SAMPLES_PER_PATTERN {
+            report.push_str(&format!(
+                "    ... and {} more\n",
+                lines.len() - MAX_SAMPLES_PER_PATTERN
+            ));
+        }
+    }
+
+    panic!(
+        "Found unallowed log patterns in IC logs for group `{group_name}`:{report}\n\
+         If these patterns are expected in the test, create `SystemTestGroup` with \
+         `remove_unallowed_log_patterns(\"<pattern>\")` or `remove_all_unallowed_log_patterns()`.",
+    );
+}
+
 pub enum SystemTestSubGroup {
     Multiple {
         tasks: Vec<SystemTestSubGroup>,
@@ -427,6 +585,7 @@ pub struct SystemTestGroup {
     with_farm: bool,
     replica_metrics_to_check: BTreeMap<&'static str, /*max value of the metric =*/ u64>,
     orchestrator_metrics_to_check: BTreeMap<&'static str, /*max value of the metric =*/ u64>,
+    unallowed_log_patterns: BTreeSet<String>,
 }
 
 impl Default for SystemTestGroup {
@@ -479,6 +638,10 @@ impl SystemTestGroup {
                 ("orchestrator_tasks_failed_total", 0),
                 ("orchestrator_replica_process_start_attempts_total", 1),
             ]),
+            unallowed_log_patterns: BTreeSet::from([
+                "This is a bug".to_string(),
+                "panicked".to_string(),
+            ]),
         }
     }
 
@@ -528,6 +691,28 @@ impl SystemTestGroup {
         self.replica_metrics_to_check = BTreeMap::new();
         self.orchestrator_metrics_to_check = BTreeMap::new();
 
+        self
+    }
+
+    /// Add a substring pattern that must not appear in any IC log line collected during the
+    /// test. After the test, ElasticSearch is queried for the pattern and the test fails if
+    /// at least one matching log line is found.
+    pub fn add_unallowed_log_pattern(mut self, pattern: impl Into<String>) -> Self {
+        self.unallowed_log_patterns.insert(pattern.into());
+        self
+    }
+
+    /// Remove a single unallowed log pattern previously registered (either by default in
+    /// `SystemTestGroup::new` or via `add_unallowed_log_pattern`).
+    pub fn remove_unallowed_log_patterns(mut self, pattern: &str) -> Self {
+        self.unallowed_log_patterns.remove(pattern);
+        self
+    }
+
+    /// Remove all unallowed log patterns, disabling the ElasticSearch log-pattern check
+    /// entirely for this group.
+    pub fn remove_all_unallowed_log_patterns(mut self) -> Self {
+        self.unallowed_log_patterns = BTreeSet::new();
         self
     }
 
@@ -758,12 +943,27 @@ impl SystemTestGroup {
                 None
             };
 
+        let assert_no_unallowed_log_patterns_fn: Option<(String, Box<dyn PotSetupFn>)> =
+            if self.with_farm && !self.unallowed_log_patterns.is_empty() {
+                let unallowed_log_patterns = self.unallowed_log_patterns.clone();
+                let teardown_fn = move |env: TestEnv| {
+                    check_unallowed_log_patterns(&env, &unallowed_log_patterns, start_time);
+                };
+                Some((
+                    ASSERT_NO_UNALLOWED_LOG_PATTERNS_TASK_NAME.to_string(),
+                    Box::new(teardown_fn),
+                ))
+            } else {
+                None
+            };
+
         let teardown_plan: Vec<Plan<Box<dyn Task>>> = self
             .teardowns
             .into_iter()
             .enumerate()
             .map(|(i, teardown)| (format!("{TEARDOWN_TASK_NAME}_{i}"), teardown))
             .chain(assert_no_metric_errors_fn)
+            .chain(assert_no_unallowed_log_patterns_fn)
             .map(|(teardown_name, teardown_fn)| {
                 let logger = logger.clone();
                 let group_ctx = group_ctx.clone();
