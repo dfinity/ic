@@ -31,6 +31,7 @@ use crate::driver::{
     test_env::{TestEnv, TestEnvAttribute},
     test_setup::{GroupSetup, InfraProvider},
 };
+use crate::util::block_on;
 use anyhow::{Result, bail};
 use chrono::Utc;
 use clap::Parser;
@@ -196,6 +197,18 @@ impl TestEnvAttribute for SetupResult {
     }
 }
 
+/// The time at which the test group started, persisted during setup so that teardown tasks
+/// (which run in separate child processes where `Utc::now()` would otherwise reflect only
+/// the teardown process start) can query log backends for the full test duration.
+#[derive(Deserialize, Serialize)]
+struct GroupStartTime(chrono::DateTime<Utc>);
+
+impl TestEnvAttribute for GroupStartTime {
+    fn attribute_name() -> String {
+        String::from("group_start_time")
+    }
+}
+
 pub fn is_task_visible_to_user(task_id: &TaskId) -> bool {
     matches!(
         task_id,
@@ -326,11 +339,7 @@ fn get_or_create_env(gctx: GroupContext, task_id: TaskId) -> Result<TestEnv> {
 /// matching semantics (`match_phrase`).
 /// Panics if at least one matching log line is found. Transport / parse errors are logged
 /// and treated as a soft-skip, matching the behaviour of the metrics teardown.
-fn check_unallowed_log_patterns(
-    env: &TestEnv,
-    patterns: &BTreeSet<String>,
-    start_time: chrono::DateTime<Utc>,
-) {
+fn check_unallowed_log_patterns(env: &TestEnv, patterns: &BTreeSet<String>) {
     if patterns.is_empty() {
         return;
     }
@@ -347,6 +356,17 @@ fn check_unallowed_log_patterns(
         }
     };
     let group_name = group_setup.infra_group_name;
+    let start_time = match GroupStartTime::try_read_attribute(env) {
+        Ok(g) => g.0,
+        Err(e) => {
+            info!(
+                env.logger(),
+                "GroupStartTime attribute is not available ({e:?}) \
+                 => skipping unallowed log pattern check."
+            );
+            return;
+        }
+    };
     let end_time = Utc::now();
 
     let should: Vec<serde_json::Value> = patterns
@@ -390,22 +410,7 @@ fn check_unallowed_log_patterns(
         }
     };
 
-    let rt = match tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-    {
-        Ok(rt) => rt,
-        Err(e) => {
-            info!(
-                env.logger(),
-                "Failed to build tokio runtime for ES query ({e:?}) \
-                 => skipping unallowed log pattern check."
-            );
-            return;
-        }
-    };
-
-    let response: Result<serde_json::Value, reqwest::Error> = rt.block_on(async {
+    let response: Result<serde_json::Value, reqwest::Error> = block_on(async {
         client
             .post(url)
             .json(&body)
@@ -736,9 +741,11 @@ impl SystemTestGroup {
         self
     }
 
-    /// Add a substring pattern that must not appear in any IC log line collected during the
-    /// test. After the test, ElasticSearch is queried for the pattern and the test fails if
-    /// at least one matching log line is found.
+    /// Add a log-message phrase pattern that must not match any IC log line collected during
+    /// the test. After the test, ElasticSearch is queried using `match_phrase` semantics on
+    /// the `MESSAGE` field, and the test fails if at least one matching log line is found.
+    /// This is not a raw-substring search: matching depends on the indexed field's
+    /// analyzer/tokenization behavior.
     pub fn add_unallowed_log_pattern(mut self, pattern: impl Into<String>) -> Self {
         self.unallowed_log_patterns.insert(pattern.into());
         self
@@ -942,6 +949,10 @@ impl SystemTestGroup {
                     // Persist the cli arguments in case the test needs them
                     cli_arguments.write_attribute(&env);
 
+                    // Persist the group start time so teardown tasks (which run in separate
+                    // child processes) can use it when querying log/metric backends.
+                    GroupStartTime(start_time).write_attribute(&env);
+
                     setup_fn(env.clone());
                     SetupResult {}.write_attribute(&env);
                 }
@@ -992,7 +1003,7 @@ impl SystemTestGroup {
         {
             let unallowed_log_patterns = self.unallowed_log_patterns.clone();
             let teardown_fn = move |env: TestEnv| {
-                check_unallowed_log_patterns(&env, &unallowed_log_patterns, start_time);
+                check_unallowed_log_patterns(&env, &unallowed_log_patterns);
             };
             Some((
                 ASSERT_NO_UNALLOWED_LOG_PATTERNS_TASK_NAME.to_string(),
