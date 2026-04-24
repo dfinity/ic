@@ -65,21 +65,58 @@ const DM1_DMZ_NETWORK: Ipv4Addr = Ipv4Addr::new(23, 142, 184, 224);
 const DM1_DMZ_PREFIX: u8 = 28;
 const DM1_DMZ_GATEWAY: Ipv4Addr = Ipv4Addr::new(23, 142, 184, 238);
 
+/// Node providers used in this testnet. Each data center is owned by exactly
+/// one node provider (1 node provider per DC). Providers can own multiple DCs
+/// and do not need to own the same number of DCs / nodes.
+#[derive(Clone, Copy, Debug)]
+enum NodeProvider {
+    Dfinity,
+    Alusion,
+    OneSixtyTwoDigitalCapital,
+    DecentralizedEntitiesFoundation,
+}
+
+impl NodeProvider {
+    /// Stable test principal id for each provider. These are deterministic and
+    /// only intended for the testnet setup.
+    fn principal_id(&self) -> PrincipalId {
+        // Use a separate id range (3000+) from node operators (1000+) so that
+        // the principals don't overlap.
+        match self {
+            NodeProvider::Dfinity => PrincipalId::new_user_test_id(3000),
+            NodeProvider::Alusion => PrincipalId::new_user_test_id(3001),
+            NodeProvider::OneSixtyTwoDigitalCapital => PrincipalId::new_user_test_id(3002),
+            NodeProvider::DecentralizedEntitiesFoundation => PrincipalId::new_user_test_id(3003),
+        }
+    }
+}
+
 struct DcConfig {
     id: &'static str,
     region: &'static str,
     owner: &'static str,
     latitude: f32,
     longitude: f32,
+    /// The node provider that owns this data center. Every DC has exactly one
+    /// node provider, but one node provider may own many DCs.
+    node_provider: NodeProvider,
 }
 
+// Distribution of the 30 data centers across 4 node providers (uneven on
+// purpose, as requested):
+//   - Dfinity:                            9 DCs (18 nodes)
+//   - Alusion:                            8 DCs (16 nodes)
+//   - OneSixtyTwo Digital Capital:        7 DCs (14 nodes)
+//   - Decentralized Entities Foundation:  6 DCs (12 nodes)
 const DATA_CENTERS: &[DcConfig] = &[
+    // ------------------------- Dfinity (9 DCs) --------------------------
     DcConfig {
         id: "Fremont",
         region: "North America,US,California",
         owner: "Hurricane Electric",
         latitude: 37.549,
         longitude: -121.989,
+        node_provider: NodeProvider::Dfinity,
     },
     DcConfig {
         id: "Brussels",
@@ -87,6 +124,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Digital Realty",
         latitude: 50.839,
         longitude: 4.348,
+        node_provider: NodeProvider::Dfinity,
     },
     DcConfig {
         id: "HongKong 1",
@@ -94,6 +132,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Unicom",
         latitude: 22.284,
         longitude: 114.269,
+        node_provider: NodeProvider::Dfinity,
     },
     DcConfig {
         id: "Sterling",
@@ -101,6 +140,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "CyrusOne",
         latitude: 39.004,
         longitude: -77.408,
+        node_provider: NodeProvider::Dfinity,
     },
     DcConfig {
         id: "Tokyo",
@@ -108,6 +148,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Equinix",
         latitude: 35.682,
         longitude: 139.692,
+        node_provider: NodeProvider::Dfinity,
     },
     DcConfig {
         id: "London",
@@ -115,6 +156,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Telehouse",
         latitude: 51.508,
         longitude: -0.076,
+        node_provider: NodeProvider::Dfinity,
     },
     DcConfig {
         id: "Frankfurt",
@@ -122,6 +164,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Interxion",
         latitude: 50.110,
         longitude: 8.682,
+        node_provider: NodeProvider::Dfinity,
     },
     DcConfig {
         id: "Singapore",
@@ -129,6 +172,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Equinix",
         latitude: 1.290,
         longitude: 103.851,
+        node_provider: NodeProvider::Dfinity,
     },
     DcConfig {
         id: "Sao Paulo",
@@ -136,13 +180,16 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Ascenty",
         latitude: -23.550,
         longitude: -46.633,
+        node_provider: NodeProvider::Dfinity,
     },
+    // ------------------------- Alusion (8 DCs) --------------------------
     DcConfig {
         id: "Sydney",
         region: "Oceania,AU,New South Wales",
         owner: "Equinix",
         latitude: -33.868,
         longitude: 151.207,
+        node_provider: NodeProvider::Alusion,
     },
     DcConfig {
         id: "Toronto",
@@ -150,6 +197,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "eStruxture",
         latitude: 43.651,
         longitude: -79.347,
+        node_provider: NodeProvider::Alusion,
     },
     DcConfig {
         id: "Mumbai",
@@ -157,6 +205,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Nxtra",
         latitude: 19.076,
         longitude: 72.878,
+        node_provider: NodeProvider::Alusion,
     },
     DcConfig {
         id: "Seoul",
@@ -164,6 +213,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "KINX",
         latitude: 37.566,
         longitude: 126.978,
+        node_provider: NodeProvider::Alusion,
     },
     DcConfig {
         id: "Amsterdam",
@@ -171,6 +221,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Equinix",
         latitude: 52.370,
         longitude: 4.895,
+        node_provider: NodeProvider::Alusion,
     },
     DcConfig {
         id: "Paris",
@@ -178,6 +229,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Interxion",
         latitude: 48.864,
         longitude: 2.349,
+        node_provider: NodeProvider::Alusion,
     },
     DcConfig {
         id: "Stockholm",
@@ -185,6 +237,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Interxion",
         latitude: 59.330,
         longitude: 18.069,
+        node_provider: NodeProvider::Alusion,
     },
     DcConfig {
         id: "Zurich",
@@ -192,13 +245,16 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Green",
         latitude: 47.376,
         longitude: 8.540,
+        node_provider: NodeProvider::Alusion,
     },
+    // --------------- OneSixtyTwo Digital Capital (7 DCs) ----------------
     DcConfig {
         id: "Dublin",
         region: "Europe,IE,Dublin",
         owner: "Equinix",
         latitude: 53.350,
         longitude: -6.260,
+        node_provider: NodeProvider::OneSixtyTwoDigitalCapital,
     },
     DcConfig {
         id: "Chicago",
@@ -206,6 +262,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Equinix",
         latitude: 41.878,
         longitude: -87.630,
+        node_provider: NodeProvider::OneSixtyTwoDigitalCapital,
     },
     DcConfig {
         id: "Dallas",
@@ -213,6 +270,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "DataBank",
         latitude: 32.777,
         longitude: -96.797,
+        node_provider: NodeProvider::OneSixtyTwoDigitalCapital,
     },
     DcConfig {
         id: "Los Angeles",
@@ -220,6 +278,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "CoreSite",
         latitude: 34.052,
         longitude: -118.244,
+        node_provider: NodeProvider::OneSixtyTwoDigitalCapital,
     },
     DcConfig {
         id: "Miami",
@@ -227,6 +286,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Equinix",
         latitude: 25.762,
         longitude: -80.192,
+        node_provider: NodeProvider::OneSixtyTwoDigitalCapital,
     },
     DcConfig {
         id: "Bogota",
@@ -234,6 +294,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Equinix",
         latitude: 4.711,
         longitude: -74.072,
+        node_provider: NodeProvider::OneSixtyTwoDigitalCapital,
     },
     DcConfig {
         id: "Cape Town",
@@ -241,13 +302,16 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Teraco",
         latitude: -33.925,
         longitude: 18.424,
+        node_provider: NodeProvider::OneSixtyTwoDigitalCapital,
     },
+    // ------------ Decentralized Entities Foundation (6 DCs) -------------
     DcConfig {
         id: "Nairobi",
         region: "Africa,KE,Nairobi",
         owner: "PAIX",
         latitude: -1.286,
         longitude: 36.817,
+        node_provider: NodeProvider::DecentralizedEntitiesFoundation,
     },
     DcConfig {
         id: "Warsaw",
@@ -255,6 +319,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Equinix",
         latitude: 52.230,
         longitude: 21.012,
+        node_provider: NodeProvider::DecentralizedEntitiesFoundation,
     },
     DcConfig {
         id: "Madrid",
@@ -262,6 +327,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Interxion",
         latitude: 40.417,
         longitude: -3.704,
+        node_provider: NodeProvider::DecentralizedEntitiesFoundation,
     },
     DcConfig {
         id: "Milan",
@@ -269,6 +335,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Equinix",
         latitude: 45.464,
         longitude: 9.190,
+        node_provider: NodeProvider::DecentralizedEntitiesFoundation,
     },
     DcConfig {
         id: "Osaka",
@@ -276,6 +343,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Equinix",
         latitude: 34.694,
         longitude: 135.502,
+        node_provider: NodeProvider::DecentralizedEntitiesFoundation,
     },
     DcConfig {
         id: "Jakarta",
@@ -283,6 +351,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "DCI",
         latitude: -6.175,
         longitude: 106.845,
+        node_provider: NodeProvider::DecentralizedEntitiesFoundation,
     },
 ];
 
@@ -322,8 +391,10 @@ pub fn setup(env: TestEnv) {
     // let mut cloud_engine_subnet = Subnet::new(SubnetType::CloudEngine);
     let mut node_counter: usize = 0;
     for (i, dc) in DATA_CENTERS.iter().enumerate() {
+        // Each DC has its own node operator (1 node operator per DC), but the
+        // node provider is shared across all DCs owned by that provider.
         let operator_principal = PrincipalId::new_user_test_id(1000 + i as u64);
-        let provider_principal = PrincipalId::new_user_test_id(2000 + i as u64);
+        let provider_principal = dc.node_provider.principal_id();
 
         // Determine the reward types for this DC's nodes (before incrementing counter).
         let dc_node_types: Vec<(NodeRewardType, &'static str)> = (0..NODES_PER_DC)
