@@ -46,7 +46,7 @@ fn setup_sharing_instance_and_witness() -> (SharingInstance, SharingWitness) {
         .map(|(yi, si)| G1Projective::mul2(&yi.into(), &r, &g1.into(), si).to_affine())
         .collect();
 
-    let instance = SharingInstance::new(pk, aa, rr, cc);
+    let instance = SharingInstance::new(pk, aa, rr, cc).expect("Valid sharing instance");
 
     let witness = SharingWitness::new(r, s);
 
@@ -101,7 +101,8 @@ fn setup_chunking_instance_and_witness<R: Rng + CryptoRng>(
         chunk.push(chunk_i.try_into().expect("Unexpected size"));
     }
 
-    let instance = ChunkingInstance::new(y, chunk, rr.try_into().expect("Unexpected size"));
+    let instance = ChunkingInstance::new(y, chunk, rr.try_into().expect("Unexpected size"))
+        .expect("Valid chunking instance");
     let witness = ChunkingWitness::new(r.try_into().expect("Unexpected size"), s);
     (instance, witness)
 }
