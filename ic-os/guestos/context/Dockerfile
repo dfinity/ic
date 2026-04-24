@@ -113,7 +113,8 @@ RUN systemctl disable \
     motd-news.service \
     motd-news.timer \
     fstrim.service \
-    fstrim.timer
+    fstrim.timer \
+    ollama.service
 
 # ------ GUESTOS WORK --------------------------------------------
 
@@ -230,6 +231,15 @@ RUN adduser --system --disabled-password --home /var/lib/metrics-proxy --group -
 RUN addgroup socks && \
     adduser --system --disabled-password --shell /usr/sbin/nologin -c "Dante SOCKS Proxy" socks && \
     adduser socks socks && chmod +s /usr/sbin/danted
+
+# The "ollama" account. Used to run the `ollama serve` binary when the
+# `ollama.service` unit is enabled (disabled by default; see
+# /lib/systemd/system/ollama.service).
+RUN addgroup --system ollama && \
+    adduser --system --disabled-password --home /var/lib/ollama --shell /usr/sbin/nologin --ingroup ollama -c "Ollama" ollama && \
+    mkdir -p /var/lib/ollama && \
+    chown ollama:ollama /var/lib/ollama && \
+    chmod 0750 /var/lib/ollama
 
 # ------ INSTALL SCRIPTS -----------------------------------------
 

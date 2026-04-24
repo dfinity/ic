@@ -50,6 +50,12 @@ def component_files(mode):
         Label("guestos/ic-https-outcalls-adapter/ic-https-outcalls-adapter.socket"): "/etc/systemd/system/ic-https-outcalls-adapter.socket",
         Label("guestos/ic-https-outcalls-adapter/generate-https-outcalls-adapter-config.sh"): "/opt/ic/bin/generate-https-outcalls-adapter-config.sh",
         Label("guestos/ic-replica.service"): "/etc/systemd/system/ic-replica.service",
+        # Ollama is intentionally disabled by default. The blanket
+        # `systemctl enable` loop in the Dockerfile would otherwise enable
+        # it; an explicit `systemctl disable ollama.service` in the
+        # Dockerfile keeps it off. Start it on demand with:
+        #   systemctl enable --now ollama.service
+        Label("guestos/ollama/ollama.service"): "/etc/systemd/system/ollama.service",
         Label("guestos/remote-attestation-server.service"): "/etc/systemd/system/remote-attestation-server.service",
         Label("guestos/generate-ic-config/generate-ic-config.service"): "/etc/systemd/system/generate-ic-config.service",
         Label("guestos/share/ic-boundary.env"): "/opt/ic/share/ic-boundary.env",
