@@ -106,12 +106,9 @@ async fn test_canister_snapshot() {
         nns_url,
         vec![
             "propose-to-take-canister-snapshot".to_string(),
-            "--proposer".to_string(),
-            neuron_id.clone(),
-            "--canister-id".to_string(),
-            target_canister_id.to_string(),
-            "--summary".to_string(),
-            "Take a snapshot of the Ledger canister.".to_string(),
+            format!("--proposer={neuron_id}"),
+            format!("--canister-id={target_canister_id}"),
+            "--summary=Take a snapshot of the Ledger canister.".to_string(),
         ],
     );
     let first_proposal_id = extract_proposal_id(&ic_admin_output);
@@ -205,14 +202,13 @@ async fn test_canister_snapshot() {
         nns_url,
         vec![
             "propose-to-take-canister-snapshot".to_string(),
-            "--proposer".to_string(),
-            neuron_id.clone(),
-            "--canister-id".to_string(),
-            target_canister_id.to_string(),
-            "--replace-snapshot".to_string(),
-            hex::encode(first_snapshot.snapshot_id().as_slice()),
-            "--summary".to_string(),
-            "Take another snapshot and replace the first.".to_string(),
+            format!("--proposer={neuron_id}"),
+            format!("--canister-id={target_canister_id}"),
+            format!(
+                "--replace-snapshot={}",
+                hex::encode(first_snapshot.snapshot_id().as_slice())
+            ),
+            "--summary=Take another snapshot and replace the first.".to_string(),
         ],
     );
     let replace_proposal_id = extract_proposal_id(&stderr);
@@ -360,14 +356,14 @@ async fn test_canister_snapshot() {
         nns_url,
         vec![
             "propose-to-load-canister-snapshot".to_string(),
-            "--proposer".to_string(),
-            neuron_id,
-            "--canister-id".to_string(),
-            target_canister_id.to_string(),
-            "--snapshot-id".to_string(),
-            hex::encode(second_snapshot.snapshot_id().as_slice()),
-            "--summary".to_string(),
-            "Restore the Ledger canister to snapshot 2, rolling back the ICP transfer.".to_string(),
+            format!("--proposer={neuron_id}"),
+            format!("--canister-id={target_canister_id}"),
+            format!(
+                "--snapshot-id={}",
+                hex::encode(second_snapshot.snapshot_id().as_slice())
+            ),
+            "--summary=Restore the Ledger canister to snapshot 2, rolling back the ICP transfer."
+                .to_string(),
         ],
     );
     let load_canister_snapshot_proposal_id = extract_proposal_id(&stderr);
@@ -466,12 +462,9 @@ async fn test_governance_canister_snapshot() {
         nns_url,
         vec![
             "propose-to-take-canister-snapshot".to_string(),
-            "--proposer".to_string(),
-            neuron_id.clone(),
-            "--canister-id".to_string(),
-            target_canister_id.to_string(),
-            "--summary".to_string(),
-            "Take a snapshot of the Governance canister.".to_string(),
+            format!("--proposer={neuron_id}"),
+            format!("--canister-id={target_canister_id}"),
+            "--summary=Take a snapshot of the Governance canister.".to_string(),
         ],
     );
     let take_canister_snapshot_proposal_id = extract_proposal_id(&output);
@@ -544,14 +537,13 @@ async fn test_governance_canister_snapshot() {
         nns_url,
         vec![
             "propose-to-load-canister-snapshot".to_string(),
-            "--proposer".to_string(),
-            neuron_id,
-            "--canister-id".to_string(),
-            target_canister_id.to_string(),
-            "--snapshot-id".to_string(),
-            hex::encode(snapshot.snapshot_id().as_slice()),
-            "--summary".to_string(),
-            "Load the Governance snapshot, rolling back state.".to_string(),
+            format!("--proposer={neuron_id}"),
+            format!("--canister-id={target_canister_id}"),
+            format!(
+                "--snapshot-id={}",
+                hex::encode(snapshot.snapshot_id().as_slice())
+            ),
+            "--summary=Load the Governance snapshot, rolling back state.".to_string(),
         ],
     );
     let _load_proposal_id = extract_proposal_id(&output);
@@ -629,18 +621,12 @@ async fn test_snapshot_before_nns_canister_upgrade() {
         vec![
             "propose-to-change-nns-canister".to_string(),
             "--snapshot-before".to_string(), // <-- THIS IS THE INTERESTING PART RIGHT HERE!
-            "--proposer".to_string(),
-            neuron_id.clone(),
-            "--canister-id".to_string(),
-            target_canister_id.to_string(),
-            "--mode".to_string(),
-            "upgrade".to_string(),
-            "--wasm-module-path".to_string(),
-            wasm_path.clone(),
-            "--wasm-module-sha256".to_string(),
-            wasm_sha256.clone(),
-            "--summary".to_string(),
-            "Snapshot Ledger then upgrade it.".to_string(),
+            format!("--proposer={neuron_id}"),
+            format!("--canister-id={target_canister_id}"),
+            "--mode=upgrade".to_string(),
+            format!("--wasm-module-path={wasm_path}"),
+            format!("--wasm-module-sha256={wasm_sha256}"),
+            "--summary=Snapshot Ledger then upgrade it.".to_string(),
         ],
     );
     let no_replace_snapshot_proposal_id = extract_proposal_id(&ic_admin_output);
@@ -686,18 +672,12 @@ async fn test_snapshot_before_nns_canister_upgrade() {
             "propose-to-change-nns-canister".to_string(),
             // THE INTERESTING PART IS HERE vvv
             format!("--snapshot-before=replace={no_replace_snapshot_snapshot_id_hex}"),
-            "--proposer".to_string(),
-            neuron_id,
-            "--canister-id".to_string(),
-            target_canister_id.to_string(),
-            "--mode".to_string(),
-            "upgrade".to_string(),
-            "--wasm-module-path".to_string(),
-            wasm_path,
-            "--wasm-module-sha256".to_string(),
-            wasm_sha256,
-            "--summary".to_string(),
-            "Snapshot Ledger (replacing first snapshot) then upgrade it.".to_string(),
+            format!("--proposer={neuron_id}"),
+            format!("--canister-id={target_canister_id}"),
+            "--mode=upgrade".to_string(),
+            format!("--wasm-module-path={wasm_path}"),
+            format!("--wasm-module-sha256={wasm_sha256}"),
+            "--summary=Snapshot Ledger (replacing first snapshot) then upgrade it.".to_string(),
         ],
     );
     let replace_snapshot_proposal_id = extract_proposal_id(&ic_admin_output);
