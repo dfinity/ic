@@ -126,6 +126,12 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
 
         if guestos_version == True:  # HEAD version
             guestos_local(suffix, "dev")
+        elif guestos_version == "local_base_dev":
+            # Rebuilds Dockerfile.base locally instead of using the pinned
+            # ghcr.io/dfinity/guestos-base-dev image. Slow (~15-30 min), but
+            # necessary whenever Dockerfile.base itself is modified (e.g. to
+            # bundle new third-party tooling).
+            guestos_local(suffix, "local-base-dev")
         elif guestos_version == "malicious":
             guestos_local(suffix, "dev-malicious")
         elif guestos_version == "recovery_dev":

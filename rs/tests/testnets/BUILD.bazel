@@ -75,6 +75,12 @@ system_test(
 
 system_test_nns(
     name = "small",
+    # Build the GuestOS base image from Dockerfile.base locally so that
+    # modifications to Dockerfile.base (for example, the bundled `ollama`
+    # binary + baked-in Gemma model) actually end up in the image used by
+    # this testnet. Without this, the testnet would start from the pinned
+    # upstream base image, which has none of those extras.
+    guestos = "local_base_dev",
     enable_metrics = True,
     tags = [
         "dynamic_testnet",
@@ -143,6 +149,12 @@ system_test(
 
 system_test_nns(
     name = "small_nns",
+    # Build the GuestOS base image from Dockerfile.base locally so that
+    # modifications to Dockerfile.base (for example, the bundled `ollama`
+    # binary + baked-in Gemma model) actually end up in the image used by
+    # this testnet. Without this, the testnet would start from the pinned
+    # upstream base image, which has none of those extras.
+    guestos = "local_base_dev",
     enable_metrics = True,
     tags = [
         "dynamic_testnet",
