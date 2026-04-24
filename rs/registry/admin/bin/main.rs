@@ -3416,9 +3416,11 @@ struct AddAiNodesCmd {
     #[clap(long, required = true, num_args(1..), alias = "node-ids")]
     pub nodes: Vec<PrincipalId>,
 
-    /// Optional subnet to associate the AI nodes with.
-    #[clap(long)]
-    pub subnet_id: Option<PrincipalId>,
+    /// Subnet to associate the AI nodes with. Required: every AI node must be
+    /// associated with a subnet at creation time. Use `update-ai-node-subnet`
+    /// later to change or clear the association.
+    #[clap(long, required = true)]
+    pub subnet_id: PrincipalId,
 }
 
 #[derive(Parser)]
@@ -7084,7 +7086,7 @@ async fn add_ai_nodes(registry_canister: RegistryCanister, cmd: AddAiNodesCmd) {
     let nonce = generate_nonce();
     let request = AddAiNodesPayload {
         node_ids: cmd.nodes.into_iter().map(NodeId::from).collect(),
-        subnet_id: cmd.subnet_id.map(SubnetId::from),
+        subnet_id: Some(SubnetId::from(cmd.subnet_id)),
     };
 
     let payload = Encode!(&request).expect("Failed to serialize add_ai_nodes request.");
