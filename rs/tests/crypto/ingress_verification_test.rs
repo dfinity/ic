@@ -2020,7 +2020,10 @@ fn ingress_status_from_read_state_response(
             panic!("Request status is not a leaf node: {other:?}");
         }
         LookupStatus::Absent | LookupStatus::Unknown => {
-            panic!("The status field is missing from the resonse");
+            // The status path may legitimately not yet be present in the
+            // certificate tree on early polls; signal the caller to keep
+            // polling rather than failing the test.
+            return None;
         }
     };
 
@@ -2343,18 +2346,18 @@ fn random_n_bytes<R: Rng + CryptoRng>(n: u32, rng: &mut R) -> Vec<u8> {
 }
 
 fn resign_certificate_with_random_signature<R: Rng + CryptoRng>(
-    reply: &[u8],
+    certificate_cbor: &[u8],
     rng: &mut R,
 ) -> Vec<u8> {
     use ic_crypto_internal_bls12_381_type::G1Affine;
     // sanity check for self-describing CBOR tag
     // 0xd9d9f7 (cf. https://tools.ietf.org/html/rfc7049#section-2.4.5) is the
     // self-describing CBOR tag required to be present by the interface spec.
-    if reply.len() < 3 || reply[0..3] != [0xd9, 0xd9, 0xf7] {
+    if certificate_cbor.len() < 3 || certificate_cbor[0..3] != [0xd9, 0xd9, 0xf7] {
         panic!("certificate CBOR doesn't have a self-describing tag");
     }
     let mut certificate: ic_certification::Certificate =
-        serde_cbor::from_slice(reply).expect("failed to parse certificate CBOR");
+        serde_cbor::from_slice(certificate_cbor).expect("failed to parse certificate CBOR");
 
     let previous_signature = certificate.signature.clone();
     assert_eq!(previous_signature.len(), 48);
