@@ -134,46 +134,47 @@ fn test(env: TestEnv) {
                 .await
                 .expect("Node didn't report healthy");
 
-            // After the node reports healthy, it may still need time to catch up
-            // to the latest state (e.g. the canister's wasm module may not yet be
-            // available). Retry the first update call to allow for this.
-            let canister_id = canister.canister_id();
-            ic_system_test_driver::retry_with_msg_async!(
-                "First update after node restart",
-                &log,
-                Duration::from_secs(120),
-                Duration::from_secs(5),
-                || async {
-                    agent
-                        .update(&canister_id, "update")
-                        .with_arg(wasm().set_global_data(&[0_u8]).reply())
-                        .call_and_wait()
-                        .await
-                        .map_err(|e| anyhow::anyhow!("failed to update: {e}"))
-                }
-            )
-            .await
-            .expect("failed to update after retries");
-            let response = canister
-                .query(wasm().get_global_data().append_and_reply())
-                .await
-                .expect("failed to query");
-            assert_eq!(response, vec![0_u8]);
-
             // For the same reason as before, if N = DKG_INTERVAL + 1, it's guaranteed
             // that a catch up package is proposed by the faulty node.
-            // Start from 1 since we already did the first iteration above.
-            for n in 1..(DKG_INTERVAL + 1) {
-                agent
-                    .update(&canister.canister_id(), "update")
-                    .with_arg(wasm().set_global_data(&[n as u8]).reply())
-                    .call_and_wait()
-                    .await
-                    .expect("failed to update");
-                let response = canister
-                    .query(wasm().get_global_data().append_and_reply())
-                    .await
-                    .expect("failed to query");
+            //
+            // After the malicious node reports healthy its HTTP endpoint is
+            // available but the replicated state may still be catching up via
+            // state sync / consensus. In particular, the canister's wasm
+            // module may not yet be present in the state used to execute
+            // ingress messages, causing transient errors like
+            // `IC0537: Requested canister has no wasm module`.
+            // Retry the calls on any error until the node has caught up.
+            for n in 0..(DKG_INTERVAL + 1) {
+                ic_system_test_driver::retry_with_msg_async!(
+                    "update call after restart",
+                    &log,
+                    Duration::from_secs(300),
+                    Duration::from_secs(5),
+                    || async {
+                        agent
+                            .update(&canister.canister_id(), "update")
+                            .with_arg(wasm().set_global_data(&[n as u8]).reply())
+                            .call_and_wait()
+                            .await
+                            .map_err(|e| anyhow::anyhow!("failed to update: {e}"))
+                    }
+                )
+                .await
+                .expect("failed to update");
+                let response = ic_system_test_driver::retry_with_msg_async!(
+                    "query call after restart",
+                    &log,
+                    Duration::from_secs(300),
+                    Duration::from_secs(5),
+                    || async {
+                        canister
+                            .query(wasm().get_global_data().append_and_reply())
+                            .await
+                            .map_err(|e| anyhow::anyhow!("failed to query: {e}"))
+                    }
+                )
+                .await
+                .expect("failed to query");
                 assert_eq!(response, vec![n as u8]);
             }
         }
@@ -183,11 +184,18 @@ fn test(env: TestEnv) {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .without_assert_no_replica_restarts()
         .add_test(systest!(test))
         // One of the nodes has a corrupted state and proposes a CUP share which will be invalidated
         // by the peers (and vice versa), so it's expected that the metric is increased.
         .remove_metrics_to_check("consensus_invalidated_artifacts")
+        // It is expected that the malicious node crashes due to state divergence and restarts.
+        //  TODO(DSM-118): The replica may occasionally be started 3 times (instead of the usual 2) if
+        // it crashes again briefly during the catch-up process after the divergence. Consider reducing
+        // this number if the underlying issue has been resolved.
+        .update_orchestrator_metrics_to_check(
+            "orchestrator_replica_process_start_attempts_total",
+            3,
+        )
         .execute_from_args()?;
     Ok(())
 }
