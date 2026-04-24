@@ -1483,7 +1483,8 @@ impl CanisterManager {
         // Canister creation's first-time allocation is a different event class
         // from user-triggered `log_memory_limit` resize — don't mix their
         // distributions. Pass `None` to skip observation here.
-        self.validate_and_update_canister_settings(
+        let round_limits_snapshot = round_limits.clone();
+        if let Err(err) = self.validate_and_update_canister_settings(
             settings,
             &mut new_canister,
             &mut round_limits.subnet_available_memory,
@@ -1493,7 +1494,10 @@ impl CanisterManager {
             state.get_own_cost_schedule(),
             true, // New canister: resize always needed.
             None,
-        )?;
+        ) {
+            *round_limits = round_limits_snapshot;
+            return Err(err);
+        }
 
         round_limits.compute_allocation_used = round_limits
             .compute_allocation_used
