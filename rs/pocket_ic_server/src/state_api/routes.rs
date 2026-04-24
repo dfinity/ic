@@ -40,7 +40,7 @@ use ic_boundary::{ErrorClientFacing, MAX_REQUEST_BODY_SIZE};
 use ic_http_endpoints_public::{cors_layer, make_plaintext_response, query, read_state};
 use ic_registry_routing_table::RoutingTable;
 use ic_types::malicious_flags::MaliciousFlags;
-use ic_types::{CanisterId, SnapshotId, SubnetId};
+use ic_types::{CanisterId, PrincipalId, SnapshotId, SubnetId};
 use pocket_ic::RejectResponse;
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
@@ -208,6 +208,12 @@ where
                 .layer(axum::middleware::from_fn(handle_limit_error)),
         )
         .directory_route(
+            "/subnet/{sid}/query",
+            post(handler_query_subnet_v3)
+                .layer(RequestBodyLimitLayer::new(MAX_REQUEST_BODY_SIZE))
+                .layer(axum::middleware::from_fn(handle_limit_error)),
+        )
+        .directory_route(
             "/canister/{ecid}/read_state",
             post(handler_canister_read_state_v3)
                 .layer(RequestBodyLimitLayer::new(MAX_REQUEST_BODY_SIZE))
@@ -226,12 +232,19 @@ where
     S: Clone + Send + Sync + 'static,
     AppState: extract::FromRef<S>,
 {
-    ApiRouter::new().directory_route(
-        "/canister/{ecid}/call",
-        post(handler_call_v4)
-            .layer(RequestBodyLimitLayer::new(MAX_REQUEST_BODY_SIZE))
-            .layer(axum::middleware::from_fn(handle_limit_error)),
-    )
+    ApiRouter::new()
+        .directory_route(
+            "/canister/{ecid}/call",
+            post(handler_call_v4)
+                .layer(RequestBodyLimitLayer::new(MAX_REQUEST_BODY_SIZE))
+                .layer(axum::middleware::from_fn(handle_limit_error)),
+        )
+        .directory_route(
+            "/subnet/{sid}/call",
+            post(handler_call_subnet_v4)
+                .layer(RequestBodyLimitLayer::new(MAX_REQUEST_BODY_SIZE))
+                .layer(axum::middleware::from_fn(handle_limit_error)),
+        )
 }
 
 pub fn instances_routes<S>() -> ApiRouter<S>
@@ -908,12 +921,12 @@ pub async fn handler_status(
 
 async fn handler_call(
     State(AppState { api_state, .. }): State<AppState>,
-    NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
+    NoApi(Path((instance_id, effective_principal_id))): NoApi<Path<(InstanceId, PrincipalId)>>,
     bytes: Bytes,
     version: CallRequestVersion,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = CallRequest {
-        effective_canister_id,
+        effective_principal_id,
         bytes,
         version,
     };
@@ -922,7 +935,7 @@ async fn handler_call(
 
 pub async fn handler_call_v2(
     state: State<AppState>,
-    path: NoApi<Path<(InstanceId, CanisterId)>>,
+    path: NoApi<Path<(InstanceId, PrincipalId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     handler_call(state, path, bytes, CallRequestVersion::V2).await
@@ -930,7 +943,7 @@ pub async fn handler_call_v2(
 
 pub async fn handler_call_v3(
     state: State<AppState>,
-    path: NoApi<Path<(InstanceId, CanisterId)>>,
+    path: NoApi<Path<(InstanceId, PrincipalId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     handler_call(state, path, bytes, CallRequestVersion::V3).await
@@ -938,20 +951,46 @@ pub async fn handler_call_v3(
 
 pub async fn handler_call_v4(
     state: State<AppState>,
-    path: NoApi<Path<(InstanceId, CanisterId)>>,
+    path: NoApi<Path<(InstanceId, PrincipalId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     handler_call(state, path, bytes, CallRequestVersion::V4).await
 }
 
+pub async fn handler_query_subnet_v3(
+    State(AppState { api_state, .. }): State<AppState>,
+    NoApi(Path((instance_id, subnet_id))): NoApi<Path<(InstanceId, PrincipalId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    let op = QueryRequest {
+        effective_principal_id: subnet_id,
+        bytes,
+        version: query::Version::SubnetV3,
+    };
+    handle_raw(api_state, instance_id, op).await
+}
+
+pub async fn handler_call_subnet_v4(
+    State(AppState { api_state, .. }): State<AppState>,
+    NoApi(Path((instance_id, subnet_id))): NoApi<Path<(InstanceId, PrincipalId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    let op = CallRequest {
+        effective_principal_id: subnet_id,
+        bytes,
+        version: CallRequestVersion::SubnetV4,
+    };
+    handle_raw(api_state, instance_id, op).await
+}
+
 async fn handler_query(
     State(AppState { api_state, .. }): State<AppState>,
-    NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
+    NoApi(Path((instance_id, effective_principal_id))): NoApi<Path<(InstanceId, PrincipalId)>>,
     bytes: Bytes,
     version: query::Version,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = QueryRequest {
-        effective_canister_id,
+        effective_principal_id,
         bytes,
         version,
     };
@@ -960,7 +999,7 @@ async fn handler_query(
 
 pub async fn handler_query_v2(
     state: State<AppState>,
-    path: NoApi<Path<(InstanceId, CanisterId)>>,
+    path: NoApi<Path<(InstanceId, PrincipalId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     handler_query(state, path, bytes, query::Version::V2).await
@@ -968,7 +1007,7 @@ pub async fn handler_query_v2(
 
 pub async fn handler_query_v3(
     state: State<AppState>,
-    path: NoApi<Path<(InstanceId, CanisterId)>>,
+    path: NoApi<Path<(InstanceId, PrincipalId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     handler_query(state, path, bytes, query::Version::V3).await

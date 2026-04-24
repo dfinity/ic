@@ -4634,10 +4634,11 @@ pub enum CallRequestVersion {
     V2,
     V3,
     V4,
+    SubnetV4,
 }
 
 pub struct CallRequest {
-    pub effective_canister_id: CanisterId,
+    pub effective_principal_id: PrincipalId,
     pub bytes: Bytes,
     pub version: CallRequestVersion,
 }
@@ -4663,13 +4664,24 @@ impl Operation for CallRequest {
                 }
                 Err(_) => false,
             };
-        let subnet = route(
-            pic,
-            EffectivePrincipal::CanisterId(self.effective_canister_id),
-            is_provisional_create_canister,
-        );
+        let subnet = match self.version {
+            CallRequestVersion::SubnetV4 => route(
+                pic,
+                EffectivePrincipal::SubnetId(SubnetId::from(self.effective_principal_id)),
+                false,
+            )
+            .map_err(PocketIcError::SubnetRequestRoutingError),
+            _ => route(
+                pic,
+                EffectivePrincipal::CanisterId(CanisterId::unchecked_from_principal(
+                    self.effective_principal_id,
+                )),
+                is_provisional_create_canister,
+            )
+            .map_err(PocketIcError::CanisterRequestRoutingError),
+        };
         match subnet {
-            Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
+            Err(e) => OpOut::Error(e),
             Ok(subnet) => {
                 // Make sure the latest state is certified for the ingress filter to work.
                 subnet.certify_latest_state();
@@ -4709,7 +4721,9 @@ impl Operation for CallRequest {
 
                 let svc = match self.version {
                     CallRequestVersion::V2 => call_async::new_service(ingress_validator),
-                    CallRequestVersion::V3 | CallRequestVersion::V4 => {
+                    CallRequestVersion::V3
+                    | CallRequestVersion::V4
+                    | CallRequestVersion::SubnetV4 => {
                         let subnet_id = subnet.get_subnet_id();
                         let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
                         let builder = delegation.map(|delegation| {
@@ -4736,25 +4750,32 @@ impl Operation for CallRequest {
                                 CallRequestVersion::V2 => unreachable!(),
                                 CallRequestVersion::V3 => call_sync::Version::V3,
                                 CallRequestVersion::V4 => call_sync::Version::V4,
+                                CallRequestVersion::SubnetV4 => call_sync::Version::SubnetV4,
                             },
                         )
                     }
                 };
 
-                let api_version = match self.version {
-                    CallRequestVersion::V2 => "v2",
-                    CallRequestVersion::V3 => "v3",
-                    CallRequestVersion::V4 => "v4",
+                let uri = match self.version {
+                    CallRequestVersion::SubnetV4 => {
+                        format!("/api/v4/subnet/{}/call", self.effective_principal_id)
+                    }
+                    _ => format!(
+                        "/api/{}/canister/{}/call",
+                        match self.version {
+                            CallRequestVersion::V2 => "v2",
+                            CallRequestVersion::V3 => "v3",
+                            CallRequestVersion::V4 => "v4",
+                            CallRequestVersion::SubnetV4 => unreachable!(),
+                        },
+                        self.effective_principal_id
+                    ),
                 };
 
                 let request = axum::http::Request::builder()
                     .method(Method::POST)
                     .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
-                    .uri(format!(
-                        "/api/{}/canister/{}/call",
-                        api_version,
-                        PrincipalId(self.effective_canister_id.get().into())
-                    ))
+                    .uri(uri)
                     .body(self.bytes.clone().into())
                     .unwrap();
 
@@ -4784,12 +4805,12 @@ impl Operation for CallRequest {
         let mut hasher = Sha256::new();
         self.bytes.hash(&mut hasher);
         let hash = Digest(hasher.finish());
-        OpId(format!("call({},{})", self.effective_canister_id, hash,))
+        OpId(format!("call({},{})", self.effective_principal_id, hash,))
     }
 }
 
 pub struct QueryRequest {
-    pub effective_canister_id: CanisterId,
+    pub effective_principal_id: PrincipalId,
     pub bytes: Bytes,
     pub version: query::Version,
 }
@@ -4810,13 +4831,24 @@ impl BasicSigner<QueryResponseHash> for PocketNodeSigner {
 
 impl Operation for QueryRequest {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        let subnet = route(
-            pic,
-            EffectivePrincipal::CanisterId(self.effective_canister_id),
-            false,
-        );
+        let subnet = match self.version {
+            query::Version::SubnetV3 => route(
+                pic,
+                EffectivePrincipal::SubnetId(SubnetId::from(self.effective_principal_id)),
+                false,
+            )
+            .map_err(PocketIcError::SubnetRequestRoutingError),
+            _ => route(
+                pic,
+                EffectivePrincipal::CanisterId(CanisterId::unchecked_from_principal(
+                    self.effective_principal_id,
+                )),
+                false,
+            )
+            .map_err(PocketIcError::CanisterRequestRoutingError),
+        };
         match subnet {
-            Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
+            Err(e) => OpOut::Error(e),
             Ok(subnet) => {
                 let subnet_id = subnet.get_subnet_id();
                 let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
@@ -4850,21 +4882,25 @@ impl Operation for QueryRequest {
                 .with_additional_root_of_trust(mainnet_root_of_trust)
                 .build_service();
 
-                let version_str = match self.version {
-                    query::Version::V2 => "v2",
-                    query::Version::V3 => "v3",
+                let uri = match self.version {
                     query::Version::SubnetV3 => {
-                        unreachable!("SubnetV3 query not supported in PocketIC")
+                        format!("/api/v3/subnet/{}/query", self.effective_principal_id)
                     }
+                    _ => format!(
+                        "/api/{}/canister/{}/query",
+                        match self.version {
+                            query::Version::V2 => "v2",
+                            query::Version::V3 => "v3",
+                            query::Version::SubnetV3 => unreachable!(),
+                        },
+                        self.effective_principal_id
+                    ),
                 };
 
                 let request = axum::http::Request::builder()
                     .method(Method::POST)
                     .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
-                    .uri(format!(
-                        "/api/{version_str}/canister/{}/query",
-                        PrincipalId(self.effective_canister_id.get().into())
-                    ))
+                    .uri(uri)
                     .body(self.bytes.clone().into())
                     .unwrap();
                 let resp = pic.runtime.block_on(svc.oneshot(request)).unwrap();
@@ -4883,7 +4919,7 @@ impl Operation for QueryRequest {
         let mut hasher = Sha256::new();
         self.bytes.hash(&mut hasher);
         let hash = Digest(hasher.finish());
-        OpId(format!("query({},{})", self.effective_canister_id, hash,))
+        OpId(format!("query({},{})", self.effective_principal_id, hash,))
     }
 }
 
