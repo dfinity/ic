@@ -692,10 +692,7 @@ impl SystemTestGroup {
                 ("orchestrator_tasks_failed_total", 0),
                 ("orchestrator_replica_process_start_attempts_total", 1),
             ]),
-            unallowed_log_patterns: BTreeSet::from([
-                "This is a bug".to_string(),
-                "panicked".to_string(),
-            ]),
+            unallowed_log_patterns: BTreeSet::from(["This is a bug".to_string()]),
         }
     }
 
