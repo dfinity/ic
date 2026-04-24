@@ -1223,7 +1223,7 @@ pub fn requests_with_valid_sender_info(env: TestEnv) {
                 };
                 let message_id = MessageId::from(content.representation_independent_hash());
                 let signature = id.sign_bytes(&message_id.as_signed_bytes());
-                send_request(
+                let fut = send_request(
                     api_ver,
                     &test_info,
                     "call",
@@ -1231,14 +1231,18 @@ pub fn requests_with_valid_sender_info(env: TestEnv) {
                     id.public_key_der(),
                     None,
                     signature,
-                )
+                );
+                async move { (fut.await, message_id) }
             };
 
             ///////////////////////////////////////////////////////////////////
             // Valid sender_info should be accepted for update calls
             for &api_ver in ALL_UPDATE_API_VERSIONS {
-                send_update(api_ver, valid_sender_info())
-                    .await
+                let (response, message_id) = send_update(api_ver, valid_sender_info()).await;
+                let response =
+                    await_pending_update(api_ver, response, &test_info, &id, &message_id).await;
+                response
+                    .with_request_id(message_id)
                     .expect_update_ok(api_ver);
             }
 
@@ -1307,7 +1311,7 @@ pub fn requests_with_valid_sender_info(env: TestEnv) {
             for &api_ver in ALL_UPDATE_API_VERSIONS {
                 let mut si = valid_sender_info();
                 si.signer = Blob(CanisterId::ic_00().get().as_slice().to_vec());
-                let response = send_update(api_ver, si).await;
+                let (response, _) = send_update(api_ver, si).await;
                 assert_eq!(response.status(), 400);
                 response.expect_text_error(sender_info_error_text);
             }
@@ -1324,7 +1328,7 @@ pub fn requests_with_valid_sender_info(env: TestEnv) {
             for &api_ver in ALL_UPDATE_API_VERSIONS {
                 let mut si = valid_sender_info();
                 si.info = Blob(b"tampered info".to_vec());
-                let response = send_update(api_ver, si).await;
+                let (response, _) = send_update(api_ver, si).await;
                 assert_eq!(response.status(), 400);
                 response.expect_text_error(sender_info_error_text);
             }
@@ -2204,6 +2208,13 @@ async fn perform_read_state_call_with_delegations(
 
         let response = await_pending_update(3, response, test, sender, &request_id).await;
 
+        if response.status() != 200 {
+            // The preparatory update call failed (e.g., the replica rejected
+            // the signature). Return that failure directly so callers that
+            // expect an error can inspect it; attempting the read_state below
+            // would otherwise observe an empty state tree or fail elsewhere.
+            return response;
+        }
         let response = response.with_request_id(request_id.clone());
         response.expect_update_ok(3);
 
