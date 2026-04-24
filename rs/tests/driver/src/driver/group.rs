@@ -336,10 +336,12 @@ fn get_or_create_env(gctx: GroupContext, task_id: TaskId) -> Result<TestEnv> {
 
 /// Query ElasticSearch for IC log lines produced by the Farm group of the current test whose
 /// `MESSAGE` field matches any of the provided unallowed patterns using ElasticSearch phrase
-/// matching semantics (`match_phrase`).
+/// matching semantics (`match_phrase`). Each pattern can be paired with a set of exclusion
+/// phrases: a log line only counts as a match if its `MESSAGE` matches the pattern AND does
+/// not match any of the pattern's exclusions.
 /// Panics if at least one matching log line is found. Transport / parse errors are logged
 /// and treated as a soft-skip, matching the behaviour of the metrics teardown.
-fn check_unallowed_log_patterns(env: &TestEnv, patterns: &BTreeSet<String>) {
+fn check_unallowed_log_patterns(env: &TestEnv, patterns: &BTreeMap<String, BTreeSet<String>>) {
     if patterns.is_empty() {
         return;
     }
@@ -371,9 +373,22 @@ fn check_unallowed_log_patterns(env: &TestEnv, patterns: &BTreeSet<String>) {
     };
     let end_time = Utc::now();
 
+    // One `should` clause per pattern: match_phrase on the pattern, minus match_phrase on
+    // any of its exclusions. A hit needs to satisfy at least one such clause.
     let should: Vec<serde_json::Value> = patterns
         .iter()
-        .map(|p| serde_json::json!({ "match_phrase": { "MESSAGE": p } }))
+        .map(|(pattern, exclusions)| {
+            let must_not: Vec<serde_json::Value> = exclusions
+                .iter()
+                .map(|e| serde_json::json!({ "match_phrase": { "MESSAGE": e } }))
+                .collect();
+            serde_json::json!({
+                "bool": {
+                    "filter": [ { "match_phrase": { "MESSAGE": pattern } } ],
+                    "must_not": must_not,
+                }
+            })
+        })
         .collect();
 
     let body = serde_json::json!({
@@ -464,8 +479,8 @@ fn check_unallowed_log_patterns(env: &TestEnv, patterns: &BTreeSet<String>) {
             .and_then(|t| t.as_str())
             .unwrap_or("");
         let node = source.get("ic_node").and_then(|n| n.as_str()).unwrap_or("");
-        for pattern in patterns {
-            if message.contains(pattern) {
+        for (pattern, exclusions) in patterns {
+            if message.contains(pattern) && !exclusions.iter().any(|e| message.contains(e)) {
                 matches_by_pattern
                     .entry(pattern)
                     .or_default()
@@ -524,7 +539,9 @@ fn check_unallowed_log_patterns(env: &TestEnv, patterns: &BTreeSet<String>) {
     panic!(
         "Found unallowed log patterns in IC logs for group `{group_name}`:{report}\n\
          If these patterns are expected in the test, create `SystemTestGroup` with \
-         `remove_unallowed_log_pattern(\"<pattern>\")` or `remove_all_unallowed_log_patterns()`.",
+         `add_unallowed_log_pattern_except(\"<pattern>\", \"<exclusion>\")`, \
+         `remove_unallowed_log_pattern(\"<pattern>\")`, or \
+         `remove_all_unallowed_log_patterns()`.",
     );
 }
 
@@ -639,7 +656,10 @@ pub struct SystemTestGroup {
     with_farm: bool,
     replica_metrics_to_check: BTreeMap<&'static str, /*max value of the metric =*/ u64>,
     orchestrator_metrics_to_check: BTreeMap<&'static str, /*max value of the metric =*/ u64>,
-    unallowed_log_patterns: BTreeSet<String>,
+    /// Map from an unallowed log phrase to a set of exclusion phrases. A log line counts
+    /// as a match if its `MESSAGE` matches the pattern (ES `match_phrase`) and does not
+    /// match any of the associated exclusions.
+    unallowed_log_patterns: BTreeMap<String, BTreeSet<String>>,
 }
 
 impl Default for SystemTestGroup {
@@ -692,7 +712,13 @@ impl SystemTestGroup {
                 ("orchestrator_tasks_failed_total", 0),
                 ("orchestrator_replica_process_start_attempts_total", 1),
             ]),
-            unallowed_log_patterns: BTreeSet::from(["This is a bug".to_string()]),
+            unallowed_log_patterns: BTreeMap::from([
+                ("This is a bug".to_string(), BTreeSet::new()),
+                (
+                    "panicked".to_string(),
+                    BTreeSet::from(["canister".to_string()]),
+                ),
+            ]),
         }
     }
 
@@ -750,13 +776,34 @@ impl SystemTestGroup {
     /// the `MESSAGE` field, and the test fails if at least one matching log line is found.
     /// This is not a raw-substring search: matching depends on the indexed field's
     /// analyzer/tokenization behavior.
+    ///
+    /// If the pattern was already registered (possibly with exclusions), its existing
+    /// exclusions are preserved.
     pub fn add_unallowed_log_pattern(mut self, pattern: impl Into<String>) -> Self {
-        self.unallowed_log_patterns.insert(pattern.into());
+        self.unallowed_log_patterns
+            .entry(pattern.into())
+            .or_default();
+        self
+    }
+
+    /// Like `add_unallowed_log_pattern` but exempts log lines whose `MESSAGE` also matches
+    /// `exclusion` (ES `match_phrase`) from triggering a failure. Multiple calls with the
+    /// same `pattern` accumulate exclusions.
+    pub fn add_unallowed_log_pattern_except(
+        mut self,
+        pattern: impl Into<String>,
+        exclusion: impl Into<String>,
+    ) -> Self {
+        self.unallowed_log_patterns
+            .entry(pattern.into())
+            .or_default()
+            .insert(exclusion.into());
         self
     }
 
     /// Remove a single unallowed log pattern previously registered (either by default in
-    /// `SystemTestGroup::new` or via `add_unallowed_log_pattern`).
+    /// `SystemTestGroup::new` or via `add_unallowed_log_pattern` /
+    /// `add_unallowed_log_pattern_except`).
     pub fn remove_unallowed_log_pattern(mut self, pattern: &str) -> Self {
         self.unallowed_log_patterns.remove(pattern);
         self
@@ -765,7 +812,7 @@ impl SystemTestGroup {
     /// Remove all unallowed log patterns, disabling the ElasticSearch log-pattern check
     /// entirely for this group.
     pub fn remove_all_unallowed_log_patterns(mut self) -> Self {
-        self.unallowed_log_patterns = BTreeSet::new();
+        self.unallowed_log_patterns = BTreeMap::new();
         self
     }
 
