@@ -580,20 +580,30 @@ impl ExecutionEnvironment {
             .saturating_sub(state.callback_count()) as i64
     }
 
-    /// Executes a (mgmt canister) operation on the canister state
+    /// Executes a management operation on the canister state
     /// for a given canister ID.
-    /// Changes to the canister state, message, and round limits
-    /// are discarded if the operation fails with an error.
     ///
-    /// If the operation fails with an error, the amount of cycles
-    /// recorded in the mutable argument of type `ConsumedCyclesForInstructions`
-    /// is charged and the charge is expected to succeed.
-    /// An example is charging for uploading an existing WASM chunk
-    /// which fails with a corresponding error, but cycles are still
-    /// charged for the work of hashing the uploaded WASM chunk.
-    /// In particular, this means that a dedicated "out of cycles"
-    /// error and no charge should be recorded if the canister is
-    /// completely out of cycles.
+    /// The management operation is represented by a closure
+    /// taking the canister state, message, and round limits
+    /// as arguments along with a mutable argument of type
+    /// `ConsumedCyclesForInstructions` tracking instructions used
+    /// and cycles consumed for those instructions while executing
+    /// the management operation so that, if the operation fails,
+    /// the cycles consumed before the failure can be charged and
+    /// the instructions can be accounted for.
+    ///
+    /// If the operation fails with an error, then
+    /// - changes to the canister state, message, and round limits
+    ///   are discarded;
+    /// - instructions used (before the failure) are accounted for
+    ///   in round limits;
+    /// - cycles consumed for those instructions are charged.
+    ///
+    /// Note. It is expected that the cycles consumed for instructions
+    /// executed before the failure can actually be charged.
+    /// This means that no cycles should be recorded
+    /// in `ConsumedCyclesForInstructions` and the operation should
+    /// return an appropriate "out of cycles" `CanisterManagerError`.
     fn execute_mgmt_operation_on_canister<F>(
         &self,
         canister_id: CanisterId,
