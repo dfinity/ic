@@ -1,6 +1,6 @@
 # https://hub.docker.com/_/ubuntu
-# ubuntu:noble-20250910
-FROM ghcr.io/dfinity/library/ubuntu@sha256:985be7c735afdf6f18aaa122c23f87d989c30bba4e9aa24c8278912aac339a8d as base
+# ubuntu:resolute-20260413
+FROM ghcr.io/dfinity/library/ubuntu@sha256:5e275723f82c67e387ba9e3c24baa0abdcb268917f276a0561c97bef9450d0b4 as base
 
 ENV TZ=UTC
 RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
@@ -69,11 +69,7 @@ RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_vers
 # LLVM is only a build time dependency now since we link the fuzzer lib from the hermetic toolchain directly
 ARG AFLPLUSPLUS_RELEASE_VERSION=v4.35c
 ARG LLVM_VERSION=21
-RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
-    echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM_VERSION} main" | tee -a /etc/apt/sources.list.d/llvm.list && \
-    apt -yq update && \
-    apt -yqq install --no-install-recommends lld-${LLVM_VERSION} llvm-${LLVM_VERSION} llvm-${LLVM_VERSION}-dev clang-${LLVM_VERSION} libclang-rt-${LLVM_VERSION}-dev && \
-    mkdir -p /afl && \
+RUN mkdir -p /afl && \
     chown -R ubuntu:ubuntu /afl && \
     cd /afl && \
     git clone --depth=1 --branch=${AFLPLUSPLUS_RELEASE_VERSION} https://github.com/AFLplusplus/AFLplusplus.git && \
