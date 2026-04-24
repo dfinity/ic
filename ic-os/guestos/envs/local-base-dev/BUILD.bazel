@@ -13,5 +13,8 @@ icos_build(
         "manual",
         "no-cache",
     ],
-    visibility = ["//rs:ic-os-pkg"],
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
 )
