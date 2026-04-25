@@ -483,7 +483,7 @@ TODO proposal links
 
 TODO - delete if nothing relevant
 
-## Proposals to be Submitted
+## Submitted Proposals
 
 $(for file in $PROPOSAL_FILES; do
             echo "### $(nns_upgrade_proposal_canister_raw_name $file)"
@@ -522,7 +522,7 @@ TODO proposal links
 
 TODO - delete if nothing relevant
 
-## Proposals to be Submitted
+## Submitted Proposals
 
 $(for file in $PROPOSAL_FILES; do
             echo "### $(sns_wasm_publish_proposal_canister_raw_name $file)"

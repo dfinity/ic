@@ -40,8 +40,14 @@ All commands should be run from the repository root. Prefix commands with
    - `bazel`: `brew install bazelisk`
 
 Also check for optional tools and inform the user what will be automated vs manual:
-- **Slack MCP** (`mcp__plugin_slack_slack__*`): if available, will auto-post to `#dev-nns`
-  and update the channel topic. If not, will print the message and topic for manual posting.
+- **Slack MCP** (`mcp__plugin_slack_slack__*`): if available, will stage a Slack
+  draft for `#dev-nns` and copy the channel-topic text to the clipboard. If not,
+  will print the message and topic for manual posting.
+
+  To install: run `/plugin install slack@claude-plugins-official` in Claude Code
+  (the plugin lives in the official `anthropics/claude-plugins-official`
+  marketplace, which is preconfigured). On first use you'll be prompted to
+  authenticate with your Slack workspace.
 
 ## Step 1: Pick Release Candidate Commit
 
@@ -50,20 +56,22 @@ Run:
 ./rs/nervous_system/tools/release/cmd.sh latest_commit_with_prebuilt_artifacts
 ```
 
-This returns the latest master commit with prebuilt artifacts (note: artifacts are
-uploaded after `bazel build` but before `bazel test`, so having artifacts does NOT
-guarantee tests passed). If it does not match `origin/master` HEAD, the artifacts
-are not ready yet. Poll every 2 minutes in the background (using Bash tool's
-`run_in_background` option) until they match. The user can continue other work while
-waiting. If artifacts have not appeared after 20 minutes, warn the user that CI may
-be broken and ask whether to continue waiting or use the latest available commit.
+This returns the most recent master commit for which prebuilt artifacts have been
+uploaded. Artifacts are uploaded after `bazel build` but before `bazel test`, so
+having artifacts does NOT guarantee tests passed — always verify CI next.
 
-After picking the commit, verify CI passed by checking the GitHub Actions workflow:
+Verify the `bazel-test-all` job passed for the returned commit:
 ```
 gh api repos/dfinity/ic/commits/$RC_COMMIT/check-runs --jq '[.check_runs[] | select(.name == "ci-kickoff / bazel-test-all") | {status, conclusion}]'
 ```
-If the conclusion is not `success`, warn the user that tests have not passed for this
-commit and ask whether to proceed or wait.
+
+- If the conclusion is `success`, use this commit.
+- If tests have not yet finished (`status != "completed"`) or the conclusion is
+  not `success`, do **not** wait. Instead, open
+  https://github.com/dfinity/ic/actions/workflows/ci-kickoff.yml?query=branch%3Amaster+is%3Asuccess
+  and pick the most recent commit with a successful `ci-kickoff` run. Re-run the
+  `latest_commit_with_prebuilt_artifacts` check-runs query above on that commit
+  to confirm artifacts are available, then use it.
 
 Ask the user to confirm the commit or provide an override.
 
