@@ -67,7 +67,6 @@ jobs:
         with:
           run: |
             bazel test \
-              --config=lint \
               --config=flaky_retry \
               --config=stamped \
               //rs/tests/nested/nns_recovery:nr_large_with_mainnet_state \
