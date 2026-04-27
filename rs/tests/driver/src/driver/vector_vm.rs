@@ -15,7 +15,7 @@ use crate::driver::{
     nested::HasNestedVms,
     test_env::TestEnvAttribute,
     test_env_api::{
-        HasTopologySnapshot, HasVmName, IcNodeContainer, NodesInfo, SshSession, scp_send_to,
+        HasTopologySnapshot, HasVmName, IcNodeContainer, NodesInfo, SshSession, try_scp_send_to,
     },
     test_setup::GroupSetup,
     universal_vm::UniversalVms,
@@ -287,7 +287,7 @@ impl VectorVm {
 
             let from = file.path();
             let to = Path::new("/etc/vector/config").join(file.path().file_name().unwrap());
-            scp_send_to(env.logger(), &session, &from, &to, 0o644);
+            try_scp_send_to(env.logger(), &session, &from, &to, 0o644)?;
         }
 
         if !self.container_running {
