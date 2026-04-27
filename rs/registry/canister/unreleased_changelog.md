@@ -8,8 +8,9 @@ on the process that this file is part of, see
 # Next Upgrade Proposal
 
 ## Added
-* Added an optional field `initial_dkg_subnet_id` to `SplitSubnetPayload` which, when present, determines
-  the subnet to which the resulting `SetupInitialDKG` management canister call should be routed.
+* Added an optional field `initial_dkg_subnet_id` to `SplitSubnetPayload` and `FulfillSubnetRentalRequest`,
+  which, when present, determines the subnet to which the resulting `SetupInitialDKG` management
+  canister call should be routed.
 * Added an optional field `initial_dkg_subnet_id` to `CreateSubnetPayload` and `RecoverSubnetPayload`
   which, when present, determines the subnet to which the resulting `SetupInitialDKG` management
   canister call should be routed.
