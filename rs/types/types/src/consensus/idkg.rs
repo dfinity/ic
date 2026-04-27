@@ -165,7 +165,7 @@ impl<'de> serde::Deserialize<'de> for IDkgMasterPublicKeyId {
 /// protocol since the summary block.
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct IDkgPayload {
-    /// Collection of completed signatures.
+    /// Flag indicating if the deprecated signature agreements hash should be ignored.
     pub empty_signature_agreements_flag: bool,
 
     /// IDKG transcript Pre-Signatures that we can use to create threshold signatures.
