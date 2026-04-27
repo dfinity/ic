@@ -32,6 +32,8 @@ use std::{
 pub mod dkg_key_manager;
 pub mod payload_builder;
 pub mod payload_validator;
+#[allow(dead_code)]
+pub(crate) mod remote;
 
 pub use crate::utils::get_vetkey_public_keys;
 
@@ -407,7 +409,7 @@ mod tests {
     use ic_crypto_test_utils_ni_dkg::dummy_dealing;
     use ic_interfaces::{
         consensus_pool::ConsensusPool,
-        p2p::consensus::{MutablePool, UnvalidatedArtifact},
+        p2p::consensus::{BouncerFactory, BouncerValue, MutablePool, UnvalidatedArtifact},
     };
     use ic_interfaces_registry::RegistryClient;
     use ic_management_canister_types_private::{MasterPublicKeyId, VetKdCurve, VetKdKeyId};
@@ -420,6 +422,7 @@ mod tests {
     use ic_types::{
         RegistryVersion, ReplicaVersion,
         consensus::{Block, BlockPayload},
+        crypto::CryptoHash,
         crypto::threshold_sig::ni_dkg::{
             NiDkgId, NiDkgMasterPublicKeyId, NiDkgTargetId, NiDkgTargetSubnet,
         },
@@ -430,11 +433,37 @@ mod tests {
     use utils::{tags_iter, vetkd_key_ids_for_subnet};
 
     #[test]
+    fn test_dkg_bouncer() {
+        with_test_replica_logger(|logger| {
+            let mut dkg_pool = DkgPoolImpl::new(MetricsRegistry::new(), logger, Height::from(500));
+            let bouncer_factory = DkgBouncer::new(&MetricsRegistry::new());
+            let bouncer = bouncer_factory.new_bouncer(&dkg_pool);
+
+            let height_500_id = DkgMessageId {
+                hash: CryptoHash(vec![0]).into(),
+                height: Height::from(500),
+            };
+            let height_1000_id = DkgMessageId {
+                hash: CryptoHash(vec![1]).into(),
+                height: Height::from(1000),
+            };
+            assert_eq!(bouncer(&height_500_id), BouncerValue::Wants);
+            assert_eq!(bouncer(&height_1000_id), BouncerValue::MaybeWantsLater);
+
+            dkg_pool.apply(vec![ChangeAction::Purge(Height::from(1000))]);
+            let bouncer = bouncer_factory.new_bouncer(&dkg_pool);
+
+            assert_eq!(bouncer(&height_1000_id), BouncerValue::Wants);
+            assert_eq!(bouncer(&height_500_id), BouncerValue::Unwanted);
+        });
+    }
+
+    #[test]
     // In this test we test the creation of dealing payloads.
     fn test_create_dealings_payload() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let nodes: Vec<_> = (0..3).map(node_test_id).collect();
+                let nodes: Vec<_> = (0..4).map(node_test_id).collect();
                 let dkg_interval_len = 30;
                 let subnet_id = subnet_test_id(222);
                 let initial_registry_version = 112;
@@ -547,7 +576,8 @@ mod tests {
                     MetricsRegistry::new(),
                     logger.clone(),
                 );
-                let dkg_pool_2 = DkgPoolImpl::new(MetricsRegistry::new(), logger);
+                let start_height = dkg_pool.read().unwrap().get_current_start_height();
+                let dkg_pool_2 = DkgPoolImpl::new(MetricsRegistry::new(), logger, start_height);
                 sync_dkg_key_manager(&dkg_key_manager_2, &pool);
                 let change_set = dkg_2.on_state_change(&dkg_pool_2);
                 assert_eq!(change_set.len(), 3);
@@ -610,7 +640,8 @@ mod tests {
                     replica_config,
                     ..
                 } = dependencies(pool_config.clone(), 2);
-                let mut dkg_pool = DkgPoolImpl::new(MetricsRegistry::new(), logger.clone());
+                let mut dkg_pool =
+                    DkgPoolImpl::new(MetricsRegistry::new(), logger.clone(), Height::from(0));
                 // Let's check that replica 3, who's not a dealer, does not produce dealings.
                 let dkg_key_manager = new_dkg_key_manager(
                     crypto.clone(),
@@ -749,7 +780,8 @@ mod tests {
                 // We did not advance the consensus pool yet. The configs for remote transcripts
                 // are not added to a summary block yet. That's why we see two dealings for
                 // local thresholds.
-                let mut dkg_pool = DkgPoolImpl::new(MetricsRegistry::new(), logger);
+                let mut dkg_pool =
+                    DkgPoolImpl::new(MetricsRegistry::new(), logger, Height::from(0));
                 sync_dkg_key_manager(&dkg_key_manager, &pool);
                 let change_set = dkg.on_state_change(&dkg_pool);
                 match &change_set.as_slice() {
@@ -905,8 +937,10 @@ mod tests {
                 let consensus_pool_2 = dependencies_2.pool;
 
                 with_test_replica_logger(|logger| {
-                    let dkg_pool_1 = DkgPoolImpl::new(MetricsRegistry::new(), logger.clone());
-                    let dkg_pool_2 = DkgPoolImpl::new(MetricsRegistry::new(), logger.clone());
+                    let dkg_pool_1 =
+                        DkgPoolImpl::new(MetricsRegistry::new(), logger.clone(), Height::from(0));
+                    let dkg_pool_2 =
+                        DkgPoolImpl::new(MetricsRegistry::new(), logger.clone(), Height::from(0));
 
                     // We instantiate the DKG component for node Id = 1 and Id = 2.
                     let dkg_key_manager_1 = new_dkg_key_manager(
@@ -1444,18 +1478,11 @@ mod tests {
                         MetricsRegistry::new(),
                         logger.clone(),
                     );
-                    let mut dkg_pool_1 = DkgPoolImpl::new(MetricsRegistry::new(), logger.clone());
-                    let mut dkg_pool_2 = DkgPoolImpl::new(MetricsRegistry::new(), logger);
-
-                    // First we expect a new purge.
-                    let change_set = dkg_1.on_state_change(&dkg_pool_1);
-                    match &change_set.as_slice() {
-                        &[ChangeAction::Purge(purge_height)]
-                            if *purge_height == Height::from(2 * (dkg_interval_length + 1)) => {}
-                        val => panic!("Unexpected change set: {:?}", val),
-                    };
-                    dkg_pool_1.apply(change_set);
-                    sync_dkg_key_manager(&dgk_key_manager_1, &pool_1);
+                    let start_height = pool_1.get_cache().summary_block().height;
+                    let dkg_pool_1 =
+                        DkgPoolImpl::new(MetricsRegistry::new(), logger.clone(), start_height);
+                    let mut dkg_pool_2 =
+                        DkgPoolImpl::new(MetricsRegistry::new(), logger, start_height);
 
                     // The last summary contains two local and two remote configs.
                     // dkg.on_state_change should create 4 dealings for those
@@ -1498,17 +1525,6 @@ mod tests {
                             });
                         }
                     }
-
-                    assert_eq!(dkg_pool_2.get_unvalidated().count(), 4);
-
-                    // First we expect a new purge from dkg_2 as well.
-                    let change_set = dkg_2.on_state_change(&dkg_pool_2);
-                    match &change_set.as_slice() {
-                        &[ChangeAction::Purge(purge_height)]
-                            if *purge_height == Height::from(2 * (dkg_interval_length + 1)) => {}
-                        val => panic!("Unexpected change set: {:?}", val),
-                    };
-                    dkg_pool_2.apply(change_set);
 
                     assert_eq!(dkg_pool_2.get_unvalidated().count(), 4);
 

@@ -63,6 +63,7 @@ jobs:
     secrets: inherit
     with:
       commit-sha: ${{ github.sha }}
+      release-build: 'true'
 
   setup-guest-os-qualification:
     name: Setting up guest os qualification pipeline

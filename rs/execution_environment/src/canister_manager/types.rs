@@ -402,6 +402,11 @@ pub(crate) enum CanisterManagerError {
         available: Cycles,
         required: Cycles,
     },
+    LogResizeNotEnoughCycles {
+        available: Cycles,
+        threshold: Cycles,
+        requested: Cycles,
+    },
     ReservedCyclesLimitExceededInMemoryAllocation {
         memory_allocation: MemoryAllocation,
         requested: Cycles,
@@ -444,7 +449,7 @@ pub(crate) enum CanisterManagerError {
         canister_id: CanisterId,
         limit: usize,
     },
-    CanisterSnapshotNotEnoughCycles(CanisterOutOfCyclesError),
+    NotEnoughCycles(CanisterOutOfCyclesError),
     CanisterSnapshotImmutable,
     CanisterSnapshotInconsistent {
         message: String,
@@ -493,6 +498,10 @@ pub(crate) enum CanisterManagerError {
     CanisterLogMemoryLimitIsTooHigh {
         bytes: NumBytes,
         limit: NumBytes,
+    },
+    CanisterSnapshotAccessDenied {
+        caller: PrincipalId,
+        method_name: String,
     },
 }
 
@@ -605,6 +614,10 @@ impl AsErrorHelp for CanisterManagerError {
                 suggestion: "Top up the canister with more cycles.".to_string(),
                 doc_link: doc_ref("insufficient-cycles-in-memory-grow-1"),
             },
+            CanisterManagerError::LogResizeNotEnoughCycles { .. } => ErrorHelp::UserError {
+                suggestion: "Top up the canister with more cycles.".to_string(),
+                doc_link: doc_ref("log-resize-not-enough-cycles"),
+            },
             CanisterManagerError::ReservedCyclesLimitExceededInMemoryAllocation { .. } => {
                 ErrorHelp::UserError {
                     suggestion: "Try increasing this canister's reserved cycles limit or moving \
@@ -665,9 +678,9 @@ impl AsErrorHelp for CanisterManagerError {
                 suggestion: "Consider deleting an unnecessary snapshot of the specified canister before creating a new one.".to_string(),
                 doc_link: "canister-snapshot-limit-exceeded".to_string(),
             },
-            CanisterManagerError::CanisterSnapshotNotEnoughCycles { .. } => ErrorHelp::UserError {
+            CanisterManagerError::NotEnoughCycles { .. } => ErrorHelp::UserError {
                 suggestion: "Try sending more cycles with the request.".to_string(),
-                doc_link: "canister-snapshot-not-enough-cycles".to_string(),
+                doc_link: "not-enough-cycles".to_string(),
             },
             CanisterManagerError::CanisterSnapshotImmutable => ErrorHelp::UserError {
                 suggestion: "Only canister snapshots created by metadata upload can be mutated.".to_string(),
@@ -741,6 +754,11 @@ impl AsErrorHelp for CanisterManagerError {
             CanisterManagerError::CallerNotAuthorized => ErrorHelp::UserError {
                 suggestion: "The caller is not authorized to call this method.".to_string(),
                 doc_link: "".to_string(),
+            },
+            CanisterManagerError::CanisterSnapshotAccessDenied { .. } => ErrorHelp::UserError {
+                suggestion: "Execute this call from a principal with snapshot read access."
+                    .to_string(),
+                doc_link: doc_ref("invalid-controller"),
             },
             CanisterManagerError::CanisterLogMemoryLimitIsTooHigh { .. } => ErrorHelp::UserError {
                 suggestion: "Set a lower canister log memory limit.".to_string(),
@@ -982,6 +1000,18 @@ impl From<CanisterManagerError> for UserError {
                     required - available
                 ),
             ),
+            LogResizeNotEnoughCycles {
+                available,
+                threshold,
+                requested,
+            } => Self::new(
+                ErrorCode::CanisterOutOfCycles,
+                format!(
+                    "Cannot resize canister log memory due to insufficient cycles. \
+                     At least {} additional cycles are required.{additional_help}",
+                    (threshold + requested) - available
+                ),
+            ),
             ReservedCyclesLimitExceededInMemoryAllocation {
                 memory_allocation,
                 requested,
@@ -1050,9 +1080,9 @@ impl From<CanisterManagerError> for UserError {
                     "Canister {canister_id} has reached the maximum number of snapshots allowed: {limit}.{additional_help}",
                 ),
             ),
-            CanisterSnapshotNotEnoughCycles(err) => Self::new(
+            NotEnoughCycles(err) => Self::new(
                 ErrorCode::CanisterOutOfCycles,
-                format!("Canister snapshotting failed with: `{err}`{additional_help}"),
+                format!("Canister management operation failed with: `{err}`{additional_help}"),
             ),
             CanisterSnapshotImmutable => Self::new(
                 ErrorCode::CanisterSnapshotImmutable,
@@ -1164,6 +1194,13 @@ impl From<CanisterManagerError> for UserError {
             CallerNotAuthorized => Self::new(
                 ErrorCode::CanisterRejectedMessage,
                 "The caller is not authorized to call this method.".to_string(),
+            ),
+            CanisterSnapshotAccessDenied {
+                caller,
+                method_name,
+            } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!("Caller {caller} is not allowed to call {method_name}"),
             ),
             CanisterLogMemoryLimitIsTooHigh { bytes, limit } => Self::new(
                 ErrorCode::CanisterRejectedMessage,

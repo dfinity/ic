@@ -25,6 +25,7 @@ pub(crate) const SCHEDULER_CORES_INVARIANT_BROKEN: &str = "scheduler_cores_invar
 pub struct SchedulerMetrics {
     pub(super) canister_age: Histogram,
     pub(super) canister_log_delta_memory_usage: Histogram,
+    pub(super) canister_log_retention: Histogram,
     pub(super) canister_ingress_queue_latencies: Histogram,
     pub(super) compute_utilization_per_core: Histogram,
     pub(super) msg_execution_duration: Histogram,
@@ -38,6 +39,7 @@ pub struct SchedulerMetrics {
     pub(super) inner_round_loop_consumed_max_instructions: IntCounter,
     pub(super) num_canisters_uninstalled_out_of_cycles: IntCounter,
     pub(super) round: ScopedMetrics,
+    pub(super) remove_orphaned_stop_canister_calls_duration: Histogram,
     pub(super) round_preparation_duration: Histogram,
     pub(super) round_preparation_ingress: Histogram,
     pub(super) round_consensus_queue: ScopedMetrics,
@@ -90,6 +92,12 @@ impl SchedulerMetrics {
                 "Canisters log delta (per single execution) memory usage distribution in bytes.",
                 // 1 KiB (2^10) .. 8 MiB (2^23), plus zero — 15 total buckets (0 + 14 powers).
                 binary_buckets_with_zero(10, 23)
+            ),
+            canister_log_retention: metrics_registry.histogram(
+                "canister_log_retention_seconds",
+                "Time span between the oldest and newest records in the canister log buffer, in seconds.",
+                // 10 s .. 5×10⁶ s (~58 d), plus zero — 19 total buckets (0 + 18 powers).
+                decimal_buckets_with_zero(1, 6),
             ),
             canister_ingress_queue_latencies: metrics_registry.histogram(
                 "scheduler_canister_ingress_queue_latencies_seconds",
@@ -195,6 +203,7 @@ impl SchedulerMetrics {
                     metrics_registry,
                 ),
             },
+            remove_orphaned_stop_canister_calls_duration: round_phase_duration_histogram("remove orphaned stop canister calls", metrics_registry),
             round_preparation_duration: round_phase_duration_histogram("preparation", metrics_registry),
             // Expiration of messages in the ingress queue.
             round_preparation_ingress: round_preparation_phase_duration_histogram("expire ingress", metrics_registry),

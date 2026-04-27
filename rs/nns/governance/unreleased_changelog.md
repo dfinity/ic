@@ -9,17 +9,18 @@ on the process that this file is part of, see
 
 ## Added
 
-- Proposal type `DeleteSubnet`, currently limited to CloudEngine subnets.
-- Tag neurons that have the maximum dissolve delay of 8 years with their bonus base
-  (`eight_year_gang_bonus_base_e8s`), in preparation for the dissolve delay bonus
-  grandfathering when the maximum dissolve delay is reduced to 2 years.
-- Expose data that will be used to determine the bonus that "8 year gang" neurons
-  will receive, starting in the near future. This data consists of the staked amount
-  in neurons with 8 year dissolve delay at the beginning of Mission 70. This will be
-  used in the near future to determine voting power (and consequently, voting rewards),
-  once other aspects of voting power/rewards are in production.
+* `TakeCanisterSnapshot` proposals now store the new snapshot ID in the
+  `success_value` field.
 
 ## Changed
+
+* Relax eight year gang membership requirement(s): Instead of needing to have dissolve
+  delay >= 8 * 365.25 days (8 "years"), which is exactly 252_460_800 seconds, a second
+  round of induction requires only that neurons had dissolve delay >= 8 * 365 days,
+  which is exactly 252_288_000 seconds. This is less than a 0.07% difference.
+  Additionally, to avoid bonusing newly staked ICP, the neuron must currently be aging
+  since before March 30 (midnight UTC). (Furthermore, neurons that are already members
+  will not have their eight year gang bonus base re-assessed.)
 
 ## Deprecated
 

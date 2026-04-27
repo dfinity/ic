@@ -710,6 +710,9 @@ pub async fn submit_deploy_guestos_to_all_subnet_nodes_proposal(
 ///   the new subnet
 /// * `replica_version` - Replica software version to install to the new subnet
 ///   nodes (see `get_software_version`)
+/// * `max_number_of_canisters` - Cap on canisters for the new subnet. `None` is
+///   treated as no limit (`0`, same as `Some(0)` and ic-prep; see `SubnetRecord` /
+///   canister_manager). A positive value caps canisters on the subnet.
 ///
 /// Eventually returns the identifier of the newly submitted proposal.
 pub async fn submit_create_application_subnet_proposal(
@@ -717,12 +720,36 @@ pub async fn submit_create_application_subnet_proposal(
     node_ids: Vec<NodeId>,
     replica_version: ReplicaVersion,
     cost_schedule: Option<CanisterCyclesCostSchedule>,
+    max_number_of_canisters: Option<u64>,
+) -> ProposalId {
+    submit_create_application_subnet_proposal_with_initial_dkg_subnet(
+        governance,
+        node_ids,
+        replica_version,
+        cost_schedule,
+        max_number_of_canisters,
+        None,
+    )
+    .await
+}
+
+/// Submits a proposal for creating an application subnet and optionally
+/// selecting the subnet that handles initial DKG.
+pub async fn submit_create_application_subnet_proposal_with_initial_dkg_subnet(
+    governance: &Canister<'_>,
+    node_ids: Vec<NodeId>,
+    replica_version: ReplicaVersion,
+    cost_schedule: Option<CanisterCyclesCostSchedule>,
+    max_number_of_canisters: Option<u64>,
+    initial_dkg_subnet_id: Option<SubnetId>,
 ) -> ProposalId {
     let config =
         subnet_configuration::get_default_config_params(SubnetType::Application, node_ids.len());
+    let max_number_of_canisters = max_number_of_canisters.unwrap_or(0);
     let payload = CreateSubnetPayload {
         node_ids,
         subnet_id_override: None,
+        initial_dkg_subnet_id,
         max_ingress_bytes_per_message: config.max_ingress_bytes_per_message,
         max_ingress_bytes_per_block: Some(config.max_ingress_bytes_per_block),
         max_ingress_messages_per_block: config.max_ingress_messages_per_block,
@@ -736,7 +763,7 @@ pub async fn submit_create_application_subnet_proposal(
         subnet_type: SubnetType::Application,
         is_halted: false,
         features: Default::default(),
-        max_number_of_canisters: 4,
+        max_number_of_canisters,
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
         chain_key_config: None,

@@ -210,11 +210,7 @@ thread_local! {
     static ENABLE_NEURON_FOLLOW_RESTRICTIONS: Cell<bool>
         = const { Cell::new(true) };
 
-    static ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS: Cell<bool>
-        = const { Cell::new(true) };
-
-    // This covers both taking and loading canister snapshots.
-    static ENABLE_CANISTER_SNAPSHOT_PROPOSALS: Cell<bool>
+    static ENABLE_CREATE_CANISTER_AND_INSTALL_CODE_PROPOSALS: Cell<bool>
         = const { Cell::new(true) };
 
     static ENABLE_SUBNET_SPLITTING_PROPOSALS: Cell<bool>
@@ -222,12 +218,12 @@ thread_local! {
 
     // The planned effects of enabling this flag include
     //   1. Reduce max dissolve delay from 8 years to 2 years. This includes capping existing neurons via data migration.
-    //   2. Reduce voting rewards pool by approximately 36.5% (equivalently, scale by 0.635 times).
-    //   3. Quadratic dissolve delay bonus (instead of linear).
-    //   4. Reduce the minimum dissolve delay needed to vote.
+    //   2. Reduce voting rewards pool by approximately 36.71% (equivalently, scale by 0.6329 times).
+    //   3. Dissolve delay bonus: quadratic instead of linear, with a maximum of 3x instead of 2x.
+    //   4. Reduce the minimum dissolve delay needed to vote to 2 weeks instead of 6 months.
     //   5. 8 year gang 10% bonus.
     static ENABLE_MISSION_70_VOTING_REWARDS: Cell<bool>
-        = const { Cell::new(cfg!(feature = "test")) };
+        = const { Cell::new(true) };
 }
 
 thread_local! {
@@ -289,32 +285,18 @@ pub fn temporarily_disable_neuron_follow_restrictions() -> Temporary {
     Temporary::new(&ENABLE_NEURON_FOLLOW_RESTRICTIONS, false)
 }
 
-pub fn are_bless_alternative_guest_os_version_proposals_enabled() -> bool {
-    ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS.get()
+pub fn are_create_canister_and_install_code_proposals_enabled() -> bool {
+    ENABLE_CREATE_CANISTER_AND_INSTALL_CODE_PROPOSALS.get()
 }
 
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_bless_alternative_guest_os_version_proposals() -> Temporary {
-    Temporary::new(&ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS, true)
+pub fn temporarily_enable_create_canister_and_install_code_proposals() -> Temporary {
+    Temporary::new(&ENABLE_CREATE_CANISTER_AND_INSTALL_CODE_PROPOSALS, true)
 }
 
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_bless_alternative_guest_os_version_proposals() -> Temporary {
-    Temporary::new(&ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS, false)
-}
-
-pub fn are_canister_snapshot_proposals_enabled() -> bool {
-    ENABLE_CANISTER_SNAPSHOT_PROPOSALS.get()
-}
-
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_canister_snapshot_proposals() -> Temporary {
-    Temporary::new(&ENABLE_CANISTER_SNAPSHOT_PROPOSALS, true)
-}
-
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_canister_snapshot_proposals() -> Temporary {
-    Temporary::new(&ENABLE_CANISTER_SNAPSHOT_PROPOSALS, false)
+pub fn temporarily_disable_create_canister_and_install_code_proposals() -> Temporary {
+    Temporary::new(&ENABLE_CREATE_CANISTER_AND_INSTALL_CODE_PROPOSALS, false)
 }
 
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]

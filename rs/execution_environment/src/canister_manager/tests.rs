@@ -25,7 +25,7 @@ use ic_config::{
         SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
     },
     flag_status::FlagStatus,
-    subnet_config::SchedulerConfig,
+    subnet_config::{CANISTER_CREATION_FEE, SchedulerConfig},
 };
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::{
@@ -131,7 +131,7 @@ const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
 #[test]
 fn test_slice() {
     let slice = vec![42; MAX_SLICE_SIZE_BYTES as usize];
-    #[derive(Deserialize, CandidType)]
+    #[derive(CandidType, Deserialize)]
     struct S {
         #[serde(with = "serde_bytes")]
         x: Vec<u8>,
@@ -280,7 +280,6 @@ impl CanisterManagerBuilder {
             ),
             cycles_account_manager,
             Arc::new(TestPageAllocatorFileDescriptorImpl),
-            FlagStatus::Disabled,
         )
     }
 }
@@ -959,8 +958,9 @@ fn stop_a_stopped_canister() {
 
         let mut msg = CanisterCall::Ingress(Arc::new(IngressBuilder::new().source(sender).build()));
         let call_id = StopCanisterCallId::new(0);
+        let canister = state.canister_state_make_mut(&canister_id).unwrap();
         let response = canister_manager
-            .stop_canister(canister_id, &mut msg, call_id, &mut state, subnet_admins)
+            .stop_canister(&mut msg, call_id, canister, subnet_admins)
             .unwrap();
         assert!(response.reply.is_some());
         assert!(response.stop_call_id_to_remove.is_some());
@@ -989,8 +989,9 @@ fn stop_a_stopped_canister_from_another_canister() {
 
         let mut msg = CanisterCall::Request(Arc::new(RequestBuilder::new().build()));
         let call_id = StopCanisterCallId::new(0);
+        let canister = state.canister_state_make_mut(&canister_id).unwrap();
         let response = canister_manager
-            .stop_canister(canister_id, &mut msg, call_id, &mut state, subnet_admins)
+            .stop_canister(&mut msg, call_id, canister, subnet_admins)
             .unwrap();
         assert!(response.reply.is_some());
         assert!(response.stop_call_id_to_remove.is_some());
@@ -1630,9 +1631,7 @@ fn get_canister_status_of_stopping_canister() {
 
 #[test]
 fn canister_status_with_environment_variables() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_environment_variables_flag(FlagStatus::Enabled)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     let environment_variables = btreemap![
         "TEST_VAR".to_string() => "test_value".to_string(),
         "TEST_VAR2".to_string() => "test_value2".to_string(),
@@ -3052,11 +3051,11 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
         subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
     let time = state.time();
+    let canister = state.canister_state_make_mut(&canister_test_id(0)).unwrap();
     canister_manager
         .uninstall_code(
             canister_change_origin_from_canister(&GOVERNANCE_CANISTER_ID),
-            canister_test_id(0),
-            &mut state,
+            canister,
             &mut round_limits,
             None,
             time,
@@ -6139,12 +6138,7 @@ fn update_wasm_memory_limit_updates_hook_status_ready_to_not_satisfied() {
 
 #[test]
 fn test_environment_variables_are_changed_via_create_canister() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_execution_config(Config {
-            environment_variables: FlagStatus::Enabled,
-            ..Default::default()
-        })
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let env_vars = BTreeMap::from([
         ("KEY1".to_string(), "VALUE1".to_string()),
@@ -6177,12 +6171,7 @@ fn test_environment_variables_are_changed_via_create_canister() {
 
 #[test]
 fn test_environment_variables_are_updated_on_update_settings() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_execution_config(Config {
-            environment_variables: FlagStatus::Enabled,
-            ..Default::default()
-        })
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
 
     let env_vars = EnvironmentVariables::new(BTreeMap::from([
@@ -6228,70 +6217,8 @@ fn test_environment_variables_are_updated_on_update_settings() {
 }
 
 #[test]
-fn test_environment_variables_are_not_set_when_disabled() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_execution_config(Config {
-            environment_variables: FlagStatus::Disabled,
-            ..Default::default()
-        })
-        .build();
-
-    // Create environment variables.
-    let env_vars = BTreeMap::from([
-        ("KEY1".to_string(), "VALUE1".to_string()),
-        ("KEY2".to_string(), "VALUE2".to_string()),
-    ]);
-    let env_vars_args = env_vars
-        .iter()
-        .map(|(name, value)| EnvironmentVariable {
-            name: name.clone(),
-            value: value.clone(),
-        })
-        .collect::<Vec<_>>();
-    // Create canister with environment variables.
-    let canister_id = test
-        .create_canister_with_settings(
-            Cycles::new(1_000_000_000_000_000),
-            CanisterSettingsArgsBuilder::new()
-                .with_environment_variables(env_vars_args.clone())
-                .build(),
-        )
-        .unwrap();
-
-    // Verify environment variables are not set.
-    let canister = test.canister_state(canister_id);
-    assert_eq!(
-        canister.system_state.environment_variables,
-        EnvironmentVariables::new(BTreeMap::new())
-    );
-
-    // Set environment variables via `update_settings`.
-    let args = UpdateSettingsArgs {
-        canister_id: canister_id.get(),
-        settings: CanisterSettingsArgsBuilder::new()
-            .with_environment_variables(env_vars_args)
-            .build(),
-        sender_canister_version: None,
-    };
-    test.subnet_message(Method::UpdateSettings, args.encode())
-        .unwrap();
-
-    // Verify environment variables are not set.
-    let canister = test.canister_state(canister_id);
-    assert_eq!(
-        canister.system_state.environment_variables,
-        EnvironmentVariables::new(BTreeMap::new())
-    );
-}
-
-#[test]
 fn test_environment_variables_are_not_set_when_too_many_keys() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_execution_config(Config {
-            environment_variables: FlagStatus::Enabled,
-            ..Default::default()
-        })
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let env_vars = (0..MAX_ENVIRONMENT_VARIABLES + 1)
         .map(|i| (format!("KEY{i}"), "VAL".to_string()))
@@ -6323,12 +6250,7 @@ fn test_environment_variables_are_not_set_when_too_many_keys() {
 
 #[test]
 fn test_environment_variables_are_not_set_when_key_is_too_long() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_execution_config(Config {
-            environment_variables: FlagStatus::Enabled,
-            ..Default::default()
-        })
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let long_key = "K".repeat(MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH + 1);
     let env_vars = [
@@ -6364,12 +6286,7 @@ fn test_environment_variables_are_not_set_when_key_is_too_long() {
 
 #[test]
 fn test_environment_variables_are_not_set_when_value_is_too_long() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_execution_config(Config {
-            environment_variables: FlagStatus::Enabled,
-            ..Default::default()
-        })
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let long_value = "V".repeat(MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH + 1);
     let env_vars = [
@@ -6405,12 +6322,7 @@ fn test_environment_variables_are_not_set_when_value_is_too_long() {
 
 #[test]
 fn test_environment_variables_are_not_set_duplicate_keys() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_execution_config(Config {
-            environment_variables: FlagStatus::Enabled,
-            ..Default::default()
-        })
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let env_vars = [
         ("KEY1".to_string(), "VALUE1".to_string()),
@@ -6487,12 +6399,7 @@ fn check_environment_variables_via_canister_status(
 
 #[test]
 fn test_environment_variables() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_execution_config(Config {
-            environment_variables: FlagStatus::Enabled,
-            ..Default::default()
-        })
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let env_vars = [
         ("KEY1".to_string(), "VALUE1".to_string()),
@@ -7261,7 +7168,7 @@ fn create_canister_free() {
             .canister_metrics()
             .consumed_cycles()
             .get(),
-        0
+        CANISTER_CREATION_FEE.get()
     );
     assert_eq!(canister.system_state.balance(), *INITIAL_CYCLES);
 }
@@ -7294,7 +7201,7 @@ fn create_canister_as_subnet_admin_succeeds_on_free_cost_schedule() {
             .canister_metrics()
             .consumed_cycles()
             .get(),
-        0
+        CANISTER_CREATION_FEE.get()
     );
     assert_eq!(canister.system_state.balance(), Cycles::new(0));
 }

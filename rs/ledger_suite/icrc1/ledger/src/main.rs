@@ -6,11 +6,10 @@ use candid::Principal;
 use candid::types::number::Nat;
 use ic_canister_log::{declare_log_buffer, export, log};
 use ic_cdk::api::stable::StableReader;
-use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-
 #[cfg(not(feature = "canbench-rs"))]
 use ic_cdk::init;
 use ic_cdk::{post_upgrade, pre_upgrade, query, update};
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icrc1::{
     Operation, Transaction,
     endpoints::{StandardRecord, convert_transfer_error},
@@ -42,6 +41,10 @@ use icrc_ledger_types::icrc103::get_allowances::{
     Allowances, GetAllowancesArgs, GetAllowancesError,
 };
 use icrc_ledger_types::icrc106::errors::Icrc106Error;
+use icrc_ledger_types::icrc122::schema::{MTHD_152_BURN, MTHD_152_MINT};
+use icrc_ledger_types::icrc152::{
+    Icrc152BurnArgs, Icrc152BurnError, Icrc152MintArgs, Icrc152MintError,
+};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
     icrc::metadata_key::MetadataKey,
@@ -74,6 +77,7 @@ use std::{
 };
 
 const MAX_MESSAGE_SIZE: u64 = 1024 * 1024;
+const MAX_REASON_LENGTH: usize = 1024;
 
 #[cfg(not(feature = "u256-tokens"))]
 pub type Tokens = ic_icrc1_tokens_u64::U64;
@@ -747,7 +751,7 @@ fn archives() -> Vec<ArchiveInfo> {
 
 #[query(name = "icrc1_supported_standards")]
 fn supported_standards() -> Vec<StandardRecord> {
-    let standards = vec![
+    let mut standards = vec![
         StandardRecord {
             name: "ICRC-1".to_string(),
             url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-1".to_string(),
@@ -777,6 +781,12 @@ fn supported_standards() -> Vec<StandardRecord> {
             url: "https://github.com/dfinity/ICRC/pull/106".to_string(),
         },
     ];
+    if Access::with_ledger(|ledger| ledger.feature_flags().icrc152) {
+        standards.push(StandardRecord {
+            name: "ICRC-152".to_string(),
+            url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-152.md".to_string(),
+        });
+    }
     standards
 }
 
@@ -893,6 +903,197 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
     Ok(Nat::from(block_idx))
 }
 
+fn icrc152_mint_not_async(
+    caller: Principal,
+    args: Icrc152MintArgs,
+) -> Result<u64, Icrc152MintError> {
+    let block_idx = Access::with_ledger_mut(|ledger| {
+        if !ledger.feature_flags().icrc152 {
+            return Err(Icrc152MintError::GenericError {
+                error_code: Nat::from(0_u64),
+                message: "ICRC-152 is not enabled".to_string(),
+            });
+        }
+        if !ic_cdk::api::is_controller(&caller) {
+            return Err(Icrc152MintError::Unauthorized(
+                "caller is not a controller".to_string(),
+            ));
+        }
+        if args.amount == 0_u64 {
+            return Err(Icrc152MintError::GenericError {
+                error_code: Nat::from(0_u64),
+                message: "amount must be greater than 0".to_string(),
+            });
+        }
+        let amount =
+            Tokens::try_from(args.amount.clone()).map_err(|_| Icrc152MintError::GenericError {
+                error_code: Nat::from(0_u64),
+                message: "amount is too large".to_string(),
+            })?;
+        if args.to.owner == Principal::anonymous() {
+            return Err(Icrc152MintError::InvalidAccount(
+                "anonymous principal is not allowed".to_string(),
+            ));
+        }
+        if &args.to == ledger.minting_account() {
+            return Err(Icrc152MintError::InvalidAccount(
+                "cannot mint to the minting account".to_string(),
+            ));
+        }
+        if let Some(ref reason) = args.reason
+            && reason.len() > MAX_REASON_LENGTH
+        {
+            return Err(Icrc152MintError::GenericError {
+                error_code: Nat::from(0_u64),
+                message: format!("reason must be at most {} bytes", MAX_REASON_LENGTH),
+            });
+        }
+        let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+        let tx = Transaction {
+            operation: Operation::AuthorizedMint {
+                to: args.to,
+                amount,
+                caller: Some(caller),
+                mthd: Some(MTHD_152_MINT.to_string()),
+                reason: args.reason,
+            },
+            created_at_time: Some(args.created_at_time),
+            memo: None,
+        };
+        let (block_idx, _) =
+            apply_transaction(ledger, tx, now, Tokens::zero()).map_err(|err| match err {
+                CoreTransferError::TxDuplicate { duplicate_of } => Icrc152MintError::Duplicate {
+                    duplicate_of: Nat::from(duplicate_of),
+                },
+                CoreTransferError::TxTooOld { .. } => Icrc152MintError::GenericError {
+                    error_code: Nat::from(0_u64),
+                    message: "transaction too old".to_string(),
+                },
+                CoreTransferError::TxCreatedInFuture { .. } => Icrc152MintError::GenericError {
+                    error_code: Nat::from(0_u64),
+                    message: "transaction created in the future".to_string(),
+                },
+                CoreTransferError::TxThrottled => Icrc152MintError::GenericError {
+                    error_code: Nat::from(0_u64),
+                    message: "temporarily unavailable".to_string(),
+                },
+                other => Icrc152MintError::GenericError {
+                    error_code: Nat::from(0_u64),
+                    message: format!("unexpected error: {:?}", other),
+                },
+            })?;
+        update_total_volume(amount, false);
+        Ok(block_idx)
+    })?;
+    Ok(block_idx)
+}
+
+#[update]
+async fn icrc152_mint(args: Icrc152MintArgs) -> Result<Nat, Icrc152MintError> {
+    let block_idx = icrc152_mint_not_async(ic_cdk::api::caller(), args)?;
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    Ok(Nat::from(block_idx))
+}
+
+fn icrc152_burn_not_async(
+    caller: Principal,
+    args: Icrc152BurnArgs,
+) -> Result<u64, Icrc152BurnError> {
+    let block_idx = Access::with_ledger_mut(|ledger| {
+        if !ledger.feature_flags().icrc152 {
+            return Err(Icrc152BurnError::GenericError {
+                error_code: Nat::from(0_u64),
+                message: "ICRC-152 is not enabled".to_string(),
+            });
+        }
+        if !ic_cdk::api::is_controller(&caller) {
+            return Err(Icrc152BurnError::Unauthorized(
+                "caller is not a controller".to_string(),
+            ));
+        }
+        if args.amount == 0_u64 {
+            return Err(Icrc152BurnError::GenericError {
+                error_code: Nat::from(0_u64),
+                message: "amount must be greater than 0".to_string(),
+            });
+        }
+        let amount =
+            Tokens::try_from(args.amount.clone()).map_err(|_| Icrc152BurnError::GenericError {
+                error_code: Nat::from(0_u64),
+                message: "amount is too large".to_string(),
+            })?;
+        if args.from.owner == Principal::anonymous() {
+            return Err(Icrc152BurnError::InvalidAccount(
+                "anonymous principal is not allowed".to_string(),
+            ));
+        }
+        if &args.from == ledger.minting_account() {
+            return Err(Icrc152BurnError::InvalidAccount(
+                "cannot burn from the minting account".to_string(),
+            ));
+        }
+        if let Some(ref reason) = args.reason
+            && reason.len() > MAX_REASON_LENGTH
+        {
+            return Err(Icrc152BurnError::GenericError {
+                error_code: Nat::from(0_u64),
+                message: format!("reason must be at most {} bytes", MAX_REASON_LENGTH),
+            });
+        }
+        let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+        let tx = Transaction {
+            operation: Operation::AuthorizedBurn {
+                from: args.from,
+                amount,
+                caller: Some(caller),
+                mthd: Some(MTHD_152_BURN.to_string()),
+                reason: args.reason,
+            },
+            created_at_time: Some(args.created_at_time),
+            memo: None,
+        };
+        let (block_idx, _) =
+            apply_transaction(ledger, tx, now, Tokens::zero()).map_err(|err| match err {
+                CoreTransferError::TxDuplicate { duplicate_of } => Icrc152BurnError::Duplicate {
+                    duplicate_of: Nat::from(duplicate_of),
+                },
+                CoreTransferError::InsufficientFunds { balance } => {
+                    Icrc152BurnError::InsufficientBalance {
+                        balance: balance.into(),
+                    }
+                }
+                CoreTransferError::TxTooOld { .. } => Icrc152BurnError::GenericError {
+                    error_code: Nat::from(0_u64),
+                    message: "transaction too old".to_string(),
+                },
+                CoreTransferError::TxCreatedInFuture { .. } => Icrc152BurnError::GenericError {
+                    error_code: Nat::from(0_u64),
+                    message: "transaction created in the future".to_string(),
+                },
+                CoreTransferError::TxThrottled => Icrc152BurnError::GenericError {
+                    error_code: Nat::from(0_u64),
+                    message: "temporarily unavailable".to_string(),
+                },
+                other => Icrc152BurnError::GenericError {
+                    error_code: Nat::from(0_u64),
+                    message: format!("unexpected error: {:?}", other),
+                },
+            })?;
+        update_total_volume(amount, false);
+        Ok(block_idx)
+    })?;
+    Ok(block_idx)
+}
+
+#[update]
+async fn icrc152_burn(args: Icrc152BurnArgs) -> Result<Nat, Icrc152BurnError> {
+    let block_idx = icrc152_burn_not_async(ic_cdk::api::caller(), args)?;
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    Ok(Nat::from(block_idx))
+}
+
 #[query]
 fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
     Access::with_ledger(|ledger| {
@@ -928,7 +1129,7 @@ fn icrc3_get_tip_certificate() -> Option<ICRC3DataCertificate> {
 fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::SupportedBlockType> {
     use icrc_ledger_types::icrc3::blocks::SupportedBlockType;
 
-    vec![
+    let mut types = vec![
         SupportedBlockType {
             block_type: "1burn".to_string(),
             url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md"
@@ -954,7 +1155,18 @@ fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::Suppor
             url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md"
                 .to_string(),
         },
-    ]
+    ];
+    if Access::with_ledger(|ledger| ledger.feature_flags().icrc152) {
+        types.push(SupportedBlockType {
+            block_type: "122mint".to_string(),
+            url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-122.md".to_string(),
+        });
+        types.push(SupportedBlockType {
+            block_type: "122burn".to_string(),
+            url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-122.md".to_string(),
+        });
+    }
+    types
 }
 
 #[query]

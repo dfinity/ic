@@ -11,11 +11,11 @@ use ic_metrics::{
     buckets::{decimal_buckets, linear_buckets},
 };
 use ic_replicated_state::ReplicatedState;
+use ic_types::state_manager::StateManagerError;
 use ic_types::{
-    Height, Time,
+    ExecutionRound, Height, Time,
     ingress::{IngressState, IngressStatus},
     messages::MessageId,
-    state_manager::StateManagerError,
 };
 use prometheus::{Histogram, HistogramVec};
 use std::{
@@ -92,7 +92,6 @@ pub struct IngressHistoryWriterImpl {
     log: ReplicaLogger,
     metrics: IngressHistoryMetrics,
     completed_execution_messages_tx: Sender<(MessageId, Height)>,
-    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 }
 
 struct IngressHistoryMetrics {
@@ -115,7 +114,6 @@ impl IngressHistoryWriterImpl {
         log: ReplicaLogger,
         metrics_registry: &MetricsRegistry,
         completed_execution_messages_tx: Sender<(MessageId, Height)>,
-        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> Self {
         Self {
             config,
@@ -181,7 +179,6 @@ impl IngressHistoryWriterImpl {
                 )
             },
             completed_execution_messages_tx,
-            state_reader
         }
     }
 }
@@ -194,6 +191,7 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
         state: &mut Self::State,
         message_id: MessageId,
         status: IngressStatus,
+        current_round: ExecutionRound,
     ) -> Arc<IngressStatus> {
         let time = state.time();
         let current_status = state.get_ingress_status(&message_id);
@@ -312,11 +310,10 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
             // We want to send the height of the replicated state where
             // ingress message went into a terminal state.
             //
-            // latest_state_height() will return the height of the last committed state, `H`.
-            // The ingress message will have completed execution AND be updated to a terminal state from the next state, `H+1`.
-            let last_committed_height = self.state_reader.latest_state_height();
+            // After `ExecutionRound h` completes, the resulting state is marked
+            // with `Height h`, so `current_round` directly gives the height.
             let completed_execution_and_updated_to_terminal_state: Height =
-                last_committed_height + Height::from(1);
+                Height::from(current_round.get());
 
             let _ = self.completed_execution_messages_tx.try_send((
                 message_id.clone(),

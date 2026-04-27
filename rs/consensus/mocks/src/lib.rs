@@ -219,6 +219,7 @@ impl DependenciesBuilder {
         let dkg_pool = Arc::new(RwLock::new(DkgPoolImpl::new(
             ic_metrics::MetricsRegistry::new(),
             log.clone(),
+            Height::from(0),
         )));
         let idkg_pool = Arc::new(RwLock::new(IDkgPoolImpl::new(
             self.replica_config.node_id,

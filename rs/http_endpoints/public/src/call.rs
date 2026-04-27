@@ -26,6 +26,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_types::{
     CanisterId, CountBytes, NodeId, RegistryVersion, SubnetId,
     artifact::UnvalidatedArtifactMutation,
+    crypto::threshold_sig::IcRootOfTrust,
     malicious_flags::MaliciousFlags,
     messages::{
         HttpCallContent, HttpRequestEnvelope, MessageId, SignedIngress, SignedIngressContent,
@@ -49,6 +50,7 @@ pub struct IngressValidatorBuilder {
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
     ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
+    additional_root_of_trust: Option<IcRootOfTrust>,
 }
 
 impl IngressValidatorBuilder {
@@ -73,6 +75,7 @@ impl IngressValidatorBuilder {
             ingress_filter,
             ingress_throttler,
             ingress_tx,
+            additional_root_of_trust: None,
         }
     }
 
@@ -83,6 +86,14 @@ impl IngressValidatorBuilder {
 
     pub fn with_time_source(mut self, time_source: Arc<dyn TimeSource>) -> Self {
         self.time_source = Some(time_source);
+        self
+    }
+
+    pub fn with_additional_root_of_trust(
+        mut self,
+        additional_root_of_trust: IcRootOfTrust,
+    ) -> Self {
+        self.additional_root_of_trust = Some(additional_root_of_trust);
         self
     }
 
@@ -98,6 +109,7 @@ impl IngressValidatorBuilder {
             ingress_filter: self.ingress_filter,
             ingress_throttler: self.ingress_throttler,
             ingress_tx: self.ingress_tx,
+            additional_root_of_trust: self.additional_root_of_trust,
         }
     }
 }
@@ -105,6 +117,11 @@ impl IngressValidatorBuilder {
 pub(crate) enum IngressError {
     HttpError(HttpError),
     UserError(UserError),
+}
+
+pub(crate) enum EffectiveDestination {
+    Canister(CanisterId),
+    Subnet(SubnetId),
 }
 
 impl From<HttpError> for IngressError {
@@ -183,6 +200,7 @@ pub struct IngressValidator {
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
     ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
+    additional_root_of_trust: Option<IcRootOfTrust>,
 }
 
 impl IngressValidator {
@@ -193,7 +211,7 @@ impl IngressValidator {
     pub(crate) async fn validate_ingress_message(
         self,
         request: HttpRequestEnvelope<HttpCallContent>,
-        effective_canister_id: CanisterId,
+        effective_destination: EffectiveDestination,
     ) -> Result<IngressMessageSubmitter, IngressError> {
         let Self {
             log,
@@ -205,6 +223,7 @@ impl IngressValidator {
             ingress_filter,
             ingress_throttler,
             ingress_tx,
+            additional_root_of_trust,
         } = self;
 
         // Load shed the request if the ingress pool is full.
@@ -229,20 +248,51 @@ impl IngressValidator {
             message: format!("Could not parse body as call message: {e}"),
         })?;
 
-        // Reject requests where `canister_id` != `effective_canister_id` for non mgmt canister calls.
-        // This needs to be enforced because boundary nodes block access based on the `effective_canister_id`
-        // in the url and the replica processes the request based on the `canister_id`.
-        // If this is not enforced, a blocked canisters can still be accessed by specifying
-        // a non-blocked `effective_canister_id` and a blocked `canister_id`.
-        if msg.canister_id() != CanisterId::ic_00() && msg.canister_id() != effective_canister_id {
-            Err(HttpError {
-                status: StatusCode::BAD_REQUEST,
-                message: format!(
-                    "Specified CanisterId {} does not match effective canister id in URL {}",
-                    msg.canister_id(),
-                    effective_canister_id
-                ),
-            })?;
+        match effective_destination {
+            // Reject requests where `canister_id` != `effective_canister_id` for non mgmt canister calls.
+            // This needs to be enforced because boundary nodes block access based on the `effective_canister_id`
+            // in the url and the replica processes the request based on the `canister_id`.
+            // If this is not enforced, a blocked canisters can still be accessed by specifying
+            // a non-blocked `effective_canister_id` and a blocked `canister_id`.
+            EffectiveDestination::Canister(effective_canister_id) => {
+                if msg.canister_id() != CanisterId::ic_00()
+                    && msg.canister_id() != effective_canister_id
+                {
+                    Err(HttpError {
+                        status: StatusCode::BAD_REQUEST,
+                        message: format!(
+                            "Specified canister ID {} does not match effective canister ID in URL {}",
+                            msg.canister_id(),
+                            effective_canister_id
+                        ),
+                    })?;
+                }
+            }
+            EffectiveDestination::Subnet(effective_subnet_id) => {
+                if effective_subnet_id != subnet_id {
+                    Err(HttpError {
+                        status: StatusCode::BAD_REQUEST,
+                        message: format!(
+                            "Specified subnet ID {} does not match the subnet ID of this node {}",
+                            effective_subnet_id, subnet_id
+                        ),
+                    })?;
+                }
+                if msg.canister_id() != CanisterId::ic_00()
+                    || (msg.method_name() != "create_canister"
+                        && msg.method_name() != "provisional_create_canister_with_cycles")
+                {
+                    Err(HttpError {
+                        status: StatusCode::BAD_REQUEST,
+                        message: format!(
+                            "Subnet call endpoint only accepts canister creation calls to the management canister ({}), got canister_id={} method_name='{}'",
+                            CanisterId::ic_00(),
+                            msg.canister_id(),
+                            msg.method_name()
+                        ),
+                    })?;
+                }
+            }
         }
 
         let message_id = msg.id();
@@ -262,7 +312,15 @@ impl IngressValidator {
         }
 
         let root_of_trust_provider =
-            RegistryRootOfTrustProvider::new(Arc::clone(&registry_client), registry_version);
+            if let Some(additional_root_of_trust) = additional_root_of_trust {
+                RegistryRootOfTrustProvider::new_with_additional_root_of_trust(
+                    registry_client,
+                    registry_version,
+                    additional_root_of_trust,
+                )
+            } else {
+                RegistryRootOfTrustProvider::new(registry_client, registry_version)
+            };
         // Since spawn blocking requires 'static we can't use any references
         let request_c = msg.as_ref().clone();
 

@@ -114,6 +114,7 @@ impl ArtifactPools {
         let dkg_pool = Arc::new(RwLock::new(DkgPoolImpl::new(
             metrics_registry.clone(),
             log.clone(),
+            catch_up_package.height(),
         )));
         let https_outcalls_pool = Arc::new(RwLock::new(CanisterHttpPoolImpl::new(
             metrics_registry.clone(),

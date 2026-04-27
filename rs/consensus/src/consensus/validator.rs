@@ -13,7 +13,7 @@ use ic_consensus_idkg::{self as idkg};
 use ic_consensus_utils::{
     MINIMUM_CHAIN_LENGTH, RoundRobin, active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
-    get_oldest_idkg_state_registry_version,
+    get_oldest_state_registry_version,
     membership::{Membership, MembershipError},
     pool_reader::{PoolReader, UnexpectedChainLength},
     subnet_splitting,
@@ -1834,7 +1834,7 @@ impl Validator {
                 .state_manager
                 .get_state_at(block.height())
                 .map_err(ValidationFailure::StateManagerError)?;
-            get_oldest_idkg_state_registry_version(state.get_ref())
+            get_oldest_state_registry_version(state.get_ref())
         } else {
             None
         };

@@ -107,10 +107,6 @@ fn consensus_produces_expected_batches() {
         let fake_crypto = Arc::new(fake_crypto);
         let metrics_registry = MetricsRegistry::new();
         let time_source = FastForwardTimeSource::new();
-        let dkg_pool = Arc::new(RwLock::new(dkg_pool::DkgPoolImpl::new(
-            metrics_registry.clone(),
-            no_op_logger(),
-        )));
         let idkg_pool = Arc::new(RwLock::new(idkg_pool::IDkgPoolImpl::new(
             replica_config.node_id,
             pool_config.clone(),
@@ -138,6 +134,11 @@ fn consensus_produces_expected_batches() {
             cup_contents.version,
         )
         .expect("Failed to get DKG summary from CUP contents");
+        let dkg_pool = Arc::new(RwLock::new(dkg_pool::DkgPoolImpl::new(
+            metrics_registry.clone(),
+            no_op_logger(),
+            summary.height,
+        )));
         let consensus_pool = Arc::new(RwLock::new(consensus_pool::ConsensusPoolImpl::new(
             node_id,
             subnet_id,

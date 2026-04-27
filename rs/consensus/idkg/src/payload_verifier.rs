@@ -35,7 +35,7 @@ use crate::{
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::validation::{ValidationError, ValidationResult};
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateManager;
+use ic_interfaces_state_manager::StateReader;
 use ic_management_canister_types_private::ReshareChainKeyResponse;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -227,7 +227,7 @@ pub fn validate_payload(
     crypto: &dyn ConsensusCrypto,
     thread_pool: &ThreadPool,
     pool_reader: &PoolReader<'_>,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
     context: &ValidationContext,
     parent_block: &Block,
     last_summary_block: &Block,
@@ -260,7 +260,7 @@ pub fn validate_payload(
                     crypto,
                     thread_pool,
                     pool_reader,
-                    state_manager,
+                    state_reader,
                     context,
                     parent_block,
                     last_summary_block,
@@ -334,7 +334,7 @@ fn validate_data_payload(
     crypto: &dyn ConsensusCrypto,
     thread_pool: &ThreadPool,
     pool_reader: &PoolReader<'_>,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
     context: &ValidationContext,
     parent_block: &Block,
     summary_block: &Block,
@@ -433,8 +433,9 @@ fn validate_data_payload(
         summary_block,
         &block_reader,
         &builder,
-        state_manager,
+        state_reader,
         registry_client,
+        None,
         &ic_logger::replica_logger::no_op_logger(),
     ) {
         Ok(idkg_payload) => {
@@ -799,7 +800,12 @@ mod test {
         let (key_transcript, key_transcript_ref) =
             payload.generate_current_key(&key_id, &env, &mut rng);
         block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript);
-        initiate_reshare_requests(&mut payload, reshare_requests.clone());
+        initiate_reshare_requests(
+            &mut payload,
+            reshare_requests.clone(),
+            None,
+            &no_op_logger(),
+        );
         let prev_payload = payload.clone();
 
         // Create completed dealings for request 1.
@@ -815,6 +821,7 @@ mod test {
             &contexts,
             &block_reader,
             &transcript_builder,
+            None,
             &no_op_logger(),
         );
         assert_eq!(payload.xnet_reshare_agreements.len(), 1);
@@ -853,6 +860,7 @@ mod test {
             &contexts,
             &block_reader,
             &transcript_builder,
+            None,
             &no_op_logger(),
         );
 

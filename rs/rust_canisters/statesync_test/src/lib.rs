@@ -1,7 +1,7 @@
 use candid::CandidType;
 use serde::{Deserialize, Serialize};
 
-#[derive(CandidType, Copy, Clone, Serialize, Deserialize)]
+#[derive(Copy, Clone, CandidType, Deserialize, Serialize)]
 pub enum CanisterCreationStatus {
     #[serde(rename = "idle")]
     Idle,

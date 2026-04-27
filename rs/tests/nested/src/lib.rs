@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::bail;
 use bare_metal_deployment::{BareMetalIpmiSession, LoginInfo};
 use ic_system_test_driver::driver::nested::NestedNode;
@@ -57,14 +59,23 @@ pub fn create_bare_metal_session(env: &TestEnv) -> BareMetalIpmiSession {
     bare_metal
 }
 
-/// Creates a `NestedNodes` with a single bare metal TEE node.
-pub fn create_bare_metal_tee_node(bare_metal: &BareMetalIpmiSession) -> NestedNode {
+/// Creates a bare-metal nested node. Set `enable_trusted_execution_environment` when the host
+/// runs AMD SEV-SNP (same meaning as the `TRUSTED_EXECUTION_ENVIRONMENT` env var in `setup()`).
+pub fn create_bare_metal_node(
+    bare_metal: &BareMetalIpmiSession,
+    enable_trusted_execution_environment: bool,
+) -> NestedNode {
     NestedNode::new_bare_metal(
         HOST_VM_NAME.to_string(),
         bare_metal.hostos_address(),
         bare_metal.mgmt_mac(),
-        /*enable_trusted_execution_environment=*/ true,
+        enable_trusted_execution_environment,
     )
+}
+
+/// Creates a `NestedNodes` with a single bare metal TEE (SEV-SNP) node.
+pub fn create_bare_metal_tee_node(bare_metal: &BareMetalIpmiSession) -> NestedNode {
+    create_bare_metal_node(bare_metal, true)
 }
 
 pub fn get_bare_metal_login_info() -> LoginInfo {
@@ -76,20 +87,19 @@ pub fn get_bare_metal_login_info() -> LoginInfo {
         .expect("Failed to parse baremetal login info")
 }
 
+pub fn registration(env: TestEnv) {
+    registration_with_timeout(env, NODE_REGISTRATION_TIMEOUT);
+}
+
 /// Allow the nested GuestOS to install and launch, and check that it can
 /// successfully join the testnet.
-pub fn registration(env: TestEnv) {
+pub fn registration_with_timeout(env: TestEnv, timeout: Duration) {
     let logger = env.logger();
 
-    let initial_topology = block_on(
-        env.topology_snapshot()
-            .block_for_min_registry_version(ic_types::RegistryVersion::from(1)),
-    )
-    .unwrap();
+    let initial_topology = env.topology_snapshot();
 
-    // Check that there are initially no unassigned nodes.
-    let num_unassigned_nodes = initial_topology.unassigned_nodes().count();
-    assert_eq!(num_unassigned_nodes, 0);
+    // Keep track of the initial number of unassigned nodes.
+    let initial_num_unassigned_nodes = initial_topology.unassigned_nodes().count();
 
     let nested_vms = env.get_all_nested_vms().unwrap();
     let n = nested_vms.len();
@@ -97,24 +107,25 @@ pub fn registration(env: TestEnv) {
     // If the nodes are able to join successfully, the registry will be updated,
     // and the new node IDs will enter the unassigned pool.
     let mut new_topology = initial_topology;
+    let expected_num_unassigned_nodes = initial_num_unassigned_nodes + n;
     retry_with_msg!(
         format!("Waiting for all {n} nodes to join ..."),
         logger.clone(),
-        NODE_REGISTRATION_TIMEOUT,
+        timeout,
         NODE_REGISTRATION_BACKOFF,
         || {
             new_topology = block_on(
                 new_topology.block_for_newer_registry_version_within_duration(
-                    NODE_REGISTRATION_TIMEOUT,
+                    timeout,
                     NODE_REGISTRATION_BACKOFF,
                 ),
             )
             .unwrap();
             let num_unassigned_nodes = new_topology.unassigned_nodes().count();
-            if num_unassigned_nodes == n {
+            if num_unassigned_nodes == expected_num_unassigned_nodes {
                 Ok(())
             } else {
-                bail!("Expected {n} unassigned nodes, but found {num_unassigned_nodes}. Waiting for the rest to register ...");
+                bail!("Expected {expected_num_unassigned_nodes} unassigned nodes, but found {num_unassigned_nodes}. Waiting for the rest to register ...");
             }
         }
     ).unwrap();

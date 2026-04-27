@@ -48,6 +48,7 @@ message CallContext {
   uint64 time_nanos = 9;
   uint64 instructions_executed = 10;
   state.queues.v1.RequestMetadata metadata = 11;
+  state.ingress.v1.SenderInfo sender_info = 14;
 }
 
 message CallContextEntry {
@@ -78,6 +79,7 @@ message Callback {
   state.queues.v1.CompoundCycles prepayment_for_response_execution_compound = 11;
   // To replace `prepayment_for_response_transmission`.
   state.queues.v1.CompoundCycles prepayment_for_response_transmission_compound = 12;
+  state.queues.v1.CompoundCycles prepayment_for_call_transmission = 13;
 }
 
 message CallbackEntry {
@@ -480,6 +482,9 @@ message CanisterStateBits {
   optional uint64 global_timer_nanos = 33;
   // Canister version.
   uint64 canister_version = 34;
+  // Consumed cycles by use case presented as gauges. When prepayments happen
+  // the respective amount is added to the consumed amount while when a refund
+  // happens the refund amount is subtracted from consumed amount.
   repeated ConsumedCyclesByUseCase consumed_cycles_by_use_cases = 36;
   CanisterHistory canister_history = 37;
   // Resource reservation cycles.

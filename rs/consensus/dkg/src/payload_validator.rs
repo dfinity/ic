@@ -5,7 +5,7 @@ use ic_interfaces::{
     validation::ValidationResult,
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateManager;
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, warn};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
@@ -32,7 +32,7 @@ pub fn validate_payload(
     parent: Block,
     last_summary_block: &Block,
     payload: &BlockPayload,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
     validation_context: &ValidationContext,
     metrics: &IntCounterVec,
     log: &ReplicaLogger,
@@ -60,7 +60,7 @@ pub fn validate_payload(
                 last_dkg_summary,
                 &parent,
                 registry_version,
-                state_manager,
+                state_reader,
                 validation_context,
                 ic_logger::replica_logger::no_op_logger(),
             )?;
@@ -743,7 +743,8 @@ mod tests {
                 MetricsRegistry::new(),
                 no_op_logger(),
             );
-            let mut dkg_pool = DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+            let mut dkg_pool =
+                DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger(), dkg_summary.height);
             // Update start height
             let start_height = Height::new(10);
             dkg_pool.apply(vec![ChangeAction::Purge(start_height)]);
