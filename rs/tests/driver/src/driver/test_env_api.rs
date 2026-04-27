@@ -2865,7 +2865,9 @@ pub fn try_scp_send_to(
     to_remote: &std::path::Path,
     mode: i32,
 ) -> Result<()> {
-    let size = fs::metadata(from_local)?.len();
+    let size = fs::metadata(from_local)
+        .with_context(|| format!("Failed to read metadata for local path {from_local:?}"))?
+        .len();
     retry_with_msg!(
         format!("scp-ing local {from_local:?} of {size:?} B to remote {to_remote:?}"),
         log.clone(),
