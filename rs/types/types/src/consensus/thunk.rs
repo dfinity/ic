@@ -50,6 +50,14 @@ impl<T> Thunk<T> {
     }
 }
 
+impl<T: Clone + Send + 'static> Clone for Thunk<T> {
+    fn clone(&self) -> Self {
+        // `as_ref` evaluates the thunk and `from` creates a new thunk that returns the value as a
+        // constant
+        Self::from(self.as_ref().clone())
+    }
+}
+
 impl<T: Send + 'static> From<T> for Thunk<T> {
     fn from(value: T) -> Self {
         Thunk::new(Box::new(move || value))

@@ -234,6 +234,16 @@ impl Payload {
     pub fn payload_type(&self) -> PayloadType {
         self.payload_type
     }
+
+    /// Return the inner `BlockPayload`. This will force the lazy loading if it has not been loaded
+    /// yet. If the `Arc` pointer is unique, this is done without cloning. Otherwise, we first need
+    /// to clone the `BlockPayload` before returning it.
+    pub fn into_inner(self) -> BlockPayload {
+        Arc::try_unwrap(self.payload)
+            .unwrap_or_else(|arc| (*arc).clone())
+            .into_inner()
+            .into_inner()
+    }
 }
 
 impl AsRef<BlockPayload> for Payload {

@@ -325,9 +325,9 @@ impl NiDkgTranscript {
 
 /// Converts an NI-DKG transcript into the corresponding protobuf
 /// representation.
-impl From<&NiDkgTranscript> for InitialNiDkgTranscriptRecord {
-    fn from(transcript: &NiDkgTranscript) -> Self {
-        let dkg_id = NiDkgIdProto::from(transcript.dkg_id.clone());
+impl From<NiDkgTranscript> for InitialNiDkgTranscriptRecord {
+    fn from(transcript: NiDkgTranscript) -> Self {
+        let dkg_id = NiDkgIdProto::from(transcript.dkg_id);
         InitialNiDkgTranscriptRecord {
             id: Some(dkg_id),
             threshold: transcript.threshold.get().get(),
@@ -341,11 +341,5 @@ impl From<&NiDkgTranscript> for InitialNiDkgTranscriptRecord {
             internal_csp_transcript: serde_cbor::to_vec(&transcript.internal_csp_transcript)
                 .expect("failed to serialize CSP NI-DKG transcript to CBOR"),
         }
-    }
-}
-
-impl From<NiDkgTranscript> for InitialNiDkgTranscriptRecord {
-    fn from(transcript: NiDkgTranscript) -> Self {
-        Self::from(&transcript)
     }
 }
