@@ -1,9 +1,6 @@
 use crate::{
     CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS, Clock, IcClock,
-    governance::{
-        LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70,
-        RELAXED_EIGHT_YEAR_GANG_MIN_DISSOLVE_DELAY_SECONDS, TimeWarp,
-    },
+    governance::{LOG_PREFIX, RELAXED_EIGHT_YEAR_GANG_MIN_DISSOLVE_DELAY_SECONDS, TimeWarp},
     neuron::Neuron,
     neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
     pb::v1::{
@@ -802,11 +799,6 @@ impl NeuronStore {
 
                 // Skip neurons dissolve delay that was too small.
                 if d < RELAXED_EIGHT_YEAR_GANG_MIN_DISSOLVE_DELAY_SECONDS {
-                    return None;
-                }
-
-                // Skip neurons that are already in the eight year gang.
-                if d == MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70 {
                     return None;
                 }
 
