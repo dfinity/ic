@@ -192,12 +192,12 @@ impl RoundScheduleFixture {
     fn set_long_execution_progress(
         &mut self,
         canister_id: CanisterId,
-        long_execution_start_round: Option<ExecutionRound>,
+        long_execution_start_round: ExecutionRound,
         executed_slices: i64,
     ) {
         assert!(self.state.canister_state(&canister_id).is_some());
         let canister_priority = self.state.canister_priority_mut(canister_id);
-        canister_priority.long_execution_start_round = long_execution_start_round;
+        canister_priority.long_execution_start_round = Some(long_execution_start_round);
         canister_priority.executed_slices = executed_slices;
     }
 
@@ -256,7 +256,7 @@ impl RoundScheduleFixture {
     /// Adds a paused long execution to the canister's task queue.
     fn add_long_execution(&mut self, canister_id: CanisterId) {
         let canister = self.canister_state(&canister_id);
-        debug_assert!(!canister.has_input());
+        assert!(!canister.has_input());
 
         canister
             .system_state
@@ -574,9 +574,9 @@ fn start_iteration_ordering_by_priority() {
 fn start_iteration_ordering_executed_slices() {
     let mut fixture = RoundScheduleFixture::new();
     let fewer_slices_id = fixture.canister_with_long_execution();
-    fixture.set_long_execution_progress(fewer_slices_id, Some(ExecutionRound::new(1)), 2);
+    fixture.set_long_execution_progress(fewer_slices_id, ExecutionRound::new(1), 2);
     let more_slices_id = fixture.canister_with_long_execution();
-    fixture.set_long_execution_progress(more_slices_id, Some(ExecutionRound::new(2)), 3);
+    fixture.set_long_execution_progress(more_slices_id, ExecutionRound::new(2), 3);
 
     let iteration = fixture.start_iteration(true);
 
@@ -590,9 +590,9 @@ fn start_iteration_ordering_executed_slices() {
 fn start_iteration_ordering_start_round() {
     let mut fixture = RoundScheduleFixture::new();
     let earlier_start_id = fixture.canister_with_long_execution();
-    fixture.set_long_execution_progress(earlier_start_id, Some(ExecutionRound::new(1)), 2);
+    fixture.set_long_execution_progress(earlier_start_id, ExecutionRound::new(1), 2);
     let later_start_id = fixture.canister_with_long_execution();
-    fixture.set_long_execution_progress(later_start_id, Some(ExecutionRound::new(2)), 2);
+    fixture.set_long_execution_progress(later_start_id, ExecutionRound::new(2), 2);
 
     let iteration = fixture.start_iteration(true);
 
@@ -794,10 +794,10 @@ fn end_iteration_clears_long_execution_start_round() {
 
     // At the end of the round, `canister_a` has an in-progress long execution.
     let canister_a = fixture.canister_with_long_execution();
-    fixture.set_long_execution_progress(canister_a, Some(ExecutionRound::new(1)), 2);
+    fixture.set_long_execution_progress(canister_a, ExecutionRound::new(1), 2);
     // `canister_b` had a long execution, but now has a new input.
     let canister_b = fixture.canister_with_input();
-    fixture.set_long_execution_progress(canister_b, Some(ExecutionRound::new(3)), 4);
+    fixture.set_long_execution_progress(canister_b, ExecutionRound::new(3), 4);
 
     let executed = btreeset! {canister_a, canister_b};
     let completed = btreeset! {canister_b};
@@ -1335,7 +1335,7 @@ fn run_multi_round_simulation(
             }
         }
 
-        // --- start_iteration ---
+        // --- Start round ---
         let current_round = ExecutionRound::new(round as u64);
         fixture.start_round(
             current_round,
@@ -1343,6 +1343,8 @@ fn run_multi_round_simulation(
                 .with_cores(scheduler_cores)
                 .with_heap_delta_rate_limit(HEAP_DELTA_RATE_LIMIT),
         );
+
+        // --- start_iteration ---
         let iteration = fixture.start_iteration_only(true);
 
         // --- Simulate core assignment and execution ---
