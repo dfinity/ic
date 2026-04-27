@@ -2995,6 +2995,8 @@ pub struct FulfillSubnetRentalRequest {
     pub node_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
     #[prost(string, tag = "2")]
     pub replica_version_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "4")]
+    pub initial_dkg_subnet_id: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
 #[derive(
     candid::CandidType,
