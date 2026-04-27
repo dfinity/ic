@@ -3414,7 +3414,6 @@ impl StateMachine {
         self.checkpointed_tick();
         let (h, mut state) = self.state_manager.take_tip();
         state.put_canister_state(source_state.canister_state(&canister_id).unwrap().clone());
-        *state.canister_priority_mut(canister_id) = *source_state.canister_priority(&canister_id);
         self.state_manager
             .commit_and_certify(state, CertificationScope::Full, None);
         self.state_manager.remove_states_below(h.increment());

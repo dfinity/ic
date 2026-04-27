@@ -1216,10 +1216,8 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             controllers: canister_state.system_state.controllers.clone(),
             last_full_execution_round: canister_priority.last_full_execution_round,
             compute_allocation: canister_state.compute_allocation(),
-            // Any long execution must have been aborted, priority credit is always zero.
-            priority_credit: 0.into(),
-            // Value is ignored when loading.
-            long_execution_mode: Default::default(),
+            priority_credit: canister_priority.priority_credit,
+            long_execution_mode: canister_priority.long_execution_mode,
             accumulated_priority: canister_priority.accumulated_priority,
             memory_allocation: canister_state.system_state.memory_allocation,
             wasm_memory_threshold: canister_state.system_state.wasm_memory_threshold,
