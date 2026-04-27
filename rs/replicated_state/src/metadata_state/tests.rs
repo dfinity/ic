@@ -4,8 +4,8 @@ use super::subnet_call_context_manager::{
     SubnetCallContext, SubnetCallContextManager, ThresholdArguments,
 };
 use super::*;
+use crate::InputQueueType;
 use crate::testing::{CanisterQueuesTesting, StreamTesting};
-use crate::{CanisterPriority, InputQueueType};
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_canister_threshold_sigs::{
     CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_ecdsa_presig_quadruple,
@@ -370,32 +370,6 @@ fn system_metadata_roundtrip_encoding() {
     system_metadata.bitcoin_get_successors_follow_up_responses =
         btreemap! { 10.into() => vec![vec![1], vec![2]] };
 
-    // Observe two `BlockmakerMetrics` on successive days.
-    system_metadata.blockmaker_metrics_time_series.observe(
-        Time::from_nanos_since_unix_epoch(0),
-        &BlockmakerMetrics {
-            blockmaker: node_test_id(1),
-            failed_blockmakers: vec![node_test_id(2)],
-        },
-    );
-    system_metadata.blockmaker_metrics_time_series.observe(
-        Time::from_nanos_since_unix_epoch(0) + Duration::from_secs(24 * 3600),
-        &BlockmakerMetrics {
-            blockmaker: node_test_id(3),
-            failed_blockmakers: vec![node_test_id(4)],
-        },
-    );
-
-    // Add scheduling priority for a canister.
-    *system_metadata
-        .subnet_schedule
-        .get_mut(CanisterId::from_u64(1)) = CanisterPriority {
-        accumulated_priority: 100.into(),
-        executed_slices: 2,
-        long_execution_start_round: Some(3.into()),
-        last_full_execution_round: 4.into(),
-    };
-
     // Validates that a roundtrip encode-decode results in the same `SystemMetadata`.
     fn validate_roundtrip_encoding(system_metadata: &SystemMetadata) {
         let proto = pb::SystemMetadata::from(system_metadata);
@@ -403,7 +377,7 @@ fn system_metadata_roundtrip_encoding() {
             *system_metadata,
             (
                 proto,
-                SubnetSchedule::default(),
+                system_metadata.subnet_schedule.clone(),
                 &DummyMetrics as &dyn CheckpointLoadingMetrics
             )
                 .try_into()
@@ -425,36 +399,30 @@ fn system_metadata_roundtrip_encoding() {
     // Set `last_generated_canister_id` to valid, but migrated canister ID.
     system_metadata.last_generated_canister_id = Some(15.into());
     validate_roundtrip_encoding(&system_metadata);
-}
 
-#[test]
-fn subnet_schedule_backward_compatibility() {
-    // Old encoding: `SystemMetadata` without `subnet_schedule`, plus a
-    // `SubnetSchedule` aggregated from canister states.
-    let system_metadata = SystemMetadata::new(SUBNET_0, SubnetType::Application);
-    let mut subnet_schedule = SubnetSchedule::default();
-    *subnet_schedule.get_mut(CanisterId::from_u64(1)) = CanisterPriority {
-        accumulated_priority: 100.into(),
-        executed_slices: 2,
-        long_execution_start_round: Some(3.into()),
-        last_full_execution_round: 4.into(),
-    };
-
-    // Expected decoded `SystemMetadata` has populated `subnet_schedule`.
-    let mut expected = system_metadata.clone();
-    expected.subnet_schedule = subnet_schedule.clone();
-
-    let proto = pb_metadata::SystemMetadata::from(&system_metadata);
-    assert_eq!(
-        expected,
-        (
-            proto,
-            subnet_schedule,
-            &DummyMetrics as &dyn CheckpointLoadingMetrics
-        )
-            .try_into()
-            .unwrap()
+    // Observe two `BlockmakerMetrics` on successive days.
+    system_metadata.blockmaker_metrics_time_series.observe(
+        Time::from_nanos_since_unix_epoch(0),
+        &BlockmakerMetrics {
+            blockmaker: node_test_id(1),
+            failed_blockmakers: vec![node_test_id(2)],
+        },
     );
+    system_metadata.blockmaker_metrics_time_series.observe(
+        Time::from_nanos_since_unix_epoch(0) + Duration::from_secs(24 * 3600),
+        &BlockmakerMetrics {
+            blockmaker: node_test_id(3),
+            failed_blockmakers: vec![node_test_id(4)],
+        },
+    );
+    validate_roundtrip_encoding(&system_metadata);
+
+    // Add scheduling priority for a canister.
+    system_metadata
+        .subnet_schedule
+        .get_mut(CanisterId::from_u64(1))
+        .accumulated_priority = 1.into();
+    validate_roundtrip_encoding(&system_metadata);
 }
 
 #[test]
