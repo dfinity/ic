@@ -229,7 +229,8 @@ fn can_record_metrics_for_a_round() {
     // Bump up the round number.
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // Advance 11 rounds (relative to the 2 rounds already executed).
+    // For allocation violation to happen, the canister age should be more than `100/9 = 11 rounds`
+    // plus 2 rounds already executed.
     test.advance_to_round(ExecutionRound::from(11 + 2));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 

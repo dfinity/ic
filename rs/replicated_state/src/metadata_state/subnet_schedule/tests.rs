@@ -1,5 +1,4 @@
 use super::*;
-use ic_types::LongExecutionMode;
 use strum::IntoEnumIterator;
 
 #[test]
@@ -36,8 +35,8 @@ fn get() {
 fn validate_eq() {
     let some_priority = CanisterPriority {
         accumulated_priority: AccumulatedPriority::new(1),
-        executed_slices: 2,
-        long_execution_start_round: Some(ExecutionRound::new(3)),
+        priority_credit: AccumulatedPriority::new(2),
+        long_execution_mode: LongExecutionMode::Opportunistic,
         last_full_execution_round: ExecutionRound::new(4),
     };
     let canister_id1 = CanisterId::from_u64(1);

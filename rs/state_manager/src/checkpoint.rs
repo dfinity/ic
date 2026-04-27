@@ -889,14 +889,8 @@ pub fn load_canister_state(
     };
     let priority = CanisterPriority {
         accumulated_priority: canister_state_bits.accumulated_priority,
-        // We can only be loading an aborted execution, so zero executed slices.
-        executed_slices: 0,
-        // Set a long execution start round where necessary.
-        long_execution_start_round: if canister_state.has_long_execution() {
-            Some(0.into())
-        } else {
-            None
-        },
+        priority_credit: canister_state_bits.priority_credit,
+        long_execution_mode: canister_state_bits.long_execution_mode,
         last_full_execution_round: canister_state_bits.last_full_execution_round,
     };
 
