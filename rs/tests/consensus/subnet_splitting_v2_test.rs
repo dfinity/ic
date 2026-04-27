@@ -902,6 +902,7 @@ async fn propose_to_split_subnet(
         destination_canister_ranges: canister_ranges_to_migrate,
         destination_node_ids: node_ids_to_migrate,
         source_subnet_id: source_subnet.subnet_id,
+        initial_dkg_subnet_id: None,
     };
 
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
