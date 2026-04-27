@@ -240,8 +240,7 @@ impl Payload {
     /// to clone the `BlockPayload` before returning it.
     pub fn into_inner(self) -> BlockPayload {
         Arc::try_unwrap(self.payload)
-            // .unwrap_or_else(|arc| (*arc).clone())
-            .unwrap_or_else(|_| panic!("Pierugo test REVERT ME"))
+            .unwrap_or_else(|arc| (*arc).clone())
             .into_inner()
             .into_inner()
     }
