@@ -471,11 +471,11 @@ generate_forum_post_nns_upgrades() {
 
     PROPOSAL_FILES=$(ls "$@")
 
-    THIS_FRIDAY=$(date -d "next Friday" +'%Y-%m-%d' 2>/dev/null || date -v+Fri +%Y-%m-%d)
+    VOTE_DATE=$(date -d "+3 days" +'%A, %B %-d, %Y' 2>/dev/null || date -v+3d +'%A, %B %-d, %Y')
 
     OUTPUT=$(
         cat <<EOF
-The NNS Team submitted the following proposals.  DFINITY plans to vote on these proposals the following Monday.
+The NNS Team submitted the following proposals.  DFINITY plans to vote on these proposals on $VOTE_DATE.
 
 TODO proposal links
 
@@ -483,7 +483,7 @@ TODO proposal links
 
 TODO - delete if nothing relevant
 
-## Proposals to be Submitted
+## Submitted Proposals
 
 $(for file in $PROPOSAL_FILES; do
             echo "### $(nns_upgrade_proposal_canister_raw_name $file)"
@@ -510,11 +510,11 @@ generate_forum_post_sns_wasm_publish() {
 
     PROPOSAL_FILES=$(ls "$@")
 
-    THIS_FRIDAY=$(date -d "next Friday" +'%Y-%m-%d' 2>/dev/null || date -v+Fri +%Y-%m-%d)
+    VOTE_DATE=$(date -d "+3 days" +'%A, %B %-d, %Y' 2>/dev/null || date -v+3d +'%A, %B %-d, %Y')
 
     OUTPUT=$(
         cat <<EOF
-The NNS Team submitted the following proposals to publish new versions of SNS canisters to SNS-WASM.  DFINITY plans to vote on these proposals the following Monday.
+The NNS Team submitted the following proposals to publish new versions of SNS canisters to SNS-WASM.  DFINITY plans to vote on these proposals on $VOTE_DATE.
 
 TODO proposal links
 
@@ -522,7 +522,7 @@ TODO proposal links
 
 TODO - delete if nothing relevant
 
-## Proposals to be Submitted
+## Submitted Proposals
 
 $(for file in $PROPOSAL_FILES; do
             echo "### $(sns_wasm_publish_proposal_canister_raw_name $file)"

@@ -333,6 +333,20 @@ pub struct SignedSenderInfo {
     pub sig: Vec<u8>,
 }
 
+/// The content bytes of a sender_info field, used as the signable message
+/// for canister signature verification of sender info.
+///
+/// The signing canister (e.g. Internet Identity) signs the `info` blob
+/// using a canister signature with the domain separator `"ic-sender-info"`.
+#[derive(Clone, Debug)]
+pub struct SenderInfoContent<'a>(pub &'a [u8]);
+
+impl crate::crypto::SignedBytesWithoutDomainSeparator for SenderInfoContent<'_> {
+    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
+        self.0.to_vec()
+    }
+}
+
 /// Common attributes that all HTTP request contents should have.
 pub trait HttpRequestContent {
     fn id(&self) -> MessageId;

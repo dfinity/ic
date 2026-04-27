@@ -11,7 +11,7 @@ use ic_interfaces::{
     crypto::{ErrorReproducibility, IDkgProtocol},
     idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool},
 };
-use ic_logger::{ReplicaLogger, debug, warn};
+use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     Height, NodeId,
@@ -142,9 +142,10 @@ impl IDkgPreSignerImpl {
                         self.metrics
                             .pre_sign_errors_inc("create_dealing_for_xnet_transcript");
                         warn!(
+                            every_n_seconds => 10,
                             self.log,
                             "Dealing creation: dealing for target xnet dealing: {:?}",
-                            transcript_params,
+                            transcript_params
                         );
                     }
                     self.crypto_create_dealing(idkg_pool, transcript_loader, &transcript_params)
@@ -278,6 +279,7 @@ impl IDkgPreSignerImpl {
                         self.metrics
                             .pre_sign_errors_inc("create_support_id_dealing_hash");
                         warn!(
+                            every_n_seconds => 10,
                             self.log,
                             "send_dealing_support(): Failed to get dealing hash: {:?}", id
                         );
@@ -325,9 +327,10 @@ impl IDkgPreSignerImpl {
                         self.metrics
                             .pre_sign_errors_inc("create_support_for_xnet_transcript");
                         warn!(
+                            every_n_seconds => 10,
                             self.log,
                             "Dealing support creation: support for target xnet dealing: {}",
-                            signed_dealing,
+                            signed_dealing
                         );
                     }
 
@@ -370,6 +373,7 @@ impl IDkgPreSignerImpl {
                 self.metrics
                     .pre_sign_errors_inc("validate_dealing_support_id_dealing_hash");
                 warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "validate_dealing_support(): Failed to get dealing hash: {:?}", id
                 )
@@ -530,8 +534,9 @@ impl IDkgPreSignerImpl {
                             self.metrics
                                 .pre_sign_errors_inc("missing_hash_invalid_dealer");
                             warn!(
+                                every_n_seconds => 10,
                                 self.log,
-                                "validate_dealing_support(): Missing hash, invalid dealer: {support}",
+                                "validate_dealing_support(): Missing hash, invalid dealer: {support}"
                             );
                             return Some(IDkgChangeAction::RemoveUnvalidated(id));
                         }
@@ -553,8 +558,9 @@ impl IDkgPreSignerImpl {
                             self.metrics
                                 .pre_sign_errors_inc("missing_hash_meta_data_mismatch");
                             warn!(
+                                every_n_seconds => 10,
                                 self.log,
-                                "validate_dealing_support(): Missing hash, meta data mismatch: {support}",
+                                "validate_dealing_support(): Missing hash, meta data mismatch: {support}"
                             );
                             return Some(IDkgChangeAction::RemoveUnvalidated(id));
                         }
@@ -609,6 +615,7 @@ impl IDkgPreSignerImpl {
                             self.metrics
                                 .pre_sign_errors_inc("build_transcript_id_dealing_hash");
                             warn!(
+                                every_n_seconds => 10,
                                 self.log,
                                 "build_transcript(): Failed to get dealing hash: {:?}", id
                             );
@@ -622,6 +629,7 @@ impl IDkgPreSignerImpl {
                     {
                         if let Err(err) = transcript_state.add_dealing_support(support) {
                             warn!(
+                                every_n_seconds => 10,
                                 self.log,
                                 "Failed to add support: transcript_id = {:?}, error = {:?}",
                                 transcript_id,
@@ -786,6 +794,7 @@ impl IDkgPreSignerImpl {
             }
             Err(IDkgCreateDealingError::SignatureError { internal_error }) => {
                 warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Failed to sign dealing: transcript_id = {:?}, type = {:?}, error = {:?}",
                     transcript_params.transcript_id(),
@@ -800,6 +809,7 @@ impl IDkgPreSignerImpl {
                 // will most likely fail again. This should be signaled up so that the bad
                 // transcript params can be acted on
                 warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Failed to create dealing: transcript_id = {:?}, type = {:?}, error = {:?}",
                     transcript_params.transcript_id(),
@@ -832,7 +842,8 @@ impl IDkgPreSignerImpl {
             }
             Err(error) => {
                 // Defer in case of transient errors
-                debug!(
+                warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Dealing validation(transient error): {}, error = {:?}", signed_dealing, error
                 );
@@ -864,6 +875,7 @@ impl IDkgPreSignerImpl {
                 self.metrics
                     .pre_sign_errors_inc("verify_dealing_private_permanent");
                 warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Dealing private verification(permanent error): {}, error = {:?}",
                     dealing,
@@ -878,7 +890,8 @@ impl IDkgPreSignerImpl {
             } else {
                 self.metrics
                     .pre_sign_errors_inc("verify_dealing_private_transient");
-                debug!(
+                warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Dealing private verification(transient error): {}, error = {:?}",
                     dealing,
@@ -897,7 +910,8 @@ impl IDkgPreSignerImpl {
             )
             .map_or_else(
                 |error| {
-                    debug!(
+                    warn!(
+                        every_n_seconds => 10,
                         self.log,
                         "Dealing multi sign failed: {}, error = {:?}", dealing, error
                     );
@@ -984,6 +998,7 @@ impl IDkgPreSignerImpl {
         ret.map_or_else(
             |error| {
                 warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Failed to aggregate: transcript_id = {:?}, error = {:?}",
                     transcript_params.transcript_id(),
@@ -1023,6 +1038,7 @@ impl IDkgPreSignerImpl {
         ret.map_or_else(
             |error| {
                 warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Failed to create transcript: transcript_id = {:?}, error = {:?}",
                     transcript_params.transcript_id(),
@@ -1135,6 +1151,7 @@ impl IDkgPreSignerImpl {
             }
             Err(error) => {
                 warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Failed to translate transcript ref: reason = {}, \
                      transcript_params_ref = {:?}, tip = {:?}, error = {:?}",

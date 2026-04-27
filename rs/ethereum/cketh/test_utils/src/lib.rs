@@ -139,7 +139,10 @@ impl CkEthSetup {
                     .with_transfer_fee(CKETH_TRANSFER_FEE)
                     .with_max_memo_length(80)
                     .with_decimals(18)
-                    .with_feature_flags(ic_icrc1_ledger::FeatureFlags { icrc2: true })
+                    .with_feature_flags(ic_icrc1_ledger::FeatureFlags {
+                        icrc2: true,
+                        icrc152: false
+                    })
                     .build(),
             ))
             .unwrap(),

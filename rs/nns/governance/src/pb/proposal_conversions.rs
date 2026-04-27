@@ -566,7 +566,7 @@ pub(crate) fn proposal_data_to_info(
     let success_value = data
         .success_value
         .clone()
-        .map(|success_value| success_value.into());
+        .and_then(Option::<api::SuccessfulProposalExecutionValue>::from);
 
     let proposal = data
         .proposal

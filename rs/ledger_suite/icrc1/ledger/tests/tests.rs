@@ -869,7 +869,10 @@ fn test_icrc2_feature_flag_doesnt_disable_icrc2_endpoints() {
             max_transactions_per_response: None,
         },
         max_memo_length: None,
-        feature_flags: Some(FeatureFlags { icrc2: false }),
+        feature_flags: Some(FeatureFlags {
+            icrc2: false,
+            icrc152: false
+        }),
         index_principal: None,
     }))
     .unwrap();
@@ -1904,7 +1907,10 @@ mod verify_written_blocks {
                     max_transactions_per_response: None,
                 },
                 max_memo_length: None,
-                feature_flags: Some(FeatureFlags { icrc2: true }),
+                feature_flags: Some(FeatureFlags {
+                    icrc2: true,
+                    icrc152: false,
+                }),
                 index_principal: None,
             });
 
@@ -2087,4 +2093,55 @@ mod verify_written_blocks {
             self.ledger
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// ICRC-152 tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_icrc152_feature_flag_disabled() {
+    ic_ledger_suite_state_machine_tests::test_icrc152_feature_flag_disabled(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc152_unauthorized() {
+    ic_ledger_suite_state_machine_tests::test_icrc152_unauthorized(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_icrc152_validation() {
+    ic_ledger_suite_state_machine_tests::test_icrc152_validation(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_icrc152_mint_and_burn() {
+    ic_ledger_suite_state_machine_tests::test_icrc152_mint_and_burn(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc152_deduplication() {
+    ic_ledger_suite_state_machine_tests::test_icrc152_deduplication(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc152_supported_standards() {
+    ic_ledger_suite_state_machine_tests::test_icrc152_supported_standards(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc152_total_volume() {
+    ic_ledger_suite_state_machine_tests::test_icrc152_total_volume(ledger_wasm(), encode_init_args);
 }

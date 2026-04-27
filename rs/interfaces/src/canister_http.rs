@@ -103,19 +103,26 @@ pub enum InvalidCanisterHttpPayloadReason {
     /// For example, a non-flexible response is not in the responses section
     /// or a flexible response is not in the flexible_responses section.
     InvalidPayloadSection(CallbackId),
-    /// A TooManyRequestErrors error does not carry enough rejects.
+    /// A TooManyRejects error does not carry enough rejects.
     FlexibleInsufficientRejectCount {
         callback_id: CallbackId,
         reject_count: usize,
         min_needed: usize,
     },
-    /// A TooManyRequestErrors entry contains a non-Reject response.
+    /// A TooManyRejects entry contains a non-Reject response.
     FlexibleRejectExpectedInErrorResponse(CallbackId),
-    /// A ResponsesTooLarge error does not carry enough metadata shares.
-    FlexibleInsufficientMetadataShareCount {
+    /// A ResponsesTooLarge error has incorrect total_requests or min_responses.
+    FlexibleResponsesTooLargeParamMismatch {
         callback_id: CallbackId,
-        share_count: usize,
-        min_needed: usize,
+        field: &'static str,
+        expected: u32,
+        actual: u32,
+    },
+    /// A ResponsesTooLarge error does not include enough OK shares to prove impossibility.
+    FlexibleResponsesTooLargeInsufficientEvidence {
+        callback_id: CallbackId,
+        ok_count: usize,
+        min_known_ok_needed: usize,
     },
     /// A ResponsesTooLarge error is invalid: the smallest responses actually fit.
     FlexibleResponsesNotTooLarge(CallbackId),

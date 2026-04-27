@@ -341,7 +341,7 @@ pub(crate) enum FlexibleFindResult {
 /// If enough OK responses are gathered, returns [`FlexibleFindResult::OkResponses`].
 ///
 /// Otherwise checks for error conditions:
-/// - **TooManyRequestErrors**: more nodes returned rejects than the slack
+/// - **TooManyRejects**: more nodes returned rejects than the slack
 ///   allows (`committee.len() - min_responses`).
 /// - **ResponsesTooLarge**: even the smallest `min_responses` many OK responses
 ///   (approximated by `count_bytes()`) exceed [`MAX_CANISTER_HTTP_PAYLOAD_SIZE`].
@@ -424,7 +424,7 @@ pub(crate) fn find_flexible_result(
 
     // 2. Too many nodes returned rejects (so that we can never reach min_responses OK responses)?
     if reject_responses.len() > committee.len().saturating_sub(min_responses) {
-        let error = FlexibleCanisterHttpError::TooManyRequestErrors {
+        let error = FlexibleCanisterHttpError::TooManyRejects {
             callback_id,
             reject_responses: reject_responses
                 .into_iter()
@@ -439,23 +439,27 @@ pub(crate) fn find_flexible_result(
     }
 
     // 3. Even the smallest OK responses exceed the absolute payload limit?
-    if all_ok_shares_sorted_asc.len() >= min_responses {
-        let num_unseen = committee.len().saturating_sub(seen_signers.len());
-        // Unseen responses could still submit small OK responses, so we account for them.
-        let min_minus_unseen = min_responses.saturating_sub(num_unseen);
-
-        let smallest_content_sum: usize = all_ok_shares_sorted_asc[..min_minus_unseen]
+    // Unseen responses could still submit small OK responses, so we account for them.
+    let num_unseen = committee.len().saturating_sub(seen_signers.len());
+    let min_known_ok_needed = min_responses.saturating_sub(num_unseen);
+    if all_ok_shares_sorted_asc.len() >= min_known_ok_needed {
+        let smallest_content_sum: usize = all_ok_shares_sorted_asc
             .iter()
+            .take(min_known_ok_needed)
             .map(|(_share, response_with_proof_size)| response_with_proof_size)
             .sum();
 
         if smallest_content_sum > MAX_CANISTER_HTTP_PAYLOAD_SIZE {
+            let all_seen_shares: Vec<_> = all_ok_shares_sorted_asc
+                .iter()
+                .map(|(share, _)| (*share).clone())
+                .chain(reject_responses.iter().map(|(_, share)| (*share).clone()))
+                .collect();
             let error = FlexibleCanisterHttpError::ResponsesTooLarge {
                 callback_id,
-                metadata_shares: all_ok_shares_sorted_asc[..min_responses]
-                    .iter()
-                    .map(|(share, _size)| (*share).clone())
-                    .collect(),
+                all_seen_shares,
+                total_requests: committee.len() as u32,
+                min_responses: min_responses as u32,
             };
             let error_size = error.count_bytes();
             return FlexibleFindResult::Error(error, error_size);

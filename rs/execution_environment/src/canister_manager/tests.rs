@@ -131,7 +131,7 @@ const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
 #[test]
 fn test_slice() {
     let slice = vec![42; MAX_SLICE_SIZE_BYTES as usize];
-    #[derive(Deserialize, CandidType)]
+    #[derive(CandidType, Deserialize)]
     struct S {
         #[serde(with = "serde_bytes")]
         x: Vec<u8>,

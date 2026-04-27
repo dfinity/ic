@@ -4395,6 +4395,7 @@ dependencies = [
  "candid",
  "canister-test",
  "criterion",
+ "ic-embedders",
  "ic-test-utilities-execution-environment",
  "ic-types",
  "wirm",
@@ -4731,6 +4732,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-registry-subnet-type",
  "ic-replicated-state",
+ "ic-sys",
  "ic-test-utilities",
  "ic-test-utilities-execution-environment",
  "ic-test-utilities-state",
@@ -6587,6 +6589,7 @@ dependencies = [
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-tree-hash",
  "ic-interfaces",
+ "ic-interfaces-state-manager",
  "ic-limits",
  "ic-logger",
  "ic-metrics",
@@ -6597,6 +6600,7 @@ dependencies = [
  "ic-test-utilities-consensus",
  "ic-test-utilities-logger",
  "ic-test-utilities-registry",
+ "ic-test-utilities-state",
  "ic-test-utilities-time",
  "ic-test-utilities-types",
  "ic-types",
@@ -7988,12 +7992,14 @@ name = "ic-consensus-dkg"
 version = "0.9.0"
 dependencies = [
  "ic-artifact-pool",
+ "ic-config",
  "ic-consensus-mocks",
  "ic-consensus-utils",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-crypto-returning-ok",
  "ic-crypto-test-utils-ni-dkg",
  "ic-interfaces",
+ "ic-interfaces-mocks",
  "ic-interfaces-registry",
  "ic-interfaces-registry-mocks",
  "ic-interfaces-state-manager",
@@ -11073,6 +11079,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "num-traits",
  "proptest",
+ "serde",
  "serde_bytes",
 ]
 
@@ -11790,6 +11797,7 @@ dependencies = [
  "ic-nervous-system-clients",
  "ic-nervous-system-lock",
  "ic-nervous-system-runtime",
+ "ic-nns-constants",
  "serde",
  "serde_bytes",
  "tokio",
@@ -12453,6 +12461,7 @@ dependencies = [
  "prometheus-parse",
  "prost 0.13.5",
  "rand 0.8.5",
+ "regex",
  "registry-canister",
  "rewards-calculation",
  "rustc-hash 1.1.0",
@@ -12460,6 +12469,7 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "strum 0.26.3",
+ "tempfile",
  "tokio",
  "wat",
  "xrc-mock",
@@ -12911,6 +12921,7 @@ dependencies = [
 name = "ic-recovery"
 version = "0.9.0"
 dependencies = [
+ "assert_matches",
  "clap 4.6.0",
  "futures",
  "hex",
@@ -15221,18 +15232,20 @@ name = "ic-testnet-mainnet-nns"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "flate2",
  "ic-agent",
  "ic-base-types",
  "ic-canister-client",
  "ic-canister-client-sender",
  "ic-crypto-utils-threshold-sig-der",
- "ic-limits",
  "ic-nervous-system-common",
+ "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
  "ic-nns-test-utils",
  "ic-protobuf",
+ "ic-registry-keys",
  "ic-registry-nns-data-provider",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
@@ -15242,9 +15255,11 @@ dependencies = [
  "once_cell",
  "rand 0.8.5",
  "registry-canister",
+ "reqwest",
  "serde",
  "slog",
  "ssh2",
+ "tokio",
  "url",
 ]
 
@@ -15552,6 +15567,7 @@ dependencies = [
  "assert_matches",
  "base64 0.13.1",
  "hex",
+ "ic-crypto-iccsa",
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-sha2",
@@ -16087,6 +16103,7 @@ dependencies = [
  "candid",
  "ic-agent",
  "ic-certification 3.1.0",
+ "ic-crypto-iccsa",
  "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-internal-bls12-381-type",
  "ic-crypto-sha2",
@@ -16136,8 +16153,12 @@ name = "ic_nested_nns_recovery_common"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "candid",
+ "ic-agent",
+ "ic-nervous-system-root",
  "ic-recovery",
  "ic-system-test-driver",
+ "ic-testnet-mainnet-nns",
  "ic-types",
  "ic_consensus_system_test_subnet_recovery",
  "ic_consensus_system_test_utils",
@@ -16153,6 +16174,7 @@ dependencies = [
 name = "ic_os_logging"
 version = "0.0.0"
 dependencies = [
+ "tracing",
  "tracing-journald",
  "tracing-subscriber",
 ]
@@ -16287,7 +16309,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-agent"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "candid",
  "ciborium",
@@ -16301,7 +16323,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-client"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -16310,7 +16332,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-client-cdk"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -16320,7 +16342,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-types"
-version = "0.1.13"
+version = "0.2.0"
 dependencies = [
  "assert_matches",
  "base32",
@@ -18960,6 +18982,7 @@ dependencies = [
  "ic-nns-governance-api",
  "ic-types",
  "ic_device",
+ "ic_os_logging",
  "linux_kernel_command_line",
  "pem",
  "rand 0.8.5",
@@ -18968,6 +18991,7 @@ dependencies = [
  "sev_guest",
  "sev_guest_testing",
  "tempfile",
+ "tracing",
  "uuid",
 ]
 
@@ -21417,6 +21441,7 @@ dependencies = [
  "serde",
  "serde_json",
  "strum 0.26.3",
+ "strum_macros 0.26.4",
  "tempfile",
  "tokio",
  "url",

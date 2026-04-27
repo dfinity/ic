@@ -45,8 +45,8 @@ use ic_doge_interface::{
 };
 use ic_http_endpoints_public::query;
 use ic_http_endpoints_public::{
-    CanisterReadStateServiceBuilder, IngressValidatorBuilder, QueryServiceBuilder,
-    SubnetReadStateServiceBuilder, call_async, call_sync, metrics::HttpHandlerMetrics, read_state,
+    IngressValidatorBuilder, QueryServiceBuilder, ReadStateServiceBuilder, call_async, call_sync,
+    metrics::HttpHandlerMetrics, read_state,
 };
 use ic_https_outcalls_adapter::{
     Config as HttpsOutcallsConfig, IncomingSource as CanisterHttpIncomingSource,
@@ -2173,7 +2173,8 @@ impl PocketIcSubnets {
                 related_origins: None,         // DIFFERENT FROM ICP MAINNET
                 new_flow_origins: None,        // DIFFERENT FROM ICP MAINNET
                 openid_configs: openid_google, // DIFFERENT FROM ICP MAINNET
-                analytics_config: None,        // DIFFERENT FROM ICP MAINNET
+                oidc_configs: None,
+                analytics_config: None, // DIFFERENT FROM ICP MAINNET
                 enable_dapps_explorer: Some(false),
                 is_production: Some(false), // DIFFERENT FROM ICP MAINNET
                 dummy_auth: Some(Some(dummy_auth_config)), // DIFFERENT FROM ICP MAINNET
@@ -2575,7 +2576,7 @@ impl PocketIcSubnets {
 
             // Install the canister migration orchestrator canister.
             // TODO: replace by public interface
-            #[derive(CandidType, Deserialize, Default)]
+            #[derive(Default, CandidType, Deserialize)]
             struct MigrationCanisterInitArgs {
                 allowlist: Option<Vec<Principal>>,
             }
@@ -4633,10 +4634,11 @@ pub enum CallRequestVersion {
     V2,
     V3,
     V4,
+    SubnetV4,
 }
 
 pub struct CallRequest {
-    pub effective_canister_id: CanisterId,
+    pub effective_principal_id: PrincipalId,
     pub bytes: Bytes,
     pub version: CallRequestVersion,
 }
@@ -4662,13 +4664,24 @@ impl Operation for CallRequest {
                 }
                 Err(_) => false,
             };
-        let subnet = route(
-            pic,
-            EffectivePrincipal::CanisterId(self.effective_canister_id),
-            is_provisional_create_canister,
-        );
+        let subnet = match self.version {
+            CallRequestVersion::SubnetV4 => route(
+                pic,
+                EffectivePrincipal::SubnetId(SubnetId::from(self.effective_principal_id)),
+                false,
+            )
+            .map_err(PocketIcError::SubnetRequestRoutingError),
+            _ => route(
+                pic,
+                EffectivePrincipal::CanisterId(CanisterId::unchecked_from_principal(
+                    self.effective_principal_id,
+                )),
+                is_provisional_create_canister,
+            )
+            .map_err(PocketIcError::CanisterRequestRoutingError),
+        };
         match subnet {
-            Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
+            Err(e) => OpOut::Error(e),
             Ok(subnet) => {
                 // Make sure the latest state is certified for the ingress filter to work.
                 subnet.certify_latest_state();
@@ -4708,7 +4721,9 @@ impl Operation for CallRequest {
 
                 let svc = match self.version {
                     CallRequestVersion::V2 => call_async::new_service(ingress_validator),
-                    CallRequestVersion::V3 | CallRequestVersion::V4 => {
+                    CallRequestVersion::V3
+                    | CallRequestVersion::V4
+                    | CallRequestVersion::SubnetV4 => {
                         let subnet_id = subnet.get_subnet_id();
                         let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
                         let builder = delegation.map(|delegation| {
@@ -4735,25 +4750,32 @@ impl Operation for CallRequest {
                                 CallRequestVersion::V2 => unreachable!(),
                                 CallRequestVersion::V3 => call_sync::Version::V3,
                                 CallRequestVersion::V4 => call_sync::Version::V4,
+                                CallRequestVersion::SubnetV4 => call_sync::Version::SubnetV4,
                             },
                         )
                     }
                 };
 
-                let api_version = match self.version {
-                    CallRequestVersion::V2 => "v2",
-                    CallRequestVersion::V3 => "v3",
-                    CallRequestVersion::V4 => "v4",
+                let uri = match self.version {
+                    CallRequestVersion::SubnetV4 => {
+                        format!("/api/v4/subnet/{}/call", self.effective_principal_id)
+                    }
+                    _ => format!(
+                        "/api/{}/canister/{}/call",
+                        match self.version {
+                            CallRequestVersion::V2 => "v2",
+                            CallRequestVersion::V3 => "v3",
+                            CallRequestVersion::V4 => "v4",
+                            CallRequestVersion::SubnetV4 => unreachable!(),
+                        },
+                        self.effective_principal_id
+                    ),
                 };
 
                 let request = axum::http::Request::builder()
                     .method(Method::POST)
                     .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
-                    .uri(format!(
-                        "/api/{}/canister/{}/call",
-                        api_version,
-                        PrincipalId(self.effective_canister_id.get().into())
-                    ))
+                    .uri(uri)
                     .body(self.bytes.clone().into())
                     .unwrap();
 
@@ -4783,12 +4805,12 @@ impl Operation for CallRequest {
         let mut hasher = Sha256::new();
         self.bytes.hash(&mut hasher);
         let hash = Digest(hasher.finish());
-        OpId(format!("call({},{})", self.effective_canister_id, hash,))
+        OpId(format!("call({},{})", self.effective_principal_id, hash,))
     }
 }
 
 pub struct QueryRequest {
-    pub effective_canister_id: CanisterId,
+    pub effective_principal_id: PrincipalId,
     pub bytes: Bytes,
     pub version: query::Version,
 }
@@ -4809,13 +4831,24 @@ impl BasicSigner<QueryResponseHash> for PocketNodeSigner {
 
 impl Operation for QueryRequest {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        let subnet = route(
-            pic,
-            EffectivePrincipal::CanisterId(self.effective_canister_id),
-            false,
-        );
+        let subnet = match self.version {
+            query::Version::SubnetV3 => route(
+                pic,
+                EffectivePrincipal::SubnetId(SubnetId::from(self.effective_principal_id)),
+                false,
+            )
+            .map_err(PocketIcError::SubnetRequestRoutingError),
+            _ => route(
+                pic,
+                EffectivePrincipal::CanisterId(CanisterId::unchecked_from_principal(
+                    self.effective_principal_id,
+                )),
+                false,
+            )
+            .map_err(PocketIcError::CanisterRequestRoutingError),
+        };
         match subnet {
-            Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
+            Err(e) => OpOut::Error(e),
             Ok(subnet) => {
                 let subnet_id = subnet.get_subnet_id();
                 let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
@@ -4841,6 +4874,7 @@ impl Operation for QueryRequest {
                     Arc::new(StandaloneIngressSigVerifier),
                     NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     query_handler,
+                    subnet_id,
                     self.version,
                 )
                 .with_malicious_flags(pic.malicious_flags.clone())
@@ -4848,18 +4882,25 @@ impl Operation for QueryRequest {
                 .with_additional_root_of_trust(mainnet_root_of_trust)
                 .build_service();
 
-                let version_str = match self.version {
-                    query::Version::V2 => "v2",
-                    query::Version::V3 => "v3",
+                let uri = match self.version {
+                    query::Version::SubnetV3 => {
+                        format!("/api/v3/subnet/{}/query", self.effective_principal_id)
+                    }
+                    _ => format!(
+                        "/api/{}/canister/{}/query",
+                        match self.version {
+                            query::Version::V2 => "v2",
+                            query::Version::V3 => "v3",
+                            query::Version::SubnetV3 => unreachable!(),
+                        },
+                        self.effective_principal_id
+                    ),
                 };
 
                 let request = axum::http::Request::builder()
                     .method(Method::POST)
                     .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
-                    .uri(format!(
-                        "/api/{version_str}/canister/{}/query",
-                        PrincipalId(self.effective_canister_id.get().into())
-                    ))
+                    .uri(uri)
                     .body(self.bytes.clone().into())
                     .unwrap();
                 let resp = pic.runtime.block_on(svc.oneshot(request)).unwrap();
@@ -4878,7 +4919,7 @@ impl Operation for QueryRequest {
         let mut hasher = Sha256::new();
         self.bytes.hash(&mut hasher);
         let hash = Digest(hasher.finish());
-        OpId(format!("query({},{})", self.effective_canister_id, hash,))
+        OpId(format!("query({},{})", self.effective_principal_id, hash,))
     }
 }
 
@@ -4886,7 +4927,7 @@ impl Operation for QueryRequest {
 pub struct CanisterReadStateRequest {
     pub effective_canister_id: CanisterId,
     pub bytes: Bytes,
-    pub version: read_state::canister::Version,
+    pub version: read_state::Version,
 }
 
 impl Operation for CanisterReadStateRequest {
@@ -4919,7 +4960,7 @@ impl Operation for CanisterReadStateRequest {
                 let metrics = HttpHandlerMetrics::new(&MetricsRegistry::new());
                 let mainnet_root_of_trust =
                     IcRootOfTrust::from(icp_mainnet_root_public_key_for_testing());
-                let svc = CanisterReadStateServiceBuilder::builder(
+                let svc = ReadStateServiceBuilder::builder(
                     subnet.replica_logger.clone(),
                     metrics,
                     subnet.state_manager.clone(),
@@ -4928,6 +4969,7 @@ impl Operation for CanisterReadStateRequest {
                     NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     nns_subnet_id,
                     self.version,
+                    read_state::Target::Canister,
                 )
                 .with_malicious_flags(pic.malicious_flags.clone())
                 .with_time_source(subnet.time_source.clone())
@@ -4935,8 +4977,8 @@ impl Operation for CanisterReadStateRequest {
                 .build_service();
 
                 let version_str = match self.version {
-                    read_state::canister::Version::V2 => "v2",
-                    read_state::canister::Version::V3 => "v3",
+                    read_state::Version::V2 => "v2",
+                    read_state::Version::V3 => "v3",
                 };
 
                 let request = axum::http::Request::builder()
@@ -4975,7 +5017,7 @@ impl Operation for CanisterReadStateRequest {
 pub struct SubnetReadStateRequest {
     pub subnet_id: SubnetId,
     pub bytes: Bytes,
-    pub version: read_state::subnet::Version,
+    pub version: read_state::Version,
 }
 
 impl Operation for SubnetReadStateRequest {
@@ -4984,6 +5026,12 @@ impl Operation for SubnetReadStateRequest {
             Err(e) => OpOut::Error(PocketIcError::SubnetRequestRoutingError(e)),
             Ok(subnet) => {
                 let subnet_id = subnet.get_subnet_id();
+                let nns_subnet_id = pic
+                    .nns_subnet()
+                    .map(|subnet| subnet.get_subnet_id())
+                    .expect(
+                        "The NNS subnet should already exist if we are already executing requests",
+                    );
                 let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
                 let builder = delegation.map(|delegation| {
                     NNSDelegationBuilder::try_new(
@@ -4995,25 +5043,28 @@ impl Operation for SubnetReadStateRequest {
                 });
                 let (_, delegation_rx) = watch::channel(builder);
                 subnet.certify_latest_state();
-                let nns_subnet_id = pic
-                    .nns_subnet()
-                    .map(|subnet| subnet.get_subnet_id())
-                    .expect(
-                        "The NNS subnet should already exist if we are already executing requests",
-                    );
                 let metrics = HttpHandlerMetrics::new(&MetricsRegistry::new());
-                let svc = SubnetReadStateServiceBuilder::builder(
+                let mainnet_root_of_trust =
+                    IcRootOfTrust::from(icp_mainnet_root_public_key_for_testing());
+                let svc = ReadStateServiceBuilder::builder(
+                    subnet.replica_logger.clone(),
                     metrics,
-                    NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     subnet.state_manager.clone(),
+                    subnet.registry_client.clone(),
+                    Arc::new(StandaloneIngressSigVerifier),
+                    NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     nns_subnet_id,
                     self.version,
+                    read_state::Target::Subnet,
                 )
+                .with_malicious_flags(pic.malicious_flags.clone())
+                .with_time_source(subnet.time_source.clone())
+                .with_additional_root_of_trust(mainnet_root_of_trust)
                 .build_service();
 
                 let version_str = match self.version {
-                    read_state::subnet::Version::V2 => "v2",
-                    read_state::subnet::Version::V3 => "v3",
+                    read_state::Version::V2 => "v2",
+                    read_state::Version::V3 => "v3",
                 };
 
                 let request = axum::http::Request::builder()

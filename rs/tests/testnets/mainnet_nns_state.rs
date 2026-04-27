@@ -20,11 +20,11 @@
 // to unpack and 59G of disk space.
 //
 // ```
-// $ ict testnet create mainnet_nns --verbose --set-required-host-features=dc=zh1 -- --test_tmpdir=./mainnet_nns
+// $ ict testnet create mainnet_nns_state --verbose --set-required-host-features=dc=zh1 -- --test_tmpdir=./mainnet_nns_state
 // ```
 //
 // Additional configuration:
-//  - --test_env=DKG_INTERVAL=<dkg_interval> (default: 499)
+//  - --test_env=DKG_INTERVAL=<dkg_interval>
 //  - --test_env=NNS_STATE_ON_BACKUP_POD=<path_on_remote_backup_pod> (default: dev@zh1-pyr07.zh1.dfinity.network:/home/dev/nns_state.tar.zst)
 //
 // To get access to P8s and Grafana look for the following lines in the ict console output:
@@ -41,9 +41,13 @@ use ic_testnet_mainnet_nns::setup as setup_mainnet_nns;
 use std::time::Duration;
 
 fn main() -> Result<()> {
+    let dkg_interval = std::env::var("DKG_INTERVAL")
+        .ok()
+        .map(|s| s.parse::<u64>().expect("DKG_INTERVAL must be a valid u64"));
+
     SystemTestGroup::new()
-        .with_timeout_per_test(Duration::from_secs(90 * 60))
-        .with_setup(setup_mainnet_nns)
+        .with_timeout_per_test(Duration::from_mins(90))
+        .with_setup(move |env| setup_mainnet_nns(env, dkg_interval))
         .execute_from_args()?;
     Ok(())
 }

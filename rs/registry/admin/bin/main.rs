@@ -41,9 +41,9 @@ use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePaylo
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::{
     AddOrRemoveNodeProvider, CanisterSettings, CreateServiceNervousSystem, GovernanceError,
-    InstallCodeRequest, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
-    NnsFunction, NodeProvider, ProposalActionRequest, RewardNodeProviders, StopOrStartCanister,
-    UpdateCanisterSettings,
+    InstallCodeRequest, LoadCanisterSnapshot, MakeProposalRequest, ManageNeuronCommandRequest,
+    ManageNeuronRequest, NnsFunction, NodeProvider, ProposalActionRequest, RewardNodeProviders,
+    StopOrStartCanister, TakeCanisterSnapshot, UpdateCanisterSettings,
     add_or_remove_node_provider::Change,
     bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
     canister_settings::{
@@ -129,6 +129,7 @@ use registry_canister::mutations::{
     do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
     do_add_node_operator::AddNodeOperatorPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
+    do_delete_subnet::DeleteSubnetPayload,
     do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
     do_migrate_node_operator_directly::MigrateNodeOperatorPayload,
@@ -435,6 +436,9 @@ enum SubCommand {
     /// Submits a proposal to create a new subnet.
     ProposeToCreateSubnet(ProposeToCreateSubnetCmd),
 
+    /// Submits a proposal to delete a subnet from the registry.
+    ProposeToDeleteSubnet(ProposeToDeleteSubnetCmd),
+
     /// Propose to deploy a priorly elected GuestOS version to all subnet nodes.
     ProposeToDeployGuestosToAllSubnetNodes(ProposeToDeployGuestosToAllSubnetNodesCmd),
 
@@ -500,6 +504,12 @@ enum SubCommand {
 
     /// Propose to stop a canister managed by the governance.
     ProposeToStopCanister(StopCanisterCmd),
+
+    /// Propose to take a snapshot of a canister managed by the governance.
+    ProposeToTakeCanisterSnapshot(ProposeToTakeCanisterSnapshotCmd),
+
+    /// Propose to load a snapshot into a canister managed by the governance.
+    ProposeToLoadCanisterSnapshot(ProposeToLoadCanisterSnapshotCmd),
 
     /// Sets three things:
     ///
@@ -1023,6 +1033,33 @@ impl ProposalPayload<SetSubnetOperationalLevelPayload>
     }
 }
 
+/// Sub-command to submit a proposal to delete a subnet.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToDeleteSubnetCmd {
+    /// The subnet to delete.
+    #[clap(long)]
+    pub subnet_id: PrincipalId,
+}
+
+impl ProposalTitle for ProposeToDeleteSubnetCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!("Delete subnet {}", shortened_pid_string(&self.subnet_id)),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<DeleteSubnetPayload> for ProposeToDeleteSubnetCmd {
+    async fn payload(&self, _: &Agent) -> DeleteSubnetPayload {
+        DeleteSubnetPayload {
+            subnet_id: Principal::from(self.subnet_id),
+        }
+    }
+}
+
 /// Sub-command to submit a proposal to change the public keys with "readonly"
 /// access privileges. There is no easy way to set a privilege to an empty list.
 #[derive_common_proposal_fields]
@@ -1175,6 +1212,77 @@ impl ProposalAction for StopCanisterCmd {
             action,
         };
         ProposalActionRequest::StopOrStartCanister(stop_canister)
+    }
+}
+
+/// Sub-command to submit a proposal to take a snapshot of a canister.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToTakeCanisterSnapshotCmd {
+    /// The canister to snapshot.
+    #[clap(long)]
+    pub canister_id: CanisterId,
+    /// If set, replace the existing snapshot with this hex-encoded snapshot ID.
+    #[clap(long)]
+    pub replace_snapshot: Option<String>,
+}
+
+impl ProposalTitle for ProposeToTakeCanisterSnapshotCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!("Take snapshot of canister {}", self.canister_id),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalAction for ProposeToTakeCanisterSnapshotCmd {
+    async fn action(&self, _agent: &Agent) -> ProposalActionRequest {
+        let replace_snapshot = self
+            .replace_snapshot
+            .as_deref()
+            .map(|s| hex::decode(s).expect("replace_snapshot is not valid hex"));
+        ProposalActionRequest::TakeCanisterSnapshot(TakeCanisterSnapshot {
+            canister_id: Some(PrincipalId::from(self.canister_id)),
+            replace_snapshot,
+        })
+    }
+}
+
+/// Sub-command to submit a proposal to load a snapshot into a canister.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToLoadCanisterSnapshotCmd {
+    /// The canister to load the snapshot into.
+    #[clap(long)]
+    pub canister_id: CanisterId,
+    /// The hex-encoded ID of the snapshot to load.
+    #[clap(long)]
+    pub snapshot_id: String,
+}
+
+impl ProposalTitle for ProposeToLoadCanisterSnapshotCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Load snapshot {} into canister {}",
+                self.snapshot_id, self.canister_id
+            ),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalAction for ProposeToLoadCanisterSnapshotCmd {
+    async fn action(&self, _agent: &Agent) -> ProposalActionRequest {
+        let snapshot_id =
+            Some(hex::decode(&self.snapshot_id).expect("snapshot_id is not valid hex"));
+        ProposalActionRequest::LoadCanisterSnapshot(LoadCanisterSnapshot {
+            canister_id: Some(PrincipalId::from(self.canister_id)),
+            snapshot_id,
+        })
     }
 }
 
@@ -1813,7 +1921,7 @@ impl ProposeToBlessAlternativeGuestOsVersionCmd {
                 )
             });
         SubnetRecord::from(
-            &SubnetRecordProto::decode(&subnet_record_bytes[..]).unwrap_or_else(|err| {
+            SubnetRecordProto::decode(&subnet_record_bytes[..]).unwrap_or_else(|err| {
                 panic!(
                     "Failed to decode SubnetRecord for subnet {}: {}",
                     subnet_id, err
@@ -4449,6 +4557,7 @@ async fn main() {
             SubCommand::ProposeToCompleteCanisterMigration(_) => (),
             SubCommand::ProposeToCreateServiceNervousSystem(_) => (),
             SubCommand::ProposeToCreateSubnet(_) => (),
+            SubCommand::ProposeToDeleteSubnet(_) => (),
             SubCommand::ProposeToDeployGuestosToAllSubnetNodes(_) => (),
             SubCommand::ProposeToDeployGuestosToAllUnassignedNodes(_) => (),
             SubCommand::ProposeToDeployGuestosToSomeApiBoundaryNodes(_) => (),
@@ -4470,6 +4579,8 @@ async fn main() {
             SubCommand::ProposeToSetFirewallConfig(_) => (),
             SubCommand::ProposeToStartCanister(_) => (),
             SubCommand::ProposeToStopCanister(_) => (),
+            SubCommand::ProposeToTakeCanisterSnapshot(_) => (),
+            SubCommand::ProposeToLoadCanisterSnapshot(_) => (),
             SubCommand::ProposeToTakeSubnetOfflineForRepairs(_) => (),
             SubCommand::ProposeToUninstallCode(_) => (),
             SubCommand::ProposeToUpdateCanisterSettings(_) => (),
@@ -4812,6 +4923,21 @@ async fn main() {
             )
             .await;
         }
+        SubCommand::ProposeToDeleteSubnet(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::DeleteSubnet,
+                make_canister_client(
+                    reachable_nns_urls,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
         SubCommand::ProposeToCreateServiceNervousSystem(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             propose_to_create_service_nervous_system(
@@ -4963,6 +5089,26 @@ async fn main() {
             propose_action_from_command(cmd, canister_client, proposer).await;
         }
         SubCommand::ProposeToStopCanister(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            propose_action_from_command(cmd, canister_client, proposer).await;
+        }
+        SubCommand::ProposeToTakeCanisterSnapshot(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            propose_action_from_command(cmd, canister_client, proposer).await;
+        }
+        SubCommand::ProposeToLoadCanisterSnapshot(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             let canister_client = make_canister_client(
                 reachable_nns_urls,
@@ -5815,7 +5961,7 @@ async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
                 // subnet records are emitted as JSON
                 let value = SubnetRecordProto::decode(&bytes[..])
                     .expect("Error decoding value from registry.");
-                let subnet_record = SubnetRecord::from(&value);
+                let subnet_record = SubnetRecord::from(value);
 
                 let mut registry = Registry {
                     version,
