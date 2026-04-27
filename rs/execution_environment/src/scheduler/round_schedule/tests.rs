@@ -1493,7 +1493,7 @@ fn assert_multi_round_invariants(
         .iter()
         .map(|(_, p)| p.accumulated_priority.get())
         .sum();
-    prop_assert!(sum_ap / sims.len() as i64 >= 0, "final sum(AP) = {sum_ap}");
+    prop_assert!(sum_ap >= 0, "final sum(AP) = {sum_ap}");
 
     // Accumulated priority decays exponentially outside the `[AP_ROUNDS_MIN,
     // AP_ROUNDS_MAX]` range. Expect at most 5 extra rounds at either end.
@@ -1552,7 +1552,7 @@ fn assert_multi_round_invariants(
     Ok(())
 }
 
-#[test_strategy::proptest(ProptestConfig { cases: 40, max_shrink_iters: 0, ..ProptestConfig::default() })]
+#[test_strategy::proptest(ProptestConfig { cases: 400, max_shrink_iters: 0, ..ProptestConfig::default() })]
 fn multi_round_priority_invariants(
     #[strategy(2..6_usize)] scheduler_cores: usize,
     #[strategy(200..800_usize)] num_rounds: usize,
@@ -1585,7 +1585,7 @@ fn multi_round_priority_invariants(
     )?;
 }
 
-#[test_strategy::proptest(ProptestConfig { cases: 40, max_shrink_iters: 0, ..ProptestConfig::default() })]
+#[test_strategy::proptest(ProptestConfig { cases: 400, max_shrink_iters: 0, ..ProptestConfig::default() })]
 fn multi_round_all_active_short_executions(
     #[strategy(proptest::collection::vec(-100..100_i64, 2..=10))] raw_allocations: Vec<i64>,
 ) {

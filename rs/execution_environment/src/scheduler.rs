@@ -1214,14 +1214,11 @@ impl Scheduler for SchedulerImpl {
             self.metrics.execute_round_called.inc();
 
             long_running_canisters = state
-                .canister_priorities()
+                .canister_states()
                 .iter()
-                .filter_map(|(&canister_id, _)| {
-                    if state
-                        .canister_state(&canister_id)?
-                        .has_long_execution_or_install_code()
-                    {
-                        Some(canister_id)
+                .filter_map(|(canister_id, canister)| {
+                    if canister.has_long_execution_or_install_code() {
+                        Some(*canister_id)
                     } else {
                         None
                     }
