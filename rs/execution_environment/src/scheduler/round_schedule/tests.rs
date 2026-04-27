@@ -1504,7 +1504,7 @@ fn assert_multi_round_invariants(
         .iter()
         .map(|(_, p)| p.accumulated_priority.get())
         .sum();
-    prop_assert!(sum_ap / sims.len() as i64 >= 0, "final sum(AP) = {sum_ap}");
+    prop_assert!(sum_ap >= 0, "final sum(AP) = {sum_ap}");
 
     // Accumulated priority decays exponentially outside the `[AP_ROUNDS_MIN,
     // AP_ROUNDS_MAX]` range. Expect at most 5 extra rounds at either end.
