@@ -1,7 +1,7 @@
 use ic_crypto_tree_hash::Path;
 use ic_http_endpoints_public::{query, read_state};
 use ic_types::{
-    PrincipalId, UserId,
+    CanisterId, PrincipalId, UserId,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
@@ -203,6 +203,8 @@ impl CallSubnet {
 pub struct Query {
     canister_id: PrincipalId,
     effective_canister_id: PrincipalId,
+    method_name: String,
+    subnet_id: Option<PrincipalId>,
     version: query::Version,
 }
 
@@ -215,8 +217,30 @@ impl Query {
         Self {
             canister_id,
             effective_canister_id,
+            method_name: METHOD_NAME.to_string(),
+            subnet_id: None,
             version,
         }
+    }
+
+    pub fn new_subnet(subnet_id: PrincipalId) -> Self {
+        Self {
+            canister_id: CanisterId::ic_00().get(),
+            effective_canister_id: PrincipalId::default(),
+            method_name: "list_canisters".to_string(),
+            subnet_id: Some(subnet_id),
+            version: query::Version::SubnetV3,
+        }
+    }
+
+    pub fn with_canister_id(mut self, canister_id: PrincipalId) -> Self {
+        self.canister_id = canister_id;
+        self
+    }
+
+    pub fn with_method_name(mut self, method_name: String) -> Self {
+        self.method_name = method_name;
+        self
     }
 
     pub async fn query(self, addr: SocketAddr) -> reqwest::Response {
@@ -225,7 +249,7 @@ impl Query {
         let call_content = HttpQueryContent::Query {
             query: HttpUserQuery {
                 canister_id: Blob(self.canister_id.into_vec()),
-                method_name: METHOD_NAME.to_string(),
+                method_name: self.method_name,
                 arg: Blob(ARG),
                 sender: Blob(SENDER.into_vec()),
                 ingress_expiry,
@@ -242,14 +266,20 @@ impl Query {
         };
 
         let body = serde_cbor::to_vec(&envelope).unwrap();
-        let version_str = match self.version {
-            query::Version::V2 => "v2",
-            query::Version::V3 => "v3",
+        let url = match self.version {
+            query::Version::V2 => format!(
+                "http://{addr}/api/v2/canister/{}/query",
+                self.effective_canister_id
+            ),
+            query::Version::V3 => format!(
+                "http://{addr}/api/v3/canister/{}/query",
+                self.effective_canister_id
+            ),
+            query::Version::SubnetV3 => format!(
+                "http://{addr}/api/v3/subnet/{}/query",
+                self.subnet_id.expect("subnet_id required for SubnetV3")
+            ),
         };
-        let url = format!(
-            "http://{addr}/api/{version_str}/canister/{}/query",
-            self.effective_canister_id
-        );
 
         reqwest::Client::new()
             .post(url)

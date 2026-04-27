@@ -7926,6 +7926,7 @@ dependencies = [
  "mockall",
  "prometheus",
  "slog",
+ "tokio",
 ]
 
 [[package]]
@@ -12771,7 +12772,6 @@ dependencies = [
  "slog",
  "tempfile",
  "thiserror 2.0.18",
- "tokio",
  "url",
  "x509-cert",
 ]
@@ -12914,6 +12914,7 @@ dependencies = [
 name = "ic-recovery"
 version = "0.9.0"
 dependencies = [
+ "assert_matches",
  "clap 4.6.0",
  "futures",
  "hex",
@@ -14688,7 +14689,6 @@ dependencies = [
  "strum 0.26.3",
  "tempfile",
  "test-strategy 0.4.5",
- "tokio",
  "tree-deserializer",
  "uuid",
 ]
@@ -15225,17 +15225,20 @@ name = "ic-testnet-mainnet-nns"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "flate2",
  "ic-agent",
  "ic-base-types",
  "ic-canister-client",
  "ic-canister-client-sender",
  "ic-crypto-utils-threshold-sig-der",
  "ic-nervous-system-common",
+ "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
  "ic-nns-test-utils",
  "ic-protobuf",
+ "ic-registry-keys",
  "ic-registry-nns-data-provider",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
@@ -15245,6 +15248,7 @@ dependencies = [
  "once_cell",
  "rand 0.8.5",
  "registry-canister",
+ "reqwest",
  "serde",
  "slog",
  "ssh2",
@@ -16142,8 +16146,12 @@ name = "ic_nested_nns_recovery_common"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "candid",
+ "ic-agent",
+ "ic-nervous-system-root",
  "ic-recovery",
  "ic-system-test-driver",
+ "ic-testnet-mainnet-nns",
  "ic-types",
  "ic_consensus_system_test_subnet_recovery",
  "ic_consensus_system_test_utils",

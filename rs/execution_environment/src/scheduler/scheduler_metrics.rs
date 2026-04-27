@@ -39,6 +39,7 @@ pub struct SchedulerMetrics {
     pub(super) inner_round_loop_consumed_max_instructions: IntCounter,
     pub(super) num_canisters_uninstalled_out_of_cycles: IntCounter,
     pub(super) round: ScopedMetrics,
+    pub(super) remove_orphaned_stop_canister_calls_duration: Histogram,
     pub(super) round_preparation_duration: Histogram,
     pub(super) round_preparation_ingress: Histogram,
     pub(super) round_consensus_queue: ScopedMetrics,
@@ -202,6 +203,7 @@ impl SchedulerMetrics {
                     metrics_registry,
                 ),
             },
+            remove_orphaned_stop_canister_calls_duration: round_phase_duration_histogram("remove orphaned stop canister calls", metrics_registry),
             round_preparation_duration: round_phase_duration_histogram("preparation", metrics_registry),
             // Expiration of messages in the ingress queue.
             round_preparation_ingress: round_preparation_phase_duration_histogram("expire ingress", metrics_registry),
