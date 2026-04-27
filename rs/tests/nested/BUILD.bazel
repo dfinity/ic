@@ -175,7 +175,7 @@ system_test_nns(
     hostos_update = True,
     tags = [
         "manual",
-    ],    
+    ],
     test_driver_target = ":hostos_upgrade_test_bin",
     test_timeout = "eternal",
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
