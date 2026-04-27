@@ -290,11 +290,11 @@ pub(crate) fn deliver_batches_with_result_processor(
 /// This function creates:
 ///   - The list of messages to be included in the batch
 ///   - The list of responses to the system calls that are redirected to consensus. There are two
-///   types of calls being handled here:
+///     types of calls being handled here:
 ///     - Initial NiDKG transcript creation and resharing, where a response may come from summary
-///     or data payloads
+///       or data payloads
 ///     - Initial IDKG dealings when resharing a chain key, where a response may come from data
-///     payloads.
+///       payloads.
 ///     - Canister threshold signature creation, where a response may come from from data payloads.
 ///     - CanisterHttpResponse handling, where a response to a canister http request may come from data payloads.
 fn generate_batch_messages_and_consensus_responses(
