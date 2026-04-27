@@ -215,7 +215,10 @@ impl StateMachine for StateMachineImpl {
 
         // Preprocess messages and add messages to the induction pool through the Demux.
         let since = Instant::now();
-        let mut state_with_messages = self.demux.process_payload(state, batch_messages);
+        let current_round = ExecutionRound::from(batch.batch_number.get());
+        let mut state_with_messages =
+            self.demux
+                .process_payload(state, current_round, batch_messages);
         // Batch creation time is essentially wall time (on some replica), so the median
         // duration should be meaningful.
         self.metrics.induct_batch_latency.observe(
@@ -248,7 +251,7 @@ impl StateMachine for StateMachineImpl {
             batch.randomness,
             chain_key_data,
             &batch.replica_version,
-            ExecutionRound::from(batch.batch_number.get()),
+            current_round,
             round_summary,
             execution_round_type,
             registry_settings,

@@ -10,13 +10,16 @@ on:
   workflow_dispatch:
     inputs:
       tag-name:
-        description: 'The name of the tag to publish'
+        description: 'Tag Name'
         required: true
       dry-run:
-        description: "If true, run the workflow in dry-run mode (don't actually publish the release)"
+        description: "Run in dry-run mode (don't actually publish the release)"
         required: true
         default: 'true'
         type: boolean
+
+env:
+  RELEASE_TAG: ${{ github.event.inputs.tag-name || github.ref_name }}
 
 jobs:
   build:
@@ -32,7 +35,8 @@ jobs:
         run: |
           set -euxo pipefail
 
-          DOWNLOAD_PREFIX="https://download.dfinity.systems/ic/$GITHUB_SHA"
+          CI_COMMIT_SHA=$(git rev-parse HEAD)
+          DOWNLOAD_PREFIX="https://download.dfinity.systems/ic/${CI_COMMIT_SHA}"
 
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/setup-os/disk-img/disk-img.tar.zst" -o setup-os-img.tar.zst
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/guest-os/update-img/update-img.tar.zst" -o update-os-img.tar.zst
@@ -91,7 +95,7 @@ jobs:
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
         if: ${{ github.event_name == 'push' || github.event.inputs.dry-run == 'false' }}
         with:
-          body: "IC ${{github.ref_name}}"
+          body: "IC ${{ env.RELEASE_TAG }}"
           files: |
             canisters.tar
             setup-os-img.tar.gz

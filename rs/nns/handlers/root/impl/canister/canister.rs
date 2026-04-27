@@ -248,7 +248,7 @@ async fn take_canister_snapshot(
     check_caller_is_governance();
     ic_nervous_system_root::take_canister_snapshot::take_canister_snapshot(
         take_canister_snapshot_request,
-        &mut new_management_canister_client(),
+        new_management_canister_client(),
     )
     .await
 }
@@ -262,7 +262,7 @@ async fn load_canister_snapshot(
     check_caller_is_governance();
     ic_nervous_system_root::load_canister_snapshot::load_canister_snapshot(
         load_canister_snapshot_request,
-        &mut new_management_canister_client(),
+        new_management_canister_client(),
     )
     .await
 }

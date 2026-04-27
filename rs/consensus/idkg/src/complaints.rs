@@ -11,7 +11,7 @@ use ic_interfaces::{
     idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool},
 };
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
-use ic_logger::{ReplicaLogger, debug, warn};
+use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -399,7 +399,8 @@ impl IDkgComplaintHandlerImpl {
                 ));
             } else {
                 // Defer in case of transient errors
-                debug!(
+                warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Complaint signature validation(transient error): {}, error = {:?}",
                     signed_complaint,
@@ -427,7 +428,8 @@ impl IDkgComplaintHandlerImpl {
                 ))
             }
             Err(error) => {
-                debug!(
+                warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Complaint validation(transient error): {}, error = {:?}",
                     signed_complaint,
@@ -523,7 +525,8 @@ impl IDkgComplaintHandlerImpl {
                     ),
                 ));
             } else {
-                debug!(
+                warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Opening signature validation(transient error): {}, error = {:?}",
                     signed_opening,
@@ -553,7 +556,8 @@ impl IDkgComplaintHandlerImpl {
                 ))
             }
             Err(error) => {
-                debug!(
+                warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Opening validation(transient error): {}, error = {:?}", signed_opening, error
                 );
@@ -686,6 +690,7 @@ impl IDkgComplaintHandlerImpl {
             }
             Err(error) => {
                 warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Failed to resolve complaint ref: reason = {}, \
                      transcript_ref = {:?}, error = {:?}",
@@ -886,6 +891,7 @@ impl IDkgTranscriptLoader for IDkgComplaintHandlerImpl {
             }
             Err(err) => {
                 warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Failed to load transcript: transcript_id: {:?}, error = {:?}",
                     transcript.transcript_id,
@@ -936,6 +942,7 @@ impl IDkgTranscriptLoader for IDkgComplaintHandlerImpl {
             }
             Err(err) => {
                 warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Failed to load transcript with openings: transcript_id: {:?}, error = {:?}",
                     transcript.transcript_id,

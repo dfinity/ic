@@ -138,6 +138,8 @@ impl UpdateCanisterSettings {
 }
 
 impl CallCanister for UpdateCanisterSettings {
+    type Reply = ();
+
     fn canister_and_function(&self) -> Result<(CanisterId, &str), GovernanceError> {
         let canister_id = self.valid_canister_id()?;
         if canister_id == ROOT_CANISTER_ID {

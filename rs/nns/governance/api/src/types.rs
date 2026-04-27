@@ -1727,6 +1727,9 @@ pub struct ProposalData {
     pub total_potential_voting_power: ::core::option::Option<u64>,
     /// The topic of the proposal.
     pub topic: ::core::option::Option<i32>,
+    /// When an adopted proposal has been executed successfully, this may contain
+    /// a value produced by the execution. This is the dual of failure_reason.
+    pub success_value: Option<SuccessfulProposalExecutionValue>,
 }
 /// This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
 #[derive(
@@ -2053,6 +2056,40 @@ pub struct ProposalInfo {
     pub deadline_timestamp_seconds: Option<u64>,
     pub derived_proposal_information: Option<DerivedProposalInformation>,
     pub total_potential_voting_power: ::core::option::Option<u64>,
+    /// When an adopted proposal has been executed successfully, this may contain
+    /// a value produced by the execution. This is the dual of failure_reason.
+    pub success_value: Option<SuccessfulProposalExecutionValue>,
+}
+
+/// A value produced by successfully executing a proposal.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug)]
+pub enum SuccessfulProposalExecutionValue {
+    CreateCanisterAndInstallCode(CreateCanisterAndInstallCodeOk),
+    TakeCanisterSnapshot(TakeCanisterSnapshotOk),
+}
+
+/// The result of a successful CreateCanisterAndInstallCode proposal execution.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug)]
+pub struct CreateCanisterAndInstallCodeOk {
+    pub canister_id: Option<PrincipalId>,
+}
+
+/// The result of a successful TakeCanisterSnapshot proposal execution.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug)]
+pub struct TakeCanisterSnapshotOk {
+    pub snapshot_id: Vec<u8>,
+}
+
+impl From<CreateCanisterAndInstallCodeOk> for SuccessfulProposalExecutionValue {
+    fn from(ok: CreateCanisterAndInstallCodeOk) -> Self {
+        Self::CreateCanisterAndInstallCode(ok)
+    }
+}
+
+impl From<TakeCanisterSnapshotOk> for SuccessfulProposalExecutionValue {
+    fn from(ok: TakeCanisterSnapshotOk) -> Self {
+        Self::TakeCanisterSnapshot(ok)
+    }
 }
 
 /// Network economics contains the parameters for several operations related

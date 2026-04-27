@@ -18,14 +18,13 @@ Success::
 . NNS subnet is functional after the recovery.
 
 Variant::
-. This test variant performs the recovery on a large NNS subnet, better reflecting the scale of the production NNS.
+. This test variant performs the recovery on a large NNS subnet holding mainnet state, better reflecting the production setup.
 
 end::catalog[] */
 
 use anyhow::Result;
 use ic_nested_nns_recovery_common::{
-    LARGE_DKG_INTERVAL, LARGE_F, LARGE_SUBNET_SIZE, NNS_RECOVERY_VM_RESOURCE_OVERRIDES,
-    SetupConfig, TestConfig, setup, test,
+    LARGE_DKG_INTERVAL, LARGE_F, LARGE_SUBNET_SIZE, SetupConfig, TestConfig, setup, test,
 };
 use ic_system_test_driver::{
     driver::group::SystemTestGroup,
@@ -41,6 +40,7 @@ fn main() -> Result<()> {
                 env,
                 SetupConfig {
                     impersonate_upstreams: true,
+                    use_mainnet_state: true,
                     subnet_size: LARGE_SUBNET_SIZE,
                     dkg_interval: LARGE_DKG_INTERVAL,
                     nested_nodes_vm_resource_overrides: VmResourceOverrides {
@@ -52,20 +52,21 @@ fn main() -> Result<()> {
                         // In theory, these VMs should be able to run with 20
                         // or fewer vCPUs. (16 GuestOS + 4 HostOS)
                         vcpus: Some(NrOfVCPUs::new(64)),
-                        ..NNS_RECOVERY_VM_RESOURCE_OVERRIDES
+                        ..Default::default()
                     },
                 },
             )
         })
         .add_test(systest!(test; TestConfig {
-            local_recovery: false,
+            use_mainnet_state: true,
+            local_recovery: true,
             break_dfinity_owned_node: false,
             num_broken_nodes: LARGE_F + 1,
             add_upgrade_version: true,
             fix_dfinity_owned_node_like_np: false,
             sequential_np_actions: false,
         }))
-        .with_timeout_per_test(Duration::from_secs(50 * 60))
+        .with_timeout_per_test(Duration::from_mins(120))
         .execute_from_args()?;
 
     Ok(())

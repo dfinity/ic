@@ -233,6 +233,18 @@ impl IDkgPayloadMetrics {
     }
 }
 
+pub(crate) trait IDkgPayloadMetricsOptionExt {
+    fn payload_errors_inc(self, label: &str);
+}
+
+impl IDkgPayloadMetricsOptionExt for Option<&IDkgPayloadMetrics> {
+    fn payload_errors_inc(self, label: &str) {
+        if let Some(metrics) = self {
+            metrics.payload_errors_inc(label);
+        }
+    }
+}
+
 pub fn timed_call<F, R>(label: &str, call_fn: F, metric: &HistogramVec) -> R
 where
     F: FnOnce() -> R,

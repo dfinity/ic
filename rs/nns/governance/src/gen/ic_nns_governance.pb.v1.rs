@@ -1520,6 +1520,75 @@ pub struct ProposalData {
     /// bug might have caused the voting power spike.
     #[prost(uint64, optional, tag = "24")]
     pub previous_ballots_timestamp_seconds: ::core::option::Option<u64>,
+    /// When an adopted proposal has been executed successfully, this may contain
+    /// a value produced by the execution (e.g. the ID of a newly created canister).
+    /// This is the dual of failure_reason: that field is populated on failure,
+    /// this field is populated on success.
+    #[prost(message, optional, tag = "25")]
+    pub success_value: ::core::option::Option<SuccessfulProposalExecutionValue>,
+}
+/// A value produced by successfully executing a proposal.
+/// Not all proposal types produce a value; for those that don't, this field
+/// is simply not set.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SuccessfulProposalExecutionValue {
+    #[prost(
+        oneof = "successful_proposal_execution_value::ProposalType",
+        tags = "1, 2"
+    )]
+    pub proposal_type: ::core::option::Option<successful_proposal_execution_value::ProposalType>,
+}
+/// Nested message and enum types in `SuccessfulProposalExecutionValue`.
+pub mod successful_proposal_execution_value {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum ProposalType {
+        #[prost(message, tag = "1")]
+        CreateCanisterAndInstallCode(super::CreateCanisterAndInstallCodeOk),
+        #[prost(message, tag = "2")]
+        TakeCanisterSnapshot(super::TakeCanisterSnapshotOk),
+    }
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct CreateCanisterAndInstallCodeOk {
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct TakeCanisterSnapshotOk {
+    #[prost(bytes = "vec", tag = "1")]
+    pub snapshot_id: ::prost::alloc::vec::Vec<u8>,
 }
 /// This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
 #[derive(
@@ -3195,6 +3264,9 @@ pub struct Governance {
     #[prost(map = "uint64, message", tag = "32")]
     pub neuron_id_to_pre_clamp_dissolve_state:
         ::std::collections::HashMap<u64, NeuronDissolveStateSnapshot>,
+    /// Whether the relaxed eight year gang member induction is done.
+    #[prost(bool, tag = "33")]
+    pub relaxed_eight_year_gang_bonus_migration_done: bool,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {

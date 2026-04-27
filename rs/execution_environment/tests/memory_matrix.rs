@@ -123,7 +123,7 @@ struct ScenarioParams<F, G> {
     op: G,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 enum FreezingThreshold {
     /// Short freezing threshold so that the number of reserved cycles
     /// exceeds the freezing limit in cycles.
@@ -142,7 +142,7 @@ impl FreezingThreshold {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 enum MemoryAllocation {
     /// Memory allocation of 0.
     BestEffort,

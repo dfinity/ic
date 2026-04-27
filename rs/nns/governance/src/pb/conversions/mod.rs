@@ -1,5 +1,7 @@
-use crate::pb::proposal_conversions::{ProposalDisplayOptions, convert_proposal};
-use crate::pb::v1 as pb;
+use crate::pb::{
+    proposal_conversions::{ProposalDisplayOptions, convert_proposal},
+    v1::{self as pb, successful_proposal_execution_value::ProposalType},
+};
 
 use ic_crypto_sha2::Sha256;
 use ic_nns_governance_api as api;
@@ -7,6 +9,7 @@ use ic_nns_governance_conversions::{
     convert_guest_launch_measurements_from_api_to_pb,
     convert_guest_launch_measurements_from_pb_to_api,
 };
+use ic_nns_handler_root_interface as root;
 
 #[cfg(test)]
 mod tests;
@@ -1486,8 +1489,9 @@ impl From<api::ProposalData> for pb::ProposalData {
             neurons_fund_data: item.neurons_fund_data.map(|x| x.into()),
             total_potential_voting_power: item.total_potential_voting_power,
             topic: item.topic,
-            // This is not intended to be initialized from outside of canister.
+            // These are not intended to be initialized from outside of canister.
             previous_ballots_timestamp_seconds: None,
+            success_value: None,
         }
     }
 }
@@ -1763,6 +1767,92 @@ impl From<api::DerivedProposalInformation> for pb::DerivedProposalInformation {
     fn from(item: api::DerivedProposalInformation) -> Self {
         Self {
             swap_background_information: item.swap_background_information.map(|x| x.into()),
+        }
+    }
+}
+
+impl From<pb::SuccessfulProposalExecutionValue> for Option<api::SuccessfulProposalExecutionValue> {
+    fn from(item: pb::SuccessfulProposalExecutionValue) -> Self {
+        let result = match item.proposal_type? {
+            ProposalType::CreateCanisterAndInstallCode(ok) => {
+                api::SuccessfulProposalExecutionValue::CreateCanisterAndInstallCode(ok.into())
+            }
+            ProposalType::TakeCanisterSnapshot(ok) => {
+                api::SuccessfulProposalExecutionValue::TakeCanisterSnapshot(ok.into())
+            }
+        };
+
+        Some(result)
+    }
+}
+
+impl From<pb::CreateCanisterAndInstallCodeOk> for api::CreateCanisterAndInstallCodeOk {
+    fn from(item: pb::CreateCanisterAndInstallCodeOk) -> Self {
+        Self {
+            canister_id: item.canister_id,
+        }
+    }
+}
+
+impl From<root::CreateCanisterAndInstallCodeOk> for pb::CreateCanisterAndInstallCodeOk {
+    fn from(ok: root::CreateCanisterAndInstallCodeOk) -> Self {
+        Self {
+            canister_id: Some(ok.canister_id),
+        }
+    }
+}
+
+/// This is not actually used. It is just needed to satisfy some `where` clause
+/// of perform_call_canister.
+impl From<()> for pb::SuccessfulProposalExecutionValue {
+    fn from(_: ()) -> Self {
+        Self {
+            proposal_type: None,
+        }
+    }
+}
+
+impl From<root::CreateCanisterAndInstallCodeOk> for pb::SuccessfulProposalExecutionValue {
+    fn from(ok: root::CreateCanisterAndInstallCodeOk) -> Self {
+        Self::from(pb::CreateCanisterAndInstallCodeOk::from(ok))
+    }
+}
+
+/// This is an "upgrade" conversion.
+/// I.e. if you have enum E { A(A) }, then, you can upgrade A to E.
+impl From<pb::CreateCanisterAndInstallCodeOk> for pb::SuccessfulProposalExecutionValue {
+    fn from(ok: pb::CreateCanisterAndInstallCodeOk) -> Self {
+        Self {
+            proposal_type: Some(ProposalType::CreateCanisterAndInstallCode(ok)),
+        }
+    }
+}
+
+impl From<root::TakeCanisterSnapshotOk> for pb::TakeCanisterSnapshotOk {
+    fn from(ok: root::TakeCanisterSnapshotOk) -> Self {
+        Self { snapshot_id: ok.id }
+    }
+}
+
+impl From<root::TakeCanisterSnapshotOk> for pb::SuccessfulProposalExecutionValue {
+    fn from(ok: root::TakeCanisterSnapshotOk) -> Self {
+        Self::from(pb::TakeCanisterSnapshotOk::from(ok))
+    }
+}
+
+// Upgrade Ok to result.
+impl From<pb::TakeCanisterSnapshotOk> for pb::SuccessfulProposalExecutionValue {
+    fn from(ok: pb::TakeCanisterSnapshotOk) -> Self {
+        Self {
+            proposal_type: Some(ProposalType::TakeCanisterSnapshot(ok)),
+        }
+    }
+}
+
+impl From<pb::TakeCanisterSnapshotOk> for api::TakeCanisterSnapshotOk {
+    fn from(item: pb::TakeCanisterSnapshotOk) -> Self {
+        Self {
+            snapshot_id: item.snapshot_id,
         }
     }
 }

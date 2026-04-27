@@ -7,12 +7,12 @@ use crate::{
         wasm_module,
     },
     proposals::{
-        call_canister::CallCanister,
+        call_canister::{CallCanister, CallCanisterReply},
         invalid_proposal_error,
         self_describing::{DocumentedAction, ValueBuilder},
     },
 };
-use candid::{Encode, Nat};
+use candid::{Decode, Encode, Nat};
 use ic_base_types::CanisterId;
 use ic_nervous_system_clients::update_settings::{
     CanisterSettings as RootCanisterSettings, LogVisibility as RootLogVisibility,
@@ -223,6 +223,8 @@ impl TryFrom<&crate::pb::v1::CanisterSettings> for RootCanisterSettings {
 }
 
 impl CallCanister for CreateCanisterAndInstallCode {
+    type Reply = root::CreateCanisterAndInstallCodeOk;
+
     fn canister_and_function(&self) -> Result<(CanisterId, &str), GovernanceError> {
         if !are_create_canister_and_install_code_proposals_enabled() {
             return Err(GovernanceError::new_with_message(
@@ -250,6 +252,30 @@ impl CallCanister for CreateCanisterAndInstallCode {
                 format!("Failed to encode CreateCanisterAndInstallCode: {}", e),
             )
         })
+    }
+}
+
+impl CallCanisterReply for root::CreateCanisterAndInstallCodeOk {
+    fn try_decode(encoded_reply: &[u8]) -> Result<Option<Self>, GovernanceError> {
+        let result =
+            Decode!(encoded_reply, root::CreateCanisterAndInstallCodeResponse).map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Failed to decode CreateCanisterAndInstallCodeResponse: {err}"),
+                )
+            })?;
+
+        let result = Result::from(result).map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "Root returned error for CreateCanisterAndInstallCode: {:?}",
+                    err
+                ),
+            )
+        })?;
+
+        Ok(Some(result))
     }
 }
 

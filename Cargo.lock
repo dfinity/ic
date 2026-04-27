@@ -3470,7 +3470,7 @@ dependencies = [
  "ic-dummy-getrandom-for-wasm",
  "ic-http-types",
  "ic-ledger-core",
- "ic-management-canister-types-private",
+ "ic-management-canister-types 0.5.0",
  "ic-metrics-encoder",
  "ic-nervous-system-common",
  "ic-nervous-system-common-build-metadata",
@@ -4394,6 +4394,7 @@ dependencies = [
  "candid",
  "canister-test",
  "criterion",
+ "ic-embedders",
  "ic-test-utilities-execution-environment",
  "ic-types",
  "wirm",
@@ -4730,6 +4731,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-registry-subnet-type",
  "ic-replicated-state",
+ "ic-sys",
  "ic-test-utilities",
  "ic-test-utilities-execution-environment",
  "ic-test-utilities-state",
@@ -5500,6 +5502,7 @@ dependencies = [
  "libcryptsetup-rs",
  "nix 0.24.3",
  "parking_lot",
+ "prometheus",
  "rand 0.8.5",
  "sev",
  "sev_guest",
@@ -11071,6 +11074,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "num-traits",
  "proptest",
+ "serde",
  "serde_bytes",
 ]
 
@@ -11786,6 +11790,7 @@ dependencies = [
  "ic-nervous-system-clients",
  "ic-nervous-system-lock",
  "ic-nervous-system-runtime",
+ "ic-nns-constants",
  "serde",
  "serde_bytes",
  "tokio",
@@ -12102,6 +12107,7 @@ dependencies = [
  "ic-nervous-system-rate-limits",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
+ "ic-nervous-system-string",
  "ic-nervous-system-temporary",
  "ic-nervous-system-time-helpers",
  "ic-nervous-system-timer-task",
@@ -12292,6 +12298,7 @@ dependencies = [
  "ic-nervous-system-proxied-canister-calls-tracker",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
+ "ic-nervous-system-string",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-handler-root-interface",
@@ -12395,6 +12402,7 @@ dependencies = [
  "ic-http-types",
  "ic-ledger-core",
  "ic-limits",
+ "ic-management-canister-types 0.5.0",
  "ic-management-canister-types-private",
  "ic-nervous-system-chunks",
  "ic-nervous-system-clients",
@@ -12446,6 +12454,7 @@ dependencies = [
  "prometheus-parse",
  "prost 0.13.5",
  "rand 0.8.5",
+ "regex",
  "registry-canister",
  "rewards-calculation",
  "rustc-hash 1.1.0",
@@ -12453,6 +12462,7 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "strum 0.26.3",
+ "tempfile",
  "tokio",
  "wat",
  "xrc-mock",
@@ -12904,6 +12914,7 @@ dependencies = [
 name = "ic-recovery"
 version = "0.9.0"
 dependencies = [
+ "assert_matches",
  "clap 4.6.0",
  "futures",
  "hex",
@@ -15214,18 +15225,20 @@ name = "ic-testnet-mainnet-nns"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "flate2",
  "ic-agent",
  "ic-base-types",
  "ic-canister-client",
  "ic-canister-client-sender",
  "ic-crypto-utils-threshold-sig-der",
- "ic-limits",
  "ic-nervous-system-common",
+ "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
  "ic-nns-test-utils",
  "ic-protobuf",
+ "ic-registry-keys",
  "ic-registry-nns-data-provider",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
@@ -15235,9 +15248,11 @@ dependencies = [
  "once_cell",
  "rand 0.8.5",
  "registry-canister",
+ "reqwest",
  "serde",
  "slog",
  "ssh2",
+ "tokio",
  "url",
 ]
 
@@ -15545,6 +15560,7 @@ dependencies = [
  "assert_matches",
  "base64 0.13.1",
  "hex",
+ "ic-crypto-iccsa",
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-sha2",
@@ -16080,6 +16096,7 @@ dependencies = [
  "candid",
  "ic-agent",
  "ic-certification 3.1.0",
+ "ic-crypto-iccsa",
  "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-internal-bls12-381-type",
  "ic-crypto-sha2",
@@ -16129,8 +16146,12 @@ name = "ic_nested_nns_recovery_common"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "candid",
+ "ic-agent",
+ "ic-nervous-system-root",
  "ic-recovery",
  "ic-system-test-driver",
+ "ic-testnet-mainnet-nns",
  "ic-types",
  "ic_consensus_system_test_subnet_recovery",
  "ic_consensus_system_test_utils",
@@ -16146,6 +16167,7 @@ dependencies = [
 name = "ic_os_logging"
 version = "0.0.0"
 dependencies = [
+ "tracing",
  "tracing-journald",
  "tracing-subscriber",
 ]
@@ -16280,7 +16302,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-agent"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "candid",
  "ciborium",
@@ -16294,7 +16316,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-client"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -16303,7 +16325,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-client-cdk"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -16313,7 +16335,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-types"
-version = "0.1.13"
+version = "0.2.0"
 dependencies = [
  "assert_matches",
  "base32",
@@ -18953,6 +18975,7 @@ dependencies = [
  "ic-nns-governance-api",
  "ic-types",
  "ic_device",
+ "ic_os_logging",
  "linux_kernel_command_line",
  "pem",
  "rand 0.8.5",
@@ -18961,6 +18984,7 @@ dependencies = [
  "sev_guest",
  "sev_guest_testing",
  "tempfile",
+ "tracing",
  "uuid",
 ]
 
@@ -21410,6 +21434,7 @@ dependencies = [
  "serde",
  "serde_json",
  "strum 0.26.3",
+ "strum_macros 0.26.4",
  "tempfile",
  "tokio",
  "url",

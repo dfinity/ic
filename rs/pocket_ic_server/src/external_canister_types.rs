@@ -45,6 +45,11 @@ pub enum CyclesLedgerArgs {
 
 /* Internet Identity */
 
+#[derive(CandidType)]
+pub struct DiscoverableOidcConfig {
+    pub discovery_domain: String,
+}
+
 pub type AnchorNumber = u64;
 
 #[derive(CandidType)]
@@ -142,6 +147,7 @@ pub struct InternetIdentityInit {
     pub related_origins: Option<Vec<String>>,
     pub new_flow_origins: Option<Vec<String>>,
     pub openid_configs: Option<Vec<OpenIdConfig>>,
+    pub oidc_configs: Option<Vec<DiscoverableOidcConfig>>,
     pub analytics_config: Option<Option<AnalyticsConfig>>,
     pub enable_dapps_explorer: Option<bool>,
     pub is_production: Option<bool>,

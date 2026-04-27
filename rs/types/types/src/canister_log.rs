@@ -4,6 +4,7 @@ use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use serde::Serialize;
 use std::collections::VecDeque;
+use std::time::Duration;
 
 const KIB: usize = 1024;
 const MIB: usize = 1024 * KIB;
@@ -225,6 +226,16 @@ impl CanisterLog {
     pub fn remaining_bytes(&self) -> usize {
         let records = &self.records;
         records.byte_capacity.saturating_sub(records.bytes_used)
+    }
+
+    /// Returns the time span between the oldest and newest records in the
+    /// buffer, or `None` if the buffer is empty. Returns `Duration::ZERO`
+    /// when the buffer holds a single record.
+    pub fn retention(&self) -> Option<Duration> {
+        let records = self.records.get();
+        let first = records.front()?.timestamp_nanos;
+        let last = records.back()?.timestamp_nanos;
+        Some(Duration::from_nanos(last.saturating_sub(first)))
     }
 
     /// Adds a new log record.
@@ -504,5 +515,32 @@ mod tests {
         main.clear_delta_log_sizes();
         assert_eq!(main.delta_log_sizes(), Vec::<usize>::new()); // Call after clear_delta_log_sizes.
         assert_eq!(main.bytes_used(), size_a + size_b + size_c);
+    }
+
+    #[test]
+    fn test_canister_log_retention() {
+        // Empty buffer: no retention.
+        let empty = CanisterLog::default_aggregate();
+        assert_eq!(empty.retention(), None);
+
+        // Single record: retention is zero.
+        let single = CanisterLog::new_aggregate(1, canister_log_records(&[(0, 100, b"a")]));
+        assert_eq!(single.retention(), Some(Duration::ZERO));
+
+        // Multiple records: retention spans first..last.
+        let span = CanisterLog::new_aggregate(
+            3,
+            canister_log_records(&[
+                (0, 1_000_000_000, b"a"),  // t = 1 s
+                (1, 1_500_000_000, b"b"),  // t = 1.5 s
+                (2, 61_000_000_000, b"c"), // t = 61 s
+            ]),
+        );
+        assert_eq!(span.retention(), Some(Duration::from_secs(60)));
+
+        // After clear the buffer is empty again.
+        let mut to_clear = span;
+        to_clear.clear();
+        assert_eq!(to_clear.retention(), None);
     }
 }

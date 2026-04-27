@@ -478,6 +478,7 @@ pub enum SubnetKind {
     NNS,
     SNS,
     System,
+    TestThresholdKeys,
     VerifiedApplication,
 }
 
@@ -490,6 +491,7 @@ pub struct SubnetConfigSet {
     pub ii: bool,
     pub fiduciary: bool,
     pub bitcoin: bool,
+    pub test_threshold_keys: bool,
     pub system: usize,
     pub application: usize,
     pub cloud_engine: usize,
@@ -507,6 +509,7 @@ impl SubnetConfigSet {
             || self.ii
             || self.fiduciary
             || self.bitcoin
+            || self.test_threshold_keys
         {
             return Ok(());
         }
@@ -522,6 +525,7 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
             ii,
             fiduciary: fid,
             bitcoin,
+            test_threshold_keys,
             system,
             application,
             cloud_engine,
@@ -550,6 +554,11 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
                 None
             },
             bitcoin: if bitcoin {
+                Some(SubnetSpec::default())
+            } else {
+                None
+            },
+            test_threshold_keys: if test_threshold_keys {
                 Some(SubnetSpec::default())
             } else {
                 None
@@ -678,6 +687,7 @@ pub struct ExtendedSubnetConfigSet {
     pub ii: Option<SubnetSpec>,
     pub fiduciary: Option<SubnetSpec>,
     pub bitcoin: Option<SubnetSpec>,
+    pub test_threshold_keys: Option<SubnetSpec>,
     pub system: Vec<SubnetSpec>,
     pub application: Vec<SubnetSpec>,
     #[serde(default)]
@@ -805,6 +815,7 @@ impl ExtendedSubnetConfigSet {
             (self.ii.clone(), II),
             (self.fiduciary.clone(), Fiduciary),
             (self.bitcoin.clone(), Bitcoin),
+            (self.test_threshold_keys.clone(), TestThresholdKeys),
         ]
         .into_iter()
         .filter(|(mb, _)| mb.is_some())
@@ -823,6 +834,7 @@ impl ExtendedSubnetConfigSet {
             .chain(&self.ii)
             .chain(&self.fiduciary)
             .chain(&self.bitcoin)
+            .chain(&self.test_threshold_keys)
             .chain(&self.system)
             .chain(&self.verified_application);
 

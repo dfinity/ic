@@ -29,6 +29,7 @@ rust_library(
         "//rs/query_stats",
         "//rs/registry/provisional_whitelist",
         "//rs/registry/resource_limits",
+        "//rs/registry/routing_table",
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
         "//rs/state_layout",
@@ -279,7 +280,7 @@ rust_ic_test(
     env = {
         "UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.module)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
-        "RUST_TEST_THREADS": "4",
+        "RUST_TEST_THREADS": "2",
     },
     tags = [
         "cpu:4",
@@ -469,8 +470,10 @@ rust_ic_bench(
         # Keep sorted.
         "//rs/config",
         "//rs/registry/subnet_type",
+        "//rs/replicated_state",
         "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
+        "//rs/test_utilities/execution_environment",
         "//rs/types/base_types",
         "//rs/types/cycles",
         "//rs/types/management_canister_types",
