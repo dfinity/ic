@@ -52,7 +52,7 @@ mod create_dealing {
                         && *algorithm_id == AlgorithmId::NiDkg_Groth20_Bls12_381
                         && *threshold == THRESHOLD
                         && *epoch_ == epoch(REG_V2)
-                        && *receiver_keys == map_of(vec![(0u32, csp_fs_enc_pk(PK_VALUE_1))])
+                        && *receiver_keys == map_of(vec![(0_u32, csp_fs_enc_pk(PK_VALUE_1))])
                 },
             )
             .times(1)
@@ -103,9 +103,9 @@ mod create_dealing {
         let csp = csp_with_create_dealing_expecting_receiver_keys_and_dealer_index(
             0,
             map_of(vec![
-                (0u32, csp_fs_enc_pk(PK_VALUE_1)),
-                (1u32, csp_fs_enc_pk(PK_VALUE_2)),
-                (2u32, csp_fs_enc_pk(PK_VALUE_3)),
+                (0_u32, csp_fs_enc_pk(PK_VALUE_1)),
+                (1_u32, csp_fs_enc_pk(PK_VALUE_2)),
+                (2_u32, csp_fs_enc_pk(PK_VALUE_3)),
             ]),
         );
 
@@ -375,7 +375,7 @@ mod create_dealing_with_resharing_transcript {
                         && *algorithm_id == AlgorithmId::NiDkg_Groth20_Bls12_381
                         && *threshold == THRESHOLD
                         && *epoch_ == epoch(REG_V2)
-                        && *receiver_keys == map_of(vec![(0u32, csp_fs_enc_pk(PK_VALUE_2))])
+                        && *receiver_keys == map_of(vec![(0_u32, csp_fs_enc_pk(PK_VALUE_2))])
                         && *resharing_public_coefficients
                             == CspPublicCoefficients::from(&resharing_transcript)
                 },
@@ -488,7 +488,7 @@ mod verify_dealing {
                         && *algorithm_id == AlgorithmId::NiDkg_Groth20_Bls12_381
                         && *threshold == THRESHOLD
                         && *epoch_ == epoch(REG_V2)
-                        && *receiver_keys == map_of(vec![(0u32, csp_fs_enc_pk(PK_VALUE_1))])
+                        && *receiver_keys == map_of(vec![(0_u32, csp_fs_enc_pk(PK_VALUE_1))])
                         && *dealing == csp_dealing(DEALING_VALUE_1)
                 },
             )
@@ -515,9 +515,9 @@ mod verify_dealing {
         let receiver_2_enc_pk = dealing_enc_pk_record(NODE_2, REG_V2, PK_VALUE_2);
         let receiver_3_enc_pk = dealing_enc_pk_record(NODE_3, REG_V2, PK_VALUE_3);
         let csp = csp_with_verify_dealing_expecting_receiver_keys(map_of(vec![
-            (0u32, csp_fs_enc_pk(PK_VALUE_1)),
-            (1u32, csp_fs_enc_pk(PK_VALUE_2)),
-            (2u32, csp_fs_enc_pk(PK_VALUE_3)),
+            (0_u32, csp_fs_enc_pk(PK_VALUE_1)),
+            (1_u32, csp_fs_enc_pk(PK_VALUE_2)),
+            (2_u32, csp_fs_enc_pk(PK_VALUE_3)),
         ]));
 
         let _ = verify_dealing(
@@ -767,7 +767,7 @@ mod verify_dealing_with_resharing_transcript {
                     *algorithm_id == AlgorithmId::NiDkg_Groth20_Bls12_381
                         && *threshold == THRESHOLD
                         && *epoch_ == epoch(REG_V2)
-                        && *receiver_keys == map_of(vec![(0u32, csp_fs_enc_pk(PK_VALUE_1))])
+                        && *receiver_keys == map_of(vec![(0_u32, csp_fs_enc_pk(PK_VALUE_1))])
                         && *dealing == csp_dealing(DEALING_VALUE_1)
                         && *resharing_pub_coeffs == expected_resharing_pub_coeffs
                         // The resharing dealer index is the index of NODE_3 in the resharing committee.

@@ -94,7 +94,7 @@ fn should_accept_signatures_that_we_generate() {
     let pk = sk.public_key();
 
     for m in 0..100 {
-        let mut msg = vec![0u8; m];
+        let mut msg = vec![0_u8; m];
         rng.fill_bytes(&mut msg);
         let sig = sk.sign_message(&msg);
 
@@ -118,7 +118,7 @@ fn should_accept_der_encoded_signatures_that_we_generate() {
     let pk = sk.public_key();
 
     for m in 0..100 {
-        let mut msg = vec![0u8; m];
+        let mut msg = vec![0_u8; m];
         rng.fill_bytes(&mut msg);
         let sig = sk.sign_message_with_der_encoded_sig(&msg);
 

@@ -2,12 +2,17 @@ use super::*;
 
 use crate::{
     governance::test_data::{CREATE_SERVICE_NERVOUS_SYSTEM, IMAGE_1, IMAGE_2},
-    pb::v1::{NetworkEconomics, SelfDescribingValue as SelfDescribingValuePb, Topic},
+    pb::v1::{
+        NetworkEconomics, NodeProvider, RewardNodeProvider, RewardNodeProviders,
+        SelfDescribingValue as SelfDescribingValuePb, Topic,
+        reward_node_provider::{RewardMode, RewardToAccount, RewardToNeuron},
+    },
 };
 
 use ic_base_types::PrincipalId;
 use ic_nns_governance_api::SelfDescribingValue;
 use ic_nns_governance_derive_self_describing::SelfDescribing;
+use icp_ledger::protobuf::AccountIdentifier;
 use maplit::hashmap;
 
 #[track_caller]
@@ -401,6 +406,72 @@ fn test_derive_mixed_enum_tuple_variant() {
             "WithValue".to_string() => SelfDescribingValue::Map(hashmap! {
                 "id".to_string() => SelfDescribingValue::from(456_u64),
             }),
+        }),
+    );
+}
+
+#[test]
+fn test_reward_node_providers_to_self_describing() {
+    let account_identifier = AccountIdentifier {
+        hash: vec![1, 2, 3, 4],
+    };
+    // Covers: RewardNodeProviders, Vec<RewardNodeProvider>, NodeProvider (with and without
+    // reward_account), both RewardMode variants (RewardToAccount and RewardToNeuron),
+    // and Option<bool> as None.
+    assert_self_describing_value_is(
+        RewardNodeProviders {
+            rewards: vec![
+                RewardNodeProvider {
+                    node_provider: Some(NodeProvider {
+                        id: Some(PrincipalId::new_user_test_id(1)),
+                        reward_account: Some(account_identifier.clone()),
+                    }),
+                    amount_e8s: 100_000_000,
+                    reward_mode: Some(RewardMode::RewardToAccount(RewardToAccount {
+                        to_account: Some(account_identifier),
+                    })),
+                },
+                RewardNodeProvider {
+                    node_provider: Some(NodeProvider {
+                        id: Some(PrincipalId::new_user_test_id(2)),
+                        reward_account: None,
+                    }),
+                    amount_e8s: 200_000_000,
+                    reward_mode: Some(RewardMode::RewardToNeuron(RewardToNeuron {
+                        dissolve_delay_seconds: 15_778_800,
+                    })),
+                },
+            ],
+            use_registry_derived_rewards: None,
+        },
+        SelfDescribingValue::Map(hashmap! {
+            "rewards".to_string() => SelfDescribingValue::Array(vec![
+                SelfDescribingValue::Map(hashmap! {
+                    "node_provider".to_string() => SelfDescribingValue::Map(hashmap! {
+                        "id".to_string() => SelfDescribingValue::from("6fyp7-3ibaa-aaaaa-aaaap-4ai"),
+                        "reward_account".to_string() => SelfDescribingValue::Blob(vec![1, 2, 3, 4]),
+                    }),
+                    "amount_e8s".to_string() => SelfDescribingValue::from(100_000_000_u64),
+                    "reward_mode".to_string() => SelfDescribingValue::Map(hashmap! {
+                        "RewardToAccount".to_string() => SelfDescribingValue::Map(hashmap! {
+                            "to_account".to_string() => SelfDescribingValue::Blob(vec![1, 2, 3, 4]),
+                        }),
+                    }),
+                }),
+                SelfDescribingValue::Map(hashmap! {
+                    "node_provider".to_string() => SelfDescribingValue::Map(hashmap! {
+                        "id".to_string() => SelfDescribingValue::from("djduj-3qcaa-aaaaa-aaaap-4ai"),
+                        "reward_account".to_string() => SelfDescribingValue::Null,
+                    }),
+                    "amount_e8s".to_string() => SelfDescribingValue::from(200_000_000_u64),
+                    "reward_mode".to_string() => SelfDescribingValue::Map(hashmap! {
+                        "RewardToNeuron".to_string() => SelfDescribingValue::Map(hashmap! {
+                            "dissolve_delay_seconds".to_string() => SelfDescribingValue::from(15_778_800_u64),
+                        }),
+                    }),
+                }),
+            ]),
+            "use_registry_derived_rewards".to_string() => SelfDescribingValue::Null,
         }),
     );
 }

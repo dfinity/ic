@@ -37,10 +37,13 @@ HASH=$(sha256sum "$FILE" | awk '{print $1}')
 {
 printf '(record { data = blob "'
 xxd -p "$FILE" | tr -d '\n' | sed 's/\(..\)/\\\1/g'
-printf '"; hash = "%s"; })' "$HASH"
+printf '"; '
+printf 'hash = "%s"; ' "$HASH"
+printf 'tags = opt vec { "ledger"; "u256" }'
+printf ' })'
 } > args.did
 
-icp canister call blob_store insert args.did
+icp canister call blob_store insert --args-file args.did
 ```
 
 ### Retrieve a file
@@ -49,10 +52,27 @@ Query the blob by its hash. The result is Candid-encoded and needs to be
 decoded before writing to disk:
 
 ```bash
-icp canister call blob_store get "(\"$HASH\")" | idl2json -b hex --did ./blob_store.did | jq -r '."17_724"' | xxd -r -p > downloaded.wasm.gz
+icp canister call blob_store get "(\"$HASH\")" | idl2json -b hex --did ./blob_store.did | jq -r '."Ok"' | xxd -r -p > downloaded.wasm.gz
 ```
 
 Control the hash of the downloaded file with
 ```bash
 sha256sum downloaded.wasm.gz
 ```
+
+### Get metadata
+
+Query metadata (uploader, insertion time, size, tags) without downloading the blob:
+
+```bash
+icp canister call blob_store get_metadata "(\"$HASH\")"
+```
+
+### View the dashboard
+
+The dashboard can be found at http://t63gs-up777-77776-aaaba-cai.raw.localhost:8000/dashboard:
+* Adapt the canister ID if needed. This should be visible in the output of `icp deploy`.
+    ```
+    Created canister blob_store with ID t63gs-up777-77776-aaaba-cai
+    ```
+* Note the `raw` part of the URL to bypass certification.

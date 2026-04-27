@@ -14,6 +14,7 @@ ic-embedders = { path = "../../../embedders" }
 ic-error-types = { path = "../../../../packages/ic-error-types" }
 ic-execution-environment = { path = "../../" }
 ic-interfaces = { path = "../../../interfaces" }
+ic-sys = { path = "../../../sys" }
 ic-limits = { path = "../../../limits" }
 ic-logger = { path = "../../../monitoring/logger" }
 ic-metrics = { path = "../../../monitoring/metrics" }
@@ -25,6 +26,7 @@ ic-test-utilities-execution-environment = { path = "../../../test_utilities/exec
 ic-test-utilities-state = { path = "../../../test_utilities/state" }
 ic-test-utilities-types = { path = "../../../test_utilities/types" }
 ic-types = { path = "../../../types/types" }
+ic-types-cycles = { path = "../../../types/cycles" }
 ic-wasm-types = { path = "../../../types/wasm_types" }
 lazy_static = { workspace = true }
 tempfile = { workspace = true }

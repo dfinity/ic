@@ -114,36 +114,82 @@ def is_git_commit_sha(s: str) -> bool:
     return bool(re.match(r"^[0-9a-fA-F]{7,40}$", s))
 
 
-def get_commit_timestamp(sha: str) -> datetime:
-    """Fetch a git commit and return its commit timestamp as a timezone-aware datetime object (UTC)."""
+def commit_sha_arg(s: str) -> str:
+    """Argparse `type` validator: accept only strings that look like a git commit SHA."""
+    if not is_git_commit_sha(s):
+        raise argparse.ArgumentTypeError(f"Invalid git commit SHA '{s}': expected 7-40 hexadecimal characters.")
+    return s
+
+
+def resolve_full_commit_sha(sha: str) -> str:
+    """
+    Resolve a (possibly short) git commit SHA to its full 40-character form using `git rev-parse`.
+
+    If the commit is not yet available locally, `git fetch origin` is run once and the
+    resolution is retried. This allows callers to pass commits that have not been fetched
+    yet (e.g. commits from recent PRs on a freshly-cloned repository).
+
+    Only accepts inputs that look like a git commit SHA (hex 7-40 chars) to avoid
+    accepting arbitrary revision expressions or option injection via `git rev-parse`.
+    The `^{commit}` suffix ensures git treats the input as a commit object reference
+    rather than another kind of object (tag, tree, ...).
+    """
+    if not is_git_commit_sha(sha):
+        die(f"Invalid git commit SHA '{sha}': expected 7-40 hexadecimal characters.")
     repo_root = THIS_SCRIPT_DIR.parent.parent
 
-    try:
-        # First, resolve the full commit SHA
+    def rev_parse() -> Optional[str]:
         result = subprocess.run(
-            ["git", "rev-parse", sha],
+            ["git", "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}"],
             cwd=repo_root,
-            check=True,
             capture_output=True,
             text=True,
         )
-        full_sha = result.stdout.strip()
+        if result.returncode != 0:
+            return None
+        # Defensively take the first non-empty line of output.
+        for line in result.stdout.splitlines():
+            stripped_line = line.strip()
+            if stripped_line:
+                return stripped_line
+        return None
 
-        # Then, fetch the commit to ensure it's available locally
+    full_sha = rev_parse()
+    if full_sha is not None:
+        return full_sha
+
+    # Commit not found locally; fetch from origin and retry.
+    try:
         subprocess.run(
-            ["git", "fetch", "origin", full_sha],
+            ["git", "fetch", "origin"],
             cwd=repo_root,
             check=True,
             capture_output=True,
             text=True,
         )
     except subprocess.CalledProcessError as e:
-        die(f"Failed to fetch git commit '{sha}': {e.stderr.strip()}\nMake sure the commit exists in the repository.")
+        die(f"Failed to fetch from origin while resolving git commit '{sha}': {e.stderr.strip()}")
+
+    full_sha = rev_parse()
+    if full_sha is None:
+        die(
+            f"Failed to resolve git commit '{sha}' even after fetching from origin.\nMake sure the commit exists in the repository."
+        )
+    return full_sha
+
+
+def get_commit_timestamp(sha: str) -> datetime:
+    """Return the commit timestamp of the given git commit as a timezone-aware datetime object (UTC)."""
+    repo_root = THIS_SCRIPT_DIR.parent.parent
+
+    # Resolve the full commit SHA, fetching from origin if necessary.
+    full_sha = resolve_full_commit_sha(sha)
 
     try:
-        # Get the commit timestamp in ISO 8601 format
+        # Get the commit timestamp in ISO 8601 format. Use the fully-resolved SHA
+        # to avoid ambiguity issues after fetching.
         result = subprocess.run(
-            ["git", "log", "-1", "--format=%cI", sha],
+            ["git", "log", "-1", "--format=%cI", full_sha],
             cwd=repo_root,
             check=True,
             capture_output=True,
@@ -285,7 +331,14 @@ def filter_columns(columns_metadata, columns_list):
     return result
 
 
-def download_and_process_logs(logs_base_dir, download_console_logs: bool, download_ic_logs: bool, df: pd.DataFrame):
+def download_and_process_logs(
+    logs_base_dir,
+    df: pd.DataFrame,
+    *,
+    download_console_logs: bool,
+    download_ic_logs: bool,
+    verbose: bool,
+):
     """
     Download the logs of all runs in the given DataFrame,
     save them to the specified logs_base_dir
@@ -334,7 +387,13 @@ def download_and_process_logs(logs_base_dir, download_console_logs: bool, downlo
                 (row, attempt_num, attempt_status, download_url, attempt_dir, download_to_path, output_dir)
             )
 
-    execute_download_tasks(download_tasks, download_console_logs, download_ic_logs, df)
+    execute_download_tasks(
+        download_tasks,
+        df,
+        download_console_logs=download_console_logs,
+        download_ic_logs=download_ic_logs,
+        verbose=verbose,
+    )
 
     if len(output_dirs) == 1:
         output_dir = output_dirs.pop()
@@ -434,11 +493,14 @@ def convert_download_url(uri, cluster) -> str:
 
 def execute_download_tasks(
     download_tasks: list,
+    df: pd.DataFrame,
+    *,
     download_console_logs: bool,
     download_ic_logs: bool,
-    df: pd.DataFrame,
+    verbose: bool,
 ):
-    print(f"Downloading {len(download_tasks)} log files...", file=sys.stderr)
+    if verbose:
+        print(f"Downloading {len(download_tasks)} log files...", file=sys.stderr)
 
     # These executors are used for downloading IC logs from ElasticSearch
     # and console logs from Farm concurrently. Limit to 10 concurrent downloads
@@ -470,6 +532,7 @@ def execute_download_tasks(
                             df,
                             download_console_logs,
                             download_ic_logs,
+                            verbose,
                             download_console_log_executor,
                             download_ic_log_executor,
                         ),
@@ -502,10 +565,11 @@ def execute_download_tasks(
     # Render the error_summaries to human-readable form.
     df["errors"] = df["error_summaries"].apply(render_error_summaries)
 
-    print(
-        f"Successfully downloaded and processed {successes}/{len(download_tasks)} logs.",
-        file=sys.stderr,
-    )
+    if verbose:
+        print(
+            f"Successfully downloaded and processed {successes}/{len(download_tasks)} logs.",
+            file=sys.stderr,
+        )
 
 
 TIMESTAMP_LEN = 23
@@ -520,6 +584,7 @@ def process_log(
     df: pd.DataFrame,
     download_console_logs: bool,
     download_ic_logs: bool,
+    verbose: bool,
     download_console_log_executor: ThreadPoolExecutor,
     download_ic_log_executor: ThreadPoolExecutor,
 ):
@@ -585,6 +650,7 @@ def process_log(
                     download_console_log,
                     console_link_raw,
                     console_logs_dir / f"{vm_name}.log",
+                    verbose,
                 )
 
         if group_name is not None and download_ic_logs:
@@ -597,6 +663,7 @@ def process_log(
                 test_start_time,
                 last_seen_timestamp,
                 vm_ipv6s,
+                verbose,
             )
     else:
         # Efficiently get the last line of the log:
@@ -731,7 +798,7 @@ def shorten(msg: str, max_length: int) -> str:
     return msg
 
 
-def download_console_log(console_link_raw: str, output_path: Path):
+def download_console_log(console_link_raw: str, output_path: Path, verbose: bool):
     """Download the log of the console of a Farm VM"""
     try:
         response = requests.get(console_link_raw, timeout=60, stream=True)
@@ -739,7 +806,8 @@ def download_console_log(console_link_raw: str, output_path: Path):
             with open(output_path, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
-            print(f"Downloaded console log to {output_path}", file=sys.stderr)
+            if verbose:
+                print(f"Downloaded console log to {output_path}", file=sys.stderr)
         else:
             print(
                 f"Failed to download console log from {console_link_raw} with HTTP {response.status_code}: '{response.text.strip()}'",
@@ -755,13 +823,14 @@ def download_and_process_ic_logs_for_system_test(
     test_start_time: datetime,
     test_end_time: datetime,
     vm_ipv6s: dict[str, str],
+    verbose: bool,
 ):
     # Create a queue for passing hits from download thread to processing thread
     hits_queue = Queue(maxsize=100)  # Limit memory usage with bounded queue
 
     # Start processing thread
     processing_thread = threading.Thread(
-        target=process_elasticsearch_hits_from_queue, args=(attempt_dir, group_name, hits_queue, vm_ipv6s)
+        target=process_elasticsearch_hits_from_queue, args=(attempt_dir, group_name, hits_queue, vm_ipv6s, verbose)
     )
     processing_thread.start()
 
@@ -799,10 +868,11 @@ def download_and_process_ic_logs_for_system_test(
 
         try:
             while True:
-                print(
-                    f"Downloading a maximum  {max_size} IC logs for attempt {attempt_dir.name} for testnet {group_name} from ElasticSearch between {gte} - {lte} with search_after={elasticsearch_query.get('search_after', None)} ...",
-                    file=sys.stderr,
-                )
+                if verbose:
+                    print(
+                        f"Downloading a maximum of {max_size} IC logs for attempt {attempt_dir.name} for testnet {group_name} from ElasticSearch between {gte} - {lte} with search_after={elasticsearch_query.get('search_after', None)} ...",
+                        file=sys.stderr,
+                    )
                 response = requests.post(url, params=params, json=elasticsearch_query, timeout=60)
 
                 if not response.ok:
@@ -840,6 +910,7 @@ def process_elasticsearch_hits_from_queue(
     group_name: str,
     hits_queue: Queue,
     vm_ipv6s: dict[str, str],
+    verbose: bool,
 ):
     """Consumer thread: Process ElasticSearch hits from queue and write IC node log files."""
     log_file_by_node = {}
@@ -853,10 +924,11 @@ def process_elasticsearch_hits_from_queue(
             if hits is None:
                 break
 
-            print(
-                f"Processing and writing {len(hits)} IC logs for attempt {attempt_dir.name} for testnet {group_name} ...",
-                file=sys.stderr,
-            )
+            if verbose:
+                print(
+                    f"Processing and writing {len(hits)} IC logs for attempt {attempt_dir.name} for testnet {group_name} ...",
+                    file=sys.stderr,
+                )
             for hit in hits:
                 # Sentinel value signals end of download
                 if hit is None:
@@ -897,6 +969,7 @@ TOP_COLUMNS = [
     ("total",               "total",                 "decimal"),
     ("last_non_success_at", "last non success at",   "right"),
     ("non_success",         "non_success",           "decimal"),
+    ("last_flaky_at",       "last flaky at",         "right"),
     ("flaky",               "flaky",                 "decimal"),
     ("timeout",             "timeout",               "decimal"),
     ("fail",                "fail",                  "decimal"),
@@ -992,6 +1065,63 @@ Each attempt directory will either contain a `FAILED.log` or `PASSED.log` file w
     readme_path.write_text(readme)
 
 
+def fmt_time(t):
+    return t.strftime("%a %Y-%m-%d %X") if pd.notna(t) else ""
+
+
+def get_git_since_arg(args) -> str:
+    """
+    Convert the time filter args into a --since argument for git log.
+
+    When --since is specified, parses it via parse_datetime (which returns a
+    UTC-aware datetime) and formats it as ISO-8601 with a Z suffix so that
+    git log --since uses the same UTC time window as the SQL query.
+    """
+    if args.since:
+        dt = parse_datetime(args.since)
+        return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return f"last {period(args)}"
+
+
+def extract_test_name(label: str) -> str:
+    """Extract the test target name from a Bazel label (part after ':')."""
+    parts = label.rsplit(":", 1)
+    return parts[1] if len(parts) == 2 else label
+
+
+def get_recent_commits(git_since: str) -> list[str]:
+    """Run git log --oneline --since once and return the list of commit lines."""
+    repo_root = THIS_SCRIPT_DIR.parent.parent
+    try:
+        result = subprocess.run(
+            ["git", "log", "--oneline", "--since", git_since],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.strip().splitlines()
+    except (subprocess.CalledProcessError, OSError) as e:
+        print(f"Warning: git log failed: {e}", file=sys.stderr)
+        return []
+
+
+def has_open_pr(test_name: str) -> bool:
+    """Check if there is an open PR that mentions the test name."""
+    search_term = test_name.replace("_", " ")
+    try:
+        result = subprocess.run(
+            ["gh", "pr", "list", "--search", search_term, "--state", "open", "--repo", f"{ORG}/{REPO}", "--limit", "1"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return bool(result.stdout.strip())
+    except (subprocess.CalledProcessError, OSError) as e:
+        print(f"Warning: gh pr list failed: {e}", file=sys.stderr)
+        return False
+
+
 def top(args):
     """
     Get the top N non-successful / flaky / failed / timed-out tests
@@ -1017,7 +1147,7 @@ def top(args):
                 value = pd.Timedelta(value).to_pytimedelta()
             except ValueError as e:
                 die(f"Can't parse '{value}' to an interval because: {e}!")
-        elif args.order_by in ("last_non_success_at"):
+        elif args.order_by in ("last_non_success_at", "last_flaky_at"):
             try:
                 value = parse_datetime(value)
             except ValueError as e:
@@ -1036,6 +1166,10 @@ def top(args):
         time_filter=get_time_filter(args),
         only_prs=sql.Literal(args.prs),
         branch=sql.Literal(args.branch if args.branch else ""),
+        exclude_prs=sql.SQL("{}::int[]").format(sql.Literal(args.exclude_pr)),
+        exclude_commits=sql.SQL("{}::text[]").format(
+            sql.Literal([resolve_full_commit_sha(c) for c in dict.fromkeys(args.exclude_commit)])
+        ),
         order_by=order_by,
         N=sql.Literal(args.N),
         condition=sql.Literal(True)
@@ -1054,12 +1188,35 @@ def top(args):
         headers = [desc[0] for desc in cursor.description]
         df = pd.DataFrame(cursor, columns=headers)
 
-    df["last_non_success_at"] = df["last_non_success_at"].apply(
-        lambda t: t.strftime("%a %Y-%m-%d %X") if pd.notna(t) else ""
-    )
+    df["last_non_success_at"] = df["last_non_success_at"].apply(fmt_time)
+    df["last_flaky_at"] = df["last_flaky_at"].apply(fmt_time)
     df["impact"] = df["impact"].apply(normalize_duration)
     df["total_duration"] = df["total_duration"].apply(normalize_duration)
     df["duration_p90"] = df["duration_p90"].apply(normalize_duration)
+
+    # Optionally exclude tests that appear to already be fixed:
+    if args.exclude_fixed:
+        git_since = get_git_since_arg(args)
+        commit_lines = get_recent_commits(git_since)
+        test_names = df["label"].apply(extract_test_name)
+        # Check commits in-memory first, then only call gh for the rest:
+        fixed_by_commit = test_names.apply(
+            lambda name: any(
+                re.search(re.escape(name).replace("_", "[_. ]"), line, re.IGNORECASE) for line in commit_lines
+            )
+        )
+        remaining = test_names[~fixed_by_commit]
+        max_pr_check_workers = max(1, min(4, len(remaining)))
+        with ThreadPoolExecutor(max_workers=max_pr_check_workers) as executor:
+            pr_results = dict(zip(remaining.index, executor.map(has_open_pr, remaining)))
+        fixed = fixed_by_commit | pd.Series({i: pr_results.get(i, False) for i in df.index})
+        excluded_count = fixed.sum()
+        if excluded_count > 0:
+            excluded_labels = df.loc[fixed, "label"].tolist()
+            print(f"Excluded {excluded_count} test(s) that appear already fixed:", file=sys.stderr)
+            for lbl in excluded_labels:
+                print(f"  {lbl}", file=sys.stderr)
+        df = df[~fixed]
 
     # Find the CODEOWNERS for each test target:
     owners = codeowners.CodeOwners(Path(os.environ["CODEOWNERS_PATH"]).read_text())
@@ -1112,6 +1269,10 @@ def last(args):
         time_filter=get_time_filter(args),
         only_prs=sql.Literal(args.prs),
         branch=sql.Literal(args.branch if args.branch else ""),
+        exclude_prs=sql.SQL("{}::int[]").format(sql.Literal(args.exclude_pr)),
+        exclude_commits=sql.SQL("{}::text[]").format(
+            sql.Literal([resolve_full_commit_sha(c) for c in dict.fromkeys(args.exclude_commit)])
+        ),
     )
 
     log_psql_query(args.verbose, query.as_string(), args.conninfo)
@@ -1140,7 +1301,7 @@ def last(args):
     )
 
     # Bazel's first_start_time is really the time the last attempt started.
-    df["last_started_at"] = df["first_start_time"].apply(lambda t: t.strftime("%a %Y-%m-%d %X"))
+    df["last_started_at"] = df["first_start_time"].apply(fmt_time)
 
     df["branch"] = df["head_branch"].apply(
         lambda branch: terminal_hyperlink(shorten(branch, 16), f"https://github.com/{ORG}/{REPO}/tree/{branch}")
@@ -1153,7 +1314,13 @@ def last(args):
     df["duration"] = df["duration"].apply(normalize_duration)
 
     if not args.skip_download:
-        download_and_process_logs(args.logs_base_dir, args.download_console_logs, args.download_ic_logs, df)
+        download_and_process_logs(
+            args.logs_base_dir,
+            df,
+            download_console_logs=args.download_console_logs,
+            download_ic_logs=args.download_ic_logs,
+            verbose=args.verbose,
+        )
 
     columns_metadata = LAST_COLUMNS
     # When downlods are skipped we don't have any error information so skip the "errors" column.
@@ -1195,7 +1362,11 @@ def main():
 
     # Arguments common to all subcommands:
     common_parser = argparse.ArgumentParser(add_help=False)
-    common_parser.add_argument("--verbose", action="store_true", help="Log queries")
+    common_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable verbose logging (SQL queries and log download/processing progress)",
+    )
     common_parser.add_argument(
         "--conninfo",
         metavar="STR",
@@ -1233,6 +1404,22 @@ Mutually exclusive with --day/--week/--month""",
 
     filter_parser.add_argument("--prs", action="store_true", help="Only show test runs on Pull Requests")
     filter_parser.add_argument("--branch", metavar="B", type=str, help="Filter by branch SQL LIKE pattern")
+    filter_parser.add_argument(
+        "--exclude-pr",
+        metavar="PR_NUMBER",
+        type=int,
+        action="append",
+        default=[],
+        help="Exclude workflow runs on this PR number (can be repeated)",
+    )
+    filter_parser.add_argument(
+        "--exclude-commit",
+        metavar="COMMIT_SHA",
+        type=commit_sha_arg,
+        action="append",
+        default=[],
+        help="Exclude test runs with this head commit SHA (can be repeated)",
+    )
 
     subparsers = parser.add_subparsers(required=True)
 
@@ -1272,6 +1459,7 @@ Examples:
             "total",
             "last_non_success_at",
             "non_success",
+            "last_flaky_at",
             "flaky",
             "timeout",
             "fail",
@@ -1288,6 +1476,7 @@ Examples:
 total:\t\t\tTotal runs in the specified period
 last_non_success_at:\tTimestamp of the last non-successful run in the specified period
 non_success:\t\tNumber of non-successful runs in the specified period
+last_flaky_at:\t\tTimestamp of the last flaky run in the specified period
 flaky:\t\t\tNumber of flaky runs in the specified period
 timeout:\t\tNumber of timed-out runs in the specified period
 fail:\t\t\tNumber of failed runs in the specified period
@@ -1316,7 +1505,11 @@ duration_p90:\t\t90th percentile duration of all runs in the specified period"""
         "--include", metavar="TEST", type=str, help="Include only tests matching this SQL LIKE pattern"
     )
 
-    top_parser.set_defaults(func=top)
+    top_parser.add_argument(
+        "--exclude-fixed",
+        action="store_true",
+        help="Exclude tests that appear already fixed (mentioned in a recent git commit or an open PR)",
+    )
 
     top_parser.add_argument(
         "--tablefmt",
@@ -1327,6 +1520,8 @@ duration_p90:\t\t90th percentile duration of all runs in the specified period"""
     )
 
     add_columns_argument(top_parser, TOP_COLUMNS)
+
+    top_parser.set_defaults(func=top)
 
     ## last ###################################################################
 
@@ -1414,7 +1609,6 @@ logs
         help="""Return runs of bazel targets matching the given SQL LIKE pattern.
 If omitted retuns all bazel test runs in the specified period.""",
     )
-    last_runs_parser.set_defaults(func=last)
 
     last_runs_parser.add_argument(
         "--tablefmt",
@@ -1425,6 +1619,8 @@ If omitted retuns all bazel test runs in the specified period.""",
     )
 
     add_columns_argument(last_runs_parser, LAST_COLUMNS)
+
+    last_runs_parser.set_defaults(func=last)
 
     ###########################################################################
 

@@ -357,7 +357,7 @@ mod test {
         let mut serialized = Vec::new();
         let ss = RegistryCanisterStableStorage {
             registry: None,
-            pre_upgrade_version: Some(1u64),
+            pre_upgrade_version: Some(1_u64),
         };
         ss.encode(&mut serialized)
             .expect("Error serializing to stable.");
@@ -394,7 +394,7 @@ mod test {
         registry
             .changelog
             .insert(EncodedVersion::from(7), empty_mutation());
-        let stable_storage_bytes = stable_storage_from_registry(&registry, Some(7u64));
+        let stable_storage_bytes = stable_storage_from_registry(&registry, Some(7_u64));
 
         let mut new_registry = Registry::new();
         let registry_storage =
@@ -421,7 +421,7 @@ mod test {
     fn post_upgrade_fails_when_registry_decodes_different_version() {
         // Given a mismatched stable storage version from the registry
         let registry = invariant_compliant_registry(0);
-        let stable_storage_bytes = stable_storage_from_registry(&registry, Some(100u64));
+        let stable_storage_bytes = stable_storage_from_registry(&registry, Some(100_u64));
         // then we panic when decoding
         let mut new_registry = Registry::new();
         let registry_storage =

@@ -8,14 +8,15 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    Cycles, ExecutionRound, Height, NodeId, NumInstructions, Randomness, RegistryVersion,
-    ReplicaVersion, Time,
+    ExecutionRound, Height, NodeId, NumInstructions, Randomness, RegistryVersion, ReplicaVersion,
+    Time,
     batch::ChainKeyData,
     ingress::{IngressStatus, WasmResult},
     messages::{
         CertificateDelegation, CertificateDelegationMetadata, MessageId, Query, SignedIngress,
     },
 };
+use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
 use std::num::NonZeroU64;
 use std::{
@@ -218,6 +219,14 @@ pub enum SystemApiCallId {
     MsgArgDataSize,
     /// Tracker for `ic0.msg_caller_copy()`
     MsgCallerCopy,
+    /// Tracker for `ic0.msg_caller_info_data_copy()`
+    MsgCallerInfoDataCopy,
+    /// Tracker for `ic0.msg_caller_info_data_size()`
+    MsgCallerInfoDataSize,
+    /// Tracker for `ic0.msg_caller_info_signer_copy()`
+    MsgCallerInfoSignerCopy,
+    /// Tracker for `ic0.msg_caller_info_signer_size()`
+    MsgCallerInfoSignerSize,
     /// Tracker for `ic0.msg_caller_size()`
     MsgCallerSize,
     /// Tracker for `ic0.msg_cycles_accept()`
@@ -647,6 +656,7 @@ pub trait IngressHistoryWriter: Send + Sync {
         state: &mut Self::State,
         message_id: MessageId,
         status: IngressStatus,
+        current_round: ExecutionRound,
     ) -> Arc<IngressStatus>;
 }
 
@@ -819,6 +829,32 @@ pub trait SystemApi {
 
     /// Returns the size of the opaque caller blob.
     fn ic0_msg_caller_size(&self) -> HypervisorResult<usize>;
+
+    /// Returns the size of the caller info data blob.
+    fn ic0_msg_caller_info_data_size(&self) -> HypervisorResult<usize>;
+
+    /// Copies `size` bytes starting from `offset` inside the caller info data blob
+    /// to heap[dst..dst+size].
+    fn ic0_msg_caller_info_data_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// Returns the size of the caller info signer blob.
+    fn ic0_msg_caller_info_signer_size(&self) -> HypervisorResult<usize>;
+
+    /// Copies `size` bytes starting from `offset` inside the caller info signer blob
+    /// to heap[dst..dst+size].
+    fn ic0_msg_caller_info_signer_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
 
     /// Returns the size of msg.payload.
     fn ic0_msg_arg_data_size(&self) -> HypervisorResult<usize>;

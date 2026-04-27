@@ -7,6 +7,7 @@ DEPENDENCIES = [
     "//rs/ic_os/config/tool:config_lib",
     "//rs/ic_os/config/types:config_types",
     "//rs/ic_os/device",
+    "//rs/ic_os/logging",
     "//rs/ic_os/sev/guest",
     "//rs/sys",
     "@crate_index//:anyhow",
@@ -14,9 +15,11 @@ DEPENDENCIES = [
     "@crate_index//:itertools",
     "@crate_index//:libcryptsetup-rs",
     "@crate_index//:nix",
+    "@crate_index//:prometheus",
     "@crate_index//:rand",
     "@crate_index//:sev",
     "@crate_index//:tempfile",
+    "@crate_index//:tracing",
 ]
 
 DEV_DEPENDENCIES = [

@@ -188,7 +188,7 @@ enum Opt {
 }
 
 /// Command line arguments for the `copy` command with eith
-#[derive(Debug, Clone, clap::Args)]
+#[derive(Clone, Debug, clap::Args)]
 #[group(multiple = false)]
 struct HeightsArgs {
     /// Copy the latest state only, or none if there are no states in the source.

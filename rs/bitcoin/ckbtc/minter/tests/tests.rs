@@ -39,7 +39,7 @@ use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_metrics_assert::{CanisterHttpQuery, MetricsAssert};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
 use ic_test_utilities_load_wasm::load_wasm;
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
@@ -723,7 +723,10 @@ impl CkBtcSetup {
                     .with_minting_account(minter_id.get().0)
                     .with_transfer_fee(TRANSFER_FEE)
                     .with_max_memo_length(CKBTC_LEDGER_MEMO_SIZE)
-                    .with_feature_flags(ic_icrc1_ledger::FeatureFlags { icrc2: true })
+                    .with_feature_flags(ic_icrc1_ledger::FeatureFlags {
+                        icrc2: true,
+                        icrc152: false
+                    })
                     .build()
             ))
             .unwrap(),
@@ -2952,18 +2955,21 @@ fn should_cancel_and_reimburse_large_withdrawal() {
         subaccount,
     };
 
-    // Step 1: deposit a lot of small UTXOs
-    const NUM_UXTOS: usize = 2_000;
+    // Step 1: deposit enough small UTXOs to exceed the max inputs limit.
+    // We need at least max + 1 UTXOs for the withdrawal to trigger TooManyInputs,
+    // plus a small buffer so there are leftover UTXOs in the set.
+    const MAX_INPUTS: usize = ic_ckbtc_minter::state::DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION;
+    const NUM_UTXOS: usize = MAX_INPUTS + 100;
     let deposit_value = 100_000_u64;
     let _deposited_utxos =
-        ckbtc.deposit_utxos_with_value(user_account, &[deposit_value; NUM_UXTOS]);
+        ckbtc.deposit_utxos_with_value(user_account, &[deposit_value; NUM_UTXOS]);
     let balance_after_deposit = ckbtc.balance_of(user_account);
     assert_eq!(
         balance_after_deposit,
-        Nat::from(NUM_UXTOS as u64 * (deposit_value - CHECK_FEE))
+        Nat::from(NUM_UTXOS as u64 * (deposit_value - CHECK_FEE))
     );
 
-    let withdrawal_amount = 1_800 * deposit_value;
+    let withdrawal_amount = (MAX_INPUTS as u64 + 1) * deposit_value;
     ckbtc.approve_minter(user, withdrawal_amount, subaccount);
     let balance_before_withdrawal = ckbtc.balance_of(user_account);
 
@@ -3026,19 +3032,23 @@ fn should_cancel_and_reimburse_large_withdrawal() {
         }
     );
     let schedule_reimbursement_event = events.pop().unwrap();
-    assert_eq!(
+    assert_matches!(
         schedule_reimbursement_event.payload,
         EventType::ScheduleWithdrawalReimbursement {
-            account: user_account,
-            amount: reimbursement_amount,
+            account,
+            amount,
             reason: WithdrawalReimbursementReason::InvalidTransaction(
                 InvalidTransactionError::TooManyInputs {
-                    num_inputs: 1800,
-                    max_num_inputs: ic_ckbtc_minter::state::DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
+                    num_inputs,
+                    max_num_inputs,
                 }
             ),
-            burn_block_index: block_index,
-        }
+            burn_block_index,
+        } if account == user_account
+          && amount == reimbursement_amount
+          && num_inputs > max_num_inputs
+          && max_num_inputs == MAX_INPUTS
+          && burn_block_index == block_index
     );
 
     ckbtc.assert_ledger_transaction_reimbursement_correct(block_index, reimbursement_block_index);

@@ -40,12 +40,13 @@ use std::str::FromStr;
 use strum::{Display, EnumString};
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.13.0";
+pub const CONFIG_VERSION: &str = "1.15.0";
 
 /// List of field paths that have been removed and should not be reused.
 pub static RESERVED_FIELD_PATHS: &[&str] = &[
     "icos_settings.logging",
     "icos_settings.use_nns_public_key",
+    "icos_settings.use_node_operator_private_key",
     "hostos_settings.vm_cpu",
     "hostos_settings.vm_memory",
     "hostos_settings.vm_nr_of_vcpus",
@@ -143,9 +144,6 @@ pub struct ICOSSettings {
     pub deployment_environment: DeploymentEnvironment,
     /// The URL (HTTP) of the NNS node(s).
     pub nns_urls: Vec<Url>,
-    /// TODO(NODE-1838): Remove after HostOS is upgraded and `node_operator_private_key` is used
-    #[serde(default)]
-    pub use_node_operator_private_key: bool,
     /// PEM-encoded Node Operator private key
     #[sensitive]
     pub node_operator_private_key: Option<String>,
@@ -221,6 +219,16 @@ pub struct GuestOSSettings {
     pub guestos_dev_settings: GuestOSDevSettings,
 }
 
+/// Pre-generated TLS certificate and key for ic-boundary.
+/// Used in system tests to inject a Farm-issued certificate.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+pub struct IcBoundaryTlsCert {
+    /// PEM-encoded certificate (leaf + chain concatenated).
+    pub cert_pem: String,
+    /// PEM-encoded private key.
+    pub key_pem: String,
+}
+
 /// GuestOS development configuration. These settings are strictly used for development images.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default, Clone)]
 pub struct GuestOSDevSettings {
@@ -236,6 +244,9 @@ pub struct GuestOSDevSettings {
     /// Generate and inject a self-signed TLS certificate and key for ic-boundary
     /// for the given domain name. To be used in system tests only.
     pub generate_ic_boundary_tls_cert: Option<String>,
+    /// Pre-generated TLS certificate and key for ic-boundary.
+    #[serde(default)]
+    pub ic_boundary_tls_cert: Option<IcBoundaryTlsCert>,
     /// PEM-encoded NNS public key.
     /// Overrides the hardcoded NNS public key on the rootfs.
     pub nns_pub_key_override: Option<String>,

@@ -22,7 +22,7 @@ pub mod tests {
     fn test_request_serialization() {
         assert_eq!(
             serde_json::json!({
-                "sender_cid": 1u32,
+                "sender_cid": 1_u32,
                 "message": "attach-hsm"
             }),
             serde_json::to_value(&Request {
@@ -33,7 +33,7 @@ pub mod tests {
         );
         assert_eq!(
             serde_json::json!({
-                "sender_cid": 1u32,
+                "sender_cid": 1_u32,
                 "message": "detach-hsm"
             }),
             serde_json::to_value(&Request {
@@ -44,10 +44,10 @@ pub mod tests {
         );
         assert_eq!(
             serde_json::json!({
-                "sender_cid": 1u32,
+                "sender_cid": 1_u32,
                 "message": {
                     "notify": {
-                        "count": 1i32,
+                        "count": 1_i32,
                         "message": "Hello World",
                     }
                 }
@@ -63,7 +63,7 @@ pub mod tests {
         );
         assert_eq!(
             serde_json::json!({
-                "sender_cid": 1u32,
+                "sender_cid": 1_u32,
                 "message": {
                     "upgrade": {
                         "url": "https://example.com",

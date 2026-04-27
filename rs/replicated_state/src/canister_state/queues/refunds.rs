@@ -1,5 +1,6 @@
+use ic_types::CanisterId;
 use ic_types::messages::Refund;
-use ic_types::{CanisterId, Cycles};
+use ic_types_cycles::Cycles;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::collections::btree_map::Entry::{Occupied, Vacant};
@@ -13,7 +14,7 @@ mod tests;
 ///
 /// Refunds are ordered by amount (larger amounts first). Ties are broken by
 /// recipient (smaller IDs first).
-#[derive(Debug, Clone, Default, PartialEq, Eq, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 pub struct RefundPool {
     /// Refund priority queue. Holds all refunds, ordered by amount.
     ///

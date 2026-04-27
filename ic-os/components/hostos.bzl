@@ -2,7 +2,12 @@
 Enumerate every component file dependency for HostOS
 """
 
+load(":defs.bzl", "OS_TYPE_DEST")
+
 component_files = {
+    # OS-type marker file, this can be used to identify the OS
+    Label("upgrade/systemd-generators/os-type-hostos"): OS_TYPE_DEST,
+
     # hostos components
     Label("hostos/guestos/guestos.service"): "/etc/systemd/system/guestos.service",
     Label("hostos/guestos/upgrade-guestos.service"): "/etc/systemd/system/upgrade-guestos.service",
@@ -34,7 +39,6 @@ component_files = {
     # misc
     Label("misc/config/config-hostos.sh"): "/opt/ic/bin/config.sh",
     Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
-    Label("misc/metrics.sh"): "/opt/ic/bin/metrics.sh",
     Label("misc/output-wrapper.sh"): "/opt/ic/bin/output-wrapper.sh",
     Label("misc/vsock/vsock-agent.service"): "/etc/systemd/system/vsock-agent.service",
     Label("misc/vsock/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",
@@ -51,6 +55,7 @@ component_files = {
     Label("misc/systemd-user/user@.service"): "/etc/systemd/system/user@.service",
 
     # monitoring
+    Label("monitoring/metrics.sh"): "/opt/ic/bin/metrics.sh",
     Label("monitoring/hostos/monitor-guestos.sh"): "/opt/ic/bin/monitor-guestos.sh",
     Label("monitoring/hostos/monitor-guestos.service"): "/etc/systemd/system/monitor-guestos.service",
     Label("monitoring/hostos/monitor-guestos.timer"): "/etc/systemd/system/monitor-guestos.timer",
@@ -101,7 +106,7 @@ component_files = {
 
     # upgrade
     Label("upgrade/manageboot/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
-    Label("upgrade/systemd-generators/hostos/mount-generator"): "/etc/systemd/system-generators/mount-generator",
+    Label("upgrade/systemd-generators/mount-generator"): "/etc/systemd/system-generators/mount-generator",
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
     Label("upgrade/install-upgrade.sh"): "/opt/ic/bin/install-upgrade.sh",
     Label("upgrade/boot-state.sh"): "/opt/ic/bin/boot-state.sh",

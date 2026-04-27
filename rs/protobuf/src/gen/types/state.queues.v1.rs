@@ -11,6 +11,13 @@ pub struct Funds {
     #[prost(message, optional, tag = "3")]
     pub cycles_struct: ::core::option::Option<Cycles>,
 }
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CompoundCycles {
+    #[prost(message, optional, tag = "1")]
+    pub real: ::core::option::Option<Cycles>,
+    #[prost(message, optional, tag = "2")]
+    pub nominal: ::core::option::Option<super::super::super::types::v1::NominalCycles>,
+}
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct RejectSignal {
     #[prost(enumeration = "RejectReason", tag = "1")]

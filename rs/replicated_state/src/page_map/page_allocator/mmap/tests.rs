@@ -6,7 +6,7 @@ use ic_sys::{PAGE_SIZE, PageIndex};
 #[test]
 fn test_page_validation_zero_page() {
     let page_allocator = Arc::new(PageAllocatorInner::new_for_testing());
-    let contents = [0u8; PAGE_SIZE];
+    let contents = [0_u8; PAGE_SIZE];
     let pages = PageAllocatorInner::allocate(&page_allocator, &[(PageIndex::new(0), &contents)]);
     assert_eq!(pages[0].1.0.validation.non_zero_word_index, 0);
     assert_eq!(pages[0].1.0.validation.non_zero_word_value, 0);
@@ -15,7 +15,7 @@ fn test_page_validation_zero_page() {
 #[test]
 fn test_page_validation_non_zero_first_byte() {
     let page_allocator = Arc::new(PageAllocatorInner::new_for_testing());
-    let mut contents = [0u8; PAGE_SIZE];
+    let mut contents = [0_u8; PAGE_SIZE];
     contents[0] = 42;
     let pages = PageAllocatorInner::allocate(&page_allocator, &[(PageIndex::new(0), &contents)]);
     assert_eq!(pages[0].1.0.validation.non_zero_word_index, 0);
@@ -25,7 +25,7 @@ fn test_page_validation_non_zero_first_byte() {
 #[test]
 fn test_page_validation_non_zero_second_byte() {
     let page_allocator = Arc::new(PageAllocatorInner::new_for_testing());
-    let mut contents = [0u8; PAGE_SIZE];
+    let mut contents = [0_u8; PAGE_SIZE];
     contents[1] = 42;
     let pages = PageAllocatorInner::allocate(&page_allocator, &[(PageIndex::new(0), &contents)]);
     assert_eq!(pages[0].1.0.validation.non_zero_word_index, 0);
@@ -35,7 +35,7 @@ fn test_page_validation_non_zero_second_byte() {
 #[test]
 fn test_page_validation_non_zero_last_byte() {
     let page_allocator = Arc::new(PageAllocatorInner::new_for_testing());
-    let mut contents = [0u8; PAGE_SIZE];
+    let mut contents = [0_u8; PAGE_SIZE];
     contents[PAGE_SIZE - 1] = 42;
     let pages = PageAllocatorInner::allocate(&page_allocator, &[(PageIndex::new(0), &contents)]);
     assert_eq!(
@@ -48,7 +48,7 @@ fn test_page_validation_non_zero_last_byte() {
 #[test]
 fn test_page_validation_non_zero_middle_byte() {
     let page_allocator = Arc::new(PageAllocatorInner::new_for_testing());
-    let mut contents = [0u8; PAGE_SIZE];
+    let mut contents = [0_u8; PAGE_SIZE];
     contents[PAGE_SIZE / 2 - 1] = 42;
     let pages = PageAllocatorInner::allocate(&page_allocator, &[(PageIndex::new(0), &contents)]);
     assert_eq!(
@@ -63,7 +63,7 @@ fn test_page_allocator_allocate_fastpath() {
     // Create an allocator and allocate 4 pages using the slow path.
     const N_PAGES: usize = 100;
     let page_allocator = Arc::new(PageAllocatorInner::new_for_testing());
-    let contents_slow = [13u8; PAGE_SIZE * N_PAGES];
+    let contents_slow = [13_u8; PAGE_SIZE * N_PAGES];
     let pages_slow = PageAllocatorInner::allocate(
         &page_allocator,
         &[
@@ -92,7 +92,7 @@ fn test_page_allocator_allocate_fastpath() {
 
     // Create another allocator and allocate 4 pages using the fast path.
     let page_allocator = Arc::new(PageAllocatorInner::new_for_testing());
-    let contents_fast = [13u8; PAGE_SIZE * N_PAGES];
+    let contents_fast = [13_u8; PAGE_SIZE * N_PAGES];
     let pages_fast = PageAllocatorInner::allocate_fastpath(
         &page_allocator,
         &[

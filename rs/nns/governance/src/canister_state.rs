@@ -149,7 +149,7 @@ impl RandomnessGenerator for CanisterRandomnessGenerator {
     fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
         match self.rng.as_mut() {
             Some(rand) => {
-                let mut bytes = [0u8; 32];
+                let mut bytes = [0_u8; 32];
                 rand.fill_bytes(&mut bytes);
                 Ok(bytes)
             }
@@ -189,7 +189,7 @@ impl Environment for CanisterEnv {
         execute_nns_function: &ValidExecuteNnsFunction,
     ) -> Result<(), crate::pb::v1::GovernanceError> {
         let reply = move || {
-            governance_mut().set_proposal_execution_status(proposal_id, Ok(()));
+            governance_mut().set_proposal_execution_status::<()>(proposal_id, Ok(vec![]));
         };
         let reject = move |(code, msg): (i32, String)| {
             let mut msg = msg;
@@ -209,7 +209,7 @@ impl Environment for CanisterEnv {
                     .collect();
             }
 
-            governance_mut().set_proposal_execution_status(
+            governance_mut().set_proposal_execution_status::<()>(
                 proposal_id,
                 Err(GovernanceError::new_with_message(
                     ErrorType::External,

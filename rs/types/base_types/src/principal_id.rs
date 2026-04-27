@@ -231,7 +231,7 @@ impl PrincipalId {
     }
 
     pub const fn new_user_test_id(n: u64) -> Self {
-        let mut bytes = [0u8; Self::MAX_LENGTH_IN_BYTES];
+        let mut bytes = [0_u8; Self::MAX_LENGTH_IN_BYTES];
         let n_bytes = n.to_le_bytes();
 
         // Copy the u64 bytes into the array
@@ -360,7 +360,7 @@ impl<'a> Arbitrary<'a> for PrincipalId {
     fn arbitrary(u: &mut Unstructured<'a>) -> ArbitraryResult<Self> {
         let principal = match u8::arbitrary(u)? {
             u8::MAX => PrincipalId(Principal::management_canister()),
-            254u8 => PrincipalId::new_anonymous(),
+            254_u8 => PrincipalId::new_anonymous(),
             _ => {
                 let length: usize = u.int_in_range(1..=PrincipalId::MAX_LENGTH_IN_BYTES)?;
                 let mut result: Vec<u8> = Vec::with_capacity(length);

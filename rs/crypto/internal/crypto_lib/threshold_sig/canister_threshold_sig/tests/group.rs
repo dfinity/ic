@@ -101,11 +101,11 @@ fn ed25519_rejects_non_canonical_points_search() {
         }
     }
 
-    let mut pt_00 = [0u8; 32];
-    let mut pt_ff = [0xFFu8; 32];
+    let mut pt_00 = [0_u8; 32];
+    let mut pt_ff = [0xFF_u8; 32];
 
-    for x in 0u8..=255 {
-        for y in 0u8..=255 {
+    for x in 0_u8..=255 {
+        for y in 0_u8..=255 {
             pt_00[0] = x;
             pt_00[31] = y;
 
@@ -296,7 +296,7 @@ fn scalar_deserializaion_errors_if_byte_length_invalid() {
             if num_bytes == curve.scalar_bytes() {
                 continue;
             }
-            let mut bytes = vec![0u8; num_bytes];
+            let mut bytes = vec![0_u8; num_bytes];
             rng.fill_bytes(&mut bytes[..]);
             assert_eq!(
                 EccScalar::deserialize(curve, &bytes[..]),
@@ -311,7 +311,7 @@ fn scalar_deserializaion_errors_if_byte_length_invalid() {
 #[test]
 fn scalar_deserializaion_errors_is_over_the_order() {
     for curve in EccCurveType::all() {
-        let bytes = vec![0xFFu8; curve.scalar_bytes()];
+        let bytes = vec![0xFF_u8; curve.scalar_bytes()];
         assert_eq!(
             EccScalar::deserialize(curve, &bytes[..]),
             Err(CanisterThresholdSerializationError(
@@ -329,7 +329,7 @@ fn scalar_from_bytes_wide_errors_if_byte_length_invalid() {
         let min_bytes = valid_num_bytes + 1;
         let max_bytes: usize = curve.scalar_bytes() * 100;
         for num_bytes in min_bytes..=max_bytes {
-            let mut bytes = vec![0u8; num_bytes];
+            let mut bytes = vec![0_u8; num_bytes];
             rng.fill_bytes(&mut bytes[..]);
             assert_eq!(
                 EccScalar::from_bytes_wide(curve, &bytes[..]),
@@ -348,7 +348,7 @@ fn point_deserialization_errors_if_byte_length_invalid() {
             if num_bytes == curve.point_bytes() {
                 continue;
             }
-            let mut bytes = vec![0u8; num_bytes];
+            let mut bytes = vec![0_u8; num_bytes];
             rng.fill_bytes(&mut bytes[..]);
             assert_eq!(
                 EccPoint::deserialize(curve, &bytes[..]),

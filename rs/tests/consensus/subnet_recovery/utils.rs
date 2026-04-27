@@ -1,4 +1,3 @@
-use anyhow::anyhow;
 use candid::Principal;
 use ic_consensus_system_test_utils::{
     rw_message::{can_read_msg, cannot_store_msg},
@@ -13,16 +12,13 @@ use ic_system_test_driver::{
     driver::{
         driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR},
         test_env::{SshKeyGen, TestEnv},
-        test_env_api::{
-            IcNodeContainer, IcNodeSnapshot, SshSession, SubnetSnapshot, scp_send_to, secs,
-        },
+        test_env_api::{IcNodeContainer, IcNodeSnapshot, SshSession, SubnetSnapshot, scp_send_to},
     },
-    util::block_on,
+    util::{JournalStreamer, block_on},
 };
 use ic_types::SubnetId;
-use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
-use std::{fmt::Debug, path::PathBuf};
+use std::{collections::BTreeMap, fmt::Debug, path::PathBuf};
 use url::Url;
 
 pub const READONLY_USERNAME: &str = "readonly";
@@ -84,75 +80,50 @@ where
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Cursor {
-    #[serde(alias = "__CURSOR")]
-    pub cursor: String,
-}
-
-// Halt the given subnet by executing the corresponding ic-admin command through the given NNS URL.
-// This function waits until it detects in the subnet node's journal that consensus is halted.
+/// Halt the given subnet by executing the corresponding ic-admin command through the given NNS URL.
+/// This function waits until it detects in the subnet node's journal that consensus is halted.
 pub fn halt_subnet(
     admin_helper: &AdminHelper,
     subnet_node: &IcNodeSnapshot,
     subnet_id: SubnetId,
-    keys: &[String],
     logger: &Logger,
 ) {
     info!(logger, "Halting subnet {subnet_id}...");
-    let session = subnet_node.block_on_ssh_session().unwrap();
-    let message_str = subnet_node
-        .block_on_bash_script_from_session(
-            &session,
-            "journalctl -n1 -o json --output-fields='__CURSOR'",
-        )
-        .expect("Failed to get journal cursor");
-    let message: Cursor = serde_json::from_str(&message_str).expect("JSON journal message");
+    let journal_streamer = JournalStreamer::new(subnet_node.block_on_ssh_session().unwrap())
+        .from_now()
+        .expect("Failed to create journal streamer");
 
     AdminStep {
         logger: logger.clone(),
-        ic_admin_cmd: admin_helper.get_halt_subnet_command(subnet_id, true, keys),
+        ic_admin_cmd: admin_helper.get_propose_to_take_subnet_offline_for_repairs_command(
+            subnet_id,
+            &[],
+            &BTreeMap::new(),
+        ),
     }
     .exec()
     .expect("Failed to halt subnet");
 
-    ic_system_test_driver::retry_with_msg!(
-        "check if consensus is halted",
-        logger.clone(),
-        secs(120),
-        secs(10),
-        || {
-            let res = subnet_node.block_on_bash_script_from_session(
-                &session,
-                &format!(
-                    "journalctl --after-cursor='{}' | grep -c 'is halted'",
-                    message.cursor
-                ),
-            );
-            if res.is_ok_and(|r| r.trim().parse::<i32>().unwrap() > 0) {
-                Ok(())
-            } else {
-                Err(anyhow!("Did not find log entry that consensus is halted"))
-            }
-        }
-    )
-    .expect("Failed to detect halted subnet");
+    assert!(
+        journal_streamer
+            .follow()
+            .max_lines(1)
+            .contains("is halted")
+            .unwrap_or_default(),
+        "Did not find log entry that consensus is halted"
+    );
 
     info!(logger, "Subnet {subnet_id} halted.");
 }
 
-// Unhalt the given subnet by executing the corresponding ic-admin command through the given NNS
-// URL.
-pub fn unhalt_subnet(
-    admin_helper: &AdminHelper,
-    subnet_id: SubnetId,
-    keys: &[String],
-    logger: &Logger,
-) {
+/// Unhalt the given subnet by executing the corresponding ic-admin command through the given NNS
+/// URL.
+pub fn unhalt_subnet(admin_helper: &AdminHelper, subnet_id: SubnetId, logger: &Logger) {
     info!(logger, "Unhalting subnet {subnet_id}...");
     AdminStep {
         logger: logger.clone(),
-        ic_admin_cmd: admin_helper.get_halt_subnet_command(subnet_id, false, keys),
+        ic_admin_cmd: admin_helper
+            .get_propose_to_bring_subnet_back_online_after_repairs_command(subnet_id),
     }
     .exec()
     .expect("Failed to unhalt subnet");
@@ -191,15 +162,33 @@ pub fn get_node_certification_share_height(node: &IcNodeSnapshot, logger: &Logge
         .map(|m| m.certification_share_height.get())
 }
 
-/// Select a node with highest certification share height in the given subnet snapshot
-pub fn node_with_highest_certification_share_height(
+pub struct NodeHeights {
+    pub node: IcNodeSnapshot,
+    pub cup: u64,
+    pub cert_share: u64,
+}
+
+/// Select a node with highest certification share height among the nodes with highest CUP height
+pub fn node_with_highest_cup_and_cert_share_heights(
     subnet: &SubnetSnapshot,
     logger: &Logger,
-) -> (IcNodeSnapshot, u64) {
+) -> NodeHeights {
     subnet
         .nodes()
-        .filter_map(|n| get_node_certification_share_height(&n, logger).map(|h| (n, h)))
-        .max_by_key(|&(_, cert_height)| cert_height)
+        .filter_map(|node| {
+            block_on(get_node_metrics(logger, &node.get_ip_addr())).map(|m| NodeHeights {
+                node,
+                cup: m.catch_up_package_height.get(),
+                cert_share: m.certification_share_height.get(),
+            })
+        })
+        .max_by_key(
+            |NodeHeights {
+                 node: _,
+                 cup,
+                 cert_share,
+             }| (*cup, *cert_share),
+        )
         .expect("No healthy node found")
 }
 
@@ -373,7 +362,6 @@ pub mod local {
             admin_key_file,
             test_mode,
             skip_prompts,
-            use_local_binaries,
         } = recovery_args;
 
         // Iterate through all fields of RecoveryArgs and generate the CLI arg for each
@@ -389,15 +377,13 @@ pub mod local {
         );
         let test_mode_cli = bool_cli_arg!(test_mode);
         let skip_prompts_cli = bool_cli_arg!(skip_prompts);
-        let use_local_binaries_cli = bool_cli_arg!(use_local_binaries);
 
         format!(
             r#"{nns_url_cli} \
             {replica_version_cli} \
             {admin_key_file_cli} \
             {test_mode_cli} \
-            {skip_prompts_cli} \
-            {use_local_binaries_cli}"#
+            {skip_prompts_cli}"#
         )
     }
 
@@ -438,9 +424,11 @@ pub mod local {
             download_pool_node,
             download_state_method: _, // ignored to choose "local" in local recoveries, see below
             keep_downloaded_state,
+            download_state_height,
             upload_method: _, // ignored to choose "local" in local recoveries, see below
             wait_for_cup_node,
             chain_key_subnet_id,
+            initial_dkg_subnet_id,
             next_step,
             skip,
         } = &subnet_recovery.params;
@@ -493,10 +481,12 @@ pub mod local {
         // We are doing a local recovery, so we override the download method to "local"
         let download_state_method_cli = r#"--download-state-method "local" "#.to_string();
         let keep_downloaded_state_cli = opt_cli_arg!(keep_downloaded_state);
+        let download_state_height_cli = opt_cli_arg!(download_state_height);
         // We are doing a local recovery, so we override the upload method to "local"
         let upload_method_cli = r#"--upload-method "local" "#.to_string();
         let wait_for_cup_node_cli = opt_cli_arg!(wait_for_cup_node);
         let chain_key_subnet_id_cli = opt_cli_arg!(chain_key_subnet_id);
+        let initial_dkg_subnet_id_cli = opt_cli_arg!(initial_dkg_subnet_id);
         let next_step_cli = opt_cli_arg!(next_step);
         let skip_cli = opt_vec_cli_arg!(skip);
 
@@ -517,9 +507,11 @@ pub mod local {
             {download_pool_node_cli} \
             {download_state_method_cli} \
             {keep_downloaded_state_cli} \
+            {download_state_height_cli} \
             {upload_method_cli} \
             {wait_for_cup_node_cli} \
             {chain_key_subnet_id_cli} \
+            {initial_dkg_subnet_id_cli} \
             {next_step_cli} \
             {skip_cli}"#
         )
@@ -558,6 +550,7 @@ pub mod local {
             download_pool_node,
             admin_access_location: _, // ignored to choose "local" in local recoveries, see below
             keep_downloaded_state,
+            download_state_height,
             wait_for_cup_node,
             backup_key_file,
             output_dir: _, // ignored to choose a different directory in local recoveries, see below
@@ -592,6 +585,7 @@ pub mod local {
         // We are doing a local recovery, so we override the admin access location to "local"
         let admin_access_location_cli = r#"--admin-access-location "local" "#.to_string();
         let keep_downloaded_state_cli = opt_cli_arg!(keep_downloaded_state);
+        let download_state_height_cli = opt_cli_arg!(download_state_height);
         let wait_for_cup_node_cli = opt_cli_arg!(wait_for_cup_node);
         let backup_key_file_cli = upload_ssh_key_and_return_cli_arg(
             session,
@@ -619,6 +613,7 @@ pub mod local {
             {download_pool_node_cli} \
             {admin_access_location_cli} \
             {keep_downloaded_state_cli} \
+            {download_state_height_cli} \
             {wait_for_cup_node_cli} \
             {backup_key_file_cli} \
             {output_dir_cli} \

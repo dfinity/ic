@@ -22,10 +22,10 @@ pub(crate) const SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN: &str =
     "scheduler_compute_allocation_invariant_broken";
 pub(crate) const SCHEDULER_CORES_INVARIANT_BROKEN: &str = "scheduler_cores_invariant_broken";
 
-pub(super) struct SchedulerMetrics {
+pub struct SchedulerMetrics {
     pub(super) canister_age: Histogram,
-    pub(super) canister_compute_allocation_violation: IntCounter,
     pub(super) canister_log_delta_memory_usage: Histogram,
+    pub(super) canister_log_retention: Histogram,
     pub(super) canister_ingress_queue_latencies: Histogram,
     pub(super) compute_utilization_per_core: Histogram,
     pub(super) msg_execution_duration: Histogram,
@@ -39,11 +39,12 @@ pub(super) struct SchedulerMetrics {
     pub(super) inner_round_loop_consumed_max_instructions: IntCounter,
     pub(super) num_canisters_uninstalled_out_of_cycles: IntCounter,
     pub(super) round: ScopedMetrics,
+    pub(super) remove_orphaned_stop_canister_calls_duration: Histogram,
     pub(super) round_preparation_duration: Histogram,
     pub(super) round_preparation_ingress: Histogram,
     pub(super) round_consensus_queue: ScopedMetrics,
     pub(super) round_postponed_raw_rand_queue: ScopedMetrics,
-    pub(super) round_subnet_queue: ScopedMetrics,
+    pub(super) round_inner_subnet_queue: ScopedMetrics,
     pub(super) round_advance_long_install_code: ScopedMetrics,
     pub(super) round_scheduling_duration: Histogram,
     pub(super) round_update_signature_request_contexts_duration: Histogram,
@@ -51,6 +52,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) round_inner_heartbeat_overhead_duration: Histogram,
     pub(super) round_inner_iteration: ScopedMetrics,
     pub(super) round_inner_iteration_prep: Histogram,
+    pub(super) round_inner_iteration_scheduling: Histogram,
     pub(super) round_inner_iteration_exe: Histogram,
     pub(super) round_inner_iteration_thread: ScopedMetrics,
     pub(super) round_inner_iteration_fin: Histogram,
@@ -59,6 +61,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) round_finalization_stop_canisters: Histogram,
     pub(super) round_finalization_ingress: Histogram,
     pub(super) round_finalization_charge: Histogram,
+    pub(super) round_finalization_scheduling: Histogram,
     pub(super) canister_heap_delta_debits: Histogram,
     pub(super) heap_delta_rate_limited_canisters_per_round: Histogram,
     pub(super) canister_install_code_debits: Histogram,
@@ -76,7 +79,7 @@ pub(super) struct SchedulerMetrics {
 }
 
 impl SchedulerMetrics {
-    pub(super) fn new(metrics_registry: &MetricsRegistry) -> Self {
+    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
             canister_age: metrics_registry.histogram(
                 "scheduler_canister_age_rounds",
@@ -84,15 +87,17 @@ impl SchedulerMetrics {
                 // 1, 2, 5, …, 1000, 2000, 5000
                 decimal_buckets(0, 3),
             ),
-            canister_compute_allocation_violation: metrics_registry.int_counter(
-                "scheduler_compute_allocation_violations",
-                "Total number of canister allocation violations.",
-            ),
             canister_log_delta_memory_usage: metrics_registry.histogram(
                 "canister_log_delta_memory_usage_bytes",
                 "Canisters log delta (per single execution) memory usage distribution in bytes.",
                 // 1 KiB (2^10) .. 8 MiB (2^23), plus zero — 15 total buckets (0 + 14 powers).
                 binary_buckets_with_zero(10, 23)
+            ),
+            canister_log_retention: metrics_registry.histogram(
+                "canister_log_retention_seconds",
+                "Time span between the oldest and newest records in the canister log buffer, in seconds.",
+                // 10 s .. 5×10⁶ s (~58 d), plus zero — 19 total buckets (0 + 18 powers).
+                decimal_buckets_with_zero(1, 6),
             ),
             canister_ingress_queue_latencies: metrics_registry.histogram(
                 "scheduler_canister_ingress_queue_latencies_seconds",
@@ -198,6 +203,7 @@ impl SchedulerMetrics {
                     metrics_registry,
                 ),
             },
+            remove_orphaned_stop_canister_calls_duration: round_phase_duration_histogram("remove orphaned stop canister calls", metrics_registry),
             round_preparation_duration: round_phase_duration_histogram("preparation", metrics_registry),
             // Expiration of messages in the ingress queue.
             round_preparation_ingress: round_preparation_phase_duration_histogram("expire ingress", metrics_registry),
@@ -217,7 +223,7 @@ impl SchedulerMetrics {
             },
             // Subnet queue processing happens in `inner_round()`, so in terms of
             // instrumentation it is an inner round phase.
-            round_subnet_queue: ScopedMetrics {
+            round_inner_subnet_queue: ScopedMetrics {
                 duration: round_inner_phase_duration_histogram("subnet", metrics_registry),
                 instructions: round_inner_phase_instructions_histogram("subnet", metrics_registry),
                 slices: round_inner_phase_slices_histogram("subnet", metrics_registry),
@@ -263,6 +269,7 @@ impl SchedulerMetrics {
                 ),
             },
             round_inner_iteration_prep: round_inner_phase_duration_histogram("preparation", metrics_registry),
+            round_inner_iteration_scheduling: round_inner_phase_duration_histogram("scheduling", metrics_registry),
             round_inner_iteration_exe: round_inner_phase_duration_histogram("execution", metrics_registry),
             round_inner_iteration_thread: ScopedMetrics {
                 duration: duration_histogram(
@@ -302,6 +309,7 @@ impl SchedulerMetrics {
             // Pruning of expired messages from the ingress history.
             round_finalization_ingress: round_finalization_phase_duration_histogram("prune ingress", metrics_registry),
             round_finalization_charge: round_finalization_phase_duration_histogram("charge canisters", metrics_registry),
+            round_finalization_scheduling: round_finalization_phase_duration_histogram("scheduling", metrics_registry),
             canister_heap_delta_debits: metrics_registry.histogram(
                 "scheduler_canister_heap_delta_debits",
                 "The heap delta debit of a canister at the end of the round, before \

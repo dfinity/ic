@@ -1,59 +1,8 @@
 use super::*;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
-
-impl From<CyclesUseCase> for pb::CyclesUseCase {
-    fn from(item: CyclesUseCase) -> Self {
-        match item {
-            CyclesUseCase::Memory => pb::CyclesUseCase::Memory,
-            CyclesUseCase::ComputeAllocation => pb::CyclesUseCase::ComputeAllocation,
-            CyclesUseCase::IngressInduction => pb::CyclesUseCase::IngressInduction,
-            CyclesUseCase::Instructions => pb::CyclesUseCase::Instructions,
-            CyclesUseCase::RequestAndResponseTransmission => {
-                pb::CyclesUseCase::RequestAndResponseTransmission
-            }
-            CyclesUseCase::Uninstall => pb::CyclesUseCase::Uninstall,
-            CyclesUseCase::CanisterCreation => pb::CyclesUseCase::CanisterCreation,
-            CyclesUseCase::ECDSAOutcalls => pb::CyclesUseCase::EcdsaOutcalls,
-            CyclesUseCase::HTTPOutcalls => pb::CyclesUseCase::HttpOutcalls,
-            CyclesUseCase::DeletedCanisters => pb::CyclesUseCase::DeletedCanisters,
-            CyclesUseCase::NonConsumed => pb::CyclesUseCase::NonConsumed,
-            CyclesUseCase::BurnedCycles => pb::CyclesUseCase::BurnedCycles,
-            CyclesUseCase::SchnorrOutcalls => pb::CyclesUseCase::SchnorrOutcalls,
-            CyclesUseCase::VetKd => pb::CyclesUseCase::VetKd,
-            CyclesUseCase::DroppedMessages => pb::CyclesUseCase::DroppedMessages,
-        }
-    }
-}
-
-impl TryFrom<pb::CyclesUseCase> for CyclesUseCase {
-    type Error = ProxyDecodeError;
-    fn try_from(item: pb::CyclesUseCase) -> Result<Self, Self::Error> {
-        match item {
-            pb::CyclesUseCase::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
-                typ: "CyclesUseCase",
-                err: format!("Unexpected value of cycles use case: {item:?}"),
-            }),
-            pb::CyclesUseCase::Memory => Ok(Self::Memory),
-            pb::CyclesUseCase::ComputeAllocation => Ok(Self::ComputeAllocation),
-            pb::CyclesUseCase::IngressInduction => Ok(Self::IngressInduction),
-            pb::CyclesUseCase::Instructions => Ok(Self::Instructions),
-            pb::CyclesUseCase::RequestAndResponseTransmission => {
-                Ok(Self::RequestAndResponseTransmission)
-            }
-            pb::CyclesUseCase::Uninstall => Ok(Self::Uninstall),
-            pb::CyclesUseCase::CanisterCreation => Ok(Self::CanisterCreation),
-            pb::CyclesUseCase::EcdsaOutcalls => Ok(Self::ECDSAOutcalls),
-            pb::CyclesUseCase::HttpOutcalls => Ok(Self::HTTPOutcalls),
-            pb::CyclesUseCase::DeletedCanisters => Ok(Self::DeletedCanisters),
-            pb::CyclesUseCase::NonConsumed => Ok(Self::NonConsumed),
-            pb::CyclesUseCase::BurnedCycles => Ok(Self::BurnedCycles),
-            pb::CyclesUseCase::SchnorrOutcalls => Ok(Self::SchnorrOutcalls),
-            pb::CyclesUseCase::VetKd => Ok(Self::VetKd),
-            pb::CyclesUseCase::DroppedMessages => Ok(Self::DroppedMessages),
-        }
-    }
-}
+use ic_protobuf::state::queues::v1::CompoundCycles as PbCompoundCycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Instructions};
 
 impl From<&CanisterStatus> for pb::canister_state_bits::CanisterStatus {
     fn from(item: &CanisterStatus) -> Self {
@@ -151,7 +100,12 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
                     task: Some(pb::execution_task::Task::AbortedExecution(
                         pb::execution_task::AbortedExecution {
                             input: Some(input),
-                            prepaid_execution_cycles: Some((*prepaid_execution_cycles).into()),
+                            prepaid_execution_cycles: Some(
+                                (prepaid_execution_cycles.real()).into(),
+                            ),
+                            prepaid_execution_compound_cycles: Some(PbCompoundCycles::from(
+                                *prepaid_execution_cycles,
+                            )),
                         },
                     )),
                 }
@@ -171,7 +125,12 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
                         pb::execution_task::AbortedInstallCode {
                             message: Some(message),
                             call_id: Some(call_id.get()),
-                            prepaid_execution_cycles: Some((*prepaid_execution_cycles).into()),
+                            prepaid_execution_cycles: Some(
+                                (prepaid_execution_cycles.real()).into(),
+                            ),
+                            prepaid_execution_compound_cycles: Some(PbCompoundCycles::from(
+                                *prepaid_execution_cycles,
+                            )),
                         },
                     )),
                 }
@@ -187,6 +146,14 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
         let task = value
             .task
             .ok_or(ProxyDecodeError::MissingField("ExecutionTask::task"))?;
+        // cost_schedule should ideally be read from the checkpoint, however there
+        // is no easy access to it here (will need to be propagated from `StateManager`).
+        // Given that the current state is that the values for `Cycles` and `NominalCycles`
+        // should still match and that they should be 0 on `Free` schedule, we can use `Normal`
+        // without any loss (to maintain values on subnets with `Normal` schedule).
+        // This code will be removed anyway when the new fields are set and the old fields
+        // containing just `Cycles` can be retired.
+        let cost_schedule = CanisterCyclesCostSchedule::Normal;
         let task = match task {
             pb::execution_task::Task::AbortedExecution(aborted) => {
                 use pb::execution_task::{
@@ -226,9 +193,15 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                         CanisterMessageOrTask::Task(task)
                     }
                 };
-                let prepaid_execution_cycles = aborted
-                    .prepaid_execution_cycles
-                    .map_or_else(Cycles::zero, |c| c.into());
+                let prepaid_execution_cycles = match aborted.prepaid_execution_compound_cycles {
+                    Some(value) => CompoundCycles::try_from(value)?,
+                    None => {
+                        let prepaid_execution_cycles = aborted
+                            .prepaid_execution_cycles
+                            .map_or_else(Cycles::zero, |c| c.into());
+                        CompoundCycles::<Instructions>::new(prepaid_execution_cycles, cost_schedule)
+                    }
+                };
                 ExecutionTask::AbortedExecution {
                     input,
                     prepaid_execution_cycles,
@@ -243,9 +216,15 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                     Message::Request(v) => CanisterCall::Request(Arc::new(v.try_into()?)),
                     Message::Ingress(v) => CanisterCall::Ingress(Arc::new(v.try_into()?)),
                 };
-                let prepaid_execution_cycles = aborted
-                    .prepaid_execution_cycles
-                    .map_or_else(Cycles::zero, |c| c.into());
+                let prepaid_execution_cycles = match aborted.prepaid_execution_compound_cycles {
+                    Some(value) => CompoundCycles::try_from(value)?,
+                    None => {
+                        let prepaid_execution_cycles = aborted
+                            .prepaid_execution_cycles
+                            .map_or_else(Cycles::zero, |c| c.into());
+                        CompoundCycles::<Instructions>::new(prepaid_execution_cycles, cost_schedule)
+                    }
+                };
                 let call_id = aborted.call_id.ok_or(ProxyDecodeError::MissingField(
                     "AbortedInstallCode::call_id",
                 ))?;
