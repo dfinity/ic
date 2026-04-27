@@ -37,6 +37,40 @@ fn check_no_failed_systemd_units(env: TestEnv) {
             logger,
             "Node {}: systemctl list-units --failed:\n{}", node.node_id, failed_units
         );
+        if !failed_units.trim().is_empty() {
+            for line in failed_units.lines() {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                // Lines from `systemctl list-units --failed --no-legend` typically
+                // start with a status glyph (e.g. `●`) followed by the unit name.
+                // Skip the glyph if present and take the unit name as the next token.
+                let unit = line
+                    .split_whitespace()
+                    .find(|tok: &&str| !tok.chars().all(|c| !c.is_alphanumeric()));
+                let Some(unit) = unit else {
+                    continue;
+                };
+                let cmd = format!("journalctl -u '{}' --no-pager -n 500", unit);
+                match node.block_on_bash_script(&cmd) {
+                    Ok(journal) => info!(
+                        logger,
+                        "Node {}: journalctl -u {} (last 500 lines):\n{}",
+                        node.node_id,
+                        unit,
+                        journal
+                    ),
+                    Err(err) => info!(
+                        logger,
+                        "Node {}: failed to fetch journalctl logs for unit {}: {}",
+                        node.node_id,
+                        unit,
+                        err
+                    ),
+                }
+            }
+        }
         assert!(
             failed_units.trim().is_empty(),
             "Node {} has failed systemd units:\n{}",
