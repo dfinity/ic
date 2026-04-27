@@ -4,8 +4,8 @@
 #
 # This script determines which Bazel targets should be built or tested and writes them separated by newlines to stdout.
 #
-# If --base is passed only include targets with modified inputs in `git diff --name-only --merge-base $BASE $HEAD`.
-# When --head is not provided defaults to HEAD.
+# If --base is passed only include targets with modified inputs in `git diff --name-only --merge-base $BASE [$HEAD]`.
+# where `$HEAD` is from --head if specified.
 #
 # If --skip_long_tests is passed, tests tagged with 'long_test' will be excluded.
 #
@@ -280,7 +280,7 @@ def main():
     )
     parser.add_argument(
         "--base",
-        help="Only include targets with modified inputs in `git diff --name-only --merge-base $BASE $HEAD`. When --head is not provided defaults to HEAD.",
+        help="Only include targets with modified inputs in `git diff --name-only --merge-base $BASE [$HEAD]` where $HEAD is from --head if specified.",
     )
     parser.add_argument("--head", help="See --base.")
     args = parser.parse_args()
