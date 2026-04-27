@@ -33,6 +33,8 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Instant;
 
+const MAX_DEALINGS_PER_BLOCK: usize = 20;
+
 #[allow(clippy::type_complexity)]
 pub struct TestConsensusPool {
     subnet_id: SubnetId,
@@ -160,7 +162,7 @@ fn dkg_payload_builder_fn(
             &*state_manager,
             validation_context,
             no_op_logger(),
-            10, // at most dealings per block
+            MAX_DEALINGS_PER_BLOCK,
         )
         .unwrap_or_else(|err| panic!("Couldn't create the payload: {err:?}"))
     })
