@@ -108,7 +108,12 @@ impl VectorVm {
         Ok(())
     }
 
-    fn hash_updated(&mut self, content: &str, logger: &Logger) -> bool {
+    /// Computes the hash of `content` and returns `Some(new_hash)` if it differs
+    /// from the currently stored `config_hash`, or `None` otherwise. The caller
+    /// is responsible for storing the returned hash in `self.config_hash` only
+    /// after the config has been successfully synced to the vector VM, so that
+    /// a failed sync is retried on the next call.
+    fn changed_hash(&self, content: &str, logger: &Logger) -> Option<u64> {
         let mut hasher = DefaultHasher::new();
         content.hash(&mut hasher);
 
@@ -119,12 +124,10 @@ impl VectorVm {
                 logger,
                 "Vector targets hash changed from {} to {new_hash}", self.config_hash
             );
-
-            self.config_hash = new_hash;
-            return true;
+            Some(new_hash)
+        } else {
+            None
         }
-
-        false
     }
 
     pub fn sync_with_vector(&mut self, env: &TestEnv) -> anyhow::Result<()> {
@@ -257,17 +260,17 @@ impl VectorVm {
 
         let generated_content = serde_json::to_string_pretty(&generated_config).unwrap();
 
-        if !self.hash_updated(&generated_content, &log) {
+        let Some(new_hash) = self.changed_hash(&generated_content, &log) else {
             debug!(log, "Skipping updating vector targets.");
             return Ok(());
-        }
+        };
 
         let deployed_vm = env.get_deployed_universal_vm("vector").unwrap();
         let session = deployed_vm
             .block_on_ssh_session()
             .unwrap_or_else(|e| panic!("Failed to setup SSH session to vector because: {e:?}!",));
 
-        let copy_result = (|| -> anyhow::Result<()> {
+        (|| -> anyhow::Result<()> {
             std::fs::write(
                 vector_local_dir.join("generated_config.json"),
                 &generated_content,
@@ -289,14 +292,7 @@ impl VectorVm {
                 try_scp_send_to(env.logger(), &session, &from, &to, 0o644)?;
             }
             Ok(())
-        })();
-
-        if let Err(e) = copy_result {
-            // Reset the config hash so the next `sync_with_vector` call will detect a
-            // change and re-attempt copying the config to the vector VM.
-            self.config_hash = 0;
-            return Err(e);
-        }
+        })()?;
 
         if !self.container_running {
             info!(log, "Issuing command to run vector container.");
@@ -328,6 +324,10 @@ docker run -d --name vector \
         }
 
         info!(log, "Vector targets sync complete.");
+
+        // Only record the new hash now that the config has been successfully synced,
+        // so that any earlier failure causes the next call to retry the sync.
+        self.config_hash = new_hash;
 
         Ok(())
     }
