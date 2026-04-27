@@ -108,11 +108,9 @@ pub(crate) fn deliver_batches_with_result_processor(
             warn!(
                 every_n_seconds => 30,
                 log,
-                "Do not deliver height {} because no finalized block was found. \
+                "Do not deliver height {height} because no finalized block was found. \
                 This should indicate we are waiting for state sync. \
-                Finalized height: {}",
-                height,
-                finalized_height
+                Finalized height: {finalized_height}"
             );
             break;
         };
@@ -121,8 +119,7 @@ pub(crate) fn deliver_batches_with_result_processor(
             warn!(
                 every_n_seconds => 30,
                 log,
-                "Do not deliver height {} because RandomTape is not ready. Will re-try later",
-                height
+                "Do not deliver height {height} because RandomTape is not ready. Will re-try later"
             );
             break;
         };
@@ -144,20 +141,15 @@ pub(crate) fn deliver_batches_with_result_processor(
             warn!(
                 every_n_seconds => 30,
                 log,
-                "Do not deliver height {} because no summary block was found. \
-                Finalized height: {}",
-                height,
-                finalized_height
+                "Do not deliver height {height} because no summary block was found. \
+                Finalized height: {finalized_height}"
             );
             break;
         };
         let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
 
         if block.payload.is_summary() {
-            info!(
-                log,
-                "Delivering finalized batch at CUP height of {}", height
-            );
+            info!(log, "Delivering finalized batch at CUP height of {height}");
         }
         // When we are not delivering CUP block, we must check if the subnet is halted.
         else {
@@ -209,7 +201,7 @@ pub(crate) fn deliver_batches_with_result_processor(
         if !chain_key_subnet_public_keys.is_empty() && block.payload.is_summary() {
             info!(
                 log,
-                "Subnet {} contains chain keys: {:?}", subnet_id, chain_key_subnet_public_keys
+                "Subnet {subnet_id} contains chain keys: {chain_key_subnet_public_keys:?}"
             );
         }
 
@@ -276,9 +268,8 @@ pub(crate) fn deliver_batches_with_result_processor(
                         .batch
                         .clone()
                         .into_messages()
-                        .map_err(|err| {
-                            error!(log, "batch payload deserialization failed: {:?}", err);
-                            err
+                        .inspect_err(|err| {
+                            error!(log, "batch payload deserialization failed: {err:?}");
                         })
                         .unwrap_or_default(),
                     chain_key_data,
@@ -292,8 +283,7 @@ pub(crate) fn deliver_batches_with_result_processor(
             warn!(
                 every_n_seconds => 5,
                 log,
-                "No batch delivery at height {}: no random beacon found.",
-                height
+                "No batch delivery at height {height}: no random beacon found."
             );
             return Ok(last_delivered_batch_height);
         };
@@ -307,9 +297,7 @@ pub(crate) fn deliver_batches_with_result_processor(
                 warn!(
                     every_n_seconds => 5,
                     log,
-                    "No batch delivery at height {}: membership error: {:?}",
-                    height,
-                    e
+                    "No batch delivery at height {height}: membership error: {e:?}"
                 );
                 return Ok(last_delivered_batch_height);
             }
@@ -341,7 +329,7 @@ pub(crate) fn deliver_batches_with_result_processor(
             f(&result, block_stats, batch_stats);
         }
         if let Err(err) = result {
-            warn!(every_n_seconds => 5, log, "Batch delivery failed: {:?}", err);
+            warn!(every_n_seconds => 5, log, "Batch delivery failed: {err:?}");
             return Err(err);
         }
         last_delivered_batch_height = height;
