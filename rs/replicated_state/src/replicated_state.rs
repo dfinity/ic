@@ -1,7 +1,9 @@
 use crate::canister_state::queues::{
     CanisterInput, CanisterQueuesLoopDetector, refunds::RefundPool,
 };
-use crate::canister_state::system_state::{CanisterOutputQueuesIterator, push_input};
+use crate::canister_state::system_state::{
+    CanisterOutputQueuesIterator, CanisterStatus, push_input,
+};
 use crate::metadata_state::subnet_call_context_manager::{
     PreSignatureStash, ReshareChainKeyContext, SignWithThresholdContext,
 };
@@ -30,7 +32,8 @@ use ic_types::{
     consensus::idkg::IDkgMasterPublicKeyId,
     ingress::IngressStatus,
     messages::{
-        CallbackId, Ingress, MessageId, Refund, RequestOrResponse, Response, SubnetMessage,
+        CallbackId, Ingress, MessageId, Refund, RequestOrResponse, Response, StopCanisterCallId,
+        SubnetMessage,
     },
     time::CoarseTime,
 };
@@ -488,6 +491,42 @@ impl ReplicatedState {
             refunds,
             consensus_queue: Vec::new(),
             epoch_query_stats,
+        }
+    }
+
+    /// Removes `StopCanisterCall`s from `SubnetCallContextManager` that have no
+    /// corresponding `StopCanisterContext` in the target canister's stop contexts.
+    /// These can arise from a bug fixed in commit 52e7b89 where a `StopCanisterCall`
+    /// was pushed but never removed when the `stop_canister` completed, e.g., when
+    /// the target canister was already stopped or the sender was not a controller.
+    pub fn remove_orphaned_stop_canister_calls(&mut self) {
+        let call_ids_with_context: BTreeSet<StopCanisterCallId> = self
+            .canister_states
+            .values()
+            .flat_map(|canister| match canister.system_state.get_status() {
+                CanisterStatus::Stopping { stop_contexts, .. } => stop_contexts.as_slice(),
+                _ => &[],
+            })
+            .filter_map(|ctx| *ctx.call_id())
+            .collect();
+
+        let orphaned: Vec<StopCanisterCallId> = self
+            .metadata
+            .subnet_call_context_manager
+            .iter_stop_canister_calls()
+            .filter_map(|(call_id, _)| {
+                if call_ids_with_context.contains(call_id) {
+                    None
+                } else {
+                    Some(*call_id)
+                }
+            })
+            .collect();
+
+        for call_id in orphaned {
+            self.metadata
+                .subnet_call_context_manager
+                .remove_stop_canister_call(call_id);
         }
     }
 
