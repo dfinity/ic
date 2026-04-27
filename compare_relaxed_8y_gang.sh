@@ -7,7 +7,7 @@ REFERENCE=neurons-that-qualify-for-relaxed-8y-gang-right-after-first-induction.j
 
 # neuron_id (string) -> preview eight_year_gang_bonus_base_e8s
 jq 'map({key: (.neuron_id | tostring), value: .eight_year_gang_bonus_base_e8s}) | from_entries' \
-    "$PREVIEW" > /tmp/preview_index.json
+    "$PREVIEW" >/tmp/preview_index.json
 
 # neuron_id (string) -> expected bonus base computed from reference fields
 jq 'map({
@@ -17,7 +17,7 @@ jq 'map({
         - (.neuron_fees_e8s | tonumber)
         + ((.staked_maturity_e8s_equivalent[0] // "0") | tonumber)
     )
-}) | from_entries' "$REFERENCE" > /tmp/reference_index.json
+}) | from_entries' "$REFERENCE" >/tmp/reference_index.json
 
 echo "=== In preview but NOT in reference ==="
 jq --slurpfile ref /tmp/reference_index.json '
@@ -43,8 +43,8 @@ echo
 echo "=== In both where preview > 1.0001x reference ==="
 echo "See discrepencies.json"
 jq --null-input \
-   --slurpfile prev /tmp/preview_index.json \
-   --slurpfile ref /tmp/reference_index.json '
+    --slurpfile prev /tmp/preview_index.json \
+    --slurpfile ref /tmp/reference_index.json '
     [$prev[0]
     | to_entries[]
     | .key as $id
@@ -59,5 +59,5 @@ jq --null-input \
      }]
 | sort_by(if .reference_bonus_base == 0 then 1e308 else (.preview_bonus_base / .reference_bonus_base) end)
 | reverse
-' > discrepencies.json
+' >discrepencies.json
 echo "$(jq '. | length' discrepencies.json) discrepencies..."
