@@ -485,14 +485,6 @@ impl SchedulerImpl {
             let measurement_scope =
                 MeasurementScope::nested(&self.metrics.round_inner_iteration, &measurement_scope);
 
-            // In every iteration after the first, recompute the subnet available memory,
-            // before taking out the canisters.
-            if !is_first_iteration {
-                let _preparation_timer = self.metrics.round_inner_iteration_prep.start_timer();
-                round_limits.subnet_available_memory =
-                    self.exec_env.scaled_subnet_available_memory(&state);
-            }
-
             // Scheduling.
             let scheduling_timer = self.metrics.round_inner_iteration_scheduling.start_timer();
             round_schedule.charge_idle_canisters(state.canisters_and_schedule_mut().0);
@@ -502,11 +494,20 @@ impl SchedulerImpl {
             if iteration_schedule.is_empty() {
                 break state;
             }
+            drop(scheduling_timer);
+
+            // In every iteration after the first, recompute the subnet available memory,
+            // before taking out the canisters.
+            let preparation_timer = self.metrics.round_inner_iteration_prep.start_timer();
+            if !is_first_iteration {
+                round_limits.subnet_available_memory =
+                    self.exec_env.scaled_subnet_available_memory(&state);
+            }
 
             let canisters = state.take_canister_states();
             let (active_canisters_partitioned_by_cores, inactive_canisters) =
                 iteration_schedule.partition_canisters_to_cores(canisters);
-            drop(scheduling_timer);
+            drop(preparation_timer);
 
             let execution_timer = self.metrics.round_inner_iteration_exe.start_timer();
             let instructions_before = round_limits.instructions;
