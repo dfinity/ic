@@ -4,8 +4,8 @@
 #
 # This script determines which Bazel targets should be built or tested and writes them separated by newlines to stdout.
 #
-# If --base is passed only include targets with modified inputs in `git diff --name-only --merge-base $BASE $HEAD`.
-# When --head is not provided defaults to HEAD.
+# If --base is passed only include targets with modified inputs in `git diff --name-only --merge-base $BASE [$HEAD]`.
+# where `$HEAD` is from --head if specified.
 #
 # If --skip_long_tests is passed, tests tagged with 'long_test' will be excluded.
 #
@@ -110,15 +110,20 @@ def load_explicit_targets() -> dict[str, Set[str]]:
     return explicit_targets_dict
 
 
-def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -> str:
+def diff_only_query(command: str, base: str, head: str | None, skip_long_tests: bool) -> str:
     """
-    Return a bazel query for all targets that have modified inputs in the specified git commit range. Taking into account:
+    Return a bazel query for all targets that have modified inputs in the specified git commit range.
+    If `head` is not specified it diffs against the working tree which is useful for testing locally.
+    It takes into account:
     * To return all targets in case files matching ALL_TARGETS_BLOBS are modified.
     * To only include test targets in case the bazel command was 'test'.
     * To exclude long_tests if requested.
     """
     modified_files = subprocess.run(
-        ["git", "diff", "--name-only", "--merge-base", base, head], check=True, capture_output=True, text=True
+        ["git", "diff", "--name-only", "--merge-base", base] + ([head] if head is not None else []),
+        check=True,
+        capture_output=True,
+        text=True,
     ).stdout.splitlines()
 
     n = len(modified_files)
@@ -187,7 +192,7 @@ def targets(
     query = (
         ("//..." + (" except attr(tags, long_test, //...)" if skip_long_tests else ""))
         if base is None
-        else diff_only_query(command, base, "HEAD" if head is None else head, skip_long_tests)
+        else diff_only_query(command, base, head, skip_long_tests)
     )
 
     # Finally, exclude targets that have any of the excluded tags:
@@ -277,7 +282,7 @@ def main():
     )
     parser.add_argument(
         "--base",
-        help="Only include targets with modified inputs in `git diff --name-only --merge-base $BASE $HEAD`. When --head is not provided defaults to HEAD.",
+        help="Only include targets with modified inputs in `git diff --name-only --merge-base $BASE [$HEAD]` where $HEAD is from --head if specified.",
     )
     parser.add_argument("--head", help="See --base.")
     args = parser.parse_args()
