@@ -410,12 +410,7 @@ fn test_fee_collector_resolution_and_repair() -> anyhow::Result<()> {
 
     store_blocks(
         &mut connection,
-        vec![
-            mint_block,
-            block1.clone(),
-            block2.clone(),
-            block3.clone(),
-        ],
+        vec![mint_block, block1.clone(), block2.clone(), block3.clone()],
     )?;
 
     // Test fee collector resolution

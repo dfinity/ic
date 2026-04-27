@@ -1397,7 +1397,6 @@ fn canister_history_no_change_during_update_settings() {
             settings: CanisterSettingsArgsBuilder::new()
                 .with_environment_variables(
                     env_vars
-                        
                         .into_iter()
                         .map(|(k, v)| EnvironmentVariable { name: k, value: v })
                         .collect::<Vec<_>>(),
@@ -1649,12 +1648,8 @@ fn subnet_available_memory() {
     test.uninstall_code(canister_id).unwrap();
     check_subnet_available_memory(&test, false, "after uninstalling code");
     // memory usage increases after reinstalling code and growing stable memory in init
-    test.reinstall_canister_with_args(
-        canister_id,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        grow_payload,
-    )
-    .unwrap();
+    test.reinstall_canister_with_args(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), grow_payload)
+        .unwrap();
     check_subnet_available_memory(&test, true, "after reinstalling code");
 
     // memory usage decreases after loading snapshot since the snapshot was taken with empty stable memory;

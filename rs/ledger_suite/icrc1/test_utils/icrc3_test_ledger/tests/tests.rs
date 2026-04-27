@@ -457,8 +457,7 @@ fn lookup_hashtree(hash_tree: &HashTree, leaf_name: &str) -> Result<Vec<u8>, Str
         },
         _ => Err(format!(
             "Expected to find a leaf node: Hash tree: {hash_tree:?}, leaf_name: {leaf_name}"
-        )
-        ),
+        )),
     }
 }
 

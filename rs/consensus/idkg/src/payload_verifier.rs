@@ -802,12 +802,7 @@ mod test {
         let (key_transcript, key_transcript_ref) =
             payload.generate_current_key(&key_id, &env, &mut rng);
         block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript);
-        initiate_reshare_requests(
-            &mut payload,
-            reshare_requests,
-            None,
-            &no_op_logger(),
-        );
+        initiate_reshare_requests(&mut payload, reshare_requests, None, &no_op_logger());
         let prev_payload = payload.clone();
 
         // Create completed dealings for request 1.

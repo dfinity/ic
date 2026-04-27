@@ -1016,9 +1016,9 @@ pub fn setup_router(
         .layer(common_service_layers.clone())
         .layer(middleware_subnet_lookup.clone())
         .layer(middleware_generic_limiter.clone())
-        .layer(option_layer(cache_state.map(|x| {
-            middleware::from_fn_with_state(x, cache_middleware)
-        })))
+        .layer(option_layer(
+            cache_state.map(|x| middleware::from_fn_with_state(x, cache_middleware)),
+        ))
         .layer(middleware_retry.clone());
 
     let middleware_subnet_read_state_cache = option_layer(

@@ -163,13 +163,7 @@ fn bench_transport(criterion: &mut Criterion) {
     group.throughput(Throughput::Bytes(
         num_request_per_iter * REQUEST_SIZE_BYTES + RESPONSE_SIZE_BYTES,
     ));
-    bench_inner(
-        &mut group,
-        &rt,
-        test_transport.clone(),
-        peers,
-        false,
-    );
+    bench_inner(&mut group, &rt, test_transport.clone(), peers, false);
     group.finish();
 }
 

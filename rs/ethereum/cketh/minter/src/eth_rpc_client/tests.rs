@@ -229,9 +229,8 @@ mod multi_call_results {
                 ),
             ]);
 
-            let reduced: Result<FeeHistory, _> = results
-                
-                .reduce_with_strategy(StrictMajorityByKey::new(oldest_block));
+            let reduced: Result<FeeHistory, _> =
+                results.reduce_with_strategy(StrictMajorityByKey::new(oldest_block));
 
             assert_eq!(
                 reduced,

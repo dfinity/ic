@@ -225,8 +225,7 @@ fn get_subnets(
         .topology_snapshot()
         .subnets()
         .find(|subnet| subnet.subnet_type() == SubnetType::Application)
-        .expect("There should be at least one Application subnet")
-        ;
+        .expect("There should be at least one Application subnet");
 
     (nns_subnet, app_subnet)
 }

@@ -261,8 +261,7 @@ fn take_canister_snapshot_fails_canister_does_not_own_replace_snapshot() {
 
     assert_eq!(error.code(), ErrorCode::CanisterSnapshotNotFound);
     let message =
-        format!("Could not find the snapshot ID {snapshot_id} for canister {canister_id_2}",)
-            ;
+        format!("Could not find the snapshot ID {snapshot_id} for canister {canister_id_2}",);
     assert!(error.description().contains(&message));
 
     // Verify the canisters exists in the `ReplicatedState`.
@@ -934,8 +933,7 @@ fn delete_canister_snapshot_fails_snapshot_not_found() {
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterSnapshotNotFound);
     let message =
-        format!("Could not find the snapshot ID {snapshot_id} for canister {canister_id}",)
-            ;
+        format!("Could not find the snapshot ID {snapshot_id} for canister {canister_id}",);
     assert!(error.description().contains(&message));
     assert!(test.state().canister_state(&canister_id).is_some());
 }
@@ -984,8 +982,7 @@ fn delete_canister_snapshot_fails_snapshot_does_not_belong_to_canister() {
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterSnapshotNotFound);
     let message =
-        format!("Could not find the snapshot ID {snapshot_id} for canister {canister_id_2}",)
-            ;
+        format!("Could not find the snapshot ID {snapshot_id} for canister {canister_id_2}",);
     assert!(error.description().contains(&message));
     assert!(test.state().canister_state(&canister_id_2).is_some());
     assert_eq!(
@@ -1268,8 +1265,7 @@ fn load_canister_snapshot_fails_snapshot_canister_not_found() {
     assert_eq!(error.code(), ErrorCode::CanisterSnapshotNotFound);
     let message = format!(
         "Could not find the snapshot ID {snapshot_id} for canister {snapshot_canister_id}",
-    )
-    ;
+    );
     assert!(error.description().contains(&message));
     assert!(test.state().canister_state(&canister_id).is_some());
     assert!(test.state().canister_state(&snapshot_canister_id).is_none());
@@ -1299,8 +1295,7 @@ fn load_canister_snapshot_fails_snapshot_not_found() {
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterSnapshotNotFound);
     let message =
-        format!("Could not find the snapshot ID {snapshot_id} for canister {canister_id}",)
-            ;
+        format!("Could not find the snapshot ID {snapshot_id} for canister {canister_id}",);
     assert!(error.description().contains(&message));
     assert!(test.state().canister_state(&canister_id).is_some());
 }
@@ -1330,8 +1325,7 @@ fn load_canister_snapshot_fails_snapshot_not_found_on_another_canister() {
     assert_eq!(error.code(), ErrorCode::CanisterSnapshotNotFound);
     let message = format!(
         "Could not find the snapshot ID {snapshot_id} for canister {snapshot_canister_id}",
-    )
-    ;
+    );
     assert!(error.description().contains(&message));
     assert!(test.state().canister_state(&canister_id).is_some());
     assert!(test.state().canister_state(&snapshot_canister_id).is_some());
@@ -1394,9 +1388,10 @@ fn load_canister_snapshot_does_not_work_when_sender_does_not_control_originating
     assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
     let message = format!(
         "Only a controller of the canister that snapshot {} belongs to can load it on canister {}. Sender: {}",
-        snapshot_id, canister_id_2, test.user_id().get()
-    )
-    ;
+        snapshot_id,
+        canister_id_2,
+        test.user_id().get()
+    );
     assert!(error.description().contains(&message));
     assert_eq!(
         initial_canister_state,
@@ -2110,10 +2105,7 @@ fn read_canister_snapshot_metadata_fails_invalid_controller() {
     // Create new canister.
     let uni_canister_wasm = UNIVERSAL_CANISTER_WASM.to_vec();
     let canister_id = test
-        .canister_from_cycles_and_binary(
-            Cycles::new(1_000_000_000_000_000),
-            uni_canister_wasm,
-        )
+        .canister_from_cycles_and_binary(Cycles::new(1_000_000_000_000_000), uni_canister_wasm)
         .unwrap();
 
     // Take a snapshot of the canister.
@@ -2476,10 +2468,7 @@ fn read_canister_snapshot_data_fails_invalid_controller() {
     // Create new canister.
     let uni_canister_wasm = UNIVERSAL_CANISTER_WASM.to_vec();
     let canister_id = test
-        .canister_from_cycles_and_binary(
-            Cycles::new(1_000_000_000_000_000),
-            uni_canister_wasm,
-        )
+        .canister_from_cycles_and_binary(Cycles::new(1_000_000_000_000_000), uni_canister_wasm)
         .unwrap();
 
     // Take a snapshot of the canister.
@@ -2570,10 +2559,7 @@ fn canister_snapshot_data_upload_fails_out_of_bounds() {
         .build();
     let counter_canister_wasm = wat::parse_str(COUNTER_CANISTER_WAT).unwrap();
     let canister_id = test
-        .canister_from_cycles_and_binary(
-            Cycles::new(1_000_000_000_000_000),
-            counter_canister_wasm,
-        )
+        .canister_from_cycles_and_binary(Cycles::new(1_000_000_000_000_000), counter_canister_wasm)
         .unwrap();
     // create new snapshot from metadata
     let wasm_module_size = 1234;
@@ -2627,10 +2613,7 @@ fn canister_snapshot_roundtrip_succeeds() {
     // 1. Create new canister
     let counter_canister_wasm = wat::parse_str(COUNTER_CANISTER_WAT).unwrap();
     let canister_id = test
-        .canister_from_cycles_and_binary(
-            Cycles::new(1_000_000_000_000_000),
-            counter_canister_wasm,
-        )
+        .canister_from_cycles_and_binary(Cycles::new(1_000_000_000_000_000), counter_canister_wasm)
         .unwrap();
     // 2. set state
     // Upload chunk 1.
@@ -2914,10 +2897,7 @@ fn canister_snapshot_invalid_metadata_fails() {
     // 1. Create new canister
     let counter_canister_wasm = wat::parse_str(COUNTER_CANISTER_WAT).unwrap();
     let canister_id = test
-        .canister_from_cycles_and_binary(
-            Cycles::new(1_000_000_000_000_000),
-            counter_canister_wasm,
-        )
+        .canister_from_cycles_and_binary(Cycles::new(1_000_000_000_000_000), counter_canister_wasm)
         .unwrap();
     let md_upload_args_original = UploadCanisterSnapshotMetadataArgs::new(
         canister_id,

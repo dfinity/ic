@@ -1608,8 +1608,7 @@ mod eth_balance {
                 r: Default::default(),
                 s: Default::default(),
             };
-            let signed_tx =
-                SignedEip1559TransactionRequest::from((transaction, dummy_signature));
+            let signed_tx = SignedEip1559TransactionRequest::from((transaction, dummy_signature));
             apply_state_transition(
                 state,
                 &EventType::SignedTransaction {

@@ -1443,13 +1443,7 @@ fn task_deadline_from_state(task: &Task) -> Option<u64> {
 }
 
 fn task_queue_from_state() -> Vec<TaskExecution> {
-    TASKS.with(|t| {
-        t.borrow()
-            .queue
-            .iter()
-            .map(|(task, _)| task)
-            .collect()
-    })
+    TASKS.with(|t| t.borrow().queue.iter().map(|(task, _)| task).collect())
 }
 
 fn init_state() {

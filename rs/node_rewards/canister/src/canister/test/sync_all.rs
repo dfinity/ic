@@ -10,11 +10,7 @@ use ic_registry_keys::make_subnet_list_record_key;
 use std::sync::Arc;
 
 fn add_subnet_list(fake_registry: Arc<FakeRegistry>, subnets: Vec<SubnetId>) {
-    let subnets_encoded: Vec<Vec<u8>> = subnets
-        
-        .into_iter()
-        .map(|s| s.get().to_vec())
-        .collect();
+    let subnets_encoded: Vec<Vec<u8>> = subnets.into_iter().map(|s| s.get().to_vec()).collect();
 
     let entry_version = fake_registry
         .get_latest_version()

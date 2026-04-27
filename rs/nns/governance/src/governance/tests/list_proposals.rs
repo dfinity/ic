@@ -556,9 +556,7 @@ fn test_filter_proposal_ballots() {
     .with_controller(neuron_1_controller)
     .with_cached_neuron_stake_e8s(10_000 * E8)
     .build();
-    governance
-        .add_neuron(PROPOSER.id, neuron_1)
-        .unwrap();
+    governance.add_neuron(PROPOSER.id, neuron_1).unwrap();
     let neuron_2 = NeuronBuilder::new_for_test(
         2,
         DissolveStateAndAge::NotDissolving {

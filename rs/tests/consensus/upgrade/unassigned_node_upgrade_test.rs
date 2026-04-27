@@ -70,8 +70,7 @@ fn test(env: TestEnv) {
 
     // obtain readonly access
     let (readonly_private_key, readonly_public_key) = generate_key_strings();
-    let payload =
-        get_update_ssh_keys_for_all_unassigned_nodes_payload(vec![readonly_public_key]);
+    let payload = get_update_ssh_keys_for_all_unassigned_nodes_payload(vec![readonly_public_key]);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         payload,

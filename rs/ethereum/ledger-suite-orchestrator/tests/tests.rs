@@ -387,10 +387,7 @@ fn should_retrieve_orchestrator_info() {
     assert_eq!(
         info,
         OrchestratorInfo {
-            managed_canisters: vec![
-                ckusdc_managed_canisters,
-                ckusdt_managed_canisters
-            ],
+            managed_canisters: vec![ckusdc_managed_canisters, ckusdt_managed_canisters],
             cycles_management: CyclesManagement {
                 cycles_for_ledger_creation: Nat::from(200_000_000_000_000_u64),
                 cycles_for_archive_creation: Nat::from(100000000000000_u64),
@@ -518,11 +515,9 @@ fn should_require_to_register_embedded_wasms_before_adding_ckerc20() {
 #[test]
 fn should_not_change_ledger_suite_version_when_registering_embedded_wasms_a_second_time() {
     let env = Arc::new(new_state_machine());
-    let orchestrator_v1 = LedgerSuiteOrchestrator::new_with_ledger_get_blocks_disabled(
-        env,
-        default_init_arg(),
-    )
-    .register_embedded_wasms();
+    let orchestrator_v1 =
+        LedgerSuiteOrchestrator::new_with_ledger_get_blocks_disabled(env, default_init_arg())
+            .register_embedded_wasms();
     let embedded_ledger_suite_v1 = orchestrator_v1.embedded_ledger_suite_version();
 
     assert_eq!(
@@ -600,10 +595,8 @@ mod upgrade {
     #[test]
     fn should_upgrade_managed_ledgers_to_new_version() {
         let env = Arc::new(new_state_machine());
-        let orchestrator_v1 = LedgerSuiteOrchestrator::new_with_ledger_get_blocks_disabled(
-            env,
-            default_init_arg(),
-        );
+        let orchestrator_v1 =
+            LedgerSuiteOrchestrator::new_with_ledger_get_blocks_disabled(env, default_init_arg());
         let embedded_ledger_wasm_hash_v1 = orchestrator_v1.embedded_ledger_wasm_hash.clone();
         let embedded_index_wasm_hash_v1 = orchestrator_v1.embedded_index_wasm_hash.clone();
         let embedded_archive_wasm_hash_v1 = orchestrator_v1.embedded_archive_wasm_hash.clone();
@@ -856,10 +849,8 @@ mod upgrade {
     #[test]
     fn should_upgrade_without_reinstalling() {
         let env = Arc::new(new_state_machine());
-        let orchestrator_v1 = LedgerSuiteOrchestrator::new_with_ledger_get_blocks_disabled(
-            env,
-            default_init_arg(),
-        );
+        let orchestrator_v1 =
+            LedgerSuiteOrchestrator::new_with_ledger_get_blocks_disabled(env, default_init_arg());
         let embedded_ledger_wasm_hash_v1 = orchestrator_v1.embedded_ledger_wasm_hash.clone();
 
         let orchestrator_v1 = orchestrator_v1

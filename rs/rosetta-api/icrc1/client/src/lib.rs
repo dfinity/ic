@@ -214,13 +214,10 @@ impl RosettaClient {
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
 
-        Err(Error::unable_to_find_block(
-            &format!(
-                "Transaction was not added to the blockchain after {} seconds",
-                timeout.as_secs()
-            )
-            ,
-        ))
+        Err(Error::unable_to_find_block(&format!(
+            "Transaction was not added to the blockchain after {} seconds",
+            timeout.as_secs()
+        )))
     }
 
     async fn fetch_transaction_metadata(

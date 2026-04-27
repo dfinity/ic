@@ -3081,10 +3081,7 @@ fn wasm64_msg_cycles_refunded128() {
     let api = ApiType::reject_callback(
         UNIX_EPOCH,
         caller,
-        RejectContext::new(
-            ic_error_types::RejectCode::CanisterReject,
-            reject_msg,
-        ),
+        RejectContext::new(ic_error_types::RejectCode::CanisterReject, reject_msg),
         Cycles::new(777),
         call_context_test_id(13),
         false,

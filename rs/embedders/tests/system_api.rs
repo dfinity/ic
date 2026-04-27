@@ -2609,9 +2609,7 @@ fn test_env_var_value_operations() {
     );
     assert_eq!(
         api.ic0_env_var_value_copy(0, non_existent.len(), 0, 0, 0, &mut heap),
-        Err(HypervisorError::EnvironmentVariableNotFound {
-            name: non_existent
-        })
+        Err(HypervisorError::EnvironmentVariableNotFound { name: non_existent })
     );
 
     // Test invalid UTF-8 in variable name

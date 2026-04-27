@@ -1432,10 +1432,7 @@ where
         block_range_start: NUM_BLOCKS_TO_ARCHIVE.into(),
         block_range_end: (2 * NUM_BLOCKS_TO_ARCHIVE - 1).into(),
     };
-    assert_eq!(
-        archive_info,
-        vec![first_archive, second_archive.clone()]
-    );
+    assert_eq!(archive_info, vec![first_archive, second_archive.clone()]);
 
     assert_eq!(
         env.canister_status_as(
@@ -4366,8 +4363,8 @@ where
     };
     args.arg = Encode!(&transfer_from_args).unwrap();
     args.method = "icrc2_transfer_from".to_owned();
-    let error = icrc21_consent_message(&env, canister_id, Principal::anonymous(), args)
-        .unwrap_err();
+    let error =
+        icrc21_consent_message(&env, canister_id, Principal::anonymous(), args).unwrap_err();
     errors.push(error);
 
     for error in errors {
@@ -4810,9 +4807,7 @@ pub mod archiving {
             ..init_args(initial_balances)
         });
         let args = Encode!(&args).unwrap();
-        let ledger_id = env
-            .install_canister(ledger_wasm, args, None)
-            .unwrap();
+        let ledger_id = env.install_canister(ledger_wasm, args, None).unwrap();
 
         // Assert no archives exist.
         assert!(get_archives(&env, ledger_id).is_empty());
@@ -5000,9 +4995,7 @@ pub mod archiving {
             ..init_args(initial_balances)
         });
         let args = Encode!(&args).unwrap();
-        let ledger_id = env
-            .install_canister(ledger_wasm, args, None)
-            .unwrap();
+        let ledger_id = env.install_canister(ledger_wasm, args, None).unwrap();
         env.add_cycles(
             ledger_id,
             DEFAULT_CYCLES_FOR_ARCHIVE_CREATION.checked_mul(10).unwrap() as u128,
@@ -5092,9 +5085,7 @@ pub mod archiving {
             ..init_args(initial_balances)
         });
         let args = Encode!(&args).unwrap();
-        let ledger_id = env
-            .install_canister(ledger_wasm, args, None)
-            .unwrap();
+        let ledger_id = env.install_canister(ledger_wasm, args, None).unwrap();
 
         // Assert no archives exist.
         assert!(get_archives(&env, ledger_id).is_empty());
@@ -5223,9 +5214,7 @@ pub mod archiving {
             ..init_args(initial_balances)
         });
         let args = Encode!(&args).unwrap();
-        let ledger_id = env
-            .install_canister(ledger_wasm, args, None)
-            .unwrap();
+        let ledger_id = env.install_canister(ledger_wasm, args, None).unwrap();
 
         // Assert no archives exist.
         assert!(get_archives(&env, ledger_id).is_empty());
@@ -5352,9 +5341,7 @@ pub mod archiving {
             ..init_args(initial_balances)
         });
         let args = Encode!(&args).unwrap();
-        let ledger_id = env
-            .install_canister(ledger_wasm, args, None)
-            .unwrap();
+        let ledger_id = env.install_canister(ledger_wasm, args, None).unwrap();
 
         // Assert no archives exist.
         assert!(get_archive_count(&env, ledger_id).is_empty());
@@ -5464,9 +5451,7 @@ pub mod archiving {
             ..init_args(initial_balances)
         });
         let args = Encode!(&args).unwrap();
-        let ledger_id = env
-            .install_canister(ledger_wasm, args, None)
-            .unwrap();
+        let ledger_id = env.install_canister(ledger_wasm, args, None).unwrap();
 
         let get_blocks_res = get_blocks_fn(&env, ledger_id, (MAX_BLOCKS_TO_ARCHIVE - 1) as u64, 1);
         let initial_chain_length = get_blocks_res.chain_length;

@@ -98,8 +98,7 @@ impl Registry {
 
             // Validate that any new keys do not exist in another subnet, as that would trigger
             // creating another key with the same MasterPublicKeyId, which would break chain key signing.
-            let new_keys =
-                self.get_keys_that_will_be_added_to_subnet(subnet_id, payload_key_ids);
+            let new_keys = self.get_keys_that_will_be_added_to_subnet(subnet_id, payload_key_ids);
 
             let keys_to_subnet_map = self.get_master_public_keys_to_subnets_map();
             new_keys.iter().for_each(|key_id| {

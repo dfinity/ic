@@ -1201,11 +1201,7 @@ mod tests {
     ) -> Firewall {
         let registry = set_up_registry(role, node_id, reward_type);
 
-        let registry_helper = Arc::new(RegistryHelper::new(
-            node_id,
-            registry,
-            no_op_logger(),
-        ));
+        let registry_helper = Arc::new(RegistryHelper::new(node_id, registry, no_op_logger()));
 
         let cup_reader = LocalCUPReader::new(tmp_dir.join("cups"), no_op_logger());
 

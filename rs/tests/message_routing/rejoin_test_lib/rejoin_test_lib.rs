@@ -240,11 +240,7 @@ pub fn rejoin_test_large_state(
 
     // Wait for the next CUP to make sure the second round of state modification is persisted to a new checkpoint.
     info!(logger, "Waiting for the next CUP");
-    block_on(wait_for_cup(
-        &logger,
-        latest_certified_height,
-        agent_node,
-    ));
+    block_on(wait_for_cup(&logger, latest_certified_height, agent_node));
 
     info!(logger, "Killing {} nodes ...", allowed_failures);
     for node_to_kill in nodes_to_kill {

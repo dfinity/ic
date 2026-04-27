@@ -1324,8 +1324,7 @@ fn pool_take_slice_respects_signal_limit(
         let mut pool =
             CertifiedSlicePool::new(Arc::clone(&certified_stream_store), &fixture.metrics);
 
-        pool.put(SRC_SUBNET, slice, REGISTRY_VERSION, log)
-            .unwrap();
+        pool.put(SRC_SUBNET, slice, REGISTRY_VERSION, log).unwrap();
         let _ = pool
             .take_slice(SRC_SUBNET, Some(&begin), None, None)
             .unwrap()

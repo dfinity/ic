@@ -1015,10 +1015,8 @@ mod eth_transactions {
                 base_fee_per_gas: DEFAULT_CKERC20_MAX_FEE_PER_GAS,
                 max_priority_fee_per_gas: WeiPerGas::ONE,
             };
-            let resubmitted_txs = transactions.create_resubmit_transactions(
-                TransactionCount::from(30_u8),
-                too_high_price,
-            );
+            let resubmitted_txs = transactions
+                .create_resubmit_transactions(TransactionCount::from(30_u8), too_high_price);
             assert_eq!(
                 resubmitted_txs,
                 vec![Err(ResubmitTransactionError::InsufficientTransactionFee {

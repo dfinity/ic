@@ -2251,11 +2251,9 @@ pub mod test {
             state_manager
                 .get_mut()
                 .expect_get_state_at()
-                .return_const(Ok(fake_state_with_signature_requests(
-                    height,
-                    contexts,
-                )
-                .get_labeled_state()));
+                .return_const(Ok(
+                    fake_state_with_signature_requests(height, contexts).get_labeled_state()
+                ));
 
             // Manually construct a cup share
             let make_next_cup_share = |proposal: BlockProposal,

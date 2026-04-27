@@ -678,9 +678,7 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     // Create a PocketIC instance mounting the persisted state created so far.
     let pic = PocketIcBuilder::new()
         .with_server_url(new_server_url)
-        .with_read_only_state(&PocketIcState::new_from_path(
-            write_state_dir_path_buf,
-        ))
+        .with_read_only_state(&PocketIcState::new_from_path(write_state_dir_path_buf))
         .build();
 
     // Check that the canister states have been changed in the persisted state

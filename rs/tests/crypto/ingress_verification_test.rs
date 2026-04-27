@@ -183,21 +183,18 @@ impl<'a> GenericIdentity<'a> {
     fn sign_query(&self, query: &HttpQueryContent) -> Vec<u8> {
         sign_query(query, self)
             .signature
-            
             .expect("Signature missing")
     }
 
     fn sign_update(&self, update: &HttpCallContent) -> Vec<u8> {
         sign_update(update, self)
             .signature
-            
             .expect("Signature missing")
     }
 
     fn sign_read_state(&self, read_state: &HttpReadStateContent) -> Vec<u8> {
         sign_read_state(read_state, self)
             .signature
-            
             .expect("Signature missing")
     }
 

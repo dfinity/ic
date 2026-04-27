@@ -4957,11 +4957,7 @@ fn refresh_neuron_by_id_or_subaccount(
     );
 
     // stake shouldn't have changed.
-    let neuron = gov
-        .neuron_store
-        .with_neuron(&nid, |n| n.clone())
-        .unwrap()
-        ;
+    let neuron = gov.neuron_store.with_neuron(&nid, |n| n.clone()).unwrap();
     assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s());
 
     let neuron_id_or_subaccount = match refresh_by {
@@ -8719,11 +8715,7 @@ fn test_stop_dissolving_panics() {
 fn test_update_node_provider() {
     let (_, mut gov, neuron) = create_mature_neuron(false);
     let id = neuron.id.unwrap();
-    let neuron = gov
-        .neuron_store
-        .with_neuron(&id, |n| n.clone())
-        .unwrap()
-        ;
+    let neuron = gov.neuron_store.with_neuron(&id, |n| n.clone()).unwrap();
     let controller = neuron.controller();
     let account = AccountIdentifier::new(
         ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),

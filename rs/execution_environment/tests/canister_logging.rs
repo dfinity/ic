@@ -2184,12 +2184,7 @@ fn test_canister_uninstall_and_install_clears_log_memory() {
 
     // Do uninstall code and install again.
     let _ = env.uninstall_code(canister_id).unwrap();
-    let _ = env.install_wasm_in_mode(
-        canister_id,
-        CanisterInstallMode::Install,
-        wasm,
-        vec![],
-    );
+    let _ = env.install_wasm_in_mode(canister_id, CanisterInstallMode::Install, wasm, vec![]);
 
     // After uninstall code.
     let _ = env.execute_ingress(canister_id, "test", vec![]);

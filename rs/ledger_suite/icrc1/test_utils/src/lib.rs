@@ -494,10 +494,7 @@ impl ArgWithCaller {
                 let operation = Operation::<T>::Approve {
                     amount: T::try_from(approve_arg.amount.clone()).unwrap(),
                     expires_at: approve_arg.expires_at,
-                    fee: approve_arg
-                        .fee
-                        .clone()
-                        .map(|f| T::try_from(f).unwrap()),
+                    fee: approve_arg.fee.clone().map(|f| T::try_from(f).unwrap()),
                     expected_allowance: approve_arg
                         .expected_allowance
                         .clone()

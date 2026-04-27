@@ -1517,8 +1517,7 @@ fn test_icrc3_certificate() {
             },
             _ => Err(format!(
                 "Expected to find a leaf node: Hash tree: {hash_tree:?}, leaf_name: {leaf_name}"
-            )
-            ),
+            )),
         }
     }
 

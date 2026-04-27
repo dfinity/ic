@@ -479,8 +479,7 @@ mod test {
         let contents2 = b"Foo Bar";
         fs::write(input_file2.clone(), contents2).unwrap();
 
-        let mut partition =
-            ExtPartition::open(img_path, None).expect("Could not open partition");
+        let mut partition = ExtPartition::open(img_path, None).expect("Could not open partition");
 
         // Copy a file to the partition.
         let target_path = Path::new("/home/ubuntu/files/out.txt");
@@ -517,8 +516,7 @@ mod test {
         let img_path = dir.path().join("empty_ext4.img");
         create_empty_partition_img(&img_path).expect("Could not create test partition image");
 
-        let mut partition =
-            ExtPartition::open(img_path, None).expect("Could not open partition");
+        let mut partition = ExtPartition::open(img_path, None).expect("Could not open partition");
 
         let input_file_names = ["input.txt", "input2.txt"];
         for file in input_file_names {
@@ -556,8 +554,7 @@ mod test {
         let img_path = dir.path().join("empty_ext4.img");
         create_empty_partition_img(&img_path).expect("Could not create test partition image");
 
-        let mut partition =
-            ExtPartition::open(img_path, None).expect("Could not open partition");
+        let mut partition = ExtPartition::open(img_path, None).expect("Could not open partition");
 
         let input_file_names = ["input.txt", "input2.txt"];
         for file in input_file_names {

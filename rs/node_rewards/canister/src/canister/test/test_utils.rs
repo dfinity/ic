@@ -52,8 +52,7 @@ pub(crate) fn setup_thread_local_canister_for_test() -> (Arc<FakeRegistry>, Rc<M
     let canister = NodeRewardsCanister::new(
         Arc::new(StableCanisterRegistryClient::<TestState>::new(
             fake_registry.clone(),
-        ))
-        ,
+        )),
         metrics_manager.clone(),
         &LAST_DAY_SYNCED,
     );

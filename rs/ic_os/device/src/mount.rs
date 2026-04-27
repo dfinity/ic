@@ -359,12 +359,7 @@ pub mod testing {
             if !mounts.contains_key(&key) {
                 mounts.insert(
                     key.clone(),
-                    self.extract_partition_to_tempdir(
-                        device,
-                        offset_bytes,
-                        len_bytes,
-                        options,
-                    )?,
+                    self.extract_partition_to_tempdir(device, offset_bytes, len_bytes, options)?,
                 );
             }
 

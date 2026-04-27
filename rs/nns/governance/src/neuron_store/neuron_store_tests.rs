@@ -618,9 +618,7 @@ fn test_prune_some_following_super_strict_voting_power_refresh() {
 
     // Similar to fresh_neuron, except voting power was refrshed a "long" time
     // ago.
-    let mut stale_neuron = simple_neuron_builder(3)
-        .with_followees(followees)
-        .build();
+    let mut stale_neuron = simple_neuron_builder(3).with_followees(followees).build();
     stale_neuron.refresh_voting_power(CREATED_TIMESTAMP_SECONDS - 7 * ONE_MONTH_SECONDS - 1);
 
     let mut neuron_store = NeuronStore::new(btreemap! {

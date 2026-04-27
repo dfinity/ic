@@ -291,9 +291,7 @@ fn test_sns_metrics() {
         governance.genesis_timestamp_seconds = expected_genesis_timestamp_seconds;
 
         let args = Encode!(&governance).unwrap();
-        state_machine
-            .install_canister(wasm, args, None)
-            .unwrap()
+        state_machine.install_canister(wasm, args, None).unwrap()
     };
 
     assert_eq!(governance, governance_canister_id);

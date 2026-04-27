@@ -106,12 +106,7 @@ pub(super) fn make_chain_key_config() -> ChainKeyConfig {
     };
 
     ChainKeyConfig {
-        key_configs: vec![
-            key_config,
-            key_config_1,
-            key_config_2,
-            key_config_3,
-        ],
+        key_configs: vec![key_config, key_config_1, key_config_2, key_config_3],
         // 1 second timeout
         signature_request_timeout_ns: Some(1_000_000_000),
         ..ChainKeyConfig::default()

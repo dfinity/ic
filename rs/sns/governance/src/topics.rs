@@ -230,8 +230,7 @@ impl Governance {
                     custom_functions: custom_functions
                         .get(&topic.topic)
                         .cloned()
-                        .unwrap_or_default()
-                        ,
+                        .unwrap_or_default(),
                 },
                 extension_operations: all_registered_operations
                     .get(&topic.topic)

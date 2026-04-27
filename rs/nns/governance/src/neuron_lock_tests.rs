@@ -222,8 +222,7 @@ fn test_ledger_update_lock_compatible_with_neuron_async_lock() {
 
     {
         let _neuron_lock =
-            Governance::acquire_neuron_async_lock(&TEST_GOVERNANCE, neuron_id, 1, command)
-                .unwrap();
+            Governance::acquire_neuron_async_lock(&TEST_GOVERNANCE, neuron_id, 1, command).unwrap();
         assert!(
             test_governance_mut()
                 .lock_neuron_for_command(neuron_id.id, inflight_command)

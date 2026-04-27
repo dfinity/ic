@@ -801,12 +801,7 @@ fn system_subnet_stream_throttling(
         {
             let mut slice_pool = xnet_payload_builder.certified_slice_pool.lock().unwrap();
             slice_pool
-                .put(
-                    REMOTE_SUBNET,
-                    certified_slice,
-                    REGISTRY_VERSION,
-                    log,
-                )
+                .put(REMOTE_SUBNET, certified_slice, REGISTRY_VERSION, log)
                 .unwrap();
         }
 

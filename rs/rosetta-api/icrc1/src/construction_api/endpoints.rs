@@ -14,9 +14,7 @@ pub async fn construction_derive(
 ) -> Result<Json<ConstructionDeriveResponse>> {
     get_state_from_network_id(&request.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&err))?;
-    Ok(Json(services::construction_derive(
-        request.public_key,
-    )?))
+    Ok(Json(services::construction_derive(request.public_key)?))
 }
 
 pub async fn construction_preprocess(

@@ -1306,7 +1306,6 @@ impl TryFrom<pb::IDkgArtifactId> for IDkgArtifactId {
         use pb::i_dkg_artifact_id::Kind;
         let kind = value
             .kind
-            
             .ok_or_else(|| ProxyDecodeError::MissingField("IDkgArtifactId::kind"))?;
 
         Ok(match kind {

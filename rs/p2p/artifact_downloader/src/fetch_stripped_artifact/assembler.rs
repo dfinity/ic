@@ -743,8 +743,7 @@ mod tests {
     fn strip_assemble_fails_when_still_missing_ingress_test() {
         let (ingress_1, ingress_id_1) = fake_ingress_message_with_arg_size("fake_1", 1024);
         let (ingress_2, _ingress_id_2) = fake_ingress_message_with_arg_size("fake_2", 1024);
-        let block_proposal =
-            fake_block_proposal_with_ingresses(vec![ingress_1.clone(), ingress_2]);
+        let block_proposal = fake_block_proposal_with_ingresses(vec![ingress_1.clone(), ingress_2]);
         let consensus_message = ConsensusMessage::BlockProposal(block_proposal);
 
         // strip the block

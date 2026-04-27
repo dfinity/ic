@@ -1518,9 +1518,7 @@ fn query_cache_never_caches_calls_to_management_canister() {
     );
     res_1.assert_contains(ErrorCode::CanisterContractViolation, &description);
 
-    let res_2 = test
-        .non_replicated_query(a_id, "query", q)
-        .unwrap_err();
+    let res_2 = test.non_replicated_query(a_id, "query", q).unwrap_err();
     assert_eq!(query_cache_metrics(&test).hits.get(), 1);
     assert_eq!(query_cache_metrics(&test).misses.get(), 1);
     assert_eq!(res_1, res_2);

@@ -2010,10 +2010,9 @@ impl TryFrom<CanisterInstallModeV2Proto> for CanisterInstallModeV2 {
                         None => None,
                         Some(mode) => Some(match WasmMemoryPersistenceProto::try_from(mode).ok() {
                             Some(persistence) => WasmMemoryPersistence::try_from(persistence),
-                            None => Err(CanisterInstallModeError(
-                                format!("Invalid `WasmMemoryPersistence` value: {mode}")
-                                    ,
-                            )),
+                            None => Err(CanisterInstallModeError(format!(
+                                "Invalid `WasmMemoryPersistence` value: {mode}"
+                            ))),
                         }?),
                     },
                 },
@@ -2118,9 +2117,9 @@ impl TryFrom<WasmMemoryPersistenceProto> for WasmMemoryPersistence {
         match item {
             WasmMemoryPersistenceProto::Keep => Ok(WasmMemoryPersistence::Keep),
             WasmMemoryPersistenceProto::Replace => Ok(WasmMemoryPersistence::Replace),
-            WasmMemoryPersistenceProto::Unspecified => Err(CanisterInstallModeError(
-                format!("Invalid `WasmMemoryPersistence` value: {item:?}"),
-            )),
+            WasmMemoryPersistenceProto::Unspecified => Err(CanisterInstallModeError(format!(
+                "Invalid `WasmMemoryPersistence` value: {item:?}"
+            ))),
         }
     }
 }

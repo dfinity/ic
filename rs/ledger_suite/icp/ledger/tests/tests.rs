@@ -1846,8 +1846,8 @@ fn test_icrc21_legacy_transfer_incorrect_fee() {
         },
     };
 
-    let error = icrc21_consent_message(&env, canister_id, Principal::anonymous(), args)
-        .unwrap_err();
+    let error =
+        icrc21_consent_message(&env, canister_id, Principal::anonymous(), args).unwrap_err();
     assert_eq!(
         error,
         Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
@@ -2568,9 +2568,10 @@ fn test_burn_whole_balance() {
         if let Some(error_tokens) = error_tokens {
             assert!(response.is_err());
             assert!(
-                response.unwrap_err().description().contains(
-                    &format!("Burns lower than {error_tokens} are not allowed")
-                )
+                response
+                    .unwrap_err()
+                    .description()
+                    .contains(&format!("Burns lower than {error_tokens} are not allowed"))
             );
         } else {
             let result = Decode!(&response.expect("burn transfer failed").bytes(), Result<BlockIndex, icp_ledger::TransferError> )

@@ -402,12 +402,9 @@ impl<T: TryFrom<OpOut>> FromOpOut for T {
     async fn from(value: OpOut) -> (StatusCode, ApiResponse<T>) {
         // match errors explicitly to make sure they have a 4xx status code
         match value {
-            OpOut::Error(PocketIcError::Forbidden(msg)) => (
-                StatusCode::FORBIDDEN,
-                ApiResponse::Error {
-                    message: msg,
-                },
-            ),
+            OpOut::Error(PocketIcError::Forbidden(msg)) => {
+                (StatusCode::FORBIDDEN, ApiResponse::Error { message: msg })
+            }
             OpOut::Error(e) => (
                 StatusCode::BAD_REQUEST,
                 ApiResponse::Error {
@@ -1169,9 +1166,7 @@ async fn op_out_to_response(op_out: OpOut) -> Response {
             .into_response(),
         OpOut::Error(PocketIcError::Forbidden(msg)) => (
             StatusCode::FORBIDDEN,
-            Json(ApiResponse::<()>::Error {
-                message: msg,
-            }),
+            Json(ApiResponse::<()>::Error { message: msg }),
         )
             .into_response(),
         opout @ OpOut::Error(_) => (

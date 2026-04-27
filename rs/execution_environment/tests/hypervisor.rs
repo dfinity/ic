@@ -10594,10 +10594,7 @@ fn call_from_query_method_traps() {
         canister_id,
         "update",
         wasm()
-            .inter_update(
-                canister_id,
-                CallArgs::default().other_side(call_args),
-            )
+            .inter_update(canister_id, CallArgs::default().other_side(call_args))
             .build(),
     );
     assert_eq!(get_reply(res), b"replying on other side");
@@ -10914,12 +10911,7 @@ fn inter_canister_call_cleanup() {
     assert_eq!(global_data(&mut test, canister_id), b"BAR");
 
     // Inter-canister call cleanup is not executed if reply callback succeeds.
-    let res = run(
-        &mut test,
-        reply_on_other_side,
-        Some(forward_reply),
-        None,
-    );
+    let res = run(&mut test, reply_on_other_side, Some(forward_reply), None);
     assert_eq!(get_reply(res), b"replying on other side");
     assert_eq!(global_data(&mut test, canister_id), b"FOO");
 
@@ -10936,12 +10928,7 @@ fn inter_canister_call_cleanup() {
     assert_eq!(global_data(&mut test, canister_id), b"BAR");
 
     // Inter-canister call cleanup is not executed if reject callback succeeds.
-    let res = run(
-        &mut test,
-        trap_on_other_side,
-        None,
-        Some(forward_reject),
-    );
+    let res = run(&mut test, trap_on_other_side, None, Some(forward_reject));
     assert!(
         String::from_utf8(get_reply(res))
             .unwrap()
