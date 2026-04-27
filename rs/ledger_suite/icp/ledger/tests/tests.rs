@@ -796,7 +796,7 @@ fn check_block_endpoint_limits() {
             user_principal.into(),
             canister_id,
             "query_encoded_blocks".to_string(),
-            get_blocks_args.clone(),
+            get_blocks_args,
         )
         .expect("query failed")
         .bytes(),
@@ -838,7 +838,7 @@ fn check_block_endpoint_limits() {
             user_principal.into(),
             canister_id,
             "get_blocks_pb".to_string(),
-            get_blocks_pb_args.clone(),
+            get_blocks_pb_args,
         )
         .expect("query failed")
         .bytes(),
@@ -886,7 +886,7 @@ fn check_block_endpoint_limits() {
             user_principal.into(),
             canister_id,
             "iter_blocks_pb".to_string(),
-            iter_blocks_pb_args.clone(),
+            iter_blocks_pb_args,
         )
         .expect("query failed")
         .bytes(),
@@ -1081,7 +1081,7 @@ fn check_archive_block_endpoint_limits() {
             user_principal.into(),
             CanisterId::unchecked_from_principal(callback.canister_id.into()),
             "get_blocks_pb".to_string(),
-            get_blocks_pb_args.clone(),
+            get_blocks_pb_args,
         )
         .expect("query failed")
         .bytes(),
@@ -1129,7 +1129,7 @@ fn check_archive_block_endpoint_limits() {
             user_principal.into(),
             CanisterId::unchecked_from_principal(callback.canister_id.into()),
             "iter_blocks_pb".to_string(),
-            iter_blocks_pb_args.clone(),
+            iter_blocks_pb_args,
         )
         .expect("query failed")
         .bytes(),
@@ -1779,7 +1779,7 @@ Charged for processing the transfer.
     );
 
     // If the caller is anonymous, the message should not include the From information.
-    args.arg = Encode!(&transfer_args.clone()).unwrap();
+    args.arg = Encode!(&transfer_args).unwrap();
     let message = extract_icrc21_message_string(
         &icrc21_consent_message(&env, canister_id, Principal::anonymous(), args.clone())
             .unwrap()
@@ -1846,7 +1846,7 @@ fn test_icrc21_legacy_transfer_incorrect_fee() {
         },
     };
 
-    let error = icrc21_consent_message(&env, canister_id, Principal::anonymous(), args.clone())
+    let error = icrc21_consent_message(&env, canister_id, Principal::anonymous(), args)
         .unwrap_err();
     assert_eq!(
         error,
@@ -2569,7 +2569,7 @@ fn test_burn_whole_balance() {
             assert!(response.is_err());
             assert!(
                 response.unwrap_err().description().contains(
-                    &format!("Burns lower than {error_tokens} are not allowed").to_string()
+                    &format!("Burns lower than {error_tokens} are not allowed")
                 )
             );
         } else {

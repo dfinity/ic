@@ -225,7 +225,7 @@ fn start_server(
 
     let graceful_shutdown = GracefulShutdown::new();
 
-    let logger = log.clone();
+    let logger = log;
 
     tokio::spawn(async move {
         loop {
@@ -326,7 +326,7 @@ impl XNetEndpoint {
             addr,
             metrics,
             certified_stream_store,
-            runtime_handle.clone(),
+            runtime_handle,
             tls,
             registry_client,
             log.clone(),

@@ -30,7 +30,7 @@ fn huge_proto_encoding_roundtrip() {
     };
     let entry = message_pool::Entry {
         id: 13,
-        message: Some(msg.clone()),
+        message: Some(msg),
     };
 
     // A pool of 2K requests with 2 MB payloads.

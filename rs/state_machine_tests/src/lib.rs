@@ -270,12 +270,12 @@ pub fn add_global_registry_records(
         .unwrap();
 
     // routing table record
-    let pb_routing_table = PbRoutingTable::from(routing_table.clone());
+    let pb_routing_table = PbRoutingTable::from(routing_table);
     registry_data_provider
         .add(
             &make_canister_ranges_key(CanisterId::from_u64(0)),
             registry_version,
-            Some(pb_routing_table.clone()),
+            Some(pb_routing_table),
         )
         .unwrap();
 
@@ -2034,7 +2034,7 @@ impl StateMachine {
         let subnet_id =
             subnet_id.unwrap_or(PrincipalId::new_self_authenticating(&public_key_der).into());
 
-        let mut sm_config = ic_config::state_manager::Config::new(state_dir.path().to_path_buf());
+        let mut sm_config = ic_config::state_manager::Config::new(state_dir.path());
         if let Some(lsmt_override) = lsmt_override {
             sm_config.lsmt_config = lsmt_override;
         }
@@ -2302,7 +2302,7 @@ impl StateMachine {
             Box::new(IngressHistoryReaderImpl::new(state_manager.clone())),
             ingress_pool.clone(),
             registry_client.clone(),
-            ingress_verifier.clone(),
+            ingress_verifier,
             metrics_registry.clone(),
             subnet_id,
             replica_logger.clone(),
@@ -2334,17 +2334,17 @@ impl StateMachine {
             is_schnorr_signing_enabled,
             is_vetkd_enabled,
             registry_data_provider,
-            registry_client: registry_client.clone(),
+            registry_client,
             state_manager,
             consensus_time,
             ingress_pool,
-            ingress_manager: ingress_manager.clone(),
+            ingress_manager,
             ingress_filter: Arc::new(Mutex::new(execution_services.ingress_filter)),
             pocket_xnet: Arc::new(RwLock::new(None)), // set by `StateMachineBuilder::build_with_subnets`
             payload_builder: Arc::new(RwLock::new(None)), // set by `StateMachineBuilder::build_with_subnets`
             ingress_history_reader: execution_services.ingress_history_reader,
             message_routing,
-            metrics_registry: metrics_registry.clone(),
+            metrics_registry,
             query_handler: Arc::new(Mutex::new(execution_services.query_execution_service)),
             transform_handler: Arc::new(Mutex::new(execution_services.transform_execution_service)),
             ingress_watcher_handle,
@@ -2361,7 +2361,7 @@ impl StateMachine {
             chain_key_subnet_public_keys,
             chain_key_subnet_secret_keys,
             ni_dkg_ids,
-            replica_logger: replica_logger.clone(),
+            replica_logger,
             log_level,
             nodes,
             batch_summary: None,
@@ -4557,7 +4557,7 @@ impl StateMachine {
                 update: HttpCanisterUpdate {
                     canister_id: Blob(canister_id.get().into_vec()),
                     method_name: method.to_string(),
-                    arg: Blob(payload.clone()),
+                    arg: Blob(payload),
                     sender: sender.into(),
                     ingress_expiry,
                     nonce: nonce_blob,
@@ -4785,7 +4785,7 @@ impl StateMachine {
             .add(
                 &make_canister_ranges_key(CanisterId::from_u64(0)),
                 next_version,
-                Some(pb_routing_table.clone()),
+                Some(pb_routing_table),
             )
             .unwrap();
         self.registry_client.update_to_latest_version();
@@ -5140,7 +5140,7 @@ impl StateMachine {
             &subnet_records,
         );
 
-        let xnet_payload = batch_payload.xnet.clone();
+        let xnet_payload = batch_payload.xnet;
         let payload = PayloadBuilder::new().with_xnet_payload(xnet_payload);
 
         self.execute_payload(payload);
@@ -5522,7 +5522,7 @@ pub fn two_subnets_with_config(
         registry_data_provider.clone(),
     );
     let env2 = multi_subnet_setup(
-        subnets.clone(),
+        subnets,
         2,
         config2,
         SubnetType::Application,

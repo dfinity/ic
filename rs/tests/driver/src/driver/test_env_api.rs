@@ -1498,7 +1498,7 @@ impl HasGroupSetup for TestEnv {
             // GROUP_TTL should be enough for the setup task to allocate the group on InfraProvider
             // Afterwards, the group's TTL should be bumped via a keepalive task
             let timeout = if no_group_ttl { None } else { Some(GROUP_TTL) };
-            let group_setup = GroupSetup::new(group_base_name.clone(), timeout);
+            let group_setup = GroupSetup::new(group_base_name, timeout);
             match InfraProvider::read_attribute(self) {
                 InfraProvider::Farm => {
                     let farm_base_url = FarmBaseUrl::read_attribute(self);

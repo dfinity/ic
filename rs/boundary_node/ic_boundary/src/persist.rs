@@ -327,7 +327,7 @@ pub(crate) mod test {
                     end: principal!("jlzvg-byp77-7qcai"),
                 },
             ],
-            nodes: vec![node1.clone()],
+            nodes: vec![node1],
             replica_version: "7742d96ddd30aa6b607c9d2d4093a7b714f5b25b".to_string(),
         };
 
@@ -344,7 +344,7 @@ pub(crate) mod test {
                     end: principal!("ca5tg-macd7-776ai-b"),
                 },
             ],
-            nodes: vec![node2.clone()],
+            nodes: vec![node2],
             replica_version: "7742d96ddd30aa6b607c9d2d4093a7b714f5b25b".to_string(),
         };
 
@@ -362,7 +362,7 @@ pub(crate) mod test {
                     end: Principal::from_slice(&[0x05]),
                 },
             ],
-            nodes: vec![node3.clone()],
+            nodes: vec![node3],
             replica_version: "7742d96ddd30aa6b607c9d2d4093a7b714f5b25b".to_string(),
         };
 
@@ -435,7 +435,7 @@ pub(crate) mod test {
         let persister = Persister::new(rt_init.clone());
 
         // Persist the routing table
-        let result = persister.persist(subnets.clone());
+        let result = persister.persist(subnets);
         // Check the result
         assert!(matches!(result, PersistStatus::Completed(_)));
         // Compare the persisted table state with expected

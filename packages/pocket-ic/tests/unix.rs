@@ -372,7 +372,7 @@ fn test_custom_blockmaker_metrics() {
         registry_proto_path,
     ));
     let latest_version = registry_data_provider.latest_version();
-    let registry_client = RegistryClientImpl::new(registry_data_provider.clone(), None);
+    let registry_client = RegistryClientImpl::new(registry_data_provider, None);
     registry_client.poll_once().unwrap();
     let node_ids = registry_client
         .get_node_ids_on_subnet(

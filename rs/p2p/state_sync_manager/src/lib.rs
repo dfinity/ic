@@ -59,7 +59,7 @@ pub fn build_state_sync_manager<T: Send + 'static>(
     let shared_chunk_state = Arc::new(StateSyncChunkHandler::new(
         log.clone(),
         state_sync.clone(),
-        metrics.clone(),
+        metrics,
     ));
 
     let (advert_sender, advert_receiver) = tokio::sync::mpsc::channel(20);
@@ -334,7 +334,7 @@ mod tests {
             let metrics = StateSyncManagerMetrics::new(&MetricsRegistry::default());
 
             let manager = StateSyncManager {
-                log: log.clone(),
+                log: log,
                 advert_receiver: handler_rx,
                 ongoing_state_sync: None,
                 metrics,

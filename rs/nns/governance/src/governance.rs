@@ -2739,7 +2739,7 @@ impl Governance {
             command: Some(InFlightCommand::SyncCommand(SyncCommand {})),
         };
         let _parent_lock = self.lock_neuron_for_command(id.id, in_flight_command.clone())?;
-        let _child_lock = self.lock_neuron_for_command(child_nid.id, in_flight_command.clone())?;
+        let _child_lock = self.lock_neuron_for_command(child_nid.id, in_flight_command)?;
 
         let child_neuron = NeuronBuilder::new(
             child_nid,

@@ -117,7 +117,7 @@ fn test_correctly_maps_timestamp_to_registry_versions() {
     .into_iter()
     .map(|(k, v)| (k, v.into_iter().collect()))
     .collect();
-    let actual = client.timestamp_to_versions_map().clone();
+    let actual = client.timestamp_to_versions_map();
 
     assert_eq!(actual, expected);
 }
@@ -320,7 +320,7 @@ fn test_sync_registry_stored() {
         .into_iter()
         .map(|(k, v)| (k, v.into_iter().collect()))
         .collect();
-    let actual = client.timestamp_to_versions_map().clone();
+    let actual = client.timestamp_to_versions_map();
 
     assert_eq!(expected_timestamp_to_registry_versions, actual);
 }

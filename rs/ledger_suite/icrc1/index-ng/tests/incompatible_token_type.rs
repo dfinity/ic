@@ -68,6 +68,6 @@ fn index_install_and_upgrade_test(index_install_wasm: Vec<u8>, index_upgrade_was
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
     let upgrade_args = Encode!(&None::<IndexArg>).unwrap();
-    env.upgrade_canister(index_id, index_upgrade_wasm, upgrade_args.clone())
+    env.upgrade_canister(index_id, index_upgrade_wasm, upgrade_args)
         .unwrap();
 }

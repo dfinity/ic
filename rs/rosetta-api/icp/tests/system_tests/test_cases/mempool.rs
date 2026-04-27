@@ -36,7 +36,7 @@ fn test_mempool_transaction() {
 
         assert!(
             mempool_transaction
-                .clone()
+                
                 .contains("Transaction not in the mempool"),
             "Error does not contain expected message: {mempool_transaction:?}"
         );

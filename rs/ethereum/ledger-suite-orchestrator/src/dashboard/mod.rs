@@ -194,7 +194,7 @@ impl DashboardTemplate {
                 .into_iter()
                 .map(|(token_id, v)| {
                     (
-                        token_id.into_erc20_unchecked().clone(),
+                        token_id.into_erc20_unchecked(),
                         CanistersDashboardData {
                             ckerc20_token_symbol: v.metadata.token_symbol.clone(),
                             canisters: CanisterDashboardData::from_canisters(v, completed_upgrades),

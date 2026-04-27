@@ -141,7 +141,7 @@ fn node_is_not_created_with_invalid_type() {
         assert!(
             response
                 .unwrap_err()
-                .to_string()
+                
                 .contains("Invalid node type")
         );
 

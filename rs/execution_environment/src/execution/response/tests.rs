@@ -1756,7 +1756,7 @@ fn dts_response_with_cleanup_concurrent_cycles_change_is_capped() {
         .inter_update(
             b_id,
             call_args()
-                .other_side(b.clone())
+                .other_side(b)
                 .on_reply(
                     wasm()
                         // Fail the response callback to trigger the cleanup callback.
@@ -2760,7 +2760,7 @@ fn cycles_balance_changes_applied_correctly() {
         .call_with_cycles(
             b_id,
             "update",
-            call_args().other_side(b.clone()),
+            call_args().other_side(b),
             Cycles::new(10_000_000_000_000),
         )
         .build();

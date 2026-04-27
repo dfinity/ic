@@ -28,7 +28,7 @@ impl Registry {
             .get(NODE_REWARDS_TABLE_KEY.as_bytes(), version)
             .ok_or_else(|| "Node Rewards Table was not found in the Registry".to_string())?
             .value
-            .clone();
+            ;
 
         let rewards_table = NodeRewardsTable::decode(rewards_table_bytes.as_slice()).unwrap();
 

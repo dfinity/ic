@@ -205,11 +205,11 @@ pub(crate) fn extract_luks_parameters(crypt_device: &mut CryptDevice) -> Result<
     let cipher = status_handle
         .get_cipher()
         .context("Failed to get cipher")?
-        .to_string();
+        ;
     let cipher_mode = status_handle
         .get_cipher_mode()
         .context("Failed to get cipher mode")?
-        .to_string();
+        ;
     let volume_key_size = status_handle.get_volume_key_size() as usize;
 
     let mut keyslot_handle = crypt_device.keyslot_handle();

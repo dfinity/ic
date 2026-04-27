@@ -1094,7 +1094,7 @@ impl NNSBuilder {
         }
         let randomness = Box::new(fixture.clone());
         NNS {
-            fixture: fixture.clone(),
+            fixture,
             governance: Governance::new(self.governance, environment, ledger, cmc, randomness),
         }
     }

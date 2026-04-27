@@ -243,7 +243,7 @@ pub fn rejoin_test_large_state(
     block_on(wait_for_cup(
         &logger,
         latest_certified_height,
-        agent_node.clone(),
+        agent_node,
     ));
 
     info!(logger, "Killing {} nodes ...", allowed_failures);
@@ -540,7 +540,7 @@ pub fn rejoin_test_long_rounds(
     let last_cup_height = block_on(wait_for_cup(
         &logger,
         latest_certified_height + 2 * (dkg_interval + 1),
-        reference_node.clone(),
+        reference_node,
     ));
 
     info!(

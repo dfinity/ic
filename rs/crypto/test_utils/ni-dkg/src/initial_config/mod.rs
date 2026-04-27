@@ -156,7 +156,7 @@ pub fn initial_dkg_transcript_and_master_key<R: rand::Rng + rand::CryptoRng>(
 
     transcript.internal_csp_transcript = match transcript.internal_csp_transcript {
         Groth20_Bls12_381(transcript) => {
-            let mut mod_transcript = transcript.clone();
+            let mut mod_transcript = transcript;
             mod_transcript.public_coefficients.coefficients[0] = PublicKeyBytes(public_key_bytes);
             Groth20_Bls12_381(mod_transcript)
         }
@@ -183,7 +183,7 @@ pub fn dummy_initial_dkg_transcript_with_master_key<R: rand::Rng + rand::CryptoR
 
     transcript.internal_csp_transcript = match transcript.internal_csp_transcript {
         Groth20_Bls12_381(transcript) => {
-            let mut mod_transcript = transcript.clone();
+            let mut mod_transcript = transcript;
             mod_transcript.public_coefficients.coefficients[0] = PublicKeyBytes(public_key_bytes);
             Groth20_Bls12_381(mod_transcript)
         }

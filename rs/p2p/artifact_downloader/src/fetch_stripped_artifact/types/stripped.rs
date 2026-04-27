@@ -291,7 +291,7 @@ mod tests {
 
         let original_consensus_message =
             MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped_block_proposal);
-        let proto = pb::StrippedConsensusMessage::from(original_consensus_message.clone());
+        let proto = pb::StrippedConsensusMessage::from(original_consensus_message);
         let result = MaybeStrippedConsensusMessage::try_from(proto);
         assert_matches!(
             result,
@@ -310,7 +310,7 @@ mod tests {
         let original_consensus_message =
             MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped_block_proposal);
 
-        let proto = pb::StrippedConsensusMessage::from(original_consensus_message.clone());
+        let proto = pb::StrippedConsensusMessage::from(original_consensus_message);
         let result = MaybeStrippedConsensusMessage::try_from(proto);
         assert_matches!(
             result,

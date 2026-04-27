@@ -160,7 +160,7 @@ fn test_load_shedding_read_state(
     let read_state_running_clone = read_state_running.clone();
     let load_shedder_returned_clone = load_shedder_returned.clone();
     let rt_clone: tokio::runtime::Handle = rt.handle().clone();
-    let state_clone = state.clone();
+    let state_clone = state;
     mock_state_manager
         .expect_get_certified_state_snapshot()
         .returning(move || {

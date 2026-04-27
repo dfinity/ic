@@ -37,7 +37,7 @@ pub fn setup(env: TestEnv, config: IcConfig) {
 
     if let Some(v) = config.initial_version {
         ic = ic.with_initial_replica(NodeSoftwareVersion {
-            replica_version: v.clone(),
+            replica_version: v,
             replica_url: Url::parse("https://unimportant.com").unwrap(),
             replica_hash: "".to_string(),
             orchestrator_url: Url::parse("https://unimportant.com").unwrap(),

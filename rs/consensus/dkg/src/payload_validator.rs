@@ -465,7 +465,7 @@ mod tests {
                 state_manager,
                 ..
             } = dependencies_with_subnet_params(
-                pool_config.clone(),
+                pool_config,
                 SUBNET_1,
                 vec![(
                     registry_version,
@@ -566,7 +566,7 @@ mod tests {
                 state_manager,
                 ..
             } = dependencies_with_subnet_params(
-                pool_config.clone(),
+                pool_config,
                 subnet_id,
                 vec![(
                     registry_version,
@@ -604,7 +604,7 @@ mod tests {
                 crypto.as_ref(),
                 &PoolReader::new(&pool),
                 dkg_pool.read().unwrap().deref(),
-                parent.clone(),
+                parent,
                 &block_payload,
                 state_manager.as_ref(),
                 &context,

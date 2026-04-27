@@ -288,7 +288,7 @@ impl IngressWatcher {
             // New message, create a new notifier.
             Entry::Vacant(vacant_entry) => {
                 self.cancellations.spawn_on(
-                    message.clone(),
+                    message,
                     cancellation_token.cancelled_owned(),
                     &self.rt_handle,
                 );
@@ -591,7 +591,7 @@ mod tests {
         ingress_watcher.handle_ingress_message(IngressWatcherSubscription {
             message: message.clone(),
             certification_notifier_tx,
-            cancellation_token: cancellation_token.clone(),
+            cancellation_token: cancellation_token,
         });
 
         let certification_notifier = certification_notifier_rx.try_recv().unwrap().unwrap();

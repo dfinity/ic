@@ -820,7 +820,7 @@ mod tests {
         test_set_swapping_whitelisted_callers(vec![node_operator_id]);
         test_set_swapping_enabled_subnets(vec![subnet_id]);
 
-        let response = registry.swap_nodes_inner(payload.clone(), node_operator_id, now);
+        let response = registry.swap_nodes_inner(payload, node_operator_id, now);
         assert!(
             response.is_ok(),
             "Expected OK response but got: {response:?}"

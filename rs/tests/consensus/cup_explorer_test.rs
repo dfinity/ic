@@ -205,7 +205,7 @@ fn test(env: TestEnv) {
     ));
     let status = verify(
         nns_node.get_public_url(),
-        Some(nns_public_key.clone()),
+        Some(nns_public_key),
         cup_path,
     )
     .expect("Failed to verify CUP after recovery");

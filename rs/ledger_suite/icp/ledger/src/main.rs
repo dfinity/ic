@@ -1644,7 +1644,7 @@ mod tests {
         let archive_block_type = archive_env.find_type("Block").unwrap().to_owned();
 
         let mut gamma = std::collections::HashSet::new();
-        let archive_block_type = ledger_env.merge_type(archive_env, archive_block_type.clone());
+        let archive_block_type = ledger_env.merge_type(archive_env, archive_block_type);
         candid::types::subtype::equal(
             &mut gamma,
             &ledger_env,

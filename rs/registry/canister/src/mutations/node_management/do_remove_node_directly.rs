@@ -138,7 +138,7 @@ impl Registry {
 
             // create the new API boundary node record by just cloning the old one and inserting it with the new key
             let new_key = make_api_boundary_node_record_key(replacement_node_id);
-            mutations.push(insert(new_key, api_bn_record.clone().encode_to_vec()));
+            mutations.push(insert(new_key, api_bn_record.encode_to_vec()));
         }
 
         // 4. Check if node is in a subnet, and if so, replace it in the subnet by updating the membership in the subnet record.

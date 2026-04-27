@@ -310,7 +310,7 @@ where
                     self.sender.clone(),
                     self.artifact_assembler.clone(),
                     self.metrics.clone(),
-                    cancellation_token.clone(),
+                    cancellation_token,
                 ),
                 &self.rt_handle,
             );
@@ -413,7 +413,7 @@ where
                             self.sender.clone(),
                             self.artifact_assembler.clone(),
                             self.metrics.clone(),
-                            cancellation_token.clone(),
+                            cancellation_token,
                         ),
                         &self.rt_handle,
                     );
@@ -822,7 +822,7 @@ mod tests {
             },
             NODE_1,
             ConnId::from(0),
-            cancellation.clone(),
+            cancellation,
         );
         // Check that slot table did not get updated.
         assert_eq!(
@@ -880,7 +880,7 @@ mod tests {
             },
             NODE_1,
             ConnId::from(1),
-            cancellation.clone(),
+            cancellation,
         );
         assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 2);
         assert_eq!(mgr.active_assembles.len(), 2);
@@ -1097,7 +1097,7 @@ mod tests {
             },
             NODE_2,
             ConnId::from(1),
-            cancellation.clone(),
+            cancellation,
         );
         // Verify that we only have one assemble task.
         assert_eq!(mgr.slot_table.len(), 2);
@@ -1198,7 +1198,7 @@ mod tests {
             },
             NODE_2,
             ConnId::from(1),
-            cancellation.clone(),
+            cancellation,
         );
         let addr = "127.0.0.1:8080".parse().unwrap();
         // Send current topology of two nodes.

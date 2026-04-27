@@ -647,7 +647,7 @@ impl SystemTestGroup {
         let keepalive_task_id = TaskId::Test(String::from(KEEPALIVE_TASK_NAME));
         let keepalive_task = if self.with_farm && !group_ctx.no_farm_keepalive {
             Box::from(subproc(
-                keepalive_task_id.clone(),
+                keepalive_task_id,
                 {
                     let group_ctx = group_ctx.clone();
                     move || keepalive_task(group_ctx)
@@ -683,7 +683,7 @@ impl SystemTestGroup {
             let vector_logging_task = subproc(
                 vector_logging_task_id,
                 {
-                    let group_ctx = group_ctx.clone();
+                    let group_ctx = group_ctx;
                     move || vector_logging_task(group_ctx, start_time)
                 },
                 &mut compose_ctx,
@@ -1077,7 +1077,7 @@ impl SystemTestGroup {
                 }
 
                 if with_farm && !args.no_delete_farm_group {
-                    Self::delete_farm_group(group_ctx.clone());
+                    Self::delete_farm_group(group_ctx);
                 }
                 if report.failure.is_empty() {
                     Ok(Outcome::FromParentProcess(report))

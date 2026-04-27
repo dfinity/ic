@@ -318,7 +318,7 @@ fn test_search_transactions_by_account() {
                                                     vec![
                                                         operation.account.unwrap(),
                                                         ApproveMetadata::try_from(
-                                                            operation.metadata.clone(),
+                                                            operation.metadata,
                                                         )
                                                         .unwrap()
                                                         .spender

@@ -308,7 +308,7 @@ where
     pub fn locator_hashes(&self) -> Vec<BlockHash> {
         let mut hashes = Vec::new();
         let tip = self.get_active_chain_tip();
-        let mut current_header = tip.header.clone();
+        let mut current_header = tip.header;
         let mut current_hash = current_header.block_hash();
         let mut step: u32 = 1;
         let mut last_hash = current_hash;

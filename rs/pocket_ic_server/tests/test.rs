@@ -322,7 +322,7 @@ fn pocket_ic_server_binary_name() {
     let bin_path = std::env::var_os("POCKET_IC_BIN").expect("Missing PocketIC binary");
     let new_bin_path = format!("{}_", bin_path.to_str().unwrap());
     Command::new("cp")
-        .arg(bin_path.clone())
+        .arg(bin_path)
         .arg(new_bin_path.clone())
         .output()
         .unwrap();
@@ -661,7 +661,7 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     // Create a PocketIC instance mounting the (read-only) state.
     let pic = PocketIcBuilder::new()
         .with_server_url(new_server_url)
-        .with_read_only_state(&PocketIcState::new_from_path(state_dir_path_buf.clone()))
+        .with_read_only_state(&PocketIcState::new_from_path(state_dir_path_buf))
         .build();
 
     // Check that the canister states have not changed
@@ -679,7 +679,7 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     let pic = PocketIcBuilder::new()
         .with_server_url(new_server_url)
         .with_read_only_state(&PocketIcState::new_from_path(
-            write_state_dir_path_buf.clone(),
+            write_state_dir_path_buf,
         ))
         .build();
 
@@ -711,7 +711,7 @@ fn with_subnet_state() {
     // Create a PocketIC instance with NNS and app subnets.
     let (server_url, _) = start_server_helper(None, None, false, false);
     let pic = PocketIcBuilder::new()
-        .with_state_dir(state_dir_path_buf.clone())
+        .with_state_dir(state_dir_path_buf)
         .with_server_url(server_url.clone())
         .with_nns_subnet()
         .with_application_subnet()
@@ -779,7 +779,7 @@ fn create_nns_subnet_state() -> (TempDir, PathBuf) {
 
     // Create a PocketIC instance with a single NNS subnet.
     let pic = PocketIcBuilder::new()
-        .with_state_dir(state_dir_path_buf.clone())
+        .with_state_dir(state_dir_path_buf)
         .with_nns_subnet()
         .build();
 
@@ -805,7 +805,7 @@ fn create_app_subnet_state() -> (TempDir, PathBuf) {
 
     // Create a PocketIC instance with a single app subnet.
     let pic = PocketIcBuilder::new()
-        .with_state_dir(state_dir_path_buf.clone())
+        .with_state_dir(state_dir_path_buf)
         .with_application_subnet()
         .build();
 

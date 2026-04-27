@@ -347,7 +347,7 @@ impl From<CanisterHttpResponseShare> for pb::CanisterHttpShare {
             }),
             signature: Some(pb::CanisterHttpResponseSignature {
                 signer: share.signature.signer.get().into_vec(),
-                signature: share.signature.signature.clone().get().0,
+                signature: share.signature.signature.get().0,
             }),
         }
     }
@@ -619,7 +619,7 @@ mod tests {
         // Case 1: Artifact with both share and response
         let artifact_with_response = CanisterHttpResponseArtifact {
             share: share.clone(),
-            response: Some(response.clone()),
+            response: Some(response),
         };
 
         let pb_artifact_with_response =

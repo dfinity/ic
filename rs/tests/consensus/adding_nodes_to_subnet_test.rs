@@ -226,7 +226,7 @@ fn get_subnets(
         .subnets()
         .find(|subnet| subnet.subnet_type() == SubnetType::Application)
         .expect("There should be at least one Application subnet")
-        .clone();
+        ;
 
     (nns_subnet, app_subnet)
 }

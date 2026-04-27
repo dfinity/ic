@@ -311,7 +311,7 @@ fn test_fetch_canister_logs_via_inter_canister_update_call_disabled() {
     let canister_a = create_and_install_canister(
         &env,
         CanisterSettingsArgsBuilder::new()
-            .with_log_visibility(log_visibility.clone())
+            .with_log_visibility(log_visibility)
             .with_controllers(vec![user_controller])
             .build(),
         UNIVERSAL_CANISTER_WASM.to_vec(),
@@ -431,7 +431,7 @@ fn test_fetch_canister_logs_via_composite_query_call_inter_canister_calls_disabl
     let canister_a = create_and_install_canister(
         &env,
         CanisterSettingsArgsBuilder::new()
-            .with_log_visibility(log_visibility.clone())
+            .with_log_visibility(log_visibility)
             .with_controllers(vec![user_controller])
             .build(),
         UNIVERSAL_CANISTER_WASM.to_vec(),
@@ -2187,7 +2187,7 @@ fn test_canister_uninstall_and_install_clears_log_memory() {
     let _ = env.install_wasm_in_mode(
         canister_id,
         CanisterInstallMode::Install,
-        wasm.clone(),
+        wasm,
         vec![],
     );
 

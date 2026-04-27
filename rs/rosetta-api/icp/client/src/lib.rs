@@ -182,9 +182,9 @@ impl RosettaClient {
                     Nat::try_from(suggested_fee)
                         .map_err(|e| anyhow::anyhow!("Failed to convert fee: {:?}", e))?
                         .0
-                        .clone(),
+                        ,
                 ),
-                currency.clone(),
+                currency,
             )),
             coin_change: None,
             metadata: None,

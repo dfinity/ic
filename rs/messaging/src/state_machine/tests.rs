@@ -103,7 +103,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
         .with(
             always(),
             eq(provided_batch.randomness),
-            eq(chain_key_data.clone()),
+            eq(chain_key_data),
             eq(provided_batch.replica_version.clone()),
             eq(round),
             eq(None),

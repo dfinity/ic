@@ -781,7 +781,7 @@ mod tests {
 
             let purger = Purger::new(
                 replica_config.clone(),
-                state_manager.clone(),
+                state_manager,
                 Arc::new(MockMessageRouting::new()),
                 registry,
                 no_op_logger(),
@@ -867,7 +867,7 @@ mod tests {
             let finalized_block_proposal_1 = pool.make_next_block_with_rank(Rank(0));
             let non_finalized_block_proposal_1 = pool.make_next_block_with_rank(Rank(1));
             pool.insert_validated(finalized_block_proposal_1.clone());
-            pool.insert_validated(non_finalized_block_proposal_1.clone());
+            pool.insert_validated(non_finalized_block_proposal_1);
             pool.notarize(&finalized_block_proposal_1);
             pool.finalize(&finalized_block_proposal_1);
             // Height 2 - three block proposals, two notarizations, one finalization

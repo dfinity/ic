@@ -267,7 +267,7 @@ fn test_swap_periodic_tasks_disabled_eventually() {
     let wasm = ic_test_utilities_load_wasm::load_wasm("../swap", "sns-swap-canister", &[]);
     let args = Encode!(&swap_init(state_machine.time())).unwrap();
     let canister_id = state_machine
-        .install_canister(wasm.clone(), args, None)
+        .install_canister(wasm, args, None)
         .unwrap();
 
     // Helpers.
@@ -339,7 +339,7 @@ fn test_swap_reset_timers() {
         let wasm = ic_test_utilities_load_wasm::load_wasm("../swap", "sns-swap-canister", &[]);
         let args = Encode!(&swap_init(state_machine.time())).unwrap();
         state_machine
-            .install_canister(wasm.clone(), args, None)
+            .install_canister(wasm, args, None)
             .unwrap()
     };
 
@@ -355,7 +355,7 @@ fn test_governance_reset_timers() {
         let wasm = build_governance_sns_wasm().wasm;
         let args = Encode!(&governance_init()).unwrap();
         state_machine
-            .install_canister(wasm.clone(), args, None)
+            .install_canister(wasm, args, None)
             .unwrap()
     };
 
@@ -370,7 +370,7 @@ fn test_root_reset_timers() {
         let wasm = build_root_sns_wasm().wasm;
         let args = Encode!(&root_init()).unwrap();
         state_machine
-            .install_canister(wasm.clone(), args, None)
+            .install_canister(wasm, args, None)
             .unwrap()
     };
 
@@ -391,7 +391,7 @@ fn test_swap_reset_timers_cannot_be_spammed() {
         let wasm = ic_test_utilities_load_wasm::load_wasm("../swap", "sns-swap-canister", &[]);
         let args = Encode!(&swap_init(state_machine.time())).unwrap();
         state_machine
-            .install_canister(wasm.clone(), args, None)
+            .install_canister(wasm, args, None)
             .unwrap()
     };
 
@@ -406,7 +406,7 @@ fn test_governance_reset_timers_cannot_be_spammed() {
         let wasm = build_governance_sns_wasm().wasm;
         let args = Encode!(&governance_init()).unwrap();
         state_machine
-            .install_canister(wasm.clone(), args, None)
+            .install_canister(wasm, args, None)
             .unwrap()
     };
 
@@ -421,7 +421,7 @@ fn test_root_reset_timers_cannot_be_spammed() {
         let wasm = build_root_sns_wasm().wasm;
         let args = Encode!(&root_init()).unwrap();
         state_machine
-            .install_canister(wasm.clone(), args, None)
+            .install_canister(wasm, args, None)
             .unwrap()
     };
 

@@ -230,7 +230,7 @@ impl WasmExecutor for WasmExecutorImpl {
             instance_or_system_api,
         ) = process(
             func_ref,
-            api_type.clone(),
+            api_type,
             canister_current_memory_usage,
             canister_current_message_memory_usage,
             execution_parameters,

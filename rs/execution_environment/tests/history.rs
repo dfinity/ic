@@ -158,7 +158,7 @@ fn test_terminal_states_are_transmitted() {
             );
             assert_eq!(
                 completed_execution_messages_rx.try_recv(),
-                Ok((message_id.clone(), expected_height)),
+                Ok((message_id, expected_height)),
                 "Terminal state, `Failed`, should trigger the height of state to be sent"
             );
         }

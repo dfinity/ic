@@ -20,6 +20,8 @@ After changing Rust code (`*.rs`) follow these steps in order:
        -D clippy::all \
        -D clippy::mem_forget \
        -D clippy::unseparated_literal_suffix \
+       -D clippy::redundant_clone \
+       -D clippy::needless_pass_by_value \
        -A clippy::uninlined_format_args
    ```
    where `<CRATES>` is a space separated list of

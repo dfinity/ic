@@ -740,7 +740,7 @@ mod tests {
             .metadata
             .subnet_call_context_manager
             .sign_with_threshold_contexts = contexts;
-        expected_state_snapshot.write().unwrap().state = Arc::new(state.clone());
+        expected_state_snapshot.write().unwrap().state = Arc::new(state);
 
         let transcripts =
             get_active_transcripts(&block_reader, state_manager.as_ref(), &metrics, &logger)
@@ -756,7 +756,7 @@ mod tests {
         const EXPECTED_CERTIFIED_HEIGHT: u64 = 10;
         const EXPECTED_FINALIZED_HEIGHT: u64 = 12;
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies { mut pool, .. } = dependencies(pool_config.clone(), 1);
+            let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
 
             let state_manager = Arc::new(RefMockStateManager::default());
             state_manager

@@ -485,7 +485,7 @@ pub(crate) mod test {
         // Install snapshot with zero subnets
         let (snapshot, _, _) = test_registry_snapshot(0, 0);
         registry_snapshot.store(Some(Arc::new(snapshot.clone())));
-        persister.persist(snapshot.subnets.clone());
+        persister.persist(snapshot.subnets);
 
         // Make sure it doesn't crash
         assert_eq!(
@@ -496,7 +496,7 @@ pub(crate) mod test {
         // Install snapshot with subnets which have zero nodes
         let (snapshot, _, _) = test_registry_snapshot(5, 0);
         registry_snapshot.store(Some(Arc::new(snapshot.clone())));
-        persister.persist(snapshot.subnets.clone());
+        persister.persist(snapshot.subnets);
 
         // Make sure it doesn't crash
         assert_eq!(

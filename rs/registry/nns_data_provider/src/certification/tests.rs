@@ -391,7 +391,7 @@ fn test_honest_chunked() {
 
     // Step 3: Verify result(s).
     let monolithic_blob = chunk_contents
-        .clone()
+        
         .into_iter()
         .flatten()
         .collect::<Vec<u8>>();

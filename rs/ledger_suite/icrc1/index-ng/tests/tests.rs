@@ -842,7 +842,7 @@ fn test_get_account_transactions_self_transfer() {
     // Account (1, 0) has one transfer and one mint.
     let actual_txs =
         get_account_transactions(env, index_id, account(1, 0), None, u64::MAX).transactions;
-    assert_txs_with_id_eq(actual_txs, vec![tx1.clone(), tx0.clone()]);
+    assert_txs_with_id_eq(actual_txs, vec![tx1, tx0]);
 }
 
 #[test]

@@ -412,7 +412,7 @@ mod tests {
 
         // 4. Reshare the current key transcript to get the next one
         let cur_height = Height::new(40);
-        payload.single_key_transcript_mut().current = Some(current_key_transcript.clone());
+        payload.single_key_transcript_mut().current = Some(current_key_transcript);
         payload.single_key_transcript_mut().next_in_creation = idkg::KeyTranscriptCreation::Begin;
         let result = update_next_key_transcripts(
             &subnet_nodes,

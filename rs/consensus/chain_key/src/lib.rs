@@ -869,7 +869,7 @@ mod tests {
             let crypto: Arc<dyn ConsensusCrypto> = crypto_override.unwrap_or(crypto);
 
             let payload_builder = ChainKeyPayloadBuilderImpl::new(
-                idkg_pool.clone(),
+                idkg_pool,
                 pool.get_cache(),
                 crypto,
                 state_manager,

@@ -38,7 +38,7 @@ fn should_display_metadata() {
         ..initial_dashboard()
     };
 
-    DashboardAssert::assert_that(dashboard.clone())
+    DashboardAssert::assert_that(dashboard)
         .has_ethereum_network("Ethereum Testnet Sepolia")
         .has_minter_address("0x1789F79e95324A47c5Fd6693071188e82E9a3558")
         .has_cketh_ledger_canister_id("apia6-jaaaa-aaaar-qabma-cai")
@@ -162,8 +162,8 @@ fn should_display_supported_erc20_tokens() {
     let dashboard = {
         let mut state = initial_state();
         state.ethereum_network = EthereumNetwork::Mainnet;
-        state.record_add_ckerc20_token(usdc.clone());
-        state.record_add_ckerc20_token(usdt.clone());
+        state.record_add_ckerc20_token(usdc);
+        state.record_add_ckerc20_token(usdt);
         DashboardTemplate::from_state(&state, DashboardPaginationParameters::default())
     };
 

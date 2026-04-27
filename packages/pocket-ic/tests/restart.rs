@@ -31,6 +31,6 @@ fn create_instance_twice() {
     let status_endpoint = url.join("api/v2/status").unwrap();
 
     // Check that the server is running.
-    let response = client.get(status_endpoint.clone()).send().unwrap();
+    let response = client.get(status_endpoint).send().unwrap();
     assert_eq!(response.status(), 200);
 }

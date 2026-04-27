@@ -208,7 +208,7 @@ fn update_ecdsa_quadruple_in_creation(
         } else {
             quadruple.kappa_times_lambda_config = Some(idkg::UnmaskedTimesMaskedParams::new(
                 uid_generator.next_transcript_id(),
-                receivers.clone(),
+                receivers,
                 registry_version,
                 (kappa_config, *kappa_unmasked),
                 (lambda_config, *lambda_masked),
@@ -641,7 +641,7 @@ pub(super) mod tests {
                 mut pool,
                 replica_config,
                 ..
-            } = dependencies(pool_config.clone(), 4);
+            } = dependencies(pool_config, 4);
 
             // Advance 4 rounds without IDkg
             let mut height = pool.advance_round_normal_operation_n(4);
@@ -1039,7 +1039,7 @@ pub(super) mod tests {
             &mut reproducible_rng(),
             subnet_test_id(1),
             /*nodes_count=*/ 4,
-            key_ids.clone(),
+            key_ids,
             /*should_create_key_transcript=*/ true,
         );
 
@@ -1064,7 +1064,7 @@ pub(super) mod tests {
             &mut reproducible_rng(),
             subnet_test_id(1),
             /*nodes_count=*/ 4,
-            key_ids.clone(),
+            key_ids,
             /*should_create_key_transcript=*/ true,
         );
 
@@ -1097,7 +1097,7 @@ pub(super) mod tests {
 
         let payload_capacity = 20;
         make_new_pre_signatures_by_priority(
-            &make_config(Some(payload_capacity), stash_capacity.clone()),
+            &make_config(Some(payload_capacity), stash_capacity),
             &mut payload,
             BTreeMap::new(), // There are no pre-signatures in the stash
         );

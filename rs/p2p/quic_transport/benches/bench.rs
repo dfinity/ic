@@ -167,7 +167,7 @@ fn bench_transport(criterion: &mut Criterion) {
         &mut group,
         &rt,
         test_transport.clone(),
-        peers.clone(),
+        peers,
         false,
     );
     group.finish();

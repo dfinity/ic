@@ -127,7 +127,7 @@ fn test_sns_w_saves_metadata_on_upgrade() {
     let sns_wasm_canister_id = machine
         .install_canister(
             mainnet_wasm.bytes(),
-            Encode!(&nns_init_payload.sns_wasms.clone()).unwrap(),
+            Encode!(&nns_init_payload.sns_wasms).unwrap(),
             None,
         )
         .unwrap();

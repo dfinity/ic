@@ -160,7 +160,7 @@ fn consensus_queue_is_emptied() {
     let master_ecdsa_key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
     let mut test = SchedulerTestBuilder::new()
         .with_replica_version(ReplicaVersion::default())
-        .with_chain_keys(vec![master_ecdsa_key_id.clone()])
+        .with_chain_keys(vec![master_ecdsa_key_id])
         .build();
 
     let canister_id = test.create_canister();
@@ -401,7 +401,7 @@ fn can_timeout_stop_canister_requests() {
     test.set_time(batch_time + Duration::from_secs(60));
     test.inject_call_to_ic00(
         Method::StopCanister,
-        arg.clone(),
+        arg,
         Cycles::zero(),
         test.xnet_canister_id(),
         InputQueueType::RemoteSubnet,

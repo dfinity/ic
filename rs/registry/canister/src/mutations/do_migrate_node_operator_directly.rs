@@ -516,7 +516,7 @@ mod tests {
                 NodeOperatorRecord {
                     node_operator_principal_id: new_node_operator_id.to_vec(),
                     node_provider_principal_id: new_node_provider_id.to_vec(),
-                    dc_id: dc_id.clone(),
+                    dc_id: dc_id,
                     ..Default::default()
                 }
                 .encode_to_vec(),
@@ -532,7 +532,7 @@ mod tests {
 
         let original_registry = registry.clone();
         let result = registry.migrate_node_operator_inner(
-            payload.clone(),
+            payload,
             old_node_provider_id,
             now_plus_13_hours(),
         );
@@ -588,7 +588,7 @@ mod tests {
 
         let original_registry = registry.clone();
         let result = registry.migrate_node_operator_inner(
-            payload.clone(),
+            payload,
             old_node_provider_id,
             now_plus_13_hours(),
         );
@@ -683,7 +683,7 @@ mod tests {
                 NodeOperatorRecord {
                     node_operator_principal_id: new_node_operator_id.to_vec(),
                     node_provider_principal_id: node_provider_id.to_vec(),
-                    dc_id: dc.clone(),
+                    dc_id: dc,
                     ..Default::default()
                 }
                 .encode_to_vec(),
@@ -843,7 +843,7 @@ mod tests {
             node_allowance,
             dc,
             rewardable_nodes.clone(),
-            rewardable_nodes.clone(),
+            rewardable_nodes,
         );
 
         // Add 3 nodes owned by the node operator under test
@@ -1074,8 +1074,8 @@ mod tests {
         );
         compare_rewardable_nodes(
             new_node_operator_record.max_rewardable_nodes,
-            rewardable_nodes.clone(),
-            new_rewardable_nodes.clone(),
+            rewardable_nodes,
+            new_rewardable_nodes,
         );
 
         // Ensure that the old operator isn't there

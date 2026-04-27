@@ -1850,7 +1850,7 @@ impl SyncMessageRouting {
             target_stream_size_bytes,
             metrics,
             metrics_registry,
-            log.clone(),
+            log,
             registry,
             malicious_flags,
         );

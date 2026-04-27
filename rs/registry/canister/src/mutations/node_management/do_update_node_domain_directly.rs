@@ -187,7 +187,7 @@ mod tests {
             .do_update_node_domain(
                 UpdateNodeDomainDirectlyPayload {
                     node_id,
-                    domain: new_domain.clone(),
+                    domain: new_domain,
                 },
                 node_operator_id,
                 now_system_time(),
@@ -236,7 +236,7 @@ mod tests {
             .do_update_node_domain(
                 UpdateNodeDomainDirectlyPayload {
                     node_id,
-                    domain: new_domain.clone(),
+                    domain: new_domain,
                 },
                 node_operator_id,
                 now_system_time(),

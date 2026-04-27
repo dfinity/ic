@@ -805,7 +805,7 @@ fn system_subnet_stream_throttling(
                     REMOTE_SUBNET,
                     certified_slice,
                     REGISTRY_VERSION,
-                    log.clone(),
+                    log,
                 )
                 .unwrap();
         }
@@ -1156,7 +1156,7 @@ fn refill_pool_append(
             xnet_client,
             runtime.handle().clone(),
             Arc::new(XNetPayloadBuilderMetrics::new(&metrics_registry)),
-            log.clone(),
+            log,
         );
         refill_handle.trigger_refill(registry.get_latest_version());
 
@@ -1383,7 +1383,7 @@ fn refill_pool_append_invalid_slice(
             xnet_client,
             runtime.handle().clone(),
             Arc::new(XNetPayloadBuilderMetrics::new(&metrics_registry)),
-            log.clone(),
+            log,
         );
         refill_handle.trigger_refill(registry.get_latest_version());
 

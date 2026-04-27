@@ -130,8 +130,8 @@ fn test(env: TestEnv, config: Config) {
         config.canister_size_gib,
         config.num_canisters,
         DKG_INTERVAL,
-        rejoin_node.clone(),
-        agent_node.clone(),
+        rejoin_node,
+        agent_node,
         nodes.take(allowed_failures),
     )
 }

@@ -1467,8 +1467,8 @@ impl IncompleteState {
                         self.state_sync.deliver_state_sync(
                             self.height,
                             self.root_hash.clone(),
-                            manifest.clone(),
-                            Arc::new(meta_manifest.clone()),
+                            manifest,
+                            Arc::new(meta_manifest),
                         );
                         self.metrics
                             .state_sync_metrics

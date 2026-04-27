@@ -47,7 +47,7 @@ lazy_static! {
             1044 => api::Neuron {
                 id: Some(NeuronId { id: 1044 }),
                 account: vec![44; 32],
-                ..base.clone()
+                ..base
             },
         };
 

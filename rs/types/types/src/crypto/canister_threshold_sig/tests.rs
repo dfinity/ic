@@ -459,7 +459,7 @@ fn should_create_schnorr_presignature_correctly() {
     let rng = &mut reproducible_rng();
     let receivers = set_of_nodes(&[1, 2, 3]);
     let transcript_type = IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random);
-    let presignature_transcript = schnorr_transcript(receivers.clone(), transcript_type, rng);
+    let presignature_transcript = schnorr_transcript(receivers, transcript_type, rng);
     let result = SchnorrPreSignatureTranscript::new(presignature_transcript.clone());
     assert_matches!(result, Ok(presignature) if presignature.blinder_unmasked() == &presignature_transcript);
 }
@@ -469,10 +469,10 @@ fn should_not_create_schnorr_presignature_with_invalid_algorithm_id() {
     let rng = &mut reproducible_rng();
     let receivers = set_of_nodes(&[1, 2, 3]);
     let transcript_type = IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random);
-    let mut presignature_transcript = schnorr_transcript(receivers.clone(), transcript_type, rng);
+    let mut presignature_transcript = schnorr_transcript(receivers, transcript_type, rng);
     let unsupported_algorithm = AlgorithmId::Tls;
     presignature_transcript.algorithm_id = unsupported_algorithm;
-    let result = SchnorrPreSignatureTranscript::new(presignature_transcript.clone());
+    let result = SchnorrPreSignatureTranscript::new(presignature_transcript);
     assert_matches!(
         result,
         Err( error::ThresholdSchnorrPresignatureTranscriptCreationError::UnsupportedAlgorithm(internal_error))
@@ -485,7 +485,7 @@ fn should_not_create_schnorr_presignature_with_invalid_origin() {
     let rng = &mut reproducible_rng();
     let receivers = set_of_nodes(&[1, 2, 3]);
     let transcript_type = IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random);
-    let mut presignature_transcript = schnorr_transcript(receivers.clone(), transcript_type, rng);
+    let mut presignature_transcript = schnorr_transcript(receivers, transcript_type, rng);
     let random_transcript_id = random_transcript_id(rng);
     let invalid_transcript_types = [
         IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
@@ -612,12 +612,12 @@ fn should_fail_creating_schnorr_sig_inputs_with_inconsistent_receivers() {
     let presignature_transcript_type =
         IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random);
     let presignature_transcript_raw =
-        schnorr_transcript(receivers_presig.clone(), presignature_transcript_type, rng);
+        schnorr_transcript(receivers_presig, presignature_transcript_type, rng);
 
     let key_type = IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
         random_transcript_id(rng),
     ));
-    let key_transcript = schnorr_transcript(receivers_key.clone(), key_type, rng);
+    let key_transcript = schnorr_transcript(receivers_key, key_type, rng);
 
     let presignature_transcript = SchnorrPreSignatureTranscript::new(presignature_transcript_raw)
         .expect("failed to created presignature transcript");
@@ -933,7 +933,7 @@ fn valid_tschnorr_inputs_with_receivers(
     let key_type = IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
         random_transcript_id(rng),
     ));
-    let key_transcript = schnorr_transcript(receivers.clone(), key_type, rng);
+    let key_transcript = schnorr_transcript(receivers, key_type, rng);
 
     let presig_transcript = SchnorrPreSignatureTranscript::new(blinder_unmasked_transcript)
         .expect("failed to create presignature transcript");

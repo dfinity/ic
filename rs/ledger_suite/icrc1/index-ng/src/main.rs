@@ -1509,7 +1509,7 @@ fn check_index_and_ledger_block_equality() {
     let index_block_type = index_env.find_type("Block").unwrap().to_owned();
 
     let mut gamma = std::collections::HashSet::new();
-    let index_block_type = ledger_env.merge_type(index_env, index_block_type.clone());
+    let index_block_type = ledger_env.merge_type(index_env, index_block_type);
     candid::types::subtype::equal(
         &mut gamma,
         &ledger_env,

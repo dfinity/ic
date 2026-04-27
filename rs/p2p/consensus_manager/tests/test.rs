@@ -48,10 +48,10 @@ fn test_artifact_sent_to_other_peer() {
         );
         add_transport_to_sim(
             &mut sim,
-            log.clone(),
+            log,
             NODE_2,
             registry_handle.clone(),
-            topology_watcher.clone(),
+            topology_watcher,
             None,
             None,
             None,
@@ -134,10 +134,10 @@ fn test_artifact_in_validated_pool_is_sent_to_peer_joining_subnet() {
         let processor_3 = TestConsensus::new(log.clone(), NODE_3, 4096, false);
         add_transport_to_sim(
             &mut sim,
-            log.clone(),
+            log,
             NODE_3,
             registry_handle.clone(),
-            topology_watcher.clone(),
+            topology_watcher,
             None,
             None,
             None,
@@ -188,10 +188,10 @@ fn test_flapping_connection_does_not_cause_duplicate_artifact_assemble() {
         );
         add_transport_to_sim(
             &mut sim,
-            log.clone(),
+            log,
             NODE_2,
             registry_handle.clone(),
-            topology_watcher.clone(),
+            topology_watcher,
             None,
             None,
             None,
@@ -544,10 +544,10 @@ fn test_adverts_are_retransmitted_on_reconnection() {
         );
         add_transport_to_sim(
             &mut sim,
-            log.clone(),
+            log,
             NODE_3,
             registry_handle.clone(),
-            topology_watcher.clone(),
+            topology_watcher,
             None,
             None,
             None,
@@ -640,10 +640,10 @@ fn test_new_adverts_are_transmitted_on_reconnection() {
         );
         add_transport_to_sim(
             &mut sim,
-            log.clone(),
+            log,
             NODE_3,
             registry_handle.clone(),
-            topology_watcher.clone(),
+            topology_watcher,
             None,
             None,
             None,
@@ -720,10 +720,10 @@ fn test_large_msgs() {
         );
         add_transport_to_sim(
             &mut sim,
-            log.clone(),
+            log,
             NODE_2,
             registry_handle.clone(),
-            topology_watcher.clone(),
+            topology_watcher,
             None,
             None,
             None,

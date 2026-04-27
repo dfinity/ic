@@ -76,14 +76,14 @@ where
 {
     let bytes = ProtoBuf::new(arg)
         .into_bytes()
-        .map_err(|e| (RejectionCode::Unknown, e.to_string()))?;
+        .map_err(|e| (RejectionCode::Unknown, e))?;
 
     let res: CallResult<Vec<u8>> =
         ic_cdk::api::call::call_raw(canister_id.get().0, method_name, bytes.as_slice(), 0).await;
 
     res.and_then(|bytes| {
         Ok(ProtoBuf::<Res>::from_bytes(bytes)
-            .map_err(|e| (RejectionCode::Unknown, e.to_string()))?
+            .map_err(|e| (RejectionCode::Unknown, e))?
             .into_inner())
     })
 }

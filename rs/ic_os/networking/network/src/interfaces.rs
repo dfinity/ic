@@ -31,7 +31,7 @@ pub fn has_ipv6_connectivity(
     eprintln!(
         "Bringing {} up with ip address {}",
         &interface.name,
-        &ip.to_string()
+        &ip
     );
 
     get_command_stdout("ip", &["addr", "add", &ip, "dev", &interface.name])?;

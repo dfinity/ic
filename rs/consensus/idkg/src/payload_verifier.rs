@@ -804,7 +804,7 @@ mod test {
         block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript);
         initiate_reshare_requests(
             &mut payload,
-            reshare_requests.clone(),
+            reshare_requests,
             None,
             &no_op_logger(),
         );

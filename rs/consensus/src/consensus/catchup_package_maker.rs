@@ -432,7 +432,7 @@ mod tests {
                 .expect_get_state_at()
                 .return_const(Ok(fake_state_with_signature_requests(
                     height,
-                    contexts.clone(),
+                    contexts,
                 )
                 .get_labeled_state()));
 

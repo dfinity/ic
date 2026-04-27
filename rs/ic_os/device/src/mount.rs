@@ -360,7 +360,7 @@ pub mod testing {
                 mounts.insert(
                     key.clone(),
                     self.extract_partition_to_tempdir(
-                        device.clone(),
+                        device,
                         offset_bytes,
                         len_bytes,
                         options,

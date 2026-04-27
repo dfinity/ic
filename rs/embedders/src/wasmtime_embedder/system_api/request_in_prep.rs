@@ -260,7 +260,7 @@ pub(crate) fn into_request(
                 return Err(HypervisorError::UserContractViolation {
                     error: format!(
                         "Request to {destination_canister}:{method_name} has a timeout of {timeout_seconds} seconds, which exceeds the allowed timeout duration."
-                    ).to_string(),
+                    ),
                     suggestion: "".to_string(),
                     doc_link: "".to_string(),
                 });

@@ -105,7 +105,7 @@ fn test_panic_on_hyper_large_mutation() {
         mutations: vec![RegistryMutation {
             key: b"absurd".to_vec(),
             mutation_type: registry_mutation::Type::Insert as i32,
-            value: monolithic_blob.clone(),
+            value: monolithic_blob,
         }],
         preconditions: vec![PRECONDITION.clone()],
     };

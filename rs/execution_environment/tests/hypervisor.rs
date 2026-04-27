@@ -1446,7 +1446,7 @@ fn ic0_canister_version() {
                 another_canister_id,
                 "update",
                 call_args()
-                    .other_side(reply.clone()) // triggers reply callback
+                    .other_side(reply) // triggers reply callback
                     .on_reply(trap.clone()) // triggers cleanup callback
                     .on_cleanup(trap.clone()), // trap in cleanup callback
             )
@@ -1592,7 +1592,7 @@ fn ic0_canister_version() {
     test.reinstall_canister_with_args(
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
-        store_in_global_data.clone(),
+        store_in_global_data,
     )
     .unwrap();
     expected_ctr += 1;
@@ -1665,7 +1665,7 @@ fn ic0_canister_version() {
         "update",
         wasm()
             .set_heartbeat(trap.clone())
-            .set_global_timer_method(trap.clone())
+            .set_global_timer_method(trap)
             .reply()
             .build(),
     )
@@ -1973,7 +1973,7 @@ fn test_canister_contract_violation(payload: Vec<u8>) {
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
     let err = test
-        .non_replicated_query(canister_id, "query", payload.clone())
+        .non_replicated_query(canister_id, "query", payload)
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
 }
@@ -7007,7 +7007,7 @@ fn test_callback_limits_impl(
         .inter_update(
             a_id,
             call_args()
-                .other_side(a0.clone())
+                .other_side(a0)
                 .on_reject(wasm().reject_message().reject()),
         )
         .build();
@@ -9511,7 +9511,7 @@ fn cost_sign_with_ecdsa_fails_bad_key_name() {
     let mut test = ExecutionTestBuilder::new()
         .with_chain_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
             curve: EcdsaCurve::try_from(curve_variant).unwrap(),
-            name: key_name.clone(),
+            name: key_name,
         }))
         .build();
     let canister_id = test.universal_canister().unwrap();
@@ -9591,7 +9591,7 @@ fn cost_sign_with_schnorr_fails_bad_key_name() {
     let mut test = ExecutionTestBuilder::new()
         .with_chain_key(MasterPublicKeyId::Schnorr(SchnorrKeyId {
             algorithm: SchnorrAlgorithm::try_from(algorithm_variant).unwrap(),
-            name: key_name.clone(),
+            name: key_name,
         }))
         .build();
     let canister_id = test.universal_canister().unwrap();
@@ -9671,7 +9671,7 @@ fn cost_vetkd_derive_key_fails_bad_key_name() {
     let mut test = ExecutionTestBuilder::new()
         .with_chain_key(MasterPublicKeyId::VetKd(VetKdKeyId {
             curve: VetKdCurve::try_from(curve_variant).unwrap(),
-            name: key_name.clone(),
+            name: key_name,
         }))
         .build();
     let canister_id = test.universal_canister().unwrap();
@@ -10494,7 +10494,7 @@ fn ic0_time_constant_within_single_message() {
         .build();
     assert_res(test.ingress(canister_id, "update", time.clone()));
     assert_res(test.ingress(canister_id, "query", time.clone()));
-    assert_res(test.non_replicated_query(canister_id, "query", time.clone()));
+    assert_res(test.non_replicated_query(canister_id, "query", time));
 }
 
 #[test]
@@ -10596,7 +10596,7 @@ fn call_from_query_method_traps() {
         wasm()
             .inter_update(
                 canister_id,
-                CallArgs::default().other_side(call_args.clone()),
+                CallArgs::default().other_side(call_args),
             )
             .build(),
     );
@@ -10637,7 +10637,7 @@ fn invalid_inter_canister_callee() {
     let res = env.execute_ingress(
         canister_id,
         "update",
-        wasm().inter_update(canister_id, call_args.clone()).build(),
+        wasm().inter_update(canister_id, call_args).build(),
     );
     assert_eq!(get_reply(res), b"replying on other side");
 }
@@ -10916,7 +10916,7 @@ fn inter_canister_call_cleanup() {
     // Inter-canister call cleanup is not executed if reply callback succeeds.
     let res = run(
         &mut test,
-        reply_on_other_side.clone(),
+        reply_on_other_side,
         Some(forward_reply),
         None,
     );
@@ -10938,7 +10938,7 @@ fn inter_canister_call_cleanup() {
     // Inter-canister call cleanup is not executed if reject callback succeeds.
     let res = run(
         &mut test,
-        trap_on_other_side.clone(),
+        trap_on_other_side,
         None,
         Some(forward_reject),
     );
@@ -10985,11 +10985,11 @@ fn parallel_callbacks() {
     assert_eq!(get_reply(res), b"second reply");
 
     // Trapping only in the second callback results in the first reply being returned to the caller.
-    let res = run(&mut test, forward_reply.clone(), trap_in_second.clone());
+    let res = run(&mut test, forward_reply, trap_in_second.clone());
     assert_eq!(get_reply(res), b"first reply");
 
     // Trapping in both callbacks results in the second trap message being returned to the caller.
-    let err = run(&mut test, trap_in_first.clone(), trap_in_second.clone()).unwrap_err();
+    let err = run(&mut test, trap_in_first, trap_in_second).unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
     assert!(err.description().contains("trap in second callback"));
 }

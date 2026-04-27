@@ -378,7 +378,7 @@ mod tests {
         pool.insert(to_unvalidated(share1.clone()));
 
         let result = pool.apply(vec![
-            CanisterHttpChangeAction::MoveToValidated(share2.clone()),
+            CanisterHttpChangeAction::MoveToValidated(share2),
             CanisterHttpChangeAction::MoveToValidated(share1.clone()),
         ]);
 

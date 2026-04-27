@@ -318,7 +318,7 @@ fn storage_as_buffer(storage: &Storage) -> Vec<u8> {
     );
     apply_memory_instructions(storage.get_base_memory_instructions(), &mut result);
     apply_memory_instructions(
-        storage.get_memory_instructions(full_range.clone(), &mut filter),
+        storage.get_memory_instructions(full_range, &mut filter),
         &mut result,
     );
     result

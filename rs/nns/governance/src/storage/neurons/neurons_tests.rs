@@ -693,7 +693,7 @@ fn test_register_recent_neuron_ballot_migration_full() {
         .unwrap();
 
     let mut expected_updated_ballots = {
-        let mut recent_ballots = recent_ballots.clone();
+        let mut recent_ballots = recent_ballots;
         recent_ballots.reverse();
         recent_ballots[0] = BallotInfo {
             proposal_id: Some(ProposalId { id: 100 }),
@@ -756,7 +756,7 @@ fn test_register_recent_neuron_ballot_migration_notfull() {
         .unwrap();
 
     let mut expected_updated_ballots = {
-        let mut recent_ballots = recent_ballots.clone();
+        let mut recent_ballots = recent_ballots;
         recent_ballots.reverse();
         recent_ballots.push(BallotInfo {
             proposal_id: Some(ProposalId { id: 100 }),

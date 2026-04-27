@@ -164,7 +164,7 @@ fn test_store_and_read_blocks() -> anyhow::Result<()> {
             block1.clone(),
             block2.clone(),
             block3.clone(),
-            block4.clone(),
+            block4,
         ],
     )?;
 
@@ -411,7 +411,7 @@ fn test_fee_collector_resolution_and_repair() -> anyhow::Result<()> {
     store_blocks(
         &mut connection,
         vec![
-            mint_block.clone(),
+            mint_block,
             block1.clone(),
             block2.clone(),
             block3.clone(),

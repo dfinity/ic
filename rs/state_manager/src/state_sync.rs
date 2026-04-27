@@ -303,7 +303,7 @@ impl StateSync {
                     };
                     Some(StateSyncArtifactId {
                         height: msg.height,
-                        hash: msg.root_hash.clone().get(),
+                        hash: msg.root_hash.get(),
                     })
                 } else {
                     None

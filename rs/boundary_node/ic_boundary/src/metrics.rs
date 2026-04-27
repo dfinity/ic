@@ -569,7 +569,7 @@ pub async fn metrics_middleware(
             .clone()
             .unwrap_or_else(|| SUBNET_ID_UNKNOWN.to_string());
         let cache_status_lbl = &cache_status.to_string();
-        let cache_bypass_reason_lbl = cache_bypass_reason.clone().unwrap_or("none".to_string());
+        let cache_bypass_reason_lbl = cache_bypass_reason.unwrap_or("none".to_string());
         let retry_lbl =
             // Check if retry happened and if it succeeded
             if let Some(v) = &retry_result {

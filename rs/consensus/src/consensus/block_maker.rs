@@ -774,7 +774,7 @@ mod tests {
             let block_maker = BlockMaker::new(
                 Arc::clone(&time_source) as Arc<_>,
                 replica_config,
-                registry.clone(),
+                registry,
                 membership,
                 Arc::clone(&crypto) as Arc<_>,
                 Arc::new(payload_builder),
@@ -909,12 +909,12 @@ mod tests {
                 Arc::clone(&time_source) as Arc<_>,
                 replica_config,
                 Arc::clone(&registry) as Arc<dyn RegistryClient>,
-                membership.clone(),
-                crypto.clone(),
+                membership,
+                crypto,
                 Arc::new(payload_builder),
-                dkg_pool.clone(),
-                idkg_pool.clone(),
-                state_manager.clone(),
+                dkg_pool,
+                idkg_pool,
+                state_manager,
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
                 no_op_logger(),
@@ -986,7 +986,7 @@ mod tests {
                 idkg_pool,
                 ..
             } = dependencies_with_subnet_params(
-                pool_config.clone(),
+                pool_config,
                 subnet_test_id(0),
                 vec![
                     (

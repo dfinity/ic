@@ -28,7 +28,7 @@ pub fn init_query_stats(
     let (tx, rx) = crossbeam_channel::bounded(1);
     (
         QueryStatsCollector {
-            log: log.clone(),
+            log,
             current_query_stats: Mutex::new(BTreeMap::new()),
             current_epoch: RwLock::new(None),
             sender: tx,

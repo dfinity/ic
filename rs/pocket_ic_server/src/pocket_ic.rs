@@ -718,7 +718,7 @@ impl PocketIcSubnets {
             .with_subnet_type(subnet_type)
             .with_cost_schedule(cost_schedule)
             .with_state_machine_state_dir(state_machine_state_dir)
-            .with_registry_data_provider(registry_data_provider.clone())
+            .with_registry_data_provider(registry_data_provider)
             .with_log_level(log_level)
             .with_bitcoin_testnet_uds_path(bitcoin_adapter_uds_path)
             .with_dogecoin_testnet_uds_path(dogecoin_adapter_uds_path)
@@ -1380,7 +1380,7 @@ impl PocketIcSubnets {
                 });
             // returns ()
             self.execute_ingress_on(
-                nns_subnet.clone(),
+                nns_subnet,
                 GOVERNANCE_CANISTER_ID.get(),
                 CYCLES_MINTING_CANISTER_ID,
                 "change_subnet_type_assignment".to_string(),
@@ -2358,7 +2358,7 @@ impl PocketIcSubnets {
               ("PLAUSIBLE_DOMAIN".to_string(), format!("{NNS_UI_CANISTER_ID}.localhost")),
               ("ROBOTS".to_string(), "".to_string()),
               ("SNS_AGGREGATOR_URL".to_string(), format!("http://{SNS_AGGREGATOR_CANISTER_ID}.localhost:{gateway_port}")),
-              ("STATIC_HOST".to_string(), localhost_url.clone()),
+              ("STATIC_HOST".to_string(), localhost_url),
               ("TVL_CANISTER_ID".to_string(), NNS_UI_CANISTER_ID.to_string()),
               ("WASM_CANISTER_ID".to_string(), SNS_WASM_CANISTER_ID.to_string()),
             ];
@@ -5687,7 +5687,7 @@ mod tests {
             )
             .unwrap();
             let mut pic1 = PocketIc::try_new(
-                runtime.clone(),
+                runtime,
                 RoutingTable::new(),
                 1,
                 ExtendedSubnetConfigSet {

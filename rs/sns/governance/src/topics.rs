@@ -231,7 +231,7 @@ impl Governance {
                         .get(&topic.topic)
                         .cloned()
                         .unwrap_or_default()
-                        .clone(),
+                        ,
                 },
                 extension_operations: all_registered_operations
                     .get(&topic.topic)

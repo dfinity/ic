@@ -791,7 +791,7 @@ fn create_setupos_config_image(
         DeploymentSettings {
             deployment: deployment_json::Deployment {
                 deployment_environment: DeploymentEnvironment::Testnet,
-                mgmt_mac: Some(mac.to_string()),
+                mgmt_mac: Some(mac),
             },
             nns: deployment_json::Nns {
                 urls: vec![nns_url.clone()],

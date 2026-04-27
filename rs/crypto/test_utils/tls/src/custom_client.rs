@@ -184,7 +184,7 @@ impl CustomClient {
 
         if let Some(expected_error) = &self.expected_error {
             let error = result.expect_err("expected error");
-            if !error.to_string().contains(expected_error) {
+            if !error.contains(expected_error) {
                 panic!(
                     "expected the client error to contain \"{expected_error}\" but got error: {error:?}"
                 )

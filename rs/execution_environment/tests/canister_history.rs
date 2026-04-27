@@ -1397,7 +1397,7 @@ fn canister_history_no_change_during_update_settings() {
             settings: CanisterSettingsArgsBuilder::new()
                 .with_environment_variables(
                     env_vars
-                        .clone()
+                        
                         .into_iter()
                         .map(|(k, v)| EnvironmentVariable { name: k, value: v })
                         .collect::<Vec<_>>(),
@@ -1652,7 +1652,7 @@ fn subnet_available_memory() {
     test.reinstall_canister_with_args(
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
-        grow_payload.clone(),
+        grow_payload,
     )
     .unwrap();
     check_subnet_available_memory(&test, true, "after reinstalling code");

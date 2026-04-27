@@ -115,7 +115,7 @@ async fn derive_synchronization_gaps(
                 a.index + 1,
                 b.index - 1,
                 b.get_parent_hash().unwrap(),
-                Some(a.clone().get_block_hash()),
+                Some(a.get_block_hash()),
             )
         })
         .collect::<Vec<SyncRange>>();
@@ -293,7 +293,7 @@ pub async fn sync_from_the_tip(
                     block.index + 1,
                     tip_block_index,
                     ByteBuf::from(tip_block_hash),
-                    Some(block.clone().get_block_hash()),
+                    Some(block.get_block_hash()),
                 )
             },
         );
@@ -699,14 +699,14 @@ pub mod blocks_verifier {
 
         // Check that the leading block has the block hash that is provided.
         // Safe to call unwrap as the blockchain is guaranteed to have at least one element.
-        if blockchain.last().unwrap().clone().get_block_hash().clone() != leading_block_hash {
+        if blockchain.last().unwrap().clone().get_block_hash() != leading_block_hash {
             return Err(format!(
                 "Invalid block at index {}",
                 blockchain.last().unwrap().clone().index
             ));
         }
 
-        let mut parent_hash = Some(blockchain[0].clone().get_block_hash().clone());
+        let mut parent_hash = Some(blockchain[0].clone().get_block_hash());
         // The blockchain has more than one element so it is safe to skip the first one.
         // The first element cannot be verified so we start at element 2.
         for block in blockchain.iter().skip(1) {
@@ -766,14 +766,14 @@ mod tests {
                     rosetta_blocks.push(RosettaBlock::from_generic_block(encoded_block_to_generic_block(&block.encode()),index as u64).unwrap());
                 }
                 // Blockchain is valid and should thus pass the verification.
-                assert!(blocks_verifier::is_valid_blockchain(&rosetta_blocks,&rosetta_blocks.last().map(|block|block.clone().get_block_hash().clone()).unwrap_or_else(|| ByteBuf::from(r#"TestBytes"#))).is_ok());
+                assert!(blocks_verifier::is_valid_blockchain(&rosetta_blocks,&rosetta_blocks.last().map(|block|block.clone().get_block_hash()).unwrap_or_else(|| ByteBuf::from(r#"TestBytes"#))).is_ok());
 
                 // There is no point in shuffling the blockchain if it has length zero.
                 if num_blocks > 0 {
                     // If shuffled, the blockchain is no longer in order and thus no longer valid.
                     rosetta_blocks.shuffle(&mut rand::thread_rng());
                     let shuffled_blocks = rosetta_blocks.to_vec();
-                    assert!(blocks_verifier::is_valid_blockchain(&shuffled_blocks,&rosetta_blocks.last().unwrap().clone().get_block_hash().clone()).is_err()|| num_blocks<=1||rosetta_blocks==shuffled_blocks);
+                    assert!(blocks_verifier::is_valid_blockchain(&shuffled_blocks,&rosetta_blocks.last().unwrap().clone().get_block_hash()).is_err()|| num_blocks<=1||rosetta_blocks==shuffled_blocks);
                 }
 
             }

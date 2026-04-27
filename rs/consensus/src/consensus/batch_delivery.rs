@@ -624,7 +624,7 @@ mod tests {
 
         // Build some transcipts with matching ids and tags
         let transcripts_for_remote_subnets = [(
-            ni_dkg_id(NiDkgTag::HighThresholdForKey(key_id.clone())),
+            ni_dkg_id(NiDkgTag::HighThresholdForKey(key_id)),
             CallbackId::from(2),
             Ok(dummy_transcript_for_tests()),
         )];
@@ -657,7 +657,7 @@ mod tests {
             transcripts_for_remote_subnets: vec![
                 // ReshareChainKey (NiDkg) → one response
                 (
-                    ni_dkg_id(NiDkgTag::HighThresholdForKey(key_id.clone())),
+                    ni_dkg_id(NiDkgTag::HighThresholdForKey(key_id)),
                     CallbackId::from(42),
                     Ok(dummy_transcript.clone()),
                 ),

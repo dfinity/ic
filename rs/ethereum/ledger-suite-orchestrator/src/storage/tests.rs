@@ -59,7 +59,7 @@ proptest! {
         let mut wasm_store = empty_wasm_store();
         let ledger_wasm = LedgerWasm::from(binary.clone());
         let index_wasm = IndexWasm::from(binary.clone());
-        let _archive_wasm = ArchiveWasm::from(binary.clone());
+        let _archive_wasm = ArchiveWasm::from(binary);
         let wasm_hash = ledger_wasm.hash().clone();
 
         prop_assert_eq!(wasm_store_try_insert(&mut wasm_store,timestamp, git_commit.clone(), ledger_wasm), Ok(()));
@@ -73,7 +73,7 @@ proptest! {
     #[test]
     fn should_panic_when_mixing_wasms_on_retrieve(timestamp in any::<u64>(), git_commit in arb_git_commit_hash(), binary in arb_binary()) {
         let mut wasm_store = empty_wasm_store();
-        let ledger_wasm = LedgerWasm::from(binary.clone());
+        let ledger_wasm = LedgerWasm::from(binary);
         let wasm_hash = ledger_wasm.hash().clone();
         prop_assert_eq!(wasm_store_try_insert(&mut wasm_store,timestamp, git_commit, ledger_wasm), Ok(()));
 

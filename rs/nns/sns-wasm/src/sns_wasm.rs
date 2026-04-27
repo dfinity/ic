@@ -2495,7 +2495,7 @@ mod test {
         let expected_proposal_id = wasm.proposal_id.unwrap();
 
         canister.add_wasm(AddWasmRequest {
-            wasm: Some(wasm.clone()),
+            wasm: Some(wasm),
             hash: expected_hash.to_vec(),
             skip_update_latest_version: Some(false),
         });
@@ -2573,8 +2573,8 @@ mod test {
         let AddWasmResponse {
             result: Some(add_wasm_response::Result::Error(SnsWasmError { message: _ })),
         } = canister.add_wasm(AddWasmRequest {
-            wasm: Some(wasm.clone()),
-            hash: wasm_hash.clone(),
+            wasm: Some(wasm),
+            hash: wasm_hash,
             skip_update_latest_version: Some(false),
         })
         else {
@@ -3447,9 +3447,9 @@ mod test {
                     ..basic_version.clone()
                 },
                 SnsVersion {
-                    root_wasm_hash: root_2_hash.clone(),
-                    governance_wasm_hash: governance_2_hash.clone(),
-                    ..basic_version.clone()
+                    root_wasm_hash: root_2_hash,
+                    governance_wasm_hash: governance_2_hash,
+                    ..basic_version
                 },
             ]
         );
@@ -5370,7 +5370,7 @@ mod test {
             let wasm = smallest_valid_wasm();
             let hash = Sha256::hash(&wasm.wasm);
             canister.add_wasm(AddWasmRequest {
-                wasm: Some(wasm.clone()),
+                wasm: Some(wasm),
                 hash: hash.to_vec(),
                 skip_update_latest_version: Some(false),
             });
@@ -5406,7 +5406,7 @@ mod test {
             // Run code 1st function under test.
             {
                 let response = canister.add_wasm(AddWasmRequest {
-                    wasm: Some(wasm.clone()),
+                    wasm: Some(wasm),
                     hash: hash.to_vec(),
                     skip_update_latest_version: Some(false),
                 });

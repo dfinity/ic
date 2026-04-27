@@ -458,7 +458,7 @@ fn lookup_hashtree(hash_tree: &HashTree, leaf_name: &str) -> Result<Vec<u8>, Str
         _ => Err(format!(
             "Expected to find a leaf node: Hash tree: {hash_tree:?}, leaf_name: {leaf_name}"
         )
-        .to_string()),
+        ),
     }
 }
 
@@ -517,13 +517,13 @@ fn test_icrc3_get_tip_certificate() {
     let result0 = add_block(&env, canister_id, &block0).expect("Failed to add block 0");
     assert_eq!(result0, Nat::from(0_u64));
     let cert = get_icrc3_get_tip_certificate(&env, canister_id).unwrap();
-    check_tip_certificate(cert, canister_id, Some((0, block0.clone().hash().to_vec())));
+    check_tip_certificate(cert, canister_id, Some((0, block0.hash().to_vec())));
 
     // Add another block and check if it is reflected in the certificate.
     let result1 = add_block(&env, canister_id, &block1).expect("Failed to add block 1");
     assert_eq!(result1, Nat::from(1_u64));
     let cert = get_icrc3_get_tip_certificate(&env, canister_id).unwrap();
-    check_tip_certificate(cert, canister_id, Some((1, block1.clone().hash().to_vec())));
+    check_tip_certificate(cert, canister_id, Some((1, block1.hash().to_vec())));
 }
 
 fn get_supported_standards(env: &StateMachine, canister_id: CanisterId) -> Vec<StandardRecord> {

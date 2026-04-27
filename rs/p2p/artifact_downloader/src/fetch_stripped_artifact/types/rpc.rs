@@ -223,7 +223,7 @@ mod tests {
             block_proposal_id: fake_finalization_consensus_message_id(),
         };
 
-        let proto = pb::GetIngressMessageInBlockRequest::from(request.clone());
+        let proto = pb::GetIngressMessageInBlockRequest::from(request);
         let err = GetIngressMessageInBlockRequest::try_from(proto)
             .expect_err("Should not successfully deserialize the proto");
 
@@ -285,7 +285,7 @@ mod tests {
             block_proposal_id: fake_finalization_consensus_message_id(),
         };
 
-        let proto = pb::GetIDkgDealingInBlockRequest::from(request.clone());
+        let proto = pb::GetIDkgDealingInBlockRequest::from(request);
         let err = GetIDkgDealingInBlockRequest::try_from(proto)
             .expect_err("Should not successfully deserialize the proto");
 
@@ -303,7 +303,7 @@ mod tests {
             block_proposal_id: make_proposal_id(),
         };
 
-        let proto = pb::GetIDkgDealingInBlockRequest::from(request.clone());
+        let proto = pb::GetIDkgDealingInBlockRequest::from(request);
         let err = GetIDkgDealingInBlockRequest::try_from(proto)
             .expect_err("Should not successfully deserialize the proto");
 

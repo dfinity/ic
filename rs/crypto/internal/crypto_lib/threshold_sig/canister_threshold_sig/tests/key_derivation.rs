@@ -456,7 +456,7 @@ fn should_secp256k1_derivation_match_external_bip32_lib() -> Result<(), Canister
 
     let bip32_mk = bip32::XPub::try_from(ext).expect("Failed to accept BIP32");
 
-    let mut bip32_state = bip32_mk.clone();
+    let mut bip32_state = bip32_mk;
     for (i, p) in path.iter().enumerate() {
         let derived = bip32_state
             .derive_child(bip32::ChildNumber(*p))

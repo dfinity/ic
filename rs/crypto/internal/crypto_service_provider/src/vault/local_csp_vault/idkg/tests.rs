@@ -1328,7 +1328,7 @@ mod idkg_load_transcript {
                 .idkg_gen_dealing_encryption_key_pair()
                 .expect("failed to generate key pair");
             let key_id = self.key_id.unwrap_or_else(|| KeyId::from(&pk));
-            let pk_proto = idkg_dealing_encryption_pk_to_proto(pk.clone());
+            let pk_proto = idkg_dealing_encryption_pk_to_proto(pk);
             let (dealing_bytes, internal_transcript) =
                 self.dealing_bytes_and_internal_transcript(pk_proto, &vault);
 
@@ -1712,7 +1712,7 @@ mod idkg_load_transcript_with_openings {
                 .idkg_gen_dealing_encryption_key_pair()
                 .expect("failed to generate key pair");
             let key_id = self.key_id.unwrap_or_else(|| KeyId::from(&pk));
-            let pk_proto = idkg_dealing_encryption_pk_to_proto(pk.clone());
+            let pk_proto = idkg_dealing_encryption_pk_to_proto(pk);
             let (dealing_bytes, internal_transcript) =
                 self.dealing_bytes_and_internal_transcript(pk_proto, &vault);
 
@@ -1769,7 +1769,7 @@ mod idkg_load_transcript_with_openings {
             let openings = if self.use_empty_openings {
                 BTreeMap::new()
             } else {
-                BTreeMap::from([(0_u32, BTreeMap::from([(0_u32, opening.clone())]))])
+                BTreeMap::from([(0_u32, BTreeMap::from([(0_u32, opening)]))])
             };
 
             let loader_vault: Box<dyn IDkgProtocolCspVault> =
@@ -2038,7 +2038,7 @@ mod idkg_open_dealing {
                 .idkg_gen_dealing_encryption_key_pair()
                 .expect("failed to generate key pair");
             let key_id = KeyId::from(&pk);
-            let pk_proto = idkg_dealing_encryption_pk_to_proto(pk.clone());
+            let pk_proto = idkg_dealing_encryption_pk_to_proto(pk);
             let dealing_bytes = self.dealing_bytes(pk_proto, &vault);
 
             let signed_dealings = BTreeMap::from([(

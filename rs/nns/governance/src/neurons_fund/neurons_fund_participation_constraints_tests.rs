@@ -136,7 +136,7 @@ fn test_diff_with_empty_snapshot() {
     // Test that `snapshot - {} == snapshot1`, where `snapshot1` is identical to `snapshot`,
     // except that the `is_capped` field of all of its elements is set to `false`.
     assert_eq!(
-        snapshot.clone().diff(&NeuronsFundSnapshot::empty()),
+        snapshot.diff(&NeuronsFundSnapshot::empty()),
         Ok(NeuronsFundSnapshot {
             neurons: btreemap! {
                 nid(1) => NeuronsFundNeuronPortion {
@@ -161,7 +161,7 @@ fn test_diff_with_empty_snapshot() {
                     maturity_equivalent_icp_e8s: 9000,
                     is_capped: false,
                     controller,
-                    hotkeys: hotkeys.clone(),
+                    hotkeys: hotkeys,
                 }
             },
         })

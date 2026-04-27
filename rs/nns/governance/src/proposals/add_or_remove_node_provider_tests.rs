@@ -195,7 +195,7 @@ fn test_remove_existing_node_provider() {
     ];
     let provider_to_remove = create_test_node_provider(2);
     let proposal = AddOrRemoveNodeProvider {
-        change: Some(Change::ToRemove(provider_to_remove.clone())),
+        change: Some(Change::ToRemove(provider_to_remove)),
     };
 
     let valid_proposal = ValidAddOrRemoveNodeProvider::try_from(proposal).unwrap();

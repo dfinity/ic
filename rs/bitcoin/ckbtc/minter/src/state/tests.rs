@@ -22,7 +22,7 @@ mod processable_utxos_for_account {
             result,
             (
                 ProcessableUtxos {
-                    new_utxos: all_utxos.clone(),
+                    new_utxos: all_utxos,
                     ..Default::default()
                 },
                 vec![]

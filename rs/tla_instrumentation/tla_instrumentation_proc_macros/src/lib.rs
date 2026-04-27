@@ -39,7 +39,7 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
     // let arg = parse_macro_input!(attr as Expr);
     // Convert proc_macro::TokenStream to proc_macro2::TokenStream
     // let attr2: TokenStream2 = attr.into();
-    let attr_clone = attr.clone();
+    let attr_clone = attr;
     let macro_args = parse_macro_input!(attr_clone as TlaUpdateArgs);
 
     // Deconstruct the function elements
@@ -230,7 +230,7 @@ pub fn tla_function(attr: TokenStream, item: TokenStream) -> TokenStream {
     } = input_fn;
 
     let mangled_name = syn::Ident::new(&format!("_tla_impl_{}", sig.ident), sig.ident.span());
-    modified_fn.sig.ident = mangled_name.clone();
+    modified_fn.sig.ident = mangled_name;
 
     let asyncness = sig.asyncness;
     let mut force_async_fn = false;

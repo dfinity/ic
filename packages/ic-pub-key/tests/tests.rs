@@ -410,7 +410,7 @@ fn test_vetkd_derivation_using_test_key_1() {
     let args = VetKDPublicKeyArgs {
         canister_id: Some(canister_id),
         context: b"context-string".to_vec(),
-        key_id: key_id.clone(),
+        key_id: key_id,
     };
 
     let derived_key = derive_vetkd_key(&args).unwrap();
@@ -446,7 +446,7 @@ fn test_vetkd_derivation_using_key1() {
     let args = VetKDPublicKeyArgs {
         canister_id: Some(canister_id),
         context: vec![],
-        key_id: key_id.clone(),
+        key_id: key_id,
     };
 
     let canister_key = derive_vetkd_key(&args).unwrap();

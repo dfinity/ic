@@ -1031,7 +1031,7 @@ where
 {
     let subnet_config = SubnetConfig::new(SubnetType::Application);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
-        subnet_config.clone(),
+        subnet_config,
         HypervisorConfig::default(),
     ));
 

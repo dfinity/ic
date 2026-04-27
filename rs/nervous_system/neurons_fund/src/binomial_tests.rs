@@ -78,13 +78,13 @@ fn test_member() {
     );
     assert_eq!(
         rescale(
-            BinomialFormulaMember::new(3, dec!(42), b.clone(), c.clone())
+            BinomialFormulaMember::new(3, dec!(42), b, c)
                 .unwrap()
                 .eval()
                 .unwrap()
         ),
         rescale(
-            BinomialFormulaMember::new(3, dec!(42), d.clone(), a.clone())
+            BinomialFormulaMember::new(3, dec!(42), d, a)
                 .unwrap()
                 .eval()
                 .unwrap()

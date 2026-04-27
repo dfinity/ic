@@ -211,7 +211,7 @@ mod tests {
         );
 
         // But there should still be space for a reject
-        let mut payload_reject = payload_fits.clone();
+        let mut payload_reject = payload_fits;
         payload_reject.agreements.insert(
             CallbackId::new(9),
             ChainKeyAgreement::Reject(ChainKeyErrorCode::TimedOut),

@@ -461,7 +461,7 @@ impl<T: RpcClientType> Daemon<T> {
             return Err(status);
         }
 
-        let rpc_client = RpcClient::new(network, &rpc_url, auth.clone())
+        let rpc_client = RpcClient::new(network, &rpc_url, auth)
             .map_err(DaemonStatus::ClientError)?
             .ensure_wallet()
             .map_err(DaemonStatus::ClientError)?;

@@ -693,12 +693,12 @@ mod tests {
         assert_eq!(key1_values[1].version, 2);
         assert_eq!(
             key2_values[0].content,
-            Some(high_capacity_registry_value::Content::Value(value2.clone()))
+            Some(high_capacity_registry_value::Content::Value(value2))
         );
         assert_eq!(key2_values[0].version, 3);
         assert_eq!(
             key2_values[1].content,
-            Some(high_capacity_registry_value::Content::Value(value1.clone()))
+            Some(high_capacity_registry_value::Content::Value(value1))
         );
         assert_eq!(key2_values[1].version, 2);
 

@@ -25,7 +25,7 @@ fn should_fail_if_commitment_check_opening_fails() {
         alg,
         Seed::from_rng(rng),
         threshold,
-        &[pk0.clone(), pk1.clone()],
+        &[pk0.clone(), pk1],
         dealer_index,
         associated_data,
     )

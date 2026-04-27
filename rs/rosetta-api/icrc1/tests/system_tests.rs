@@ -525,17 +525,17 @@ fn test_network_status(args_with_caller in valid_transactions_strategy(
         );
 
         assert_eq!(
-            hex::encode(rosetta_blocks.first().unwrap().clone().get_block_hash().clone()),
+            hex::encode(rosetta_blocks.first().unwrap().clone().get_block_hash()),
             rosetta_response.genesis_block_identifier.hash,
             "Genesis block hashes do not match"
         );
         assert_eq!(
-            hex::encode(rosetta_blocks.last().unwrap().clone().get_block_hash().clone()),
+            hex::encode(rosetta_blocks.last().unwrap().clone().get_block_hash()),
             rosetta_response.current_block_identifier.hash,
             "Current block hashes do not match"
         );
         assert_eq!(
-            hex::encode(rosetta_blocks.first().unwrap().clone().get_block_hash().clone()),
+            hex::encode(rosetta_blocks.first().unwrap().clone().get_block_hash()),
             rosetta_response.oldest_block_identifier.unwrap().hash,
             "Genesis block hashes do not match"
         );

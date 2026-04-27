@@ -85,7 +85,7 @@ fn test_create_neuron() {
         let neurons = list_neurons(&agent).await;
 
         assert!(!neurons.full_neurons.is_empty());
-        assert!(neurons.full_neurons.clone().into_iter().all(|n| {
+        assert!(neurons.full_neurons.into_iter().all(|n| {
             n.controller == Some(PrincipalId::from(TEST_IDENTITY.sender().unwrap()))
                 && n.cached_neuron_stake_e8s == staked_amount
         }));

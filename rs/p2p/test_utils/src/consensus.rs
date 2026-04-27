@@ -265,7 +265,7 @@ impl TestConsensus<U64Artifact> {
             .get(peer_id)
             .map(|p| p.pool())
             .unwrap_or_default()
-            .clone()
+            
     }
 }
 

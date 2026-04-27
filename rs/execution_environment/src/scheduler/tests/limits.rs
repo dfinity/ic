@@ -724,7 +724,7 @@ fn scheduled_heap_delta_limit_scaling() {
 
         scheduled_heap_delta_limit(
             current_round.into(),
-            Some(round_summary.clone()),
+            Some(round_summary),
             subnet_heap_delta_capacity.into(),
             heap_delta_initial_reserve.into(),
         )

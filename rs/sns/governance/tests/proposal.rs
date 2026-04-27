@@ -213,7 +213,7 @@ mod early_decision {
                     total,
                     timestamp_seconds: 1,
                 }),
-                ..base_proposal.clone()
+                ..base_proposal
             };
             let base_proposal_with_more_no_votes_decision = base_proposal_with_more_no_votes.early_decision();
             assert_eq!(base_proposal_with_more_no_votes_decision, Vote::No);
@@ -430,7 +430,7 @@ mod early_decision {
                 timestamp_seconds: 1,
             }),
             minimum_yes_proportion_of_exercised: Some(Percentage::from_basis_points(7_501)),
-            ..undecided_proposal.clone()
+            ..undecided_proposal
         };
         assert_eq!(yes_proposal.early_decision(), Vote::No);
         assert!(yes_proposal.can_make_decision(now_seconds));

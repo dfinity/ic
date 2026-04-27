@@ -63,7 +63,7 @@ fn smoke_test() {
         .install_canister_with_cycles(wasm.clone(), Vec::new(), None, Cycles::new(u128::MAX / 2))
         .expect("Installing messaging-test-canister failed");
     let canister3 = env2
-        .install_canister_with_cycles(wasm.clone(), Vec::new(), None, Cycles::new(u128::MAX / 2))
+        .install_canister_with_cycles(wasm, Vec::new(), None, Cycles::new(u128::MAX / 2))
         .expect("Installing messaging-test-canister failed");
 
     // A call to be sent to `canister1` as an ingress that then calls `canister3`

@@ -61,7 +61,7 @@ fn setup(env: TestEnv, use_mainnet_state: bool) {
         .unwrap_or(DKG_INTERVAL_HEIGHT);
 
     ic_nested_nns_recovery_common::setup(
-        env.clone(),
+        env,
         SetupConfig {
             impersonate_upstreams: false,
             use_mainnet_state,

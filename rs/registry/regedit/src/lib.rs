@@ -53,7 +53,7 @@ fn registry_spec_to_delta_pb(
         }
         cl.last_mut().unwrap().push(KeyMutation {
             key: r.key.clone(),
-            value: r.value.clone(),
+            value: r.value,
         });
         cl
     });

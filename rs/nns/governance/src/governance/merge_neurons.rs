@@ -1476,10 +1476,10 @@ mod tests {
             4 => neuron_involved_with_managed_neuron_proposal_by_subaccount.clone(),
         });
         let proposals = btreemap! {
-            1001 => proposal.clone(),
-            1002 => managed_neuron_proposal_by_id.clone(),
-            1003 => managed_neuron_proposal_by_subaccount.clone(),
-            1004 => decided_proposal.clone(),
+            1001 => proposal,
+            1002 => managed_neuron_proposal_by_id,
+            1003 => managed_neuron_proposal_by_subaccount,
+            1004 => decided_proposal,
         };
 
         let test_validate_fails_with_involved_in_proposal =

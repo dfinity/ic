@@ -304,7 +304,7 @@ fn should_reject_upgrade_with_invalid_args() {
                 cketh_installed_canisters(),
                 cketh_installed_canisters(), //erroneous duplicate entry
             ]),
-            ..valid_upgrade_arg.clone()
+            ..valid_upgrade_arg
         }),
     );
 }
@@ -329,7 +329,7 @@ fn should_reject_update_calls_to_http_request() {
     assert_matches!(
         orchestrator
             .env
-            .await_ingress(message_id.clone(), MAX_TICKS),
+            .await_ingress(message_id, MAX_TICKS),
         Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains("update call rejected")
     );
 }
@@ -359,7 +359,7 @@ fn should_retrieve_orchestrator_info() {
     let orchestrator = canisters.setup;
     let info = orchestrator.get_orchestrator_info();
     let ckusdc_managed_canisters = ManagedCanisters {
-        erc20_contract: usdc.contract.clone(),
+        erc20_contract: usdc.contract,
         ckerc20_token_symbol: "ckUSDC".to_string(),
         ledger: Some(ManagedCanisterStatus::Installed {
             canister_id: usdc_ledger_id.into(),
@@ -372,7 +372,7 @@ fn should_retrieve_orchestrator_info() {
         archives: vec![],
     };
     let ckusdt_managed_canisters = ManagedCanisters {
-        erc20_contract: usdt.contract.clone(),
+        erc20_contract: usdt.contract,
         ckerc20_token_symbol: "ckUSDT".to_string(),
         ledger: Some(ManagedCanisterStatus::Installed {
             canister_id: usdt_ledger_id.into(),
@@ -388,8 +388,8 @@ fn should_retrieve_orchestrator_info() {
         info,
         OrchestratorInfo {
             managed_canisters: vec![
-                ckusdc_managed_canisters.clone(),
-                ckusdt_managed_canisters.clone()
+                ckusdc_managed_canisters,
+                ckusdt_managed_canisters
             ],
             cycles_management: CyclesManagement {
                 cycles_for_ledger_creation: Nat::from(200_000_000_000_000_u64),
@@ -511,7 +511,7 @@ fn should_require_to_register_embedded_wasms_before_adding_ckerc20() {
 
     assert_eq!(
         orchestrator.get_orchestrator_info().ledger_suite_version,
-        Some(embedded_ledger_suite_version.clone().into())
+        Some(embedded_ledger_suite_version.into())
     );
 }
 
@@ -519,7 +519,7 @@ fn should_require_to_register_embedded_wasms_before_adding_ckerc20() {
 fn should_not_change_ledger_suite_version_when_registering_embedded_wasms_a_second_time() {
     let env = Arc::new(new_state_machine());
     let orchestrator_v1 = LedgerSuiteOrchestrator::new_with_ledger_get_blocks_disabled(
-        env.clone(),
+        env,
         default_init_arg(),
     )
     .register_embedded_wasms();
@@ -577,7 +577,7 @@ mod upgrade {
         let embedded_ledger_wasm_hash_v1 = orchestrator_v1.embedded_ledger_wasm_hash.clone();
         let embedded_index_wasm_hash_v1 = orchestrator_v1.embedded_index_wasm_hash.clone();
 
-        let orchestrator_v2 = LedgerSuiteOrchestrator::new(env.clone(), default_init_arg());
+        let orchestrator_v2 = LedgerSuiteOrchestrator::new(env, default_init_arg());
         let embedded_ledger_wasm_hash_v2 = orchestrator_v2.embedded_ledger_wasm_hash.clone();
         let embedded_index_wasm_hash_v2 = orchestrator_v2.embedded_index_wasm_hash.clone();
 
@@ -601,7 +601,7 @@ mod upgrade {
     fn should_upgrade_managed_ledgers_to_new_version() {
         let env = Arc::new(new_state_machine());
         let orchestrator_v1 = LedgerSuiteOrchestrator::new_with_ledger_get_blocks_disabled(
-            env.clone(),
+            env,
             default_init_arg(),
         );
         let embedded_ledger_wasm_hash_v1 = orchestrator_v1.embedded_ledger_wasm_hash.clone();
@@ -683,7 +683,7 @@ mod upgrade {
         let env = Arc::new(new_state_machine());
         let orchestrator =
             LedgerSuiteOrchestrator::new(env.clone(), default_init_arg()).register_embedded_wasms();
-        let universal_canister = UniversalCanister::new(env.clone());
+        let universal_canister = UniversalCanister::new(env);
         let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
         let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
         let embedded_archive_wasm_hash = orchestrator.embedded_archive_wasm_hash.clone();
@@ -700,7 +700,7 @@ mod upgrade {
                     .recent_changes
                     .clone()
                     .into_iter()
-                    .map(|c| c.details.clone())
+                    .map(|c| c.details)
                     .collect();
                 let expected_change = ChangeDetails::CodeDeployment(CodeDeploymentRecord {
                     mode: CodeDeploymentMode::Upgrade,
@@ -763,7 +763,7 @@ mod upgrade {
         let env = Arc::new(new_state_machine());
         let orchestrator =
             LedgerSuiteOrchestrator::new(env.clone(), default_init_arg()).register_embedded_wasms();
-        let universal_canister = UniversalCanister::new(env.clone());
+        let universal_canister = UniversalCanister::new(env);
         let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
         let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
         let embedded_archive_wasm_hash = orchestrator.embedded_archive_wasm_hash.clone();
@@ -773,7 +773,7 @@ mod upgrade {
                 .recent_changes
                 .clone()
                 .into_iter()
-                .map(|c| c.details.clone())
+                .map(|c| c.details)
                 .collect();
             matches!(changes.first(), Some(Some(ChangeDetails::Creation(_))))
                 && matches!(changes.get(1), Some(Some(x)) if x == &ChangeDetails::CodeDeployment(CodeDeploymentRecord {
@@ -792,7 +792,7 @@ mod upgrade {
                 .recent_changes
                 .clone()
                 .into_iter()
-                .map(|c| c.details.clone())
+                .map(|c| c.details)
                 .collect();
             let expected_change = ChangeDetails::CodeDeployment(CodeDeploymentRecord {
                 mode: CodeDeploymentMode::Upgrade,
@@ -857,7 +857,7 @@ mod upgrade {
     fn should_upgrade_without_reinstalling() {
         let env = Arc::new(new_state_machine());
         let orchestrator_v1 = LedgerSuiteOrchestrator::new_with_ledger_get_blocks_disabled(
-            env.clone(),
+            env,
             default_init_arg(),
         );
         let embedded_ledger_wasm_hash_v1 = orchestrator_v1.embedded_ledger_wasm_hash.clone();
@@ -986,7 +986,7 @@ mod upgrade {
         let env = Arc::new(new_state_machine());
         let orchestrator =
             LedgerSuiteOrchestrator::new(env.clone(), default_init_arg()).register_embedded_wasms();
-        let universal_canister = UniversalCanister::new(env.clone());
+        let universal_canister = UniversalCanister::new(env);
         let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
         let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
         let embedded_archive_wasm_hash = orchestrator.embedded_archive_wasm_hash.clone();
@@ -996,7 +996,7 @@ mod upgrade {
                 .recent_changes
                 .clone()
                 .into_iter()
-                .map(|c| c.details.clone())
+                .map(|c| c.details)
                 .collect();
             let expected_change = ChangeDetails::CodeDeployment(CodeDeploymentRecord {
                 mode: CodeDeploymentMode::Upgrade,
@@ -1011,7 +1011,7 @@ mod upgrade {
             .add_erc20_token(usdc())
             .expect_new_ledger_and_index_canisters()
             .assert_ledger_has_wasm_hash(embedded_ledger_wasm_hash.clone())
-            .assert_index_has_wasm_hash(embedded_index_wasm_hash.clone())
+            .assert_index_has_wasm_hash(embedded_index_wasm_hash)
             .check_metrics()
             .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 0")
             .into();

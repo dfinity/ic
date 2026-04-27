@@ -192,7 +192,7 @@ mod schema_upgrades {
 
             let serialized_config_before_upgrade = encode(&config_before_upgrade);
             let config_after_upgrade: Config = decode(serialized_config_before_upgrade.as_slice());
-            assert_eq!(config_before_upgrade, config_after_upgrade.clone().into());
+            assert_eq!(config_before_upgrade, config_after_upgrade.into());
         }
     }
 

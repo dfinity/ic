@@ -121,7 +121,7 @@ fn btcscan_request(txid: Txid, max_response_bytes: u32) -> HttpRequestArgs {
         value: "bitcoin_inputs_collector".to_string(),
     }];
     HttpRequestArgs {
-        url: url.to_string(),
+        url,
         method: HttpMethod::GET,
         body: None,
         max_response_bytes: Some(max_response_bytes as u64),
@@ -144,7 +144,7 @@ fn make_get_request(
     };
     let request_headers = vec![];
     HttpRequestArgs {
-        url: url.to_string(),
+        url,
         method: HttpMethod::GET,
         body: None,
         max_response_bytes: Some(max_response_bytes as u64),

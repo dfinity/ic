@@ -255,7 +255,7 @@ impl<Key: Ord, AltKey: Ord, V> DedupMultiKeyMap<Key, AltKey, V> {
         AltKey: Clone,
     {
         self.map
-            .try_insert(key.clone(), alt_key.clone(), (key, value))
+            .try_insert(key.clone(), alt_key, (key, value))
             .map_err(|err| OccupiedError {
                 occupied_key: err.occupied_key,
                 value: err.value.1,

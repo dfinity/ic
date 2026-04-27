@@ -314,7 +314,7 @@ mod tests {
         let content = ICRequestContent {
             sender: Principal::anonymous(),
             canister_id: None,
-            method_name: Some(long_name.clone()),
+            method_name: Some(long_name),
             nonce: None,
             ingress_expiry: None,
             arg: None,
@@ -337,7 +337,7 @@ mod tests {
         let content = ICRequestContent {
             sender: Principal::anonymous(),
             canister_id: None,
-            method_name: Some(long_name.clone()),
+            method_name: Some(long_name),
             nonce: None,
             ingress_expiry: None,
             arg: None,

@@ -410,7 +410,7 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
                             ))
                         }
                     }?;
-                    Ok((node_index, (node_public_key_g2affine, clib_share.clone())))
+                    Ok((node_index, (node_public_key_g2affine, clib_share)))
                 })
                 .collect::<Result<_, _>>()?;
 

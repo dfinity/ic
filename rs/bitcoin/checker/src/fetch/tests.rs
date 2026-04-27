@@ -211,7 +211,7 @@ fn test_try_fetch_tx() {
         tx: from_tx(&mock_transaction()),
         input_addresses: vec![None],
     });
-    state::set_fetch_status(txid_0, fetched_0.clone());
+    state::set_fetch_status(txid_0, fetched_0);
     assert!(matches!(
         env.try_fetch_tx(txid_0),
         TryFetchResult::Fetched(_)

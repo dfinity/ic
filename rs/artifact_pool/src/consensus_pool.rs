@@ -1773,12 +1773,12 @@ mod tests {
                 random_tape.clone().into_message(),
                 finalization.clone().into_message(),
                 finalization_at_4.into_message(),
-                notarization.clone().into_message(),
+                notarization.into_message(),
                 proposal.clone().into_message(),
-                proposal_non_final.clone().into_message(),
-                proposal3.clone().into_message(),
+                proposal_non_final.into_message(),
+                proposal3.into_message(),
                 notarization3.clone().into_message(),
-                proposal3_final.clone().into_message(),
+                proposal3_final.into_message(),
                 cup.clone().into_message(),
             ]
             .into_iter()

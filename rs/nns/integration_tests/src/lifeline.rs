@@ -62,7 +62,7 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
         .expect("root canister has no hash");
     assert_ne!(
         root_checksum,
-        ic_crypto_sha2::Sha256::hash(wasm_module.clone().as_slice())
+        ic_crypto_sha2::Sha256::hash(wasm_module.as_slice())
     );
 
     let funny: u32 = 422557101; // just a funny number I came up with

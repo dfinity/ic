@@ -92,7 +92,7 @@ impl ConsentMessage {
             ConsentMessage::FieldsDisplayMessage(fields_display) => fields_display.fields.push((
                 name.to_string(),
                 Value::Text {
-                    content: account.to_string(),
+                    content: account,
                 },
             )),
         }

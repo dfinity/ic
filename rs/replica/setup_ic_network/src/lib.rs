@@ -430,7 +430,7 @@ pub fn setup_consensus_and_p2p(
 
     // Start the main event loops for StateSync and Consensus
     let _abortable_broadcast_manager = p2p_builder.start(quic_transport.clone(), topology_watcher);
-    let _state_sync_manager = state_sync_manager_runner.start(quic_transport.clone());
+    let _state_sync_manager = state_sync_manager_runner.start(quic_transport);
 
     // End of IO/P2P stack initialization.
     start_consensus(

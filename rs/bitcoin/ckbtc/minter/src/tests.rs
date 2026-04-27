@@ -244,7 +244,7 @@ fn should_have_same_input_and_output_count() {
     let fee_estimator = bitcoin_fee_estimator();
     let (tx, change_output, _, _) = build_unsigned_transaction(
         &mut available_utxos,
-        vec![(out1_addr.clone(), 100_000), (out2_addr.clone(), 99_999)],
+        vec![(out1_addr, 100_000), (out2_addr, 99_999)],
         &minter_addr,
         DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
         fee_per_vbyte,
@@ -280,7 +280,7 @@ fn test_min_change_amount() {
             txid: [1; 32].into(),
             vout: 1,
         },
-        ..utxo_1.clone()
+        ..utxo_1
     };
     let mut available_utxos = UtxoSet::from_iter([utxo_1.clone(), utxo_2.clone()]);
 

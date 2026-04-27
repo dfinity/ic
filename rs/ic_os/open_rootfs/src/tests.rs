@@ -61,7 +61,7 @@ impl TestFixture {
 
         let guestos_config = GuestOSConfig {
             trusted_execution_environment_config: Some(TrustedExecutionEnvironmentConfig {
-                sev_cert_chain_pem: sev_certificate_chain_pem.clone(),
+                sev_cert_chain_pem: sev_certificate_chain_pem,
             }),
             guestos_settings: GuestOSSettings {
                 guestos_dev_settings: GuestOSDevSettings {

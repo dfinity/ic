@@ -346,7 +346,7 @@ async fn run_operation<T: Serialize + FromOpOut>(
                             StatusCode::ACCEPTED,
                             ApiResponse::Started {
                                 state_label: base64::encode_config(state_label.0, base64::URL_SAFE),
-                                op_id: op_id.0.to_string(),
+                                op_id: op_id.0,
                             },
                         );
                     }
@@ -405,7 +405,7 @@ impl<T: TryFrom<OpOut>> FromOpOut for T {
             OpOut::Error(PocketIcError::Forbidden(msg)) => (
                 StatusCode::FORBIDDEN,
                 ApiResponse::Error {
-                    message: msg.to_string(),
+                    message: msg,
                 },
             ),
             OpOut::Error(e) => (
@@ -1170,7 +1170,7 @@ async fn op_out_to_response(op_out: OpOut) -> Response {
         OpOut::Error(PocketIcError::Forbidden(msg)) => (
             StatusCode::FORBIDDEN,
             Json(ApiResponse::<()>::Error {
-                message: msg.to_string(),
+                message: msg,
             }),
         )
             .into_response(),

@@ -347,7 +347,7 @@ impl LedgerSuiteConfig {
             state_machine,
             canister_id,
             wasm.clone().bytes(),
-            args.clone(),
+            args,
         )
         .expect("should successfully stop, upgrade, and restart index canister");
         println!("Upgraded {} index '{}'", self.canister_name, self.index_id);
@@ -365,7 +365,7 @@ impl LedgerSuiteConfig {
         state_machine
             .stop_canister_as(controller, canister_id)
             .expect("should successfully stop ledger canister");
-        match state_machine.upgrade_canister(canister_id, wasm.clone().bytes(), args.clone()) {
+        match state_machine.upgrade_canister(canister_id, wasm.clone().bytes(), args) {
             Ok(_) => {
                 println!(
                     "Upgraded {} ledger '{}'",

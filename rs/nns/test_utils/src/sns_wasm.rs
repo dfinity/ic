@@ -118,7 +118,7 @@ pub fn get_wasm_metadata(
 /// add_wasm_via_proposal(&state_machine, wasm.clone());
 /// ```
 pub fn add_wasm_via_proposal(env: &StateMachine, wasm: SnsWasm) -> SnsWasm {
-    let wasm = add_wasm_via_proposal_and_return_immediately(env, wasm.clone());
+    let wasm = add_wasm_via_proposal_and_return_immediately(env, wasm);
     let proposal_id = ProposalId(wasm.proposal_id.unwrap());
 
     while get_proposal_info(env, proposal_id).unwrap().status == (ProposalStatus::Open as i32) {

@@ -167,7 +167,7 @@ fn concurrent_insertions() {
     let cache = CompilationCacheBuilder::new().build();
     let wasm = wat::parse_str("(module)").unwrap();
     let canister_module = CanisterModule::new(wasm.clone());
-    let binary = ic_wasm_types::BinaryEncodedWasm::new(wasm.clone());
+    let binary = ic_wasm_types::BinaryEncodedWasm::new(wasm);
     let config = ic_config::embedders::Config::default();
     let embedder = crate::WasmtimeEmbedder::new(config, ic_logger::no_op_logger());
     let (_, result) = crate::wasm_utils::compile(&embedder, &binary);

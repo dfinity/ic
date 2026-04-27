@@ -28,7 +28,7 @@ pub fn server_config(
         tls_cert_from_registry(registry_client.as_ref(), self_node_id, registry_version)?;
     let self_tls_cert_key_id = KeyId::from(&self_tls_cert);
     let client_cert_verifier = NodeClientCertVerifier::new_with_mandatory_client_auth(
-        allowed_clients.clone(),
+        allowed_clients,
         registry_client,
         registry_version,
     );

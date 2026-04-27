@@ -292,7 +292,7 @@ fn test_sns_metrics() {
 
         let args = Encode!(&governance).unwrap();
         state_machine
-            .install_canister(wasm.clone(), args, None)
+            .install_canister(wasm, args, None)
             .unwrap()
     };
 

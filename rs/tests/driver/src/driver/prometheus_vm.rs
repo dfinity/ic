@@ -352,8 +352,8 @@ chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
                 let prometheus_url = format!("http://{PROMETHEUS_DOMAIN_NAME}.{suffix}");
                 let grafana_url = format!("http://{GRAFANA_DOMAIN_NAME}.{suffix}");
                 let p8s_urls = PrometheusUrls {
-                    prometheus_url: prometheus_url.clone(),
-                    grafana_url: grafana_url.clone(),
+                    prometheus_url,
+                    grafana_url,
                 };
                 p8s_urls.write_attribute(env);
                 p8s_urls

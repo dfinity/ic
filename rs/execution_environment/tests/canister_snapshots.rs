@@ -486,7 +486,7 @@ fn upload_snapshot_module_with_checkpoint() {
     let env = StateMachineBuilder::new().build();
     let counter_canister_wasm = wat::parse_str(COUNTER_GROW_CANISTER_WAT).unwrap();
     let canister_id = env
-        .install_canister(counter_canister_wasm.clone(), vec![], None)
+        .install_canister(counter_canister_wasm, vec![], None)
         .unwrap();
     const SLICE_SIZE: u64 = 1_000_000;
     let num_slices = 10;
@@ -595,7 +595,7 @@ fn upload_snapshot_with_checkpoint() {
         canister_id,
         snapshot_id,
         CanisterSnapshotDataOffset::WasmChunk,
-        chunk_1.clone(),
+        chunk_1,
     ))
     .unwrap();
     // spread stable memory upload over sevaral checkpoints, covering three types of uploads:
@@ -621,7 +621,7 @@ fn upload_snapshot_with_checkpoint() {
         canister_id,
         snapshot_id,
         CanisterSnapshotDataOffset::WasmChunk,
-        chunk_2.clone(),
+        chunk_2,
     ))
     .unwrap();
     // change state to be overwritten:
@@ -679,7 +679,7 @@ fn load_snapshot_inconsistent_metadata_hook_status_fails() {
         md.globals.clone(),
         heap_dl.len() as u64,
         stable_memory_dl.len() as u64,
-        md.certified_data.clone(),
+        md.certified_data,
         None,
         None,
     );

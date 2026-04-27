@@ -159,7 +159,7 @@ impl ExecutionServices {
         );
         let transform_execution_service = HttpQueryHandler::new_transform_service(
             Arc::clone(&sync_query_handler) as Arc<_>,
-            query_scheduler.clone(),
+            query_scheduler,
             Arc::clone(&state_reader),
             metrics_registry,
             "https_outcall",
@@ -393,7 +393,7 @@ fn setup_execution_helper(
         scheduler_config.scheduler_cores,
     ));
     let sync_query_handler = InternalHttpQueryHandler::new(
-        logger.clone(),
+        logger,
         hypervisor,
         canister_manager,
         own_subnet_type,
@@ -417,7 +417,7 @@ fn setup_execution_helper(
         query_scheduler.clone(),
         Arc::clone(&state_reader),
         Arc::clone(&exec_env),
-        ingress_filter_metrics.clone(),
+        ingress_filter_metrics,
     );
 
     (

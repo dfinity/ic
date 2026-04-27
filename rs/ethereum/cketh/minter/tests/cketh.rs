@@ -190,7 +190,7 @@ fn should_retrieve_cache_transaction_price() {
         .expect_mint()
         .call_ledger_approve_minter(caller, EXPECTED_BALANCE, None)
         .expect_ok(1)
-        .call_minter_withdraw_eth(caller, withdrawal_amount.clone(), destination.clone())
+        .call_minter_withdraw_eth(caller, withdrawal_amount, destination)
         .expect_withdrawal_request_accepted()
         .wait_and_validate_withdrawal(ProcessWithdrawalParams::default())
         .setup;
@@ -300,7 +300,7 @@ fn should_block_withdrawal_to_blocked_address() {
         .expect_mint()
         .call_ledger_approve_minter(caller, EXPECTED_BALANCE, None)
         .expect_ok(1)
-        .call_minter_withdraw_eth(caller, withdrawal_amount.clone(), blocked_address.clone())
+        .call_minter_withdraw_eth(caller, withdrawal_amount, blocked_address.clone())
         .expect_error(WithdrawalError::RecipientAddressBlocked {
             address: blocked_address,
         });
@@ -518,7 +518,7 @@ fn should_reimburse() {
     let balance_after_withdrawal = cketh.balance_of(caller);
     assert_eq!(
         balance_after_withdrawal,
-        balance_before_withdrawal.clone() - cost_of_failed_transaction
+        balance_before_withdrawal - cost_of_failed_transaction
     );
 
     let reimbursed_amount = Nat::from(tx.value.unwrap().as_u128());
@@ -1032,7 +1032,7 @@ fn should_half_range_of_scrapped_logs_when_response_over_two_mega_bytes() {
     let deposit = DepositParams::default().to_log_entry();
     // around 600 bytes per log
     // we need at least 3334 logs to reach the 2MB limit
-    let large_amount_of_logs = multi_logs_for_single_transaction(deposit.clone(), 3_500);
+    let large_amount_of_logs = multi_logs_for_single_transaction(deposit, 3_500);
     assert!(serde_json::to_vec(&large_amount_of_logs).unwrap().len() > 2_000_000);
 
     let from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
@@ -1089,7 +1089,7 @@ fn should_skip_single_block_containing_too_many_events() {
     let deposit = DepositParams::default().to_log_entry();
     // around 600 bytes per log
     // we need at least 3334 logs to reach the 2MB limit
-    let large_amount_of_logs = multi_logs_for_single_transaction(deposit.clone(), 3_500);
+    let large_amount_of_logs = multi_logs_for_single_transaction(deposit, 3_500);
     assert!(serde_json::to_vec(&large_amount_of_logs).unwrap().len() > 2_000_000);
 
     cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
@@ -1226,7 +1226,7 @@ fn should_retrieve_minter_info() {
     let cketh = cketh
         .call_ledger_approve_minter(caller, EXPECTED_BALANCE, None)
         .expect_ok(1)
-        .call_minter_withdraw_eth(caller, withdrawal_amount.clone(), destination.clone())
+        .call_minter_withdraw_eth(caller, withdrawal_amount.clone(), destination)
         .expect_withdrawal_request_accepted()
         .wait_and_validate_withdrawal(ProcessWithdrawalParams::default())
         .setup;

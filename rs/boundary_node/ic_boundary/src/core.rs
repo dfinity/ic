@@ -847,7 +847,7 @@ pub fn setup_router(
         proxy_router.clone() as Arc<dyn Proxy>,
         proxy_router.clone() as Arc<dyn Lookup>,
         proxy_router.clone() as Arc<dyn RootKey>,
-        proxy_router.clone() as Arc<dyn Health>,
+        proxy_router as Arc<dyn Health>,
     );
 
     let canister_handler = post(handlers::handle_canister).with_state(proxy.clone());
@@ -1017,7 +1017,7 @@ pub fn setup_router(
         .layer(middleware_subnet_lookup.clone())
         .layer(middleware_generic_limiter.clone())
         .layer(option_layer(cache_state.map(|x| {
-            middleware::from_fn_with_state(x.clone(), cache_middleware)
+            middleware::from_fn_with_state(x, cache_middleware)
         })))
         .layer(middleware_retry.clone());
 
@@ -1037,7 +1037,7 @@ pub fn setup_router(
 
     let canister_read_state_route = Router::new()
         .route(PATH_READ_STATE_V2, canister_handler.clone())
-        .route(PATH_READ_STATE_V3, canister_handler.clone());
+        .route(PATH_READ_STATE_V3, canister_handler);
 
     let canister_read_call_query_routes = query_route
         .merge(call_route)
@@ -1046,7 +1046,7 @@ pub fn setup_router(
 
     let subnet_read_state_route = Router::new()
         .route(PATH_SUBNET_READ_STATE_V2, subnet_handler.clone())
-        .route(PATH_SUBNET_READ_STATE_V3, subnet_handler.clone())
+        .route(PATH_SUBNET_READ_STATE_V3, subnet_handler)
         .layer(service_subnet_read);
 
     let mut router = canister_read_call_query_routes

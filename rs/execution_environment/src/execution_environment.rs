@@ -3367,7 +3367,7 @@ impl ExecutionEnvironment {
         }
 
         // Composite queries are not allowed to be called in replicated mode.
-        let method = WasmMethod::CompositeQuery(ingress.method_name().to_string());
+        let method = WasmMethod::CompositeQuery(ingress.method_name());
         if canister_state.exports_method(&method) {
             return Err(UserError::new(
                 ErrorCode::CompositeQueryCalledInReplicatedMode,

@@ -266,7 +266,7 @@ pub fn upgrade(
         start_node(&logger, redundant_node);
     }
 
-    (faulty_node.clone(), can_id, msg.into())
+    (faulty_node, can_id, msg.into())
 }
 
 /// Deploys the target version to all nodes of the given subnet, and performs the necessary checks

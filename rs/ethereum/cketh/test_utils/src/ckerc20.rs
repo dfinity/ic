@@ -802,7 +802,7 @@ impl CkErc20DepositFlow {
                 "fromBlock": first_from_block,
                 "toBlock": first_to_block,
                 "address": [ERC20_HELPER_CONTRACT_ADDRESS],
-                "topics": [self.setup.received_erc20_event_topic(), erc20_topics.clone()]
+                "topics": [self.setup.received_erc20_event_topic(), erc20_topics]
             }]))
             .respond_for_all_with(erc20_logs)
             .build()

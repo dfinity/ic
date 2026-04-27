@@ -157,7 +157,7 @@ impl QueryServiceBuilder {
     pub fn build_router(self) -> Router {
         let log = self.log;
         let state = QueryService {
-            log: log.clone(),
+            log,
             node_id: self.node_id,
             signer: self.signer,
             health_status: self

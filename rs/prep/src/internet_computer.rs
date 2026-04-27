@@ -643,7 +643,7 @@ impl IcConfig {
             // as needed on the next change.  This works up to the maximum size of a registry entry.
             &make_canister_ranges_key(CanisterId::from_u64(0)),
             version,
-            routing_table_record.clone(),
+            routing_table_record,
         );
 
         fn opturl_to_string_vec(opt_url: Option<Url>) -> Vec<String> {

@@ -171,7 +171,7 @@ async fn check_transaction_with<F: FnOnce() -> Result<Txid, String>>(
 fn transform(raw: TransformArgs) -> HttpRequestResult {
     HttpRequestResult {
         status: raw.response.status.clone(),
-        body: raw.response.body.clone(),
+        body: raw.response.body,
         headers: vec![],
     }
 }

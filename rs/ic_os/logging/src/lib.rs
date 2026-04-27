@@ -82,7 +82,7 @@ pub fn init_kmsg_logging() {
             .with(
                 tracing_subscriber::fmt::layer()
                     .event_format(KmsgFormatter {
-                        identifier: identifier.clone(),
+                        identifier,
                         inner: format()
                             .without_time()
                             .with_target(false)

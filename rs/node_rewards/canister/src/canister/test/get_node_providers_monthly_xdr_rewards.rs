@@ -234,7 +234,7 @@ fn add_node_operator_with_dc(
         node_allowance,
         node_provider_principal_id: np_principal.to_vec(),
         dc_id: dc_id.clone(),
-        rewardable_nodes: rewardable_nodes.clone(),
+        rewardable_nodes: rewardable_nodes,
         ipv6: None,
         max_rewardable_nodes: Default::default(),
     };
@@ -418,7 +418,7 @@ fn test_get_node_providers_monthly_xdr_rewards_gen1() {
     let map: BTreeMap<String, BTreeMap<String, NodeRewardRate>> =
         serde_json::from_str(json).unwrap();
     let node_rewards_payload = UpdateNodeRewardsTableProposalPayload::from(map);
-    update_node_rewards_table(registry.clone(), node_rewards_payload.new_entries);
+    update_node_rewards_table(registry, node_rewards_payload.new_entries);
 
     let response = NodeRewardsCanister::get_node_providers_monthly_xdr_rewards(
         &CANISTER_TEST,

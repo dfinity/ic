@@ -170,7 +170,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
                 .with_signer(
                     config
                         .sign_attestation_reports
-                        .then_some(fake_attestation_report_signer.clone()),
+                        .then_some(fake_attestation_report_signer),
                 )
                 .with_measurement(config.client_measurement),
             registry_client,

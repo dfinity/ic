@@ -219,7 +219,7 @@ impl RosettaClient {
                 "Transaction was not added to the blockchain after {} seconds",
                 timeout.as_secs()
             )
-            .to_owned(),
+            ,
         ))
     }
 
