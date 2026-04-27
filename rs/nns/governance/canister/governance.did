@@ -251,8 +251,13 @@ type CreateCanisterAndInstallCodeOk = record {
   canister_id : opt principal;
 };
 
+type TakeCanisterSnapshotOk = record {
+  snapshot_id : blob;
+};
+
 type SuccessfulProposalExecutionValue = variant {
   CreateCanisterAndInstallCode : CreateCanisterAndInstallCodeOk;
+  TakeCanisterSnapshot : TakeCanisterSnapshotOk;
 };
 
 type CreateServiceNervousSystem = record {

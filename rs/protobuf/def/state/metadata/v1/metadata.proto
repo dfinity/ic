@@ -408,6 +408,16 @@ message SystemMetadata {
   repeated ApiBoundaryNodeEntry api_boundary_nodes = 21;
 
   registry.subnet.v1.ResourceLimits own_resource_limits = 24;
+
+  repeated CanisterPriority subnet_schedule = 25;
+}
+
+message CanisterPriority {
+  types.v1.CanisterId canister_id = 1;
+  int64 accumulated_priority = 2;
+  int64 executed_slices = 3;
+  optional uint64 long_execution_start_round = 4;
+  uint64 last_full_execution_round = 5;
 }
 
 message StableMemory {

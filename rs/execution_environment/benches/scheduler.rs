@@ -78,6 +78,7 @@ fn main() {
                 &executed_canisters,
                 &executed_canisters,
                 &BTreeSet::new(),
+                ExecutionRound::from(1),
             );
         });
     });
@@ -89,6 +90,7 @@ fn main() {
         &executed_canisters,
         &executed_canisters,
         &BTreeSet::new(),
+        ExecutionRound::from(1),
     );
 
     group.bench_function("finish_round", |bench| {

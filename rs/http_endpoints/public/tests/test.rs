@@ -1893,8 +1893,10 @@ fn test_call_v4_subnet_wrong_subnet_id() {
 
 /// Tests that /api/v4/subnet/../call accepts a request whose URL subnet ID matches
 /// the node's own subnet ID.
-#[test]
-fn test_call_v4_subnet_correct_subnet_id() {
+#[rstest]
+#[case::create_canister("create_canister")]
+#[case::provisional_create_canister_with_cycles("provisional_create_canister_with_cycles")]
+fn test_call_v4_subnet_correct_subnet_id(#[case] method_name: &str) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
@@ -1923,7 +1925,7 @@ fn test_call_v4_subnet_correct_subnet_id() {
                         ic_types::CanisterId::ic_00().get(),
                         ic_types::CanisterId::ic_00().get(),
                     )
-                    .with_method_name("create_canister".to_string()),
+                    .with_method_name(method_name.to_string()),
             )
             .await;
 
@@ -2044,7 +2046,8 @@ fn test_query_v3_subnet_wrong_canister_or_method(
 }
 
 /// Tests that /api/v4/subnet/../call rejects calls to non-management canisters (even with
-/// method "create_canister") and calls to IC_00 methods other than "create_canister".
+/// method "create_canister") and calls to IC_00 methods other than "create_canister" or
+/// "provisional_create_canister_with_cycles".
 #[rstest]
 #[case::wrong_canister_id(canister_test_id(1).get(), "create_canister")]
 #[case::wrong_method_name(CanisterId::ic_00().get(), "install_code")]
@@ -2086,7 +2089,7 @@ fn test_call_v4_subnet_wrong_canister_or_method(
         assert_eq!(
             body,
             format!(
-                "Subnet call endpoint only accepts calls to the management canister ({}) 'create_canister' method, got canister_id={} method_name='{}'",
+                "Subnet call endpoint only accepts canister creation calls to the management canister ({}), got canister_id={} method_name='{}'",
                 CanisterId::ic_00(),
                 CanisterId::unchecked_from_principal(canister_id),
                 method_name,

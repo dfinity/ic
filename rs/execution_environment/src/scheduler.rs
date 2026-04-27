@@ -553,6 +553,7 @@ impl SchedulerImpl {
                 &executed_canisters,
                 &canisters_with_completed_messages,
                 &low_cycle_balance_canisters,
+                current_round,
             );
 
             round_limits.instructions -= as_round_instructions(
@@ -1175,6 +1176,14 @@ impl Scheduler for SchedulerImpl {
             state.time(),
             self.metrics.canister_ingress_queue_latencies.clone(),
         );
+
+        {
+            let _timer = self
+                .metrics
+                .remove_orphaned_stop_canister_calls_duration
+                .start_timer();
+            state.remove_orphaned_stop_canister_calls();
+        }
 
         // Round preparation.
         let mut scheduler_round_limits = {
@@ -2202,10 +2211,10 @@ fn abort_canister(
     cost_schedule: CanisterCyclesCostSchedule,
 ) {
     if exec_env.abort_canister(canister, log, cost_schedule) {
-        // Reset the priority credit to zero.
+        // Reset `executed_slices` to zero.
         subnet_schedule
             .get_mut(canister.canister_id())
-            .priority_credit = Default::default();
+            .executed_slices = 0;
     }
 }
 
