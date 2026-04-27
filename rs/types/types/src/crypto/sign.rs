@@ -72,7 +72,7 @@ mod private {
     impl SignatureDomainSeal for Delegation {}
     impl SignatureDomainSeal for CanisterHttpResponseMetadata {}
     impl SignatureDomainSeal for MessageId {}
-    impl SignatureDomainSeal for SenderInfoContent {}
+    impl<'a> SignatureDomainSeal for SenderInfoContent<'a> {}
     impl SignatureDomainSeal for CertificationContent {}
     impl SignatureDomainSeal for CatchUpContent {}
     impl SignatureDomainSeal for CatchUpContentProtobufBytes {}
@@ -158,7 +158,7 @@ impl SignatureDomain for MessageId {
     }
 }
 
-impl SignatureDomain for SenderInfoContent {
+impl<'a> SignatureDomain for SenderInfoContent<'a> {
     fn domain(&self) -> Vec<u8> {
         domain_with_prepended_length("ic-sender-info")
     }
