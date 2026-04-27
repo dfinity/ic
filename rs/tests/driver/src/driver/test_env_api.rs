@@ -2851,9 +2851,7 @@ pub fn scp_send_to(
     to_remote: &std::path::Path,
     mode: i32,
 ) {
-    try_scp_send_to(log, session, from_local, to_remote, mode).unwrap_or_else(|e| {
-        panic!("Failed to scp local {from_local:?} to remote {to_remote:?} because: {e}")
-    });
+    try_scp_send_to(log, session, from_local, to_remote, mode).unwrap_or_else(|e| panic!("{e:#}"));
 }
 
 /// Copy a local file via SSH to a remote host, returning an `Err` on failure
