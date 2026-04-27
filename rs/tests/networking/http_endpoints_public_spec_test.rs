@@ -784,6 +784,42 @@ fn get_canister_test_ids(snapshot: &TopologySnapshot) -> (CanisterId, [CanisterI
     )
 }
 
+fn query_calls_subnet_v3(env: TestEnv) {
+    let logger = env.logger();
+    let snapshot = env.topology_snapshot();
+    let socket = get_socket_addr(&snapshot);
+    let (sys_subnet_id, app_subnet_id) = get_subnet_ids(&snapshot);
+
+    block_on(async {
+        // Correct subnet ID with ic_00 and list_canisters → accepted
+        let response = Query::new_subnet(sys_subnet_id.get()).query(socket).await;
+        let status = inspect_response(response, "QuerySubnet", &logger).await;
+        assert_2xx(&status);
+
+        // Wrong subnet ID → rejected
+        let response = Query::new_subnet(app_subnet_id.get()).query(socket).await;
+        let status = inspect_response(response, "QuerySubnet", &logger).await;
+        assert_4xx(&status);
+
+        // Non-management canister with "list_canisters" → rejected
+        let (non_mgmt_canister, _) = get_canister_test_ids(&snapshot);
+        let response = Query::new_subnet(sys_subnet_id.get())
+            .with_canister_id(non_mgmt_canister.get())
+            .query(socket)
+            .await;
+        let status = inspect_response(response, "QuerySubnet", &logger).await;
+        assert_4xx(&status);
+
+        // IC_00 with wrong method → rejected
+        let response = Query::new_subnet(sys_subnet_id.get())
+            .with_method_name("install_code".to_string())
+            .query(socket)
+            .await;
+        let status = inspect_response(response, "QuerySubnet", &logger).await;
+        assert_4xx(&status);
+    });
+}
+
 fn update_calls_subnet_v4(env: TestEnv) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
@@ -859,6 +895,7 @@ fn main() -> Result<()> {
             SystemTestSubGroup::new()
                 .add_test(systest!(query_calls; query::Version::V2))
                 .add_test(systest!(query_calls; query::Version::V3))
+                .add_test(systest!(query_calls_subnet_v3))
                 .add_test(systest!(update_calls; Call::V2))
                 .add_test(systest!(update_calls; Call::V3))
                 .add_test(systest!(update_calls; Call::V4))

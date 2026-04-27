@@ -280,7 +280,7 @@ rust_ic_test(
     env = {
         "UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.module)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
-        "RUST_TEST_THREADS": "4",
+        "RUST_TEST_THREADS": "2",
     },
     tags = [
         "cpu:4",
