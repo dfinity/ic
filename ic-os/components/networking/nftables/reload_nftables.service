@@ -9,5 +9,11 @@ Wants=nss-lookup.target
 
 [Service]
 Type=oneshot
+# Retry the reload a few times to absorb transient failures (e.g. nss_icos
+# hostname resolution hiccups, or nftables.service being momentarily
+# restarting). Without a retry, a single transient failure leaves this unit
+# stuck in "failed" until the orchestrator rewrites nftables.conf again,
+# which only happens on content change. That is the root cause of flakiness
+# in //rs/tests/node:guestos_no_failed_systemd_units.
 ExecStartPre=/usr/sbin/nft flush ruleset
-ExecStart=systemctl reload nftables.service
+ExecStart=/bin/bash -c 'for i in 1 2 3 4 5; do systemctl reload nftables.service && exit 0; sleep 2; done; exit 1'
