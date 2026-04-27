@@ -130,10 +130,7 @@ pub fn validate_exchange_rate(
 
 /// Converts an `ExchangeRate` to permyriad (4 decimal places).
 ///
-/// The rate from the XRC has `metadata.decimals` decimal places. To normalize to
-/// permyriad, this divides by 10^(decimals - 4) when `decimals > 4`, multiplies
-/// by 10^(4 - decimals) when `decimals < 4`, and leaves the rate unchanged when
-/// `decimals == 4`. Fractional sub-units are truncated, not rounded.
+/// `rate.rate` is multiplied by 10^(4 - decimals), and then truncated.
 pub fn exchange_rate_to_permyriad(rate: &ExchangeRate) -> u64 {
     let decimals = rate.metadata.decimals;
     let power_diff = PERMYRIAD_DECIMAL_PLACES.abs_diff(decimals);
