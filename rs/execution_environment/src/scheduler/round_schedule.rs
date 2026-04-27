@@ -96,7 +96,7 @@ impl Ord for CanisterRoundState {
                 .cmp(&self.accumulated_priority)
                 .then_with(|| self.canister_id.cmp(&other.canister_id)),
 
-            // Among long executions, sort by executed slices; AP descending; start round
+            // Among long executions, sort by executed slices descending; AP descending; start round
             // ascending; then break ties by canister ID.
             //
             // An aborted execution (executed slices == 0) is considered to have the same
