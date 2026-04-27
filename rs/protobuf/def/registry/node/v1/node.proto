@@ -39,6 +39,16 @@ enum NodeRewardType {
   NODE_REWARD_TYPE_TYPE1DOT1 = 6;
   // type4
   NODE_REWARD_TYPE_TYPE4 = 7;
+  // type4.1
+  NODE_REWARD_TYPE_TYPE4DOT1 = 8;
+  // type4.2
+  NODE_REWARD_TYPE_TYPE4DOT2 = 9;
+  // type4.3
+  NODE_REWARD_TYPE_TYPE4DOT3 = 10;
+  // type4.4
+  NODE_REWARD_TYPE_TYPE4DOT4 = 11;
+  // type4.5
+  NODE_REWARD_TYPE_TYPE4DOT5 = 12;
 }
 
 // A node: one machine running a replica instance.

@@ -1,26 +1,36 @@
 use ic_canister_client::Sender;
 use ic_canister_client_sender::SigKeys;
 use ic_consensus_system_test_utils::upgrade::get_blessed_replica_versions;
+use ic_nervous_system_root::change_canister::AddCanisterRequest;
 use ic_nns_common::types::NeuronId;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_governance_api::NnsFunction;
-use ic_nns_test_utils::governance::{
-    submit_external_update_proposal_allowing_error, wait_for_final_state,
+use ic_nns_test_utils::{
+    governance::{
+        submit_external_update_proposal, submit_external_update_proposal_allowing_error,
+        wait_for_final_state,
+    },
+    registry::get_value_or_panic,
 };
-use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
+use ic_protobuf::registry::{
+    nns::v1::NnsCanisterRecords, replica_version::v1::GuestLaunchMeasurements,
+};
+use ic_registry_keys::make_nns_canister_records_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_system_test_driver::{
     driver::{
         test_env::{TestEnv, TestEnvAttribute},
         test_env_api::{HasPublicApiUrl, IcNodeSnapshot},
     },
-    nns::{get_governance_canister, submit_update_elected_replica_versions_proposal},
+    nns::{get_canister, get_governance_canister, submit_update_elected_replica_versions_proposal},
     util::runtime_from_url,
 };
-use ic_types::{NodeId, ReplicaVersion};
+use ic_types::{CanisterId, NodeId, ReplicaVersion, SubnetId};
 use once_cell::sync::OnceCell;
 use registry_canister::mutations::{
-    do_add_api_boundary_nodes::AddApiBoundaryNodesPayload, do_update_subnet::UpdateSubnetPayload,
+    do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
+    do_change_subnet_membership::ChangeSubnetMembershipPayload,
+    do_update_subnet::UpdateSubnetPayload,
 };
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
@@ -106,6 +116,38 @@ impl ProposalWithMainnetState {
         RECOVERED_NNS_DICTATOR_NEURON_IDENTITY
             .set((neuron.neuron_id, neuron.neuron_secret_key_pem))
             .expect("'read_dictator_neuron_identity_from_env' can only be called once");
+    }
+
+    pub async fn add_nns_canister(nns_url: Url, payload: AddCanisterRequest) -> CanisterId {
+        let self_ = Self::new();
+
+        let nns = runtime_from_url(nns_url, REGISTRY_CANISTER_ID.into());
+        let governance_canister = get_governance_canister(&nns);
+        let neuron_id = self_.neuron_id;
+        let proposal_sender = self_.proposal_sender.clone();
+
+        let proposal_id = submit_external_update_proposal_allowing_error(
+            &governance_canister,
+            proposal_sender,
+            neuron_id,
+            NnsFunction::NnsCanisterInstall,
+            payload.clone(),
+            format!("Adding NNS canister {}", payload.name),
+            "".to_string(),
+        )
+        .await
+        .expect("Failed to submit proposal to add NNS canister");
+        wait_for_final_state(&governance_canister, proposal_id).await;
+
+        let registry_canister = get_canister(&nns, REGISTRY_CANISTER_ID);
+        let nns_canister_records: NnsCanisterRecords = get_value_or_panic(
+            &registry_canister,
+            make_nns_canister_records_key().as_bytes(),
+        )
+        .await;
+        let new_canister_record = nns_canister_records.canisters.get(&payload.name).unwrap();
+
+        CanisterId::try_from(new_canister_record.id.clone().unwrap()).unwrap()
     }
 
     /// Code duplicate of rs/tests/consensus/utils/src/upgrade.rs:bless_replica_version
@@ -204,5 +246,39 @@ impl ProposalWithMainnetState {
             logger,
             "API Boundary Nodes addition proposal {:?} has been executed", proposal_id,
         );
+    }
+
+    /// Code duplicate of rs/tests/driver/src/nns.rs:change_subnet_membership
+    pub async fn change_subnet_membership(
+        url: Url,
+        subnet_id: SubnetId,
+        node_ids_add: &[NodeId],
+        node_ids_remove: &[NodeId],
+    ) -> Result<(), String> {
+        let self_ = Self::new();
+
+        let nns = runtime_from_url(url, REGISTRY_CANISTER_ID.into());
+        let governance_canister = get_governance_canister(&nns);
+        let proposal_payload = ChangeSubnetMembershipPayload {
+            subnet_id: subnet_id.get(),
+            node_ids_add: node_ids_add.to_vec(),
+            node_ids_remove: node_ids_remove.to_vec(),
+        };
+        let neuron_id = self_.neuron_id;
+        let proposal_sender = self_.proposal_sender.clone();
+
+        let proposal_id = submit_external_update_proposal(
+            &governance_canister,
+            proposal_sender,
+            neuron_id,
+            NnsFunction::ChangeSubnetMembership,
+            proposal_payload,
+            String::from("Change subnet membership for testing"),
+            "Motivation: testing".to_string(),
+        )
+        .await;
+
+        wait_for_final_state(&governance_canister, proposal_id).await;
+        Ok(())
     }
 }

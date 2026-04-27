@@ -9,19 +9,18 @@ on the process that this file is part of, see
 
 ## Added
 
-* Enabled CreateCanisterAndInstallCode proposals.
+* `TakeCanisterSnapshot` proposals now store the new snapshot ID in the
+  `success_value` field.
 
 ## Changed
 
-* The minimum dissolve delay required to submit non-manage-neuron proposals is now
-  a fixed 6 months, decoupled from the voting eligibility threshold which can be lower.
-
-* Enable Mission 70 voting rewards changes. This includes the following:
-  1. Reduce max dissolve delay from 8 years to 2 years. This includes capping existing neurons via data migration.
-  2. Reduce voting rewards pool by approximately 36.71% (equivalently, scale by 0.6329 times).
-  3. Dissolve delay bonus: quadratic instead of linear, with a maximum of 3x instead of 2x.
-  4. Reduce the minimum dissolve delay needed to vote to 2 weeks instead of 6 months.
-  5. 8 year gang 10% bonus.
+* Relax eight year gang membership requirement(s): Instead of needing to have dissolve
+  delay >= 8 * 365.25 days (8 "years"), which is exactly 252_460_800 seconds, a second
+  round of induction requires only that neurons had dissolve delay >= 8 * 365 days,
+  which is exactly 252_288_000 seconds. This is less than a 0.07% difference.
+  Additionally, to avoid bonusing newly staked ICP, the neuron must currently be aging
+  since before March 30 (midnight UTC). (Furthermore, neurons that are already members
+  will not have their eight year gang bonus base re-assessed.)
 
 ## Deprecated
 

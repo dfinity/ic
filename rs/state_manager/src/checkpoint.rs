@@ -617,13 +617,14 @@ pub fn load_checkpoint(
     };
     let (canister_states, subnet_schedule) =
         checkpoint_loader.load_canister_states(&mut thread_pool)?;
-    Ok(ReplicatedState::new_from_checkpoint(
+    let state = ReplicatedState::new_from_checkpoint(
         canister_states,
         checkpoint_loader.load_system_metadata(subnet_schedule)?,
         checkpoint_loader.load_subnet_queues()?,
         checkpoint_loader.load_refunds()?,
         checkpoint_loader.load_epoch_query_stats()?,
-    ))
+    );
+    Ok(state)
 }
 
 pub fn validate_eq_checkpoint(

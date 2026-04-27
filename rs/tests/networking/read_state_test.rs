@@ -13,9 +13,10 @@ Success::
     . public key and canister ranges for all subnets
     . public keys of nodes on the subnet
     . no public keys of nodes on other subnets
-. Malformed status requests are rejected by /api/{v2,v3}/canister/.../read_state
+. Malformed status requests are rejected by /api/{v2,v3}/canister/.../read_state and /api/{v2,v3}/subnet/.../read_state
 . Status requests for non-existent requests contain an absence proof by /api/{v2,v3}/canister/.../read_state
-. /api/{v2,v3}/canister/.../read_state requests of invalid paths are rejected
+  and /api/v3/subnet/.../read_state
+. /api/{v2,v3}/canister/.../read_state and /api/{v2,v3}/subnet/.../read_state requests of invalid paths are rejected
 . A canister's public metadata sections can be read by
     . The canister controller
     . The anonymous identity
@@ -27,11 +28,13 @@ Success::
     . module_hash is absent for empty canisters;
     . module_hash is a blob for non-empty canisters;
     . controllers are always present for existing canisters and consist of a list of principals
-. /api/{v2,v3}/canister/.../read_state requests for the full paths /request_status/R/status and /request_status/R/reply succeed
-. /api/{v2,v3}/canister/.../read_state requests for the path /request_status/R are rejected with 403 if signed by a different
-  principal than who made the original request with request ID R;
-. /api/{v2,v3}/canister/.../read_state requests for two paths /request_status/R and /request_status/S with two different request
-  IDs R and S are rejected with 400 (while requesting each of the two paths in isolation would succeed);
+. /api/{v2,v3}/canister/.../read_state and /api/v3/subnet/.../read_state requests for the full paths
+  /request_status/R/status and /request_status/R/reply succeed
+. /api/{v2,v3}/canister/.../read_state and /api/v3/subnet/.../read_state requests for the path /request_status/R
+  are rejected with 403 if signed by a different principal than who made the original request with request ID R;
+. /api/{v2,v3}/canister/.../read_state and /api/v3/subnet/.../read_state requests for two paths /request_status/R
+  and /request_status/S with two different request IDs R and S are rejected with 400
+  (while requesting each of the two paths in isolation would succeed);
 . Read state requests at `/api/{v2,v3}/subnet/{subnet_id}/read_state` for the path `/canister_ranges/{subnet_id}`
   succeed and return a correct list of canister ranges assigned to the subnet.
 . Read state requests at `/api/{v2,v3}/canister/{canister_id}/read_state` for the path `/canister_ranges/{subnet_id}`
@@ -211,14 +214,12 @@ fn read_state_with_identity_and_principal_id(
         .expect("There should be at least one API boundary node");
 
     let node_url = match endpoint {
-        Endpoint::CanisterReadState(read_state::canister::Version::V2)
-        | Endpoint::SubnetReadState(read_state::subnet::Version::V2) => {
-            api_boundary_node.get_public_url()
-        }
+        Endpoint::CanisterReadState(read_state::Version::V2)
+        | Endpoint::SubnetReadState(read_state::Version::V2) => api_boundary_node.get_public_url(),
         // TODO(CON-1586): switch to api_boundary_node once the endpoints are
         // allowlisted by the boundary nodes.
-        Endpoint::CanisterReadState(read_state::canister::Version::V3)
-        | Endpoint::SubnetReadState(read_state::subnet::Version::V3) => node.get_public_url(),
+        Endpoint::CanisterReadState(read_state::Version::V3)
+        | Endpoint::SubnetReadState(read_state::Version::V3) => node.get_public_url(),
     };
 
     let certificate = endpoint.read_state(node_url, paths, principal_id, identity)?;
@@ -273,7 +274,7 @@ fn test_subnet_path(env: TestEnv, endpoint: Endpoint) {
     let (app_subnet, other_app_subnet) = get_both_app_subnets(&env);
     let app_subnet_id = app_subnet.subnet_id;
 
-    // Query the `/subnet` enpoint of the app subnet
+    // Query the `/subnet` endpoint of the app subnet
     let path = vec!["subnet".into()];
     let cert = read_state(&env, vec![path], endpoint).expect("Valid request");
 
@@ -350,26 +351,25 @@ fn test_invalid_request_rejected(env: TestEnv, endpoint: Endpoint) {
         let path = vec!["request_status".into(), invalid_request_id.into()];
         let error = read_state(&env, vec![path], endpoint).expect_err("Invalid request");
         match endpoint {
-            Endpoint::CanisterReadState(_version) => {
+            Endpoint::CanisterReadState(_) | Endpoint::SubnetReadState(read_state::Version::V3) => {
                 assert_matches!(
                     error,
                     AgentError::HttpError(error) if error.status == StatusCode::BAD_REQUEST.as_u16(),
                     "Invalid request id"
                 )
             }
-            Endpoint::SubnetReadState(_version) => {
+            Endpoint::SubnetReadState(read_state::Version::V2) => {
                 assert_matches!(
                     error,
                     AgentError::HttpError(error) if error.status == StatusCode::NOT_FOUND.as_u16(),
-                    "request_status is not allowed on subnet read_state endpoint"
+                    "request_status is not allowed on subnet read_state V2 endpoint"
                 )
             }
         }
     }
 }
 
-fn test_absent_request(env: TestEnv, version: read_state::canister::Version) {
-    let endpoint = Endpoint::CanisterReadState(version);
+fn test_absent_request(env: TestEnv, endpoint: Endpoint) {
     for absent_request_id in [&[0; 32], &[8; 32], &[255; 32]] {
         let path = vec!["request_status".into(), absent_request_id.into()];
         let cert = read_state(&env, vec![path], endpoint).expect("Valid request");
@@ -458,7 +458,7 @@ fn test_non_utf8_metadata(env: TestEnv) {
     assert!(err.contains("Canister's Wasm module is not valid"));
 }
 
-fn test_metadata_path(env: TestEnv, version: read_state::canister::Version) {
+fn test_metadata_path(env: TestEnv, version: read_state::Version) {
     let endpoint = Endpoint::CanisterReadState(version);
     let node = get_first_app_node(&env);
     let runtime = runtime_from_url(node.get_public_url(), node.effective_canister_id());
@@ -589,7 +589,7 @@ fn test_metadata_path(env: TestEnv, version: read_state::canister::Version) {
     }
 }
 
-fn test_canister_path(env: TestEnv, version: read_state::canister::Version) {
+fn test_canister_path(env: TestEnv, version: read_state::Version) {
     let endpoint = Endpoint::CanisterReadState(version);
     let identities = [
         PrincipalId::from(get_identity().sender().unwrap()),
@@ -724,8 +724,7 @@ fn make_update_call(agent: &Agent, canister_id: &Principal) -> (RequestId, Vec<u
     (request_id, result)
 }
 
-fn test_request_path(env: TestEnv, version: read_state::canister::Version) {
-    let endpoint = Endpoint::CanisterReadState(version);
+fn test_request_path(env: TestEnv, endpoint: Endpoint) {
     let node = get_first_app_node(&env);
     let effective_canister_id = node.effective_canister_id();
     let agent = node.build_default_agent();
@@ -762,8 +761,7 @@ fn test_request_path(env: TestEnv, version: read_state::canister::Version) {
     assert_eq!(value.to_vec(), result);
 }
 
-fn test_request_path_access(env: TestEnv, version: read_state::canister::Version) {
-    let endpoint = Endpoint::CanisterReadState(version);
+fn test_request_path_access(env: TestEnv, endpoint: Endpoint) {
     let node = get_first_app_node(&env);
     let effective_canister_id = node.effective_canister_id();
     let agent = node.build_default_agent();
@@ -811,8 +809,8 @@ fn test_request_path_access(env: TestEnv, version: read_state::canister::Version
 }
 
 /// Queries the `api/{v2,v3}/canister/{canister_id}/read_state` endpoint for the canister ranges,
-/// and makes sure the requests fails.
-fn test_canister_canister_ranges_paths(env: TestEnv, version: read_state::canister::Version) {
+/// and makes sure the request fails.
+fn test_canister_canister_ranges_paths(env: TestEnv, version: read_state::Version) {
     let endpoint = Endpoint::CanisterReadState(version);
     let subnet = get_first_app_subnet(&env);
 
@@ -829,9 +827,9 @@ fn test_canister_canister_ranges_paths(env: TestEnv, version: read_state::canist
     assert_matches!(err, AgentError::HttpError(payload) if payload.status == 404);
 }
 
-/// Queries the `api/{v2,v3}/subnet/{subnet_id}/read_state` endpoint for the canister ranges.
+/// Queries the `api/{v2,v3}/subnet/{subnet_id}/read_state` endpoint for the canister ranges
 /// and compares the result with the canister ranges obtained from the registry.
-fn test_subnet_canister_ranges_paths(env: TestEnv, version: read_state::subnet::Version) {
+fn test_subnet_canister_ranges_paths(env: TestEnv, version: read_state::Version) {
     let endpoint = Endpoint::SubnetReadState(version);
     let subnet = get_first_app_subnet(&env);
 
@@ -849,10 +847,10 @@ fn test_subnet_canister_ranges_paths(env: TestEnv, version: read_state::subnet::
 /// doesn't work on the v3 endpoints, except when subnet_id == nns_subnet_id.
 fn test_deprecated_subnet_canister_ranges_paths(env: TestEnv, endpoint: Endpoint) {
     let should_accept_deprecated_canister_ranges_path = match endpoint {
-        Endpoint::CanisterReadState(read_state::canister::Version::V2)
-        | Endpoint::SubnetReadState(read_state::subnet::Version::V2) => true,
-        Endpoint::CanisterReadState(read_state::canister::Version::V3)
-        | Endpoint::SubnetReadState(read_state::subnet::Version::V3) => false,
+        Endpoint::CanisterReadState(read_state::Version::V2)
+        | Endpoint::SubnetReadState(read_state::Version::V2) => true,
+        Endpoint::CanisterReadState(read_state::Version::V3)
+        | Endpoint::SubnetReadState(read_state::Version::V3) => false,
     };
 
     let app_subnet = get_first_app_subnet(&env);
@@ -994,23 +992,23 @@ fn validate_canister_ranges(
 
 #[derive(Copy, Clone, Debug)]
 enum Endpoint {
-    CanisterReadState(read_state::canister::Version),
-    SubnetReadState(read_state::subnet::Version),
+    CanisterReadState(read_state::Version),
+    SubnetReadState(read_state::Version),
 }
 
 impl Endpoint {
     fn url(&self, base: Url, principal_id: PrincipalId) -> Url {
         match self {
-            Endpoint::CanisterReadState(read_state::canister::Version::V2) => {
+            Endpoint::CanisterReadState(read_state::Version::V2) => {
                 base.join(&format!("/api/v2/canister/{principal_id}/read_state"))
             }
-            Endpoint::CanisterReadState(read_state::canister::Version::V3) => {
+            Endpoint::CanisterReadState(read_state::Version::V3) => {
                 base.join(&format!("/api/v3/canister/{principal_id}/read_state"))
             }
-            Endpoint::SubnetReadState(read_state::subnet::Version::V2) => {
+            Endpoint::SubnetReadState(read_state::Version::V2) => {
                 base.join(&format!("/api/v2/subnet/{principal_id}/read_state"))
             }
-            Endpoint::SubnetReadState(read_state::subnet::Version::V3) => {
+            Endpoint::SubnetReadState(read_state::Version::V3) => {
                 base.join(&format!("/api/v3/subnet/{principal_id}/read_state"))
             }
         }
@@ -1094,36 +1092,34 @@ where
 fn main() -> Result<()> {
     let mut parallel_group = SystemTestSubGroup::new()
         .add_test(systest!(test_non_utf8_metadata))
-        .add_test(systest!(test_subnet_canister_ranges_paths; read_state::subnet::Version::V2))
-        .add_test(systest!(test_subnet_canister_ranges_paths; read_state::subnet::Version::V3))
-        .add_test(systest!(test_canister_canister_ranges_paths; read_state::canister::Version::V2))
-        .add_test(systest!(test_canister_canister_ranges_paths; read_state::canister::Version::V3))
-        // Only /api/{v2,v3}/canister/read_state endpoints are tested because paths with
-        // /request_status prefix are not supported by /api/{v2,v3}/subnet/read_state
-        .add_test(systest!(test_request_path; read_state::canister::Version::V2))
-        .add_test(systest!(test_request_path; read_state::canister::Version::V3))
-        // Only /api/{v2,v3}/canister/read_state endpoints are tested because paths with
-        // /request_status prefix are not supported by /api/{v2,v3}/subnet/read_state
-        .add_test(systest!(test_request_path_access; read_state::canister::Version::V2))
-        .add_test(systest!(test_request_path_access; read_state::canister::Version::V3))
-        // Only /api/{v2,v3}/canister/read_state endpoints are tested because paths with
-        // /request_status prefix are not supported by /api/{v2,v3}/subnet/read_state
-        .add_test(systest!(test_absent_request; read_state::canister::Version::V2))
-        .add_test(systest!(test_absent_request; read_state::canister::Version::V3))
+        .add_test(systest!(test_subnet_canister_ranges_paths; read_state::Version::V2))
+        .add_test(systest!(test_subnet_canister_ranges_paths; read_state::Version::V3))
+        .add_test(systest!(test_canister_canister_ranges_paths; read_state::Version::V2))
+        .add_test(systest!(test_canister_canister_ranges_paths; read_state::Version::V3))
+        // paths with /request_status prefix are not supported by /api/v2/subnet/read_state
+        .add_test(systest!(test_request_path; Endpoint::CanisterReadState(read_state::Version::V2)))
+        .add_test(systest!(test_request_path; Endpoint::CanisterReadState(read_state::Version::V3)))
+        .add_test(systest!(test_request_path; Endpoint::SubnetReadState(read_state::Version::V3)))
+        .add_test(systest!(test_request_path_access; Endpoint::CanisterReadState(read_state::Version::V2)))
+        .add_test(systest!(test_request_path_access; Endpoint::CanisterReadState(read_state::Version::V3)))
+        .add_test(systest!(test_request_path_access; Endpoint::SubnetReadState(read_state::Version::V3)))
+        .add_test(systest!(test_absent_request; Endpoint::CanisterReadState(read_state::Version::V2)))
+        .add_test(systest!(test_absent_request; Endpoint::CanisterReadState(read_state::Version::V3)))
+        .add_test(systest!(test_absent_request; Endpoint::SubnetReadState(read_state::Version::V3)))
         // Only /api/{v2,v3}/canister/read_state endpoints are tested because paths with
         // /canister prefix are not supported by /api/{v2,v3}/subnet/read_state
-        .add_test(systest!(test_canister_path; read_state::canister::Version::V2))
-        .add_test(systest!(test_canister_path; read_state::canister::Version::V3))
+        .add_test(systest!(test_canister_path; read_state::Version::V2))
+        .add_test(systest!(test_canister_path; read_state::Version::V3))
         // Only /api/{v2,v3}/canister/read_state endpoints are tested because paths with
         // /canister prefix are not supported by /api/{v2,v3}/subnet/read_state
-        .add_test(systest!(test_metadata_path; read_state::canister::Version::V2))
-        .add_test(systest!(test_metadata_path; read_state::canister::Version::V3));
+        .add_test(systest!(test_metadata_path; read_state::Version::V2))
+        .add_test(systest!(test_metadata_path; read_state::Version::V3));
 
     for endpoint in [
-        Endpoint::CanisterReadState(read_state::canister::Version::V2),
-        Endpoint::CanisterReadState(read_state::canister::Version::V3),
-        Endpoint::SubnetReadState(read_state::subnet::Version::V2),
-        Endpoint::SubnetReadState(read_state::subnet::Version::V3),
+        Endpoint::CanisterReadState(read_state::Version::V2),
+        Endpoint::CanisterReadState(read_state::Version::V3),
+        Endpoint::SubnetReadState(read_state::Version::V2),
+        Endpoint::SubnetReadState(read_state::Version::V3),
     ] {
         parallel_group = parallel_group
             .add_test(systest!(test_empty_paths_return_time; endpoint))

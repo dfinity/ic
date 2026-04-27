@@ -1179,7 +1179,7 @@ pub fn requests_with_valid_sender_info(env: TestEnv) {
 
             // The info blob that the signing canister attests to.
             let info_bytes = b"some user attributes".to_vec();
-            let sender_info_content = SenderInfoContent(info_bytes.clone());
+            let sender_info_content = SenderInfoContent(&info_bytes);
             let sender_info_signed_bytes = sender_info_content.as_signed_bytes();
             let sender_info_sig = signer.sign(&sender_info_signed_bytes).await;
 
