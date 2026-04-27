@@ -112,7 +112,9 @@ def load_explicit_targets() -> dict[str, Set[str]]:
 
 def diff_only_query(command: str, base: str, head: str | None, skip_long_tests: bool) -> str:
     """
-    Return a bazel query for all targets that have modified inputs in the specified git commit range. Taking into account:
+    Return a bazel query for all targets that have modified inputs in the specified git commit range.
+    If `head` is not specified it diffs against the working tree which is useful for testing locally.
+    It takes into account:
     * To return all targets in case files matching ALL_TARGETS_BLOBS are modified.
     * To only include test targets in case the bazel command was 'test'.
     * To exclude long_tests if requested.
