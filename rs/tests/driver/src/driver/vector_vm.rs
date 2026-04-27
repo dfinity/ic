@@ -262,32 +262,40 @@ impl VectorVm {
             return Ok(());
         }
 
-        std::fs::write(
-            vector_local_dir.join("generated_config.json"),
-            &generated_content,
-        )
-        .map_err(anyhow::Error::from)?;
-
-        std::fs::write(vector_local_dir.join("vector.toml"), get_vector_toml())
-            .map_err(anyhow::Error::from)?;
-
         let deployed_vm = env.get_deployed_universal_vm("vector").unwrap();
         let session = deployed_vm
             .block_on_ssh_session()
             .unwrap_or_else(|e| panic!("Failed to setup SSH session to vector because: {e:?}!",));
 
-        for file in vector_local_dir.read_dir().map_err(anyhow::Error::from)? {
-            let file = match file {
-                Ok(f) => f,
-                Err(e) => {
-                    warn!(log, "Failed to read an entry in vector local dir {:?}", e);
-                    continue;
-                }
-            };
+        let copy_result = (|| -> anyhow::Result<()> {
+            std::fs::write(
+                vector_local_dir.join("generated_config.json"),
+                &generated_content,
+            )?;
 
-            let from = file.path();
-            let to = Path::new("/etc/vector/config").join(file.path().file_name().unwrap());
-            try_scp_send_to(env.logger(), &session, &from, &to, 0o644)?;
+            std::fs::write(vector_local_dir.join("vector.toml"), get_vector_toml())?;
+
+            for file in vector_local_dir.read_dir()? {
+                let file = match file {
+                    Ok(f) => f,
+                    Err(e) => {
+                        warn!(log, "Failed to read an entry in vector local dir {:?}", e);
+                        continue;
+                    }
+                };
+
+                let from = file.path();
+                let to = Path::new("/etc/vector/config").join(file.path().file_name().unwrap());
+                try_scp_send_to(env.logger(), &session, &from, &to, 0o644)?;
+            }
+            Ok(())
+        })();
+
+        if let Err(e) = copy_result {
+            // Reset the config hash so the next `sync_with_vector` call will detect a
+            // change and re-attempt copying the config to the vector VM.
+            self.config_hash = 0;
+            return Err(e);
         }
 
         if !self.container_running {
