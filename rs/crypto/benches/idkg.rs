@@ -284,7 +284,7 @@ fn bench_create_transcript<M: Measurement, R: RngCore + CryptoRng>(
     let bench_context = OnceCell::new();
 
     group.bench_function(format!("create_transcript_{mode}"), |bench| {
-        bench.iter_batched_ref(
+        bench.iter_batched(
             || {
                 let (env, _, params) = bench_context.get_or_init(|| {
                     let env = test_case.new_test_environment(vault_type, rng);
@@ -303,7 +303,7 @@ fn bench_create_transcript<M: Measurement, R: RngCore + CryptoRng>(
             },
             |(receiver, dealings)| {
                 let (_, _, params) = bench_context.get().unwrap();
-                create_transcript_or_panic(receiver, params, dealings.clone())
+                create_transcript_or_panic(receiver, params, dealings)
             },
             SmallInput,
         )
