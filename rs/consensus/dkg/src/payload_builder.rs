@@ -3,7 +3,10 @@ use crate::{
     utils::{self, tags_iter, vetkd_key_ids_for_subnet},
 };
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
-use ic_interfaces::{crypto::ErrorReproducibility, dkg::DkgPool};
+use ic_interfaces::{
+    crypto::{ErrorReproducibility, NiDkgAlgorithm},
+    dkg::DkgPool,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, error, warn};
@@ -23,10 +26,9 @@ use ic_types::{
         get_faults_tolerated,
     },
     crypto::threshold_sig::ni_dkg::{
-        NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
+        NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         NiDkgTranscript,
         config::{NiDkgConfig, NiDkgConfigData, errors::NiDkgConfigValidationError},
-        errors::create_transcript_error::DkgCreateTranscriptError,
     },
     messages::CallbackId,
 };
@@ -259,7 +261,7 @@ pub(super) fn create_summary_payload(
     // Try to create transcripts from the last round.
     for (dkg_id, config) in last_summary.configs.iter() {
         let dealings = all_dealings.remove(dkg_id).unwrap_or_default();
-        match create_transcript(crypto, config, dealings) {
+        match NiDkgAlgorithm::create_transcript(crypto, config, dealings) {
             Ok(transcript) => {
                 let previous_value_found = if dkg_id.target_subnet == NiDkgTargetSubnet::Local {
                     next_transcripts
@@ -377,14 +379,6 @@ pub(super) fn create_summary_payload(
         height,
         initial_dkg_attempts,
     ))
-}
-
-fn create_transcript(
-    crypto: &dyn ConsensusCrypto,
-    config: &NiDkgConfig,
-    dealings: BTreeMap<NodeId, NiDkgDealing>,
-) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
-    ic_interfaces::crypto::NiDkgAlgorithm::create_transcript(crypto, config, dealings)
 }
 
 /// Return the set of next transcripts for all tags. If for some tag
