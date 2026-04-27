@@ -818,6 +818,10 @@ where
                     .cached_neuron_stake_e8s
                     .saturating_sub(abridged_neuron.neuron_fees_e8s)
                     .saturating_add(abridged_neuron.staked_maturity_e8s_equivalent.unwrap_or(0));
+
+                let result = abridged_neuron.eight_year_gang_bonus_base_e8s;
+                let neuron_id = neuron_id.id;
+                println!(r#"PREVIEW_RELAXED_EIGHT_YEAR_GANG {{"neuron_id": {neuron_id}, "eight_year_gang_bonus_base_e8s": {result} }}"#);
             })
             .expect("Failed to set relaxed eight year gang bonus base for neuron");
         }
