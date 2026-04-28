@@ -590,13 +590,9 @@ impl SystemMetadata {
         Ok(())
     }
 
-    /// Generates a new canister ID.
+    /// Computes a new canister ID for canister creation.
     ///
-    /// If a canister ID from a second canister allocation range is generated, the
-    /// first range is dropped. The last canister allocation range is never dropped.
-    ///
-    /// Returns the next canister ID that would be generated, without mutating
-    /// state.  Returns `Err` iff no more canister IDs can be generated.
+    /// Returns `Err` iff no more canister IDs are available.
     pub fn peek_new_canister_id(&self) -> Result<CanisterId, String> {
         // Start off with
         //     (canister_allocation_ranges
@@ -633,9 +629,11 @@ impl SystemMetadata {
     }
 
     /// Records `canister_id` as the last generated canister ID and drops any
-    /// exhausted allocation ranges.  Must be called with the ID returned by the
-    /// immediately preceding `peek_new_canister_id` call, once canister creation
-    /// has succeeded and the ID should be permanently consumed.
+    /// exhausted allocation ranges. Must be called with the canister ID returned
+    /// by the immediately preceding `peek_new_canister_id` call, once canister
+    /// creation succeeded and the canister ID should be permanently consumed.
+    ///
+    /// Note. The last canister allocation range is never dropped.
     pub fn commit_new_canister_id(&mut self, canister_id: CanisterId) {
         self.last_generated_canister_id = Some(canister_id);
 

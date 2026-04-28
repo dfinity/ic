@@ -1610,10 +1610,6 @@ impl CanisterManager {
             .subnet_available_memory
             .update_execution_memory_unchecked(available_execution_memory_change);
 
-        // Commit the canister ID now that settings validation has succeeded.
-        // For specified IDs the allocation counter is not involved.  For
-        // auto-generated IDs, `peek_new_canister_id` did not mutate state, so
-        // we advance `last_generated_canister_id` only here.
         if specified_id.is_none() {
             state.metadata.commit_new_canister_id(new_canister_id);
         }
@@ -1706,9 +1702,11 @@ impl CanisterManager {
         Ok(())
     }
 
-    /// Returns the next canister ID that would be generated, without mutating
-    /// state.  Returns `Err` if the subnet can generate no more canister IDs,
-    /// or if a canister with the peeked ID already exists.
+    /// Returns the next canister ID that is available for canister creation,
+    /// without mutating state.
+    ///
+    /// Returns `Err` if the subnet can generate no more canister IDs,
+    /// or if a canister with the next canister ID already exists.
     ///
     /// The caller must follow up with `state.metadata.commit_new_canister_id`
     /// once canister creation succeeds.

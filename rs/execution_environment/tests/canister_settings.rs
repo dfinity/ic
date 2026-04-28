@@ -222,20 +222,18 @@ fn failed_create_canister_does_not_reuse_canister_id() {
 
     // On an application subnet, a freezing threshold of 2^60 seconds combined
     // with a 1 MiB memory allocation requires an astronomically large cycle
-    // balance, causing the create_canister call to fail with
-    // InsufficientCyclesInMemoryAllocation during settings validation — before
-    // a canister ID is ever generated.
+    // balance, causing the create_canister call to fail.
     let failing_args = CreateCanisterArgs {
         settings: Some(
             CanisterSettingsArgsBuilder::new()
-                .with_freezing_threshold(1u64 << 60)
+                .with_freezing_threshold(1_u64 << 60)
                 .with_memory_allocation(1 << 20)
                 .build(),
         ),
         sender_canister_version: None,
     };
-    // Send enough cycles to pass the creation-fee check so the calls reach
-    // the freeze-threshold validation (where they are actually rejected).
+    // Send enough cycles to pass the creation fee check so the calls reach
+    // the freezing threshold validation (where they are actually rejected).
     let cycles_with_call: u64 = 1_000_000_000_000;
 
     // Each call is rejected during validation, so no canister ID is consumed.

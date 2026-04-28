@@ -203,7 +203,7 @@ fn init_allocation_ranges_if_empty() {
 
 #[test]
 fn peek_new_canister_id_no_allocation_ranges() {
-    let mut system_metadata = SystemMetadata::new(SUBNET_0, SubnetType::Application);
+    let system_metadata = SystemMetadata::new(SUBNET_0, SubnetType::Application);
 
     assert_eq!(
         Err("Canister ID allocation was consumed".into()),
@@ -266,6 +266,8 @@ fn peek_and_commit_new_canister_id() {
     assert_eq!(None, system_metadata.last_generated_canister_id);
     assert_eq!(2, system_metadata.canister_allocation_ranges.len());
 
+    /// Asserts that the next generated canister ID is the expected one.
+    /// And that `last_generated_canister_id` is updated accordingly.
     fn assert_next_generated(expected: u64, system_metadata: &mut SystemMetadata) {
         let canister_id = system_metadata.peek_new_canister_id().unwrap();
         assert_eq!(CanisterId::from(expected), canister_id);
