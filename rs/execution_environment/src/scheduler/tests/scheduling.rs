@@ -843,13 +843,16 @@ fn inner_round_first_execution_is_not_a_full_execution() {
         }
     }
     let mut total_accumulated_priority = 0;
-    let mut total_priority_credit = 0;
+    let mut total_executed_rounds = 0;
     for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
         total_accumulated_priority += canister_priority.accumulated_priority.get();
-        total_priority_credit += ONE_HUNDRED_PERCENT.get() * canister_priority.executed_slices;
+        total_executed_rounds += canister_priority.executed_rounds;
     }
     // The accumulated priority invariant should be respected.
-    assert_eq!(total_accumulated_priority - total_priority_credit, 0);
+    assert_eq!(
+        total_accumulated_priority - ONE_HUNDRED_PERCENT.get() * total_executed_rounds,
+        0
+    );
 }
 
 #[test]
@@ -954,12 +957,15 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
         }
     }
     let mut total_accumulated_priority = 0;
-    let mut total_priority_credit = 0;
+    let mut total_executed_rounds = 0;
     for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
         total_accumulated_priority += canister_priority.accumulated_priority.get();
-        total_priority_credit += ONE_HUNDRED_PERCENT.get() * canister_priority.executed_slices;
+        total_executed_rounds += canister_priority.executed_rounds;
     }
-    prop_assert_eq!(total_accumulated_priority - total_priority_credit, 0);
+    prop_assert_eq!(
+        total_accumulated_priority - ONE_HUNDRED_PERCENT.get() * total_executed_rounds,
+        0
+    );
 
     // Send one more message for first half of the canisters.
     for (i, canister) in canister_ids.iter().enumerate() {
@@ -999,12 +1005,15 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
         }
     }
     let mut total_accumulated_priority = 0;
-    let mut total_priority_credit = 0;
+    let mut total_executed_rounds = 0;
     for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
         total_accumulated_priority += canister_priority.accumulated_priority.get();
-        total_priority_credit += ONE_HUNDRED_PERCENT.get() * canister_priority.executed_slices;
+        total_executed_rounds += canister_priority.executed_rounds;
     }
-    prop_assert_eq!(total_accumulated_priority - total_priority_credit, 0);
+    prop_assert_eq!(
+        total_accumulated_priority - ONE_HUNDRED_PERCENT.get() * total_executed_rounds,
+        0
+    );
 }
 
 /// Canisters with inputs but without enough cycles to execute them do get

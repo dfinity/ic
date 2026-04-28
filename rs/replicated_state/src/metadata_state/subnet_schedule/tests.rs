@@ -36,7 +36,7 @@ fn get() {
 fn validate_eq() {
     let some_priority = CanisterPriority {
         accumulated_priority: AccumulatedPriority::new(1),
-        executed_slices: 2,
+        executed_rounds: 2,
         long_execution_start_round: Some(ExecutionRound::new(3)),
         last_full_execution_round: ExecutionRound::new(4),
     };
