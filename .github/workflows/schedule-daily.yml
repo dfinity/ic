@@ -128,6 +128,7 @@ jobs:
 
           # Run SEV tests
           bazel test //rs/tests/nested:guestos_upgrade_from_latest_release_to_current_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
+          bazel test //rs/tests/nested:hostos_upgrade_from_latest_release_to_current_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
           bazel test //rs/tests/nested:sev_recovery --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
 
           bazel clean
