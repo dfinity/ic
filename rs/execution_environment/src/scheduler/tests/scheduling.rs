@@ -945,13 +945,16 @@ fn inner_round_first_execution_is_not_a_full_execution() {
         }
     }
     let mut total_accumulated_priority = 0;
-    let mut total_priority_credit = 0;
+    let mut total_executed_rounds = 0;
     for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
         total_accumulated_priority += canister_priority.accumulated_priority.get();
-        total_priority_credit += ONE_HUNDRED_PERCENT.get() * canister_priority.executed_slices;
+        total_executed_rounds += canister_priority.executed_rounds;
     }
     // The accumulated priority invariant should be respected.
-    assert_eq!(total_accumulated_priority - total_priority_credit, 0);
+    assert_eq!(
+        total_accumulated_priority - ONE_HUNDRED_PERCENT.get() * total_executed_rounds,
+        0
+    );
 }
 
 #[test]
@@ -1000,7 +1003,7 @@ fn inner_round_long_execution_is_a_full_execution() {
             assert_eq!(system_state.queues().ingress_queue_size(), 0);
         }
         // All canisters should be marked as fully executed. The target canister,
-        // despite still having messages, executed a full slice of instructions.
+        // despite still having messages, executed a complete slice.
         assert_eq!(priority.last_full_execution_round, test.last_round());
     }
     let mut total_accumulated_priority = 0;
@@ -1056,12 +1059,15 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
         }
     }
     let mut total_accumulated_priority = 0;
-    let mut total_priority_credit = 0;
+    let mut total_executed_rounds = 0;
     for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
         total_accumulated_priority += canister_priority.accumulated_priority.get();
-        total_priority_credit += ONE_HUNDRED_PERCENT.get() * canister_priority.executed_slices;
+        total_executed_rounds += canister_priority.executed_rounds;
     }
-    prop_assert_eq!(total_accumulated_priority - total_priority_credit, 0);
+    prop_assert_eq!(
+        total_accumulated_priority - ONE_HUNDRED_PERCENT.get() * total_executed_rounds,
+        0
+    );
 
     // Send one more message for first half of the canisters.
     for (i, canister) in canister_ids.iter().enumerate() {
@@ -1101,12 +1107,15 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
         }
     }
     let mut total_accumulated_priority = 0;
-    let mut total_priority_credit = 0;
+    let mut total_executed_rounds = 0;
     for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
         total_accumulated_priority += canister_priority.accumulated_priority.get();
-        total_priority_credit += ONE_HUNDRED_PERCENT.get() * canister_priority.executed_slices;
+        total_executed_rounds += canister_priority.executed_rounds;
     }
-    prop_assert_eq!(total_accumulated_priority - total_priority_credit, 0);
+    prop_assert_eq!(
+        total_accumulated_priority - ONE_HUNDRED_PERCENT.get() * total_executed_rounds,
+        0
+    );
 }
 
 #[test]
@@ -1157,19 +1166,22 @@ fn charge_idle_canisters_for_full_execution_round() {
             }
         }
         let mut total_accumulated_priority = 0;
-        let mut total_priority_credit = 0;
+        let mut total_executed_rounds = 0;
         for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
             // Assert there is no divergency in accumulated priorities.
             let priority = canister_priority.accumulated_priority
-                - ONE_HUNDRED_PERCENT * canister_priority.executed_slices;
+                - ONE_HUNDRED_PERCENT * canister_priority.executed_rounds;
             assert_le!(priority.get(), 100 * MULTIPLIER);
             assert_ge!(priority.get(), -100 * MULTIPLIER);
 
             total_accumulated_priority += canister_priority.accumulated_priority.get();
-            total_priority_credit += ONE_HUNDRED_PERCENT.get() * canister_priority.executed_slices;
+            total_executed_rounds += canister_priority.executed_rounds;
         }
         // The accumulated priority invariant should be respected.
-        assert_eq!(total_accumulated_priority - total_priority_credit, 0);
+        assert_eq!(
+            total_accumulated_priority - ONE_HUNDRED_PERCENT.get() * total_executed_rounds,
+            0
+        );
     }
 }
 

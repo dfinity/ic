@@ -50,7 +50,7 @@ impl RoundScheduleFixture {
     /// large heap delta rate limit), and an empty `ReplicatedState`.
     fn new() -> Self {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
-        let current_round = ExecutionRound::new(0);
+        let current_round = ExecutionRound::new(1);
         let registry = MetricsRegistry::new();
         let metrics = SchedulerMetrics::new(&registry);
         let logger = ic_logger::replica_logger::test_logger(Some(slog::Level::Info));
@@ -92,7 +92,7 @@ impl RoundScheduleFixture {
         self.add_long_execution(canister_id);
         let canister_priority = self.state.canister_priority_mut(canister_id);
         canister_priority.long_execution_start_round = Some(self.current_round);
-        canister_priority.executed_slices = 1;
+        canister_priority.executed_rounds = 1;
         canister_id
     }
 
@@ -196,12 +196,12 @@ impl RoundScheduleFixture {
         &mut self,
         canister_id: CanisterId,
         long_execution_start_round: ExecutionRound,
-        executed_slices: i64,
+        executed_rounds: i64,
     ) {
         assert!(self.state.canister_state(&canister_id).is_some());
         let canister_priority = self.state.canister_priority_mut(canister_id);
         canister_priority.long_execution_start_round = Some(long_execution_start_round);
-        canister_priority.executed_slices = executed_slices;
+        canister_priority.executed_rounds = executed_rounds;
     }
 
     fn canister_state(&mut self, canister_id: &CanisterId) -> &mut CanisterState {
@@ -212,6 +212,12 @@ impl RoundScheduleFixture {
     /// schedule).
     fn canister_priority(&self, canister_id: &CanisterId) -> &CanisterPriority {
         self.state.canister_priority(canister_id)
+    }
+
+    /// Returns a mutable reference to the canister's scheduling priority
+    /// (initializing it to default if not present).
+    fn canister_priority_mut(&mut self, canister_id: CanisterId) -> &mut CanisterPriority {
+        self.state.canister_priority_mut(canister_id)
     }
 
     /// Returns true if the canister has an explicit scheduling priority, false
@@ -575,23 +581,23 @@ fn start_iteration_ordering_by_priority() {
     assert_eq!(&iteration.schedule, &[high_id, low_id]);
 }
 
-/// Ordering long executions by executed slices: fewer slices -> higher
+/// Ordering long executions by executed rounds: fewer rounds -> higher
 /// priority, regardless of start round.
 #[test]
-fn start_iteration_ordering_executed_slices() {
+fn start_iteration_ordering_executed_rounds() {
     let mut fixture = RoundScheduleFixture::new();
-    let fewer_slices_id = fixture.canister_with_long_execution();
-    fixture.set_long_execution_progress(fewer_slices_id, ExecutionRound::new(1), 2);
-    let more_slices_id = fixture.canister_with_long_execution();
-    fixture.set_long_execution_progress(more_slices_id, ExecutionRound::new(2), 3);
+    let fewer_rounds_id = fixture.canister_with_long_execution();
+    fixture.set_long_execution_progress(fewer_rounds_id, ExecutionRound::new(1), 2);
+    let more_rounds_id = fixture.canister_with_long_execution();
+    fixture.set_long_execution_progress(more_rounds_id, ExecutionRound::new(2), 3);
 
     let iteration = fixture.start_iteration(true);
 
-    // More slices = higher priority (more invested work, closer to completion).
-    assert_eq!(&iteration.schedule, &[more_slices_id, fewer_slices_id]);
+    // More rounds = higher priority (more invested work, closer to completion).
+    assert_eq!(&iteration.schedule, &[more_rounds_id, fewer_rounds_id]);
 }
 
-/// Ordering long executions by start round: same number of executed slices,
+/// Ordering long executions by start round: same number of executed rounds,
 /// earlier start -> higher priority.
 #[test]
 fn start_iteration_ordering_start_round() {
@@ -900,8 +906,8 @@ fn end_iteration_sets_long_execution_start_round() {
         canister_priority.long_execution_start_round,
         Some(fixture.current_round)
     );
-    // `executed_slices` is still zero, but the canister was marked fully executed.
-    assert_eq!(canister_priority.executed_slices, 0);
+    // `executed_rounds` is still zero, but the canister was marked fully executed.
+    assert_eq!(canister_priority.executed_rounds, 0);
     assert!(fixture.fully_executed_canisters().contains(&canister_id));
 }
 
@@ -982,8 +988,8 @@ fn end_iteration_adds_idle_completed_to_fully_executed() {
     // All canisters executed, none completed an execution.
     fixture.end_iteration(&all, &none, &none);
 
-    // `long` counts as fully executed, as it executed a full slice.
-    // `fully_executed` has no more inputs, so it is also counts as fully executed.
+    // `long` counts as fully executed, as it executed a slice.
+    // `fully_executed` has no more inputs, so it is also fully executed.
     assert_eq!(
         fixture.fully_executed_canisters(),
         &btreeset! {long, fully_executed}
@@ -1024,22 +1030,30 @@ fn advance_long_execution_preserves_long_execution_start_round() {
             .long_execution_start_round,
         Some(long_execution_start_round)
     );
-    // `executed_slices` was incremented by 1.
-    assert_eq!(fixture.canister_priority(&canister_id).executed_slices, 3);
+    // `executed_rounds` was incremented by 1.
+    assert_eq!(fixture.canister_priority(&canister_id).executed_rounds, 3);
 }
 
 //
 // --- finish_round tests ---
 //
 
-/// finish_round gives fully_executed canisters priority_credit += 100% and
-/// last_full_execution_round = current_round (the credit is then applied in
-/// the same round, so priority_credit is cleared by the end of finish_round).
+/// finish_round increments fully_executed canisters' executed_rounds by 1 and
+/// sets last_full_execution_round = current_round (the executed_rounds are then
+/// charged in the same round, so executed_rounds is cleared by the end of
+/// finish_round).
 #[test]
-fn finish_round_fully_executed_get_credit() {
+fn finish_round_fully_executed_get_executed_rounds_bumped() {
     let mut fixture = RoundScheduleFixture::new();
+
     let long = fixture.canister_with_long_execution();
     let new = fixture.canister_with_input();
+
+    // Start with positive AP, so that there's no free compute distribution.
+    const LONG_AP: AccumulatedPriority = AccumulatedPriority::new(210 * MULTIPLIER);
+    fixture.canister_priority_mut(long).accumulated_priority = LONG_AP;
+    const NEW_AP: AccumulatedPriority = AccumulatedPriority::new(110 * MULTIPLIER);
+    fixture.canister_priority_mut(new).accumulated_priority = NEW_AP;
 
     let current_round = ExecutionRound::new(1);
     fixture.start_round(current_round, RoundScheduleBuilder::new().with_cores(2));
@@ -1050,22 +1064,30 @@ fn finish_round_fully_executed_get_credit() {
 
     fixture.finish_round();
 
-    for canister_id in [long, new] {
-        let priority = fixture.canister_priority(&canister_id);
-        assert_eq!(
-            priority.last_full_execution_round, current_round,
-            "fully executed canister should have last_full_execution_round set"
-        );
-    }
+    // Long execution canister has same AP and executed_rounds bumped by 1.
+    let long_priority = fixture.canister_priority(&long);
+    assert_eq!(long_priority.accumulated_priority, LONG_AP);
+    assert_eq!(long_priority.executed_rounds, 2);
+    assert_eq!(long_priority.last_full_execution_round, current_round);
+
+    // New execution canister was charged 100 AP.
+    let new_priority = fixture.canister_priority(&new);
+    assert_eq!(
+        new_priority.accumulated_priority,
+        NEW_AP - ONE_HUNDRED_PERCENT
+    );
+    assert_eq!(new_priority.executed_rounds, 0);
+    assert_eq!(new_priority.last_full_execution_round, current_round);
 }
 
 /// finish_round grants scheduled canisters their compute allocation and
-/// observe_round_scheduled() on metrics.
+/// calls observe_round_scheduled() on metrics.
 #[test]
 fn finish_round_scheduled_get_compute_allocation_and_metrics() {
     let mut fixture = RoundScheduleFixture::new();
     // Add three canisters so the one we check is not in the first two (not fully
-    // executed), so it does not get priority_credit applied which would reduce its AP.
+    // executed), so it does not get executed_rounds bumped, which would reduce its
+    // accumulated priority.
     let mut canister_with_compute_allocation = |percent| {
         let canister = fixture.canister_with_input();
         fixture
@@ -1089,7 +1111,7 @@ fn finish_round_scheduled_get_compute_allocation_and_metrics() {
         &btreeset! {canister_a, canister_b}
     );
 
-    // All three canisters still have `next_execution() != StartNew`.
+    // All three canisters still have `next_execution() == StartNew`.
     fixture.finish_round();
 
     let priority = fixture.canister_priority(&canister_c);
@@ -1104,10 +1126,10 @@ fn finish_round_scheduled_get_compute_allocation_and_metrics() {
     );
 }
 
-/// finish_round preserves zero sum: sum of (accumulated_priority - priority_credit)
-/// over subnet_schedule is 0.
+/// finish_round preserves zero sum: sum(accumulated_priority) over
+/// subnet_schedule is 0.
 #[test]
-fn finish_round_free_allocation_zero_sum() {
+fn finish_round_accumulated_priority_zero_sum() {
     let mut fixture = RoundScheduleFixture::new();
     let _a = fixture.canister_with_input();
     let _b = fixture.canister_with_input();
@@ -1115,7 +1137,7 @@ fn finish_round_free_allocation_zero_sum() {
     fixture.start_iteration(true);
     fixture.finish_round();
 
-    let sum_true_priority: i64 = fixture
+    let sum_accumulated_priority: i64 = fixture
         .state
         .metadata
         .subnet_schedule
@@ -1123,39 +1145,43 @@ fn finish_round_free_allocation_zero_sum() {
         .map(|(_, p)| p.accumulated_priority.get())
         .sum();
     assert_eq!(
-        sum_true_priority, 0,
-        "sum of true_priority over schedule should be 0"
+        sum_accumulated_priority, 0,
+        "sum of accumulated priority over schedule should be 0"
     );
 }
 
-/// finish_round applies priority_credit (clears credit, reduces accumulated_priority,
-/// resets long_execution_mode) for canisters not in ContinueLong or in
-/// canisters_with_completed_messages.
+/// finish_round charges for executed rounds (clears executed_rounds, reduces
+/// accumulated_priority, resets long_execution_start_round) for canisters that
+/// complete a long execution.
 #[test]
-fn finish_round_apply_priority_credit() {
+fn finish_round_charges_for_executed_rounds() {
     let mut fixture = RoundScheduleFixture::new();
-    // A canister with a long execution and non-zero priority_credit.
+    // A canister with a long execution, 1 executed_round and AP = 210.
     let canister_id = fixture.canister_with_long_execution();
-    fixture.set_priority(
-        canister_id,
-        CanisterPriority {
-            executed_slices: 1,
-            ..*fixture.canister_priority(&canister_id)
-        },
-    );
+    const INITIAL_AP: AccumulatedPriority = AccumulatedPriority::new(210 * MULTIPLIER);
+    let canister_priority = fixture.canister_priority_mut(canister_id);
+    canister_priority.accumulated_priority = INITIAL_AP;
+    canister_priority.executed_rounds = 2;
 
     fixture.start_iteration(true);
-    // Set Prioritized and executed_slices; do not add to completed so end_iteration
-    // does not reset long_execution_mode — we want finish_round to apply_priority_credit.
-    // fixture.set_long_execution_progress(canister_id, Some(LongExecutionProgress { ... }));
+
+    // Long execution completes.
     fixture.remove_long_execution(canister_id);
+    fixture.end_iteration(
+        &btreeset! {canister_id},
+        &btreeset! {canister_id},
+        &btreeset! {},
+    );
 
     fixture.finish_round();
 
     let priority = fixture.canister_priority(&canister_id);
+    assert_eq!(priority.executed_rounds, 0);
+    assert_eq!(priority.long_execution_start_round, None);
+    // Charged for all executed rounds except the first, so two rounds.
     assert_eq!(
-        priority.executed_slices, 0,
-        "executed_slices should be cleared after apply_priority_credit"
+        priority.accumulated_priority,
+        INITIAL_AP - ONE_HUNDRED_PERCENT * 2
     );
 }
 
@@ -1574,7 +1600,7 @@ fn run_multi_round_simulation(
                         if sim.archetype.has_long_execution && sim.current_cycle_rounds_left > 0 {
                             fixture.pop_input(*canister_id);
                             fixture.add_long_execution(*canister_id);
-                            // We've just executed a full slice and consumed the instruction budget.
+                            // We've just executed a complete slice and consumed the instruction budget.
                             break;
                         }
                         canisters_with_completed_messages.insert(*canister_id);
@@ -1623,7 +1649,7 @@ fn run_multi_round_simulation(
                     .map(|(canister_id, p)| (
                         id_to_sim[canister_id],
                         p.accumulated_priority.get() / MULTIPLIER,
-                        -p.executed_slices,
+                        -p.executed_rounds,
                         p.long_execution_start_round.map(|r| r.get()).unwrap_or(0)
                     ))
                     .collect::<Vec<_>>()
