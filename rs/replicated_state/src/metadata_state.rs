@@ -628,7 +628,7 @@ impl SystemMetadata {
         })?;
 
         canister_allocation_ranges
-            .generate_canister_id(self.last_generated_canister_id)
+            .next_canister_id(self.last_generated_canister_id)
             .ok_or_else(|| "Canister ID allocation was consumed".into())
     }
 
@@ -651,14 +651,6 @@ impl SystemMetadata {
             // ranges are available.
             self.canister_allocation_ranges.drop_first();
         }
-    }
-
-    /// Generates and immediately commits the next canister ID.
-    /// Returns `Err` iff no more canister IDs can be generated.
-    pub fn generate_new_canister_id(&mut self) -> Result<CanisterId, String> {
-        let canister_id = self.peek_new_canister_id()?;
-        self.commit_new_canister_id(canister_id);
-        Ok(canister_id)
     }
 
     /// Returns the number of canister IDs that can still be generated.
