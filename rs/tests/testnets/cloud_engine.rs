@@ -107,14 +107,7 @@ struct DcConfig {
     node_provider: NodeProvider,
 }
 
-// Distribution of the 30 data centers across 4 node providers (uneven on
-// purpose, as requested):
-//   - DFINITY:                            9 DCs (18 nodes)
-//   - Alusion:                            8 DCs (16 nodes)
-//   - OneSixtyTwo Digital Capital:        7 DCs (14 nodes)
-//   - Decentralized Entities Foundation:  6 DCs (12 nodes)
 const DATA_CENTERS: &[DcConfig] = &[
-    // ------------------------- DFINITY (9 DCs) --------------------------
     DcConfig {
         id: "Fremont",
         region: "North America,US,California",
@@ -187,7 +180,6 @@ const DATA_CENTERS: &[DcConfig] = &[
         longitude: -46.633,
         node_provider: NodeProvider::DFINITY,
     },
-    // ------------------------- Alusion (8 DCs) --------------------------
     DcConfig {
         id: "Sydney",
         region: "Oceania,AU,New South Wales",
@@ -252,7 +244,6 @@ const DATA_CENTERS: &[DcConfig] = &[
         longitude: 8.540,
         node_provider: NodeProvider::Alusion,
     },
-    // --------------- OneSixtyTwo Digital Capital (7 DCs) ----------------
     DcConfig {
         id: "Dublin",
         region: "Europe,IE,Dublin",
@@ -309,7 +300,6 @@ const DATA_CENTERS: &[DcConfig] = &[
         longitude: 18.424,
         node_provider: NodeProvider::OneSixtyTwoDigitalCapital,
     },
-    // ------------ Decentralized Entities Foundation (6 DCs) -------------
     DcConfig {
         id: "Nairobi",
         region: "Africa,KE,Nairobi",
@@ -450,13 +440,6 @@ pub fn setup(env: TestEnv) {
                 dc_id: dc.id.to_string(),
                 rewardable_nodes,
             });
-
-        // 1 CloudEngine node per DC
-        // cloud_engine_subnet = cloud_engine_subnet.add_node(
-        //     Node::new()
-        //         .with_node_operator_principal_id(operator_principal)
-        //         .with_node_reward_type(NodeRewardType::Type4),
-        // );
 
         // Add unassigned nodes for this DC using the circularly-assigned types.
         for (_, (reward_type, _)) in dc_nodes {
