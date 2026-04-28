@@ -2174,6 +2174,31 @@ mod tests {
     }
 
     #[test]
+    fn test_get_completed_target_ids() {
+        let targets: Vec<_> = (1..=3).map(|i| NiDkgTargetId::new([i; 32])).collect();
+        let tags = [NiDkgTag::LowThreshold, NiDkgTag::HighThreshold];
+
+        let config_ids: Vec<_> = targets
+            .iter()
+            .flat_map(|t| {
+                tags.iter().map(|tag| NiDkgId {
+                    start_block_height: Height::from(1),
+                    dealer_subnet: subnet_test_id(1),
+                    dkg_tag: tag.clone(),
+                    target_subnet: NiDkgTargetSubnet::Remote(*t),
+                })
+            })
+            .collect();
+
+        // target 0 has both tags completed, target 1 has only one tag completed,
+        // target 2 is not completed.
+        let completed: BTreeSet<_> = config_ids[..3].iter().cloned().collect();
+
+        let result = get_completed_target_ids(&completed);
+        assert_eq!(result, BTreeSet::from([targets[0], targets[1]]));
+    }
+
+    #[test]
     fn test_process_subnet_call_context_ignores_completed_targets() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let node_ids = vec![node_test_id(0), node_test_id(1)];

@@ -1994,7 +1994,7 @@ mod tests {
     /// previous summary block). We will still retry both of the configs
     /// as part of early remote transcript creation.
     #[test]
-    fn test_early_transcripts_are_createdfor_single_setup_initial_dkg_config() {
+    fn test_early_transcripts_are_created_for_single_setup_initial_dkg_config() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let (mut deps, target_id, remote_dkg_ids) = setup_initial_dkg_test(pool_config);
 
@@ -2074,9 +2074,9 @@ mod tests {
             )
             .unwrap();
 
-            // Even though sufficient dealings exist on chain for both configs,
-            // no early transcript should be created because the summary only
-            // has 1 of the expected 2 configs for a setup_initial_dkg target.
+            // Even though the summary only has 1 of the expected 2 configs for a setup_initial_dkg target,
+            // we should still generate early transcripts for both configs. This is because we generate configs
+            // based on the data in the replicated state, and there are enough dealings on chain.
             let early_transcripts = payload_builder::create_early_remote_transcripts(
                 &pool_reader,
                 deps.crypto.as_ref(),
@@ -2085,15 +2085,15 @@ mod tests {
                 &no_op_logger(),
             )
             .unwrap();
-            assert_eq!(early_transcripts.len(), 2,);
+            assert_eq!(early_transcripts.len(), 2);
             for (dkg_id, _callback_id, result) in &early_transcripts {
                 assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Remote(target_id));
                 assert!(result.is_ok());
             }
 
-            // The next summary should contain both transcripts: the one already
-            // in the modified summary's transcripts_for_remote_subnets and the
-            // one created from the remaining config's dealings.
+            // If we instead build a summary, then it should also contain both transcripts:
+            // the one already in the modified summary's transcripts_for_remote_subnets and
+            // the one created from the remaining config's dealings.
             let next_summary = payload_builder::create_summary_payload(
                 subnet_test_id(0),
                 deps.registry.as_ref(),
@@ -2117,8 +2117,8 @@ mod tests {
                 assert!(result.is_ok());
             }
 
-            // Control: using the original summary with both configs DOES
-            // produce early transcripts.
+            // Control: using the original summary with both configs also
+            // produces early transcripts.
             let original_callback_id_map = remote::build_callback_id_config_map(
                 subnet_test_id(0),
                 deps.registry.as_ref(),

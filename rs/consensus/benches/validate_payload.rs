@@ -104,7 +104,6 @@ where
             &StateManagerConfig::new(tmpdir.path().to_path_buf()),
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
-            tokio::sync::watch::channel(ic_types::Height::from(0)).0,
         );
         setup_ingress_state(now, &mut state_manager);
         let state_manager = Arc::new(state_manager);

@@ -35,6 +35,7 @@ ic-consensus-mocks = { path = "../mocks" }
 ic-interfaces-mocks = { path = "../../interfaces/mocks" }
 ic-crypto-interfaces-sig-verification = { path = "../../crypto/interfaces/sig_verification" }
 ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
+ic-crypto-test-utils-canister-threshold-sigs = { path = "../../crypto/test_utils/canister_threshold_sigs" }
 ic-crypto-test-utils-crypto-returning-ok = { path = "../../crypto/test_utils/crypto_returning_ok" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }

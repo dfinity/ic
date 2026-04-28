@@ -177,12 +177,14 @@ pub fn assert_node_is_unassigned_with_ssh_session(
     .expect("Failed to detect that node has deleted its state.");
 }
 
-fn fetch_metric_from_nodes<T>(nodes: Vec<IcNodeSnapshot>, metric_name: &str) -> Result<Vec<T>>
+async fn fetch_metric_from_nodes<T>(nodes: Vec<IcNodeSnapshot>, metric_name: &str) -> Result<Vec<T>>
 where
     T: Copy + Debug + std::str::FromStr,
 {
     let metrics_fetcher = MetricsFetcher::new(nodes.iter().cloned(), vec![metric_name.to_string()]);
-    let metrics = block_on(metrics_fetcher.fetch::<T>())
+    let metrics = metrics_fetcher
+        .fetch::<T>()
+        .await
         .map_err(|err| anyhow!("Could not connect to metrics yet {:?}", err))?;
 
     let vals = metrics[metric_name].clone();
@@ -200,8 +202,11 @@ where
 const EARLIEST_TOPOLOGY_VERSION: &str = "peer_manager_topology_earliest_registry_version";
 
 pub fn get_node_earliest_topology_version(node: &IcNodeSnapshot) -> Result<RegistryVersion> {
-    fetch_metric_from_nodes::<u64>(vec![node.clone()], EARLIEST_TOPOLOGY_VERSION)
-        .map(|versions| RegistryVersion::from(versions[0]))
+    block_on(fetch_metric_from_nodes::<u64>(
+        vec![node.clone()],
+        EARLIEST_TOPOLOGY_VERSION,
+    ))
+    .map(|versions| RegistryVersion::from(versions[0]))
 }
 
 pub fn await_subnet_earliest_topology_version(
@@ -209,16 +214,16 @@ pub fn await_subnet_earliest_topology_version(
     target_version: RegistryVersion,
     logger: &Logger,
 ) {
-    await_subnet_earliest_topology_version_with_retries(
+    block_on(await_subnet_earliest_topology_version_with_retries_async(
         subnet,
         target_version,
         logger,
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
-    )
+    ))
 }
 
-pub fn await_subnet_earliest_topology_version_with_retries(
+pub async fn await_subnet_earliest_topology_version_with_retries_async(
     subnet: &SubnetSnapshot,
     target_version: RegistryVersion,
     logger: &Logger,
@@ -229,30 +234,34 @@ pub fn await_subnet_earliest_topology_version_with_retries(
         logger,
         "Waiting until earliest topology version {} on subnet {}", target_version, subnet.subnet_id,
     );
-    ic_system_test_driver::retry_with_msg!(
+    ic_system_test_driver::retry_with_msg_async!(
         format!(
             "Waiting until earliest topology version {} on subnet {}",
             target_version, subnet.subnet_id,
         ),
-        logger.clone(),
+        logger,
         retry_timeout,
         retry_backoff,
-        || fetch_metric_from_nodes::<u64>(subnet.nodes().collect(), EARLIEST_TOPOLOGY_VERSION)
-            .and_then(|earliest_registry_versions| {
-                let min_earliest_registry_version =
-                    earliest_registry_versions.iter().min().unwrap();
-                assert!(
-                    *min_earliest_registry_version <= target_version.get(),
-                    "Target version already surpassed"
-                );
-                ensure!(
-                    *min_earliest_registry_version == target_version.get(),
-                    "Target registry version not yet reached, current: {:?}, target: {}",
-                    earliest_registry_versions,
-                    target_version
-                );
-                Ok(())
-            })
+        || async {
+            fetch_metric_from_nodes::<u64>(subnet.nodes().collect(), EARLIEST_TOPOLOGY_VERSION)
+                .await
+                .and_then(|earliest_registry_versions| {
+                    let min_earliest_registry_version =
+                        earliest_registry_versions.iter().min().unwrap();
+                    assert!(
+                        *min_earliest_registry_version <= target_version.get(),
+                        "Target version already surpassed"
+                    );
+                    ensure!(
+                        *min_earliest_registry_version == target_version.get(),
+                        "Target registry version not yet reached, current: {:?}, target: {}",
+                        earliest_registry_versions,
+                        target_version
+                    );
+                    Ok(())
+                })
+        }
     )
+    .await
     .expect("The subnet did not reach the specified registry version in time")
 }

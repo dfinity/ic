@@ -14,7 +14,7 @@ use ic_protobuf::registry::subnet::v1::SubnetFeatures as SubnetFeaturesPb;
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{NodeId, PrincipalId, ReplicaVersion};
+use ic_types::{NodeId, PrincipalId, ReplicaVersion, SubnetId};
 use registry_canister::mutations::do_create_subnet;
 use registry_canister::mutations::do_create_subnet::CanisterCyclesCostSchedule;
 use std::collections::BTreeMap;
@@ -37,6 +37,11 @@ pub(crate) struct ProposeToCreateSubnetCmd {
     #[clap(long)]
     // Assigns this subnet ID to the newly created subnet
     pub subnet_id_override: Option<PrincipalId>,
+
+    #[clap(long)]
+    /// Optional subnet that should handle `setup_initial_dkg` for subnet creation.
+    /// If not set, handling defaults to the NNS subnet.
+    pub initial_dkg_subnet_id: Option<PrincipalId>,
 
     #[clap(long)]
     /// Maximum amount of bytes per message. This is a hard cap.
@@ -314,6 +319,7 @@ impl ProposeToCreateSubnetCmd {
         do_create_subnet::CreateSubnetPayload {
             node_ids,
             subnet_id_override: self.subnet_id_override,
+            initial_dkg_subnet_id: self.initial_dkg_subnet_id.map(SubnetId::from),
             max_ingress_bytes_per_message: self.max_ingress_bytes_per_message.unwrap_or_default(),
             max_ingress_messages_per_block: self.max_ingress_messages_per_block.unwrap_or_default(),
             max_ingress_bytes_per_block: self.max_ingress_bytes_per_block,
@@ -401,6 +407,7 @@ mod tests {
             summary_file: None,
             subnet_handler_id: None,
             subnet_id_override: None,
+            initial_dkg_subnet_id: None,
             max_ingress_bytes_per_message: None,
             max_ingress_messages_per_block: None,
             max_ingress_bytes_per_block: None,
@@ -516,6 +523,20 @@ mod tests {
                 features: SubnetFeaturesPb::from(features),
                 ..minimal_create_payload()
             },
+        );
+    }
+
+    #[test]
+    fn cli_to_payload_conversion_includes_initial_dkg_subnet_id() {
+        let initial_dkg_subnet_id = PrincipalId::from_str("gxevo-lhkam-aaaaa-aaaap-yai").unwrap();
+        let mut cmd = ProposeToCreateSubnetCmd {
+            initial_dkg_subnet_id: Some(initial_dkg_subnet_id),
+            ..empty_propose_to_create_subnet_cmd()
+        };
+        cmd.apply_defaults_for_unset_fields();
+        assert_eq!(
+            cmd.new_payload().initial_dkg_subnet_id,
+            Some(SubnetId::from(initial_dkg_subnet_id))
         );
     }
 

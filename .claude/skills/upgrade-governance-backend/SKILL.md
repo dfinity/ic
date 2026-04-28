@@ -1,6 +1,9 @@
 ---
-name: nns-sns-release
-description: Guide the NNS/SNS canister release process — pick RC commit, determine targets, create proposal texts, submit proposals, create forum posts, schedule votes, and update changelogs.
+name: upgrade-governance-backend
+description: >
+  Guide the governance backend canister upgrade process — pick RC commit,
+  determine targets, create proposal texts, submit proposals, create forum
+  posts, schedule votes, and update changelogs.
 ---
 
 # NNS/SNS Canister Release
@@ -9,22 +12,42 @@ This skill orchestrates the NNS and SNS canister release process. It replaces th
 `release-runscript` binary (`rs/nervous_system/tools/release-runscript`) by calling
 the same underlying bash scripts directly.
 
-All commands should be run from the repository root.
+All commands should be run from the repository root. Prefix commands with
+`cd "$(git rev-parse --show-toplevel)"` to ensure this.
 
 ## Prerequisites
 
-Before starting, verify prerequisites with a single command:
-```
-git fetch origin master --force && gh auth status && brew list coreutils >/dev/null && bazel --version
-```
-If any tool is missing, guide the user:
-- `gh`: `brew install gh && gh auth login`
-- `coreutils`: `brew install coreutils` (needed for `gdate` in changelog scripts)
-- `bazel`: `brew install bazelisk`
+1. Switch to an up-to-date master branch so the release scripts match the latest code:
+   ```
+   cd "$(git rev-parse --show-toplevel)" && git checkout master && git pull
+   ```
+
+2. Run `gh auth status` to check if `gh` is authenticated with `github.com`.
+   If not, run:
+   ```
+   gh auth login --hostname github.com --git-protocol ssh --skip-ssh-key --web
+   ```
+   This prints a one-time device code and a URL. Instruct the user to open the
+   URL in their browser and enter the code. **Do not** use bare `gh auth login`,
+   as the interactive prompts are unreliable when run from an AI agent.
+
+3. Verify remaining prerequisites:
+   ```
+   brew list coreutils >/dev/null && bazel --version
+   ```
+   If any tool is missing, guide the user:
+   - `coreutils`: `brew install coreutils` (needed for `gdate` in changelog scripts)
+   - `bazel`: `brew install bazelisk`
 
 Also check for optional tools and inform the user what will be automated vs manual:
-- **Slack MCP** (`mcp__plugin_slack_slack__*`): if available, will auto-post to `#dev-nns`
-  and update the channel topic. If not, will print the message and topic for manual posting.
+- **Slack MCP** (`mcp__plugin_slack_slack__*`): if available, will stage a Slack
+  draft for `#dev-nns` and copy the channel-topic text to the clipboard. If not,
+  will print the message and topic for manual posting.
+
+  To install: run `/plugin install slack@claude-plugins-official` in Claude Code
+  (the plugin lives in the official `anthropics/claude-plugins-official`
+  marketplace, which is preconfigured). On first use you'll be prompted to
+  authenticate with your Slack workspace.
 
 ## Step 1: Pick Release Candidate Commit
 
@@ -33,12 +56,22 @@ Run:
 ./rs/nervous_system/tools/release/cmd.sh latest_commit_with_prebuilt_artifacts
 ```
 
-This returns the latest master commit with prebuilt artifacts. If it does not match
-`origin/master` HEAD, the artifacts are not ready yet. Poll every 2 minutes in the
-background (using Bash tool's `run_in_background` option) until they match. The user
-can continue other work while waiting. If artifacts have not appeared after 20 minutes,
-warn the user that CI may be broken and ask whether to continue waiting or use the
-latest available commit.
+This returns the most recent master commit for which prebuilt artifacts have been
+uploaded. Artifacts are uploaded after `bazel build` but before `bazel test`, so
+having artifacts does NOT guarantee tests passed — always verify CI next.
+
+Verify the `bazel-test-all` job passed for the returned commit:
+```
+gh api repos/dfinity/ic/commits/$RC_COMMIT/check-runs --jq '[.check_runs[] | select(.name == "ci-kickoff / bazel-test-all") | {status, conclusion}]'
+```
+
+- If the conclusion is `success`, use this commit.
+- If tests have not yet finished (`status != "completed"`) or the conclusion is
+  not `success`, do **not** wait. Instead, open
+  https://github.com/dfinity/ic/actions/workflows/ci-kickoff.yml?query=branch%3Amaster+is%3Asuccess
+  and pick the most recent commit with a successful `ci-kickoff` run. Re-run the
+  `latest_commit_with_prebuilt_artifacts` check-runs query above on that commit
+  to confirm artifacts are available, then use it.
 
 Ask the user to confirm the commit or provide an override.
 
@@ -52,9 +85,12 @@ Run:
 ```
 
 Parse the output to categorize each canister:
-- **Interesting commits**: canisters with at least one non-chore/refactor/test/docs commit (shown in green by the script). These are strong candidates for release.
-- **Chore-only commits**: canisters with commits but all are chore/refactor/test/docs. Generally skip these unless there is a reason to release.
-- **No new commits**: canisters with zero commits since last release. Do not release.
+- **Interesting commits**: canisters with at least one `feat` or `fix` commit
+  (shown in green by the script). These are strong candidates for release.
+- **Chore-only commits**: canisters where every commit is chore, refactor, test,
+  or docs. Generally skip these unless there is a reason to release.
+- **No new commits**: canisters with zero commits since last release. Do not
+  release.
 
 **Exclude SNS ledger, index, and archive** from this process. The ICRC ledger suite
 (ledger/index/archive) is released separately by the DeFi team on a different cadence
@@ -94,21 +130,31 @@ remain upgradeable (no panic during pre-upgrade). The test uses golden NNS state
 Before running, check that the working tree is clean (`git status --porcelain`). If
 there are uncommitted changes, warn the user — `git checkout` will fail or lose work.
 
-Print the fully-substituted one-liner command to the user before running it, with
-`$RC_COMMIT` and `$NNS_CANISTERS_CSV` replaced by their actual values (e.g.
+Build the fully-substituted command with `$RC_COMMIT` and
+`$NNS_CANISTERS_CSV` replaced by their actual values (e.g.
 `governance,registry,root`):
 
 ```
-git checkout $RC_COMMIT && bazel test --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=$NNS_CANISTERS_CSV --test_output=streamed --test_arg=--nocapture --test_timeout=3600 //rs/nns/integration_tests:upgrade_canisters_with_golden_nns_state
+git checkout $RC_COMMIT && \
+bazel test \
+    --test_env=SSH_AUTH_SOCK \
+    --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=$NNS_CANISTERS_CSV \
+    --test_output=streamed \
+    --test_arg=--nocapture \
+    --test_timeout=3600 \
+    //rs/nns/integration_tests:upgrade_canisters_with_golden_nns_state
 ```
 
-This test can take 5-15 minutes. Run it in the background (using Bash tool's
-`run_in_background` option) so the user can continue working in the session.
-Proceed to step 4 (creating proposal texts) in parallel while the test runs,
-but do not proceed to step 5 (submission) until the test passes.
+This test may require a supported environment (e.g. devenv). Ask the user how
+they want to run it:
+1. **Run locally** — execute the command directly in the session
+2. **Run via MCP** — use a remote bazel MCP tool if one is available
+3. **Print only** — output the command for the user to copy-paste into their
+   own environment (e.g. devenv)
 
-SNS upgrade testing is covered by `sns_release_qualification` in CI and does not need
-to be run manually.
+This test can take 5-15 minutes. Proceed to step 4 (creating proposal texts)
+in parallel while the test runs, but do not proceed to step 5 (submission)
+until the test passes.
 
 ## Step 4: Create Proposal Texts
 
@@ -120,14 +166,19 @@ Create a proposals directory:
 mkdir -p ../proposals/release-$RELEASE_DATE
 ```
 
-For each NNS canister, run (note: `2>/dev/null` to avoid stderr warnings leaking into the file):
+For each NNS canister, run:
 ```
-./rs/nervous_system/tools/release/prepare-nns-upgrade-proposal-text.sh $CANISTER $RC_COMMIT 2>/dev/null > ../proposals/release-$RELEASE_DATE/nns-$CANISTER.md
+./rs/nervous_system/tools/release/prepare-nns-upgrade-proposal-text.sh \
+    $CANISTER $RC_COMMIT \
+    > ../proposals/release-$RELEASE_DATE/nns-$CANISTER.md
 ```
 
-Special case: for `cycles-minting`, ask the user for an upgrade arg (default `()`), then:
+Special case: for `cycles-minting`, ask the user for an upgrade arg
+(default `()`), then:
 ```
-./rs/nervous_system/tools/release/prepare-nns-upgrade-proposal-text.sh cycles-minting $RC_COMMIT "()" 2>/dev/null > ../proposals/release-$RELEASE_DATE/nns-cycles-minting.md
+./rs/nervous_system/tools/release/prepare-nns-upgrade-proposal-text.sh \
+    cycles-minting $RC_COMMIT "()" \
+    > ../proposals/release-$RELEASE_DATE/nns-cycles-minting.md
 ```
 
 For each SNS canister, run:
@@ -162,7 +213,6 @@ inside the Claude Code session.**
 
 Check memory for the user's saved neuron ID. If found, pre-fill it and ask the user
 to confirm. If not found, ask the user for their neuron ID.
-(Lookup: https://www.notion.so/dfinityorg/3a1856c603704d51a6fcd2a57c98f92f?v=fc597afede904e499744f3528cad6682)
 
 Instruct the user to:
 1. Plug in their HSM key and unplug their YubiKey
@@ -209,14 +259,14 @@ The generated post has two TODOs. Resolve them automatically:
 2. Delete the "TODO - delete if nothing relevant" line under Additional Notes
    (or replace with actual notes if the user mentioned breaking changes).
 
-The generated post says "DFINITY plans to vote on these proposals the following Monday."
-If today is not Friday, update this to match the actual vote date (3 calendar days from
-today, per step 7). E.g. if today is Monday, change to "this Thursday".
+The generated post includes the vote date (3 calendar days from today),
+computed by the script. Verify it looks correct.
 
-After resolving TODOs, write the final forum post to a file (e.g. `/tmp/forum-post-nns.md`).
-Copy it to clipboard by checking the `$TMUX` environment variable:
-- If `$TMUX` is set: use `tmux load-buffer /tmp/forum-post-nns.md` (user pastes with their tmux paste binding)
-- Otherwise: use `pbcopy < /tmp/forum-post-nns.md`
+After resolving TODOs, write the final forum post to a file
+(e.g. `/tmp/forum-post-nns.md`) and copy it to the clipboard:
+```
+pbcopy < /tmp/forum-post-nns.md
+```
 
 Then provide a pre-filled forum link. Construct the URL with query parameters:
 
@@ -253,7 +303,7 @@ Instruct the user to:
 1. Duplicate a past calendar event from:
    https://calendar.google.com/calendar/u/0/r/eventedit/duplicate/MjJvMTdva2xtdGJuZDhoYjRjN2poZzNwM2ogY182NGYwZDdmZDYzYjNlMDYxZjE1Zjk2MTU1NWYzMmFiN2EyZmY3M2NjMWJmM2Q3ZTRkNGI3NGVjYjk1ZWVhM2M0QGc
 2. Use the "NNS Upgrades" calendar
-3. Schedule at 6 PM CET, 3 calendar days from today (use the user's local date).
+3. Schedule at 11 AM CET, 3 calendar days from today (use the user's local date).
    E.g. Friday → Monday, Monday → Thursday, Tuesday → Friday.
 4. Title: include canister name and proposal ID
 5. Description: link to the proposal
@@ -311,9 +361,12 @@ Prepare the following for `#dev-nns` (private channel — search with `channel_t
    expected format (date, RC=, NNS_CANISTERS, SNS_CANISTERS). If it does not match,
    warn the user instead of overwriting.
 
-If Slack MCP tools are available (`mcp__plugin_slack_slack__*`), create a draft message
-using `slack_send_message_draft` so the user can review before sending. The Slack MCP cannot update channel topics, so always print the topic
-text and copy it to clipboard (`pbcopy`) for the user to paste via `/topic` in Slack.
+If Slack MCP tools are available (`mcp__plugin_slack_slack__*`), use the
+`slack_send_message_draft` tool to stage a draft message for the user to
+review before sending (this is a Slack MCP tool that creates a message
+draft visible only to the user). The Slack MCP cannot update channel
+topics, so always print the topic text and copy it to clipboard (`pbcopy`)
+for the user to paste via `/topic` in Slack.
 
 If Slack MCP is NOT available, print both the message and topic text for the user
 to post manually to `#dev-nns`.
