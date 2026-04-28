@@ -5,6 +5,7 @@ use candid::Encode;
 use ic_agent::Identity;
 use ic_agent::export::Principal;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_crypto_tree_hash::{LookupStatus, MixedHashTree};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::{SystemTestGroup, SystemTestSubGroup};
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
@@ -18,9 +19,9 @@ use ic_system_test_driver::util::{
 };
 use ic_types::crypto::Signable;
 use ic_types::messages::{
-    Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
-    HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery, MessageId, RawSignedSenderInfo,
-    SenderInfoContent, SignedDelegation,
+    Blob, Certificate, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent,
+    HttpReadState, HttpReadStateContent, HttpReadStateResponse, HttpRequestEnvelope, HttpUserQuery,
+    MessageId, RawSignedSenderInfo, SenderInfoContent, SignedDelegation,
 };
 use ic_types::{CanisterId, PrincipalId, Time};
 use ic_universal_canister::wasm;
@@ -31,6 +32,9 @@ use slog::debug;
 const ALL_QUERY_API_VERSIONS: &[usize] = &[2, 3];
 const ALL_UPDATE_API_VERSIONS: &[usize] = &[2, 3, 4];
 const ALL_READ_STATE_API_VERSIONS: &[usize] = &[2, 3];
+
+/// Burn some number of instructions in each update
+const UPDATE_PAYLOAD_INSTRUCTIONS: u64 = 2_000_000_000;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -843,6 +847,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                         },
                     };
 
+                    let request_id = MessageId::from(content.representation_independent_hash());
                     let signature = signer.sign_update(&content);
 
                     let response = send_request(
@@ -855,6 +860,12 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                         signature,
                     )
                     .await;
+
+                    let response =
+                        await_pending_update(api_ver, response, &test_info, sender, &request_id)
+                            .await;
+
+                    let response = response.with_request_id(request_id);
 
                     if include_mgmt_canister_id {
                         response.expect_update_ok(api_ver);
@@ -892,9 +903,10 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                         let signature = sender.sign_update(&content);
                         let request_id = MessageId::from(content.representation_independent_hash());
 
-                        // Always use a v3 call to test read state request since the call is sync,
-                        // otherwise we have to wait until the call executes before checking the read state, which
-                        // requires a potentially flaky retry loop.
+                        // Use a v3 call (sync delivery with fallback to read_state polling) to
+                        // ensure the ingress is processed before we exercise read_state below.
+                        // A v2 call would return 202 immediately without waiting for
+                        // processing, forcing us to poll here anyway.
 
                         let response = send_request(
                             /*api_ver=*/ 3,
@@ -907,7 +919,12 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                         )
                         .await;
 
-                        assert_eq!(response.status(), 200);
+                        let response =
+                            await_pending_update(3, response, &test_info, sender, &request_id)
+                                .await;
+
+                        let response = response.with_request_id(request_id.clone());
+                        response.expect_update_ok(3);
 
                         request_id
                     };
@@ -1206,7 +1223,7 @@ pub fn requests_with_valid_sender_info(env: TestEnv) {
                 };
                 let message_id = MessageId::from(content.representation_independent_hash());
                 let signature = id.sign_bytes(&message_id.as_signed_bytes());
-                send_request(
+                let fut = send_request(
                     api_ver,
                     &test_info,
                     "call",
@@ -1214,14 +1231,18 @@ pub fn requests_with_valid_sender_info(env: TestEnv) {
                     id.public_key_der(),
                     None,
                     signature,
-                )
+                );
+                async move { (fut.await, message_id) }
             };
 
             ///////////////////////////////////////////////////////////////////
             // Valid sender_info should be accepted for update calls
             for &api_ver in ALL_UPDATE_API_VERSIONS {
-                send_update(api_ver, valid_sender_info())
-                    .await
+                let (response, message_id) = send_update(api_ver, valid_sender_info()).await;
+                let response =
+                    await_pending_update(api_ver, response, &test_info, &id, &message_id).await;
+                response
+                    .with_request_id(message_id)
                     .expect_update_ok(api_ver);
             }
 
@@ -1290,7 +1311,7 @@ pub fn requests_with_valid_sender_info(env: TestEnv) {
             for &api_ver in ALL_UPDATE_API_VERSIONS {
                 let mut si = valid_sender_info();
                 si.signer = Blob(CanisterId::ic_00().get().as_slice().to_vec());
-                let response = send_update(api_ver, si).await;
+                let (response, _) = send_update(api_ver, si).await;
                 assert_eq!(response.status(), 400);
                 response.expect_text_error(sender_info_error_text);
             }
@@ -1307,7 +1328,7 @@ pub fn requests_with_valid_sender_info(env: TestEnv) {
             for &api_ver in ALL_UPDATE_API_VERSIONS {
                 let mut si = valid_sender_info();
                 si.info = Blob(b"tampered info".to_vec());
-                let response = send_update(api_ver, si).await;
+                let (response, _) = send_update(api_ver, si).await;
                 assert_eq!(response.status(), 400);
                 response.expect_text_error(sender_info_error_text);
             }
@@ -1598,11 +1619,19 @@ enum ResponseBody {
 struct ReplicaResponse {
     status: StatusCode,
     body: ResponseBody,
+    /// Set for responses to `call` (update) requests so `expect_update_ok`
+    /// can verify the returned certificate references this request id.
+    request_id: Option<MessageId>,
 }
 
 impl ReplicaResponse {
     fn status(&self) -> StatusCode {
         self.status
+    }
+
+    fn with_request_id(mut self, request_id: MessageId) -> Self {
+        self.request_id = Some(request_id);
+        self
     }
 
     fn expect_read_state_ok(&self, _api_ver: usize) {
@@ -1622,6 +1651,10 @@ impl ReplicaResponse {
         } else {
             assert_eq!(self.status(), 200);
             self.expect_certificate();
+            let request_id = self.request_id.as_ref().expect(
+                "expect_update_ok requires request_id to be set on the response for api v3+",
+            );
+            self.verify_update_certificate(request_id);
         }
     }
 
@@ -1650,6 +1683,48 @@ impl ReplicaResponse {
                 "Expected certificate response but got text instead: {:?}",
                 t
             ),
+        }
+    }
+
+    /// Verify that the CBOR response body contains a certificate whose state
+    /// tree includes `request_status/<request_id>/status = "replied"` and a
+    /// non-empty `request_status/<request_id>/reply` leaf.
+    fn verify_update_certificate(&self, request_id: &MessageId) {
+        let cbor = match &self.body {
+            ResponseBody::Cbor(cbor) => cbor,
+            other => panic!("Expected CBOR body for certificate verification, got: {other:?}"),
+        };
+
+        let cert_bytes = match cbor {
+            serde_cbor::Value::Map(m) => {
+                match m.get(&serde_cbor::Value::Text("certificate".to_string())) {
+                    Some(serde_cbor::Value::Bytes(b)) => b.clone(),
+                    other => panic!("Expected 'certificate' bytes in CBOR map, got: {other:?}"),
+                }
+            }
+            other => panic!("Expected CBOR map, got: {other:?}"),
+        };
+
+        let certificate: Certificate = serde_cbor::from_slice(&cert_bytes)
+            .expect("Failed to parse certificate from response body");
+
+        let status_path: [&[u8]; 3] = [b"request_status", request_id.as_ref(), b"status"];
+        match certificate.tree.lookup(&status_path) {
+            LookupStatus::Found(MixedHashTree::Leaf(status_bytes)) => {
+                let status_str = String::from_utf8(status_bytes.clone())
+                    .expect("Invalid UTF-8 in request status");
+                assert_eq!(
+                    status_str, "replied",
+                    "Expected request status 'replied', got '{status_str}'"
+                );
+            }
+            other => panic!("Expected 'replied' status leaf, got: {other:?}"),
+        }
+
+        let reply_path: [&[u8]; 3] = [b"request_status", request_id.as_ref(), b"reply"];
+        match certificate.tree.lookup(&reply_path) {
+            LookupStatus::Found(MixedHashTree::Leaf(_)) => {}
+            other => panic!("Expected reply leaf in certificate, got: {other:?}"),
         }
     }
 
@@ -1770,7 +1845,241 @@ async fn send_request<C: serde::ser::Serialize>(
         }
     };
 
-    ReplicaResponse { status, body }
+    ReplicaResponse {
+        status,
+        body,
+        request_id: None,
+    }
+}
+
+/// Parsed ingress request status from a read_state certificate.
+enum IngressStatus {
+    /// The request was executed and a reply is available.
+    Replied {
+        /// Raw CBOR-encoded certificate bytes (the `certificate` field from
+        /// the read_state response). This is the same blob that the v3/v4
+        /// sync call endpoint would have embedded in its response.
+        reply: Vec<u8>,
+    },
+    /// The request was rejected.
+    Rejected {
+        reject_code: u64,
+        reject_message: String,
+    },
+    /// The request completed but response data has been pruned.
+    Done,
+    /// The request is still being processed.
+    NonFinal(String),
+}
+
+/// When a v3/v4 sync update call returns 202 (the replica's internal timeout
+/// was exceeded before the ingress message was processed), fall back to polling
+/// read_state until a terminal request status is available.
+/// If a v3+ sync update call returned 202 (the replica's internal timeout was
+/// exceeded before the ingress was processed), fall back to polling
+/// `read_state` for the final request status. Otherwise returns the response
+/// unchanged. Has no effect for v2 update calls, which are async and always
+/// return 202 on success.
+async fn await_pending_update(
+    api_ver: usize,
+    response: ReplicaResponse,
+    test: &TestInformation,
+    sender: &GenericIdentity<'_>,
+    request_id: &MessageId,
+) -> ReplicaResponse {
+    if api_ver >= 3 && response.status() == 202 {
+        await_ingress_via_read_state(test, sender, request_id).await
+    } else {
+        response
+    }
+}
+
+async fn await_ingress_via_read_state(
+    test: &TestInformation,
+    sender: &GenericIdentity<'_>,
+    request_id: &MessageId,
+) -> ReplicaResponse {
+    for attempt in 0..30 {
+        println!("await_ingress_via_read_state attempt {attempt}");
+        if attempt > 0 {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
+
+        let content = HttpReadStateContent::ReadState {
+            read_state: HttpReadState {
+                sender: Blob(sender.principal().as_slice().to_vec()),
+                paths: vec![vec!["request_status".into(), request_id.clone().into()].into()],
+                ingress_expiry: expiry_time().as_nanos() as u64,
+                nonce: None,
+            },
+        };
+
+        let signature = sender.sign_read_state(&content);
+
+        let response = send_request(
+            3,
+            test,
+            "read_state",
+            content,
+            sender.public_key_der(),
+            None,
+            signature,
+        )
+        .await;
+
+        let status = response.status();
+
+        // 4xx (except 429 Too Many Requests) or 5xx: no point in continuing to poll
+        if (status.is_client_error() && status != 429) || status.is_server_error() {
+            panic!(
+                "read_state request failed with HTTP {}: {:?}",
+                status, response.body
+            );
+        }
+
+        if status == 200 {
+            // A 200 means the read_state HTTP request succeeded, but we must
+            // inspect the certificate to determine the actual request status.
+            match ingress_status_from_read_state_response(&response, request_id) {
+                Some(IngressStatus::Replied { reply }) => {
+                    // Reconstruct a ReplicaResponse matching the v3/v4 sync
+                    // call response format:
+                    //   { "status": "replied", "certificate": <cert_bytes> }
+                    // The certificate bytes come from the read_state response
+                    // and contain the state tree with the reply at
+                    // request_status/<id>/reply.
+                    let body = serde_cbor::Value::Map(
+                        [
+                            (
+                                serde_cbor::Value::Text("status".to_string()),
+                                serde_cbor::Value::Text("replied".to_string()),
+                            ),
+                            (
+                                serde_cbor::Value::Text("certificate".to_string()),
+                                serde_cbor::Value::Bytes(reply),
+                            ),
+                        ]
+                        .into_iter()
+                        .collect(),
+                    );
+                    return ReplicaResponse {
+                        status: StatusCode::OK,
+                        body: ResponseBody::Cbor(body),
+                        request_id: Some(request_id.clone()),
+                    };
+                }
+                Some(IngressStatus::Rejected {
+                    reject_code,
+                    reject_message,
+                }) => {
+                    panic!(
+                        "Ingress message was rejected: code={reject_code}, \
+                         message={reject_message}"
+                    );
+                }
+                Some(IngressStatus::Done) => {
+                    panic!(
+                        "Ingress message completed with 'done' status \
+                         (reply data no longer available)"
+                    );
+                }
+                Some(IngressStatus::NonFinal(s)) => {
+                    println!("await_ingress_via_read_state: status={s}, continuing to poll");
+                }
+                None => {
+                    // Status path absent or unknown in the certificate; keep polling
+                }
+            }
+        }
+    }
+
+    panic!("Timed out waiting for ingress message to be processed via read_state polling");
+}
+
+/// Parse the ingress request status from a read_state response certificate.
+/// Returns `None` if the status path is absent or unknown in the certificate tree.
+fn ingress_status_from_read_state_response(
+    response: &ReplicaResponse,
+    request_id: &MessageId,
+) -> Option<IngressStatus> {
+    let cbor = match &response.body {
+        ResponseBody::Cbor(cbor) => cbor,
+        other => panic!("Expected CBOR response body from read_state, got: {other:?}"),
+    };
+
+    let read_state_response: HttpReadStateResponse =
+        serde_cbor::value::from_value(cbor.clone()).expect("Failed to parse HttpReadStateResponse");
+
+    let certificate: Certificate =
+        serde_cbor::from_slice(read_state_response.certificate.0.as_ref())
+            .expect("Failed to parse certificate from read_state response");
+
+    let status_path: [&[u8]; 3] = [b"request_status", request_id.as_ref(), b"status"];
+
+    let status_str = match certificate.tree.lookup(&status_path) {
+        LookupStatus::Found(MixedHashTree::Leaf(status_bytes)) => {
+            String::from_utf8(status_bytes.clone()).expect("Invalid UTF-8 in request status")
+        }
+        LookupStatus::Found(other) => {
+            panic!("Request status is not a leaf node: {other:?}");
+        }
+        LookupStatus::Absent | LookupStatus::Unknown => {
+            // The status path may legitimately not yet be present in the
+            // certificate tree on early polls; signal the caller to keep
+            // polling rather than failing the test.
+            return None;
+        }
+    };
+
+    match status_str.as_str() {
+        "replied" => {
+            // Validate that the reply path exists in the tree.
+            let reply_path: [&[u8]; 3] = [b"request_status", request_id.as_ref(), b"reply"];
+            match certificate.tree.lookup(&reply_path) {
+                LookupStatus::Found(MixedHashTree::Leaf(_)) => {}
+                LookupStatus::Found(other) => {
+                    panic!("Request reply is not a leaf node: {other:?}");
+                }
+                LookupStatus::Absent | LookupStatus::Unknown => {
+                    panic!("Request status is 'replied' but reply path is missing");
+                }
+            };
+            // Return the raw certificate bytes from the read_state response.
+            // The v3/v4 sync call endpoint embeds these same bytes in its
+            // response; we will reconstruct that format in the caller.
+            Some(IngressStatus::Replied {
+                reply: read_state_response.certificate.0,
+            })
+        }
+        "rejected" => {
+            let code_path: [&[u8]; 3] = [b"request_status", request_id.as_ref(), b"reject_code"];
+            let reject_code = match certificate.tree.lookup(&code_path) {
+                LookupStatus::Found(MixedHashTree::Leaf(bytes)) => {
+                    // reject_code is a ULEB128-encoded natural number
+                    leb128::read::unsigned(&mut &bytes[..]).expect("Invalid ULEB128 in reject_code")
+                }
+                other => panic!("Missing or invalid reject_code: {other:?}"),
+            };
+
+            let msg_path: [&[u8]; 3] = [b"request_status", request_id.as_ref(), b"reject_message"];
+            let reject_message = match certificate.tree.lookup(&msg_path) {
+                LookupStatus::Found(MixedHashTree::Leaf(bytes)) => {
+                    String::from_utf8(bytes.clone()).expect("Invalid UTF-8 in reject_message")
+                }
+                // The reject_message is always supposed to be there for a rejected message
+                _ => panic!(
+                    "The request_status was rejected but the required reject_message field was missing"
+                ),
+            };
+            Some(IngressStatus::Rejected {
+                reject_code,
+                reject_message,
+            })
+        }
+        "done" => Some(IngressStatus::Done),
+        "received" | "processing" => Some(IngressStatus::NonFinal(status_str)),
+        other => panic!("Unknown request status: {other}"),
+    }
 }
 
 async fn perform_query_call_with_delegations(
@@ -1817,7 +2126,12 @@ async fn perform_update_call_with_delegations(
         update: HttpCanisterUpdate {
             canister_id: Blob(test.canister_id.get().as_slice().to_vec()),
             method_name: "update".to_string(),
-            arg: Blob(wasm().reply_data(b"update_reply").build()),
+            arg: Blob(
+                wasm()
+                    .instruction_counter_is_at_least(UPDATE_PAYLOAD_INSTRUCTIONS)
+                    .reply_data(b"update_reply")
+                    .build(),
+            ),
             sender: Blob(sender.principal().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
@@ -1825,9 +2139,10 @@ async fn perform_update_call_with_delegations(
         },
     };
 
+    let request_id = MessageId::from(content.representation_independent_hash());
     let signature = signer.sign_update(&content);
 
-    send_request(
+    let response = send_request(
         api_ver,
         test,
         "call",
@@ -1836,7 +2151,11 @@ async fn perform_update_call_with_delegations(
         Some(delegations.to_vec()),
         signature,
     )
-    .await
+    .await;
+
+    let response = await_pending_update(api_ver, response, test, sender, &request_id).await;
+
+    response.with_request_id(request_id)
 }
 
 async fn perform_read_state_call_with_delegations(
@@ -1855,7 +2174,12 @@ async fn perform_read_state_call_with_delegations(
             update: HttpCanisterUpdate {
                 canister_id: Blob(test.canister_id.get().as_slice().to_vec()),
                 method_name: "update".to_string(),
-                arg: Blob(wasm().reply_data(b"read state test").build()),
+                arg: Blob(
+                    wasm()
+                        .instruction_counter_is_at_least(UPDATE_PAYLOAD_INSTRUCTIONS)
+                        .reply_data(b"read state test")
+                        .build(),
+                ),
                 sender: Blob(sender.principal().as_slice().to_vec()),
                 ingress_expiry: expiry_time().as_nanos() as u64,
                 nonce: None,
@@ -1866,11 +2190,12 @@ async fn perform_read_state_call_with_delegations(
         let signature = sender.sign_update(&content);
         let request_id = MessageId::from(content.representation_independent_hash());
 
-        // Always use a v3 call to test read state request since the call is sync,
-        // otherwise we have to wait until the call executes before checking the read state, which
-        // requires a potentially flaky retry loop.
+        // Use a v3 call (sync delivery with fallback to read_state polling) to
+        // ensure the ingress is processed before we exercise read_state below.
+        // A v2 call would return 202 immediately without waiting for
+        // processing, forcing us to poll here anyway.
 
-        let _response = send_request(
+        let response = send_request(
             /*api_ver=*/ 3,
             test,
             "call",
@@ -1880,6 +2205,18 @@ async fn perform_read_state_call_with_delegations(
             signature,
         )
         .await;
+
+        let response = await_pending_update(3, response, test, sender, &request_id).await;
+
+        if response.status() != 200 {
+            // The preparatory update call failed (e.g., the replica rejected
+            // the signature). Return that failure directly so callers that
+            // expect an error can inspect it; attempting the read_state below
+            // would otherwise observe an empty state tree or fail elsewhere.
+            return response;
+        }
+        let response = response.with_request_id(request_id.clone());
+        response.expect_update_ok(3);
 
         request_id
     };
@@ -1953,7 +2290,12 @@ async fn perform_update_with_expiry(
         update: HttpCanisterUpdate {
             canister_id: Blob(test.canister_id.get().as_slice().to_vec()),
             method_name: "update".to_string(),
-            arg: Blob(wasm().reply_data(b"update_reply").build()),
+            arg: Blob(
+                wasm()
+                    .instruction_counter_is_at_least(UPDATE_PAYLOAD_INSTRUCTIONS)
+                    .reply_data(b"update_reply")
+                    .build(),
+            ),
             sender: Blob(sender.principal().as_slice().to_vec()),
             ingress_expiry,
             nonce: None,
@@ -1961,9 +2303,10 @@ async fn perform_update_with_expiry(
         },
     };
 
+    let request_id = MessageId::from(content.representation_independent_hash());
     let signature = signer.sign_update(&content);
 
-    send_request(
+    let response = send_request(
         api_ver,
         test,
         "call",
@@ -1972,7 +2315,11 @@ async fn perform_update_with_expiry(
         None,
         signature,
     )
-    .await
+    .await;
+
+    let response = await_pending_update(api_ver, response, test, sender, &request_id).await;
+
+    response.with_request_id(request_id)
 }
 
 async fn perform_read_state_call_with_expiry(

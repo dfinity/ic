@@ -1,6 +1,7 @@
 //! This module encapsulates all components required for establishing of a
 //! distributed consensus.
 
+mod allowed_panics;
 pub mod batch_delivery;
 mod block_maker;
 pub mod bounds;
@@ -24,10 +25,11 @@ pub mod validator;
 mod proptests;
 
 use crate::consensus::{
-    block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker, finalizer::Finalizer,
-    metrics::ConsensusMetrics, notary::Notary, payload_builder::PayloadBuilderImpl,
-    priority::new_bouncer, purger::Purger, random_beacon_maker::RandomBeaconMaker,
-    random_tape_maker::RandomTapeMaker, share_aggregator::ShareAggregator, validator::Validator,
+    allowed_panics::panic_with_no_subnet_record, block_maker::BlockMaker,
+    catchup_package_maker::CatchUpPackageMaker, finalizer::Finalizer, metrics::ConsensusMetrics,
+    notary::Notary, payload_builder::PayloadBuilderImpl, priority::new_bouncer, purger::Purger,
+    random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
+    share_aggregator::ShareAggregator, validator::Validator,
 };
 use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
@@ -354,10 +356,7 @@ impl ConsensusImpl {
             .get_is_halted(self.replica_config.subnet_id, version)
         {
             Ok(None) => {
-                panic!(
-                    "No subnet record found for registry version={:?} and subnet_id={:?}",
-                    version, self.replica_config.subnet_id,
-                );
+                panic_with_no_subnet_record(version, self.replica_config.subnet_id);
             }
             Err(err) => {
                 error!(
