@@ -898,7 +898,7 @@ fn inner_round_long_execution_is_a_full_execution() {
             assert_eq!(system_state.queues().ingress_queue_size(), 0);
         }
         // All canisters should be marked as fully executed. The target canister,
-        // despite still having messages, executed a full slice of instructions.
+        // despite still having messages, executed a complete slice.
         assert!(test.was_fully_executed(canister.canister_id()));
     }
     let mut total_accumulated_priority = 0;

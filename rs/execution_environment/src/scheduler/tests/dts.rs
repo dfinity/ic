@@ -780,7 +780,7 @@ fn abort_paused_executions_keeps_highest_priority() {
         Some(ExecutionRound::new(1))
     );
 
-    // `low` has the most executed slices (highest priority among long
+    // `low` has the most executed rounds (highest priority among long
     // executions), `high` has the highest CA (second priority). `mid` is
     // aborted.
     assert!(test.canister_state(low).has_paused_execution());

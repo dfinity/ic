@@ -105,7 +105,7 @@ impl Ord for CanisterRoundState {
                 .cmp(&self.accumulated_priority)
                 .then_with(|| self.canister_id.cmp(&other.canister_id)),
 
-            // Among long executions, sort by executed slices descending; AP descending;
+            // Among long executions, sort by executed rounds descending; AP descending;
             // start round ascending; then break ties by canister ID.
             //
             // An aborted execution (executed slices == 0) is considered to have the same
@@ -170,7 +170,7 @@ impl IterationSchedule {
         // Completely segregate long and new executions across cores. Opportunistically
         // scheduling long executions on new execution cores results in inversion of
         // priority and potential starvation (lower priority long executions may execute
-        // a second slice before higher priority ones and become higher priority).
+        // a second round before higher priority ones and become higher priority).
         let long_executions = self.schedule.iter().take(self.long_executions_count);
         let long_execution_cores = self.long_execution_cores.min(self.long_executions_count);
         for (idx, canister_id) in long_executions.enumerate() {
@@ -514,13 +514,13 @@ impl RoundSchedule {
 
         // Add all canisters that we (tried to) schedule this round to the subnet
         // schedule; and charge any immediate or deferred (on long execution completion)
-        // costs.
+        // full execution rounds.
         for canister_id in &self.scheduled_canisters {
             let canister = canister_states.get_mut(canister_id).unwrap();
             // Add the canister to the subnet schedule, if not already there.
             let canister_priority = subnet_schedule.get_mut(*canister_id);
 
-            // Charge for the first slice of every long execution immediately, to properly
+            // Charge for the first round of every long execution immediately, to properly
             // account for newly started long executions (scheduled as new executions).
             if canister_priority.executed_slices == 1
                 && canister_priority.long_execution_start_round == Some(current_round)
@@ -528,7 +528,7 @@ impl RoundSchedule {
                 canister_priority.accumulated_priority -= ONE_HUNDRED_PERCENT;
             }
 
-            // On message completion (or short execution), charge for the remaining slices.
+            // On message completion (or short execution), charge for the remaining rounds.
             if canister_priority.executed_slices > 0
                 && (!canister.has_long_execution()
                     // FIXME: This will break if we continue executing long execution canisters.
