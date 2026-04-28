@@ -80,8 +80,8 @@
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
   "internet_identity_backend": {
-    "sha256": "8de10f01747b8f0ef890ba27181474a1b6bfe7b3f3f76687ecee6bb331d6a7c2",
-    "tag": "release-2026-04-21"
+    "sha256": "390305fcfda7b5be4e020ec455932e0ab2a708887155edf18f776b58be7c4d28",
+    "tag": "release-2026-04-26"
   },
   "internet_identity_frontend": {
     "sha256": "ea7c21b71eb6f1bce1d501eb944751fe3f907b578da1687309bfd62ce1690546",
