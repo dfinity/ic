@@ -27,7 +27,7 @@ use crate::driver::{
     test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
     test_env_api::{
         CreateDnsRecords, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, RetrieveIpv4Addr,
-        SshSession, TopologySnapshot, scp_recv_from, scp_send_to,
+        SshSession, TopologySnapshot, scp_recv_from, try_scp_send_to,
     },
     test_setup::{GroupSetup, InfraProvider},
     universal_vm::{UniversalVm, UniversalVms},
@@ -490,7 +490,7 @@ impl HasPrometheus for TestEnv {
         for file in &target_json_files {
             let from = prometheus_config_dir.join(file);
             let to = Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(file);
-            scp_send_to(self.logger(), &session, &from, &to, 0o644);
+            try_scp_send_to(self.logger(), &session, &from, &to, 0o644)?;
         }
         PrometheusConfigHash { hash: new_hash }.write_attribute(self);
         Ok(())
