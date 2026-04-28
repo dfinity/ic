@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
     "//rs/crypto/internal/crypto_lib/bls12_381/type",
     "//rs/crypto/sha2",
+    "//rs/crypto/tree_hash",
     "//rs/crypto/test_utils",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/ic_os/os_tools/fstrim_tool",
@@ -25,6 +26,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-agent",
     "@crate_index//:ic-certification",
     "@crate_index//:k256",
+    "@crate_index//:leb128",
     "@crate_index//:p256",
     "@crate_index//:rand",
     "@crate_index//:reqwest",
@@ -80,10 +82,8 @@ system_test(
 
 system_test(
     name = "ingress_verification_test",
-    # TODO(CRP-2975): Remove `manual` tag once flakiness is resolved.
     tags = [
         "long_test",
-        "manual",
     ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES,

@@ -279,12 +279,13 @@ impl IngressValidator {
                     })?;
                 }
                 if msg.canister_id() != CanisterId::ic_00()
-                    || msg.method_name() != "create_canister"
+                    || (msg.method_name() != "create_canister"
+                        && msg.method_name() != "provisional_create_canister_with_cycles")
                 {
                     Err(HttpError {
                         status: StatusCode::BAD_REQUEST,
                         message: format!(
-                            "Subnet call endpoint only accepts calls to the management canister ({}) 'create_canister' method, got canister_id={} method_name='{}'",
+                            "Subnet call endpoint only accepts canister creation calls to the management canister ({}), got canister_id={} method_name='{}'",
                             CanisterId::ic_00(),
                             msg.canister_id(),
                             msg.method_name()

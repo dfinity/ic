@@ -1,5 +1,6 @@
 // Needs to be `pub` so that the benchmarking code in `state_benches`
 // can access it.
+mod allowed_panics;
 pub mod checkpoint;
 pub mod labeled_tree_visitor;
 pub mod manifest;
@@ -19,6 +20,7 @@ use crate::{
     },
     tip::{PageMapToFlush, TipRequest, flush_tip_channel, spawn_tip_thread},
 };
+use allowed_panics::panic_with_replica_diverged_at_height;
 use crossbeam_channel::Sender;
 use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
 use ic_canonical_state_tree_hash::{
@@ -3589,7 +3591,7 @@ impl StateManager for StateManagerImpl {
 
         self.release_lock_and_persist_metadata(states);
 
-        fatal!(self.log, "Replica diverged at height {}", height)
+        panic_with_replica_diverged_at_height(height);
     }
 }
 
