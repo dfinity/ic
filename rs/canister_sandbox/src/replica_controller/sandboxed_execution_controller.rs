@@ -1,3 +1,4 @@
+use super::allowed_panics::panic_sandboxed_execution_controller_reply_channel_closed;
 use crate::compiler_sandbox::WasmCompilerProxy;
 use crate::controller_launcher_service::ControllerLauncherService;
 use crate::launcher_service::LauncherService;
