@@ -717,6 +717,13 @@ mod tests {
                 .get_mut()
                 .expect_latest_certified_height()
                 .return_const(gap_trigger_height);
+            state_manager
+                .get_mut()
+                .expect_get_state_at()
+                .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                    Height::new(0),
+                    Arc::new(ic_test_utilities_state::get_initial_state(0, 0)),
+                )));
 
             assert_matches!(
                 get_adjusted_notary_delay_from_settings(
@@ -735,6 +742,13 @@ mod tests {
                 .get_mut()
                 .expect_latest_certified_height()
                 .return_const(PoolReader::new(&pool).get_finalized_height());
+            state_manager
+                .get_mut()
+                .expect_get_state_at()
+                .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                    Height::new(0),
+                    Arc::new(ic_test_utilities_state::get_initial_state(0, 0)),
+                )));
 
             assert_eq!(
                 get_adjusted_notary_delay_from_settings(
@@ -753,6 +767,13 @@ mod tests {
                 .get_mut()
                 .expect_latest_certified_height()
                 .return_const(PoolReader::new(&pool).get_finalized_height());
+            state_manager
+                .get_mut()
+                .expect_get_state_at()
+                .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                    Height::new(0),
+                    Arc::new(ic_test_utilities_state::get_initial_state(0, 0)),
+                )));
 
             pool.advance_round_normal_operation_no_cup();
 

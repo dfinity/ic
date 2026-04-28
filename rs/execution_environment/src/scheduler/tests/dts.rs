@@ -9,7 +9,6 @@ use candid::Encode;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_management_canister_types_private::{CanisterIdRecord, Method};
 use ic_registry_subnet_type::SubnetType;
-use ic_types::LongExecutionMode;
 use ic_types::methods::SystemMethod;
 use ic_types_test_utils::ids::canister_test_id;
 use more_asserts::assert_le;
@@ -205,26 +204,14 @@ fn dts_long_execution_aborted_after_checkpoint() {
 
     // Canister has a paused execution and non-zero priority credit.
     assert!(test.canister_state(canister).has_paused_execution());
-    assert_ne!(
-        test.state()
-            .canister_priority(&canister)
-            .priority_credit
-            .get(),
-        0
-    );
+    assert_ne!(test.state().canister_priority(&canister).executed_slices, 0);
 
     test.execute_round(ExecutionRoundType::CheckpointRound);
 
     // After a checkpoint round, the canister has an aborted execution and zero
     // priority credit.
     assert!(test.canister_state(canister).has_aborted_execution());
-    assert_eq!(
-        test.state()
-            .canister_priority(&canister)
-            .priority_credit
-            .get(),
-        0
-    );
+    assert_eq!(test.state().canister_priority(&canister).executed_slices, 0);
 
     // Complete the long execution.
     for _ in 0..3 {
@@ -238,13 +225,7 @@ fn dts_long_execution_aborted_after_checkpoint() {
     // After completion, there is no paused or aborted execution. And the priority
     // credit is again zero.
     assert!(!test.canister_state(canister).has_long_execution());
-    assert_eq!(
-        test.state()
-            .canister_priority(&canister)
-            .priority_credit
-            .get(),
-        0
-    );
+    assert_eq!(test.state().canister_priority(&canister).executed_slices, 0);
 
     // 2 + 3 slices were executed.
     assert_eq!(test.scheduler().metrics.round.slices.get_sample_sum(), 5.0);
@@ -324,11 +305,11 @@ fn respect_max_paused_executions(
                 let priority = subnet_schedule.get(&canister.canister_id());
                 if canister.has_paused_execution() {
                     // All paused executions have non-zero priority credit.
-                    assert_ne!(priority.priority_credit.get(), 0);
+                    assert_ne!(priority.executed_slices, 0);
                     true
                 } else {
                     // All aborted (or not started) executions have zero priority credit.
-                    assert_eq!(priority.priority_credit.get(), 0);
+                    assert_eq!(priority.executed_slices, 0);
                     false
                 }
             })
@@ -778,28 +759,31 @@ fn abort_paused_executions_keeps_highest_priority() {
     test.send_ingress(mid, ingress(100));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // The low compute allocation canister is classified as `Prioritized`, as it has
-    // executed a second slice.
+    // The low compute allocation canister started execution a round earlier.
     assert_eq!(
-        test.state().canister_priority(&low).long_execution_mode,
-        LongExecutionMode::Prioritized
+        test.state()
+            .canister_priority(&low)
+            .long_execution_start_round,
+        Some(ExecutionRound::new(0))
     );
-    // The high and mid compute allocation canisters are only `Opportunistic`.
+    // The high and mid compute allocation canisters started a round later.
     assert_eq!(
-        test.state().canister_priority(&high).long_execution_mode,
-        LongExecutionMode::Opportunistic
+        test.state()
+            .canister_priority(&high)
+            .long_execution_start_round,
+        Some(ExecutionRound::new(1))
     );
     assert_eq!(
-        test.state().canister_priority(&mid).long_execution_mode,
-        LongExecutionMode::Opportunistic
+        test.state()
+            .canister_priority(&mid)
+            .long_execution_start_round,
+        Some(ExecutionRound::new(1))
     );
 
-    // The low compute allocation canister keeps its paused execution (its
-    // `Prioritized` mode actually gives it the highest priority).
-    assert!(test.canister_state(low).has_paused_execution());
-    // The high compute allocation canister comes in second, so it's still paused.
-    assert!(test.canister_state(high).has_paused_execution());
-    // The medium compute allocation canister had the lowest priority, so it was
+    // `low` has the most executed slices (highest priority among long
+    // executions), `high` has the highest CA (second priority). `mid` is
     // aborted.
+    assert!(test.canister_state(low).has_paused_execution());
+    assert!(test.canister_state(high).has_paused_execution());
     assert!(test.canister_state(mid).has_aborted_execution());
 }
