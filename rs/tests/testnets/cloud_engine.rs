@@ -75,7 +75,7 @@ const DM1_DMZ_GATEWAY: Ipv4Addr = Ipv4Addr::new(23, 142, 184, 238);
 /// and do not need to own the same number of DCs / nodes.
 #[derive(Clone, Copy, Debug)]
 enum NodeProvider {
-    Dfinity,
+    DFINITY,
     Alusion,
     OneSixtyTwoDigitalCapital,
     DecentralizedEntitiesFoundation,
@@ -88,7 +88,7 @@ impl NodeProvider {
         // Use a separate id range (3000+) from node operators (1000+) so that
         // the principals don't overlap.
         match self {
-            NodeProvider::Dfinity => PrincipalId::new_user_test_id(3000),
+            NodeProvider::DFINITY => PrincipalId::new_user_test_id(3000),
             NodeProvider::Alusion => PrincipalId::new_user_test_id(3001),
             NodeProvider::OneSixtyTwoDigitalCapital => PrincipalId::new_user_test_id(3002),
             NodeProvider::DecentralizedEntitiesFoundation => PrincipalId::new_user_test_id(3003),
@@ -109,19 +109,19 @@ struct DcConfig {
 
 // Distribution of the 30 data centers across 4 node providers (uneven on
 // purpose, as requested):
-//   - Dfinity:                            9 DCs (18 nodes)
+//   - DFINITY:                            9 DCs (18 nodes)
 //   - Alusion:                            8 DCs (16 nodes)
 //   - OneSixtyTwo Digital Capital:        7 DCs (14 nodes)
 //   - Decentralized Entities Foundation:  6 DCs (12 nodes)
 const DATA_CENTERS: &[DcConfig] = &[
-    // ------------------------- Dfinity (9 DCs) --------------------------
+    // ------------------------- DFINITY (9 DCs) --------------------------
     DcConfig {
         id: "Fremont",
         region: "North America,US,California",
         owner: "Hurricane Electric",
         latitude: 37.549,
         longitude: -121.989,
-        node_provider: NodeProvider::Dfinity,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
         id: "Brussels",
@@ -129,7 +129,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Digital Realty",
         latitude: 50.839,
         longitude: 4.348,
-        node_provider: NodeProvider::Dfinity,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
         id: "HongKong 1",
@@ -137,7 +137,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Unicom",
         latitude: 22.284,
         longitude: 114.269,
-        node_provider: NodeProvider::Dfinity,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
         id: "Sterling",
@@ -145,7 +145,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "CyrusOne",
         latitude: 39.004,
         longitude: -77.408,
-        node_provider: NodeProvider::Dfinity,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
         id: "Tokyo",
@@ -153,7 +153,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Equinix",
         latitude: 35.682,
         longitude: 139.692,
-        node_provider: NodeProvider::Dfinity,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
         id: "London",
@@ -161,7 +161,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Telehouse",
         latitude: 51.508,
         longitude: -0.076,
-        node_provider: NodeProvider::Dfinity,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
         id: "Frankfurt",
@@ -169,7 +169,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Interxion",
         latitude: 50.110,
         longitude: 8.682,
-        node_provider: NodeProvider::Dfinity,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
         id: "Singapore",
@@ -177,7 +177,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Equinix",
         latitude: 1.290,
         longitude: 103.851,
-        node_provider: NodeProvider::Dfinity,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
         id: "Sao Paulo",
@@ -185,7 +185,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         owner: "Ascenty",
         latitude: -23.550,
         longitude: -46.633,
-        node_provider: NodeProvider::Dfinity,
+        node_provider: NodeProvider::DFINITY,
     },
     // ------------------------- Alusion (8 DCs) --------------------------
     DcConfig {
