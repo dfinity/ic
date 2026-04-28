@@ -1,7 +1,12 @@
 // Set up a testnet containing:
-//   one 1-node System/NNS subnet, 60 unassigned nodes (2 per DC in 30 datacenters),
+//   one 1-node System/NNS subnet, by default 20 unassigned nodes distributed
+//   round-robin across 30 datacenters (so each of the first 20 DCs gets 1 node),
 //   one API boundary node, one ic-gateway, and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 6 vCPUs, 24GiB of RAM, and 50 GiB disk.
+//
+// The number of unassigned nodes can be overridden via the NUM_UNASSIGNED_NODES
+// env var (e.g. NUM_UNASSIGNED_NODES=60 will spin up 60 unassigned nodes,
+// distributed round-robin across the 30 DCs, yielding 2 nodes per DC).
 //
 // You can setup this testnet by executing the following commands:
 //
@@ -374,38 +379,56 @@ pub fn setup(env: TestEnv) {
                 .with_dkg_interval_length(Height::from(10)),
         );
 
-    // Build unassigned nodes distributed across 30 datacenters.
-    // Each datacenter gets its own node operator with 2 unassigned nodes.
+    // Build unassigned nodes distributed across the 30 datacenters.
+    // Each datacenter gets its own node operator. The total number of unassigned
+    // nodes defaults to 20 and can be overridden via the NUM_UNASSIGNED_NODES
+    // env var. Nodes are distributed round-robin across DATA_CENTERS in order:
+    // node index i is placed in DC (i % NUM_DCS). This means with the default
+    // of 20 nodes the first 20 DCs each get 1 node, and with 60 nodes each DC
+    // gets 2 nodes.
     //
     // Reward types are assigned in a circular rotation across all nodes globally:
     // node index 0 -> type4.1, 1 -> type4.2, 2 -> type4.3, 3 -> type4.1, ...
-    // With 30 DCs * 2 nodes = 60 nodes total, this yields exactly 20 nodes
-    // of each of type4.1, type4.2, and type4.3.
+    // With a total that is a multiple of 3 this yields equal counts of each
+    // reward type.
     const CLOUD_ENGINE_REWARD_TYPES: &[(NodeRewardType, &str)] = &[
         (NodeRewardType::Type4dot1, "type4.1"),
         (NodeRewardType::Type4dot2, "type4.2"),
         (NodeRewardType::Type4dot3, "type4.3"),
     ];
-    const NODES_PER_DC: usize = 2;
+    const DEFAULT_NUM_UNASSIGNED_NODES: usize = 20;
+
+    let num_unassigned_nodes: usize = match std::env::var("NUM_UNASSIGNED_NODES") {
+        Ok(v) => v
+            .parse()
+            .unwrap_or_else(|e| panic!("invalid NUM_UNASSIGNED_NODES value '{v}': {e}")),
+        Err(_) => DEFAULT_NUM_UNASSIGNED_NODES,
+    };
+
+    // Compute, for each DC, the list of (node_index, reward_type) pairs that
+    // belong to that DC after the round-robin distribution. The global node
+    // index is preserved so that the reward-type rotation is identical to a
+    // simple sequential walk over all nodes.
+    let mut nodes_per_dc: Vec<Vec<(usize, (NodeRewardType, &'static str))>> =
+        vec![Vec::new(); DATA_CENTERS.len()];
+    for node_idx in 0..num_unassigned_nodes {
+        let dc_idx = node_idx % DATA_CENTERS.len();
+        let reward = CLOUD_ENGINE_REWARD_TYPES[node_idx % CLOUD_ENGINE_REWARD_TYPES.len()];
+        nodes_per_dc[dc_idx].push((node_idx, reward));
+    }
 
     // let mut cloud_engine_subnet = Subnet::new(SubnetType::CloudEngine);
-    let mut node_counter: usize = 0;
     for (i, dc) in DATA_CENTERS.iter().enumerate() {
         // Each DC has its own node operator (1 node operator per DC), but the
         // node provider is shared across all DCs owned by that provider.
         let operator_principal = PrincipalId::new_user_test_id(1000 + i as u64);
         let provider_principal = dc.node_provider.principal_id();
 
-        // Determine the reward types for this DC's nodes (before incrementing counter).
-        let dc_node_types: Vec<(NodeRewardType, &'static str)> = (0..NODES_PER_DC)
-            .map(|n| {
-                CLOUD_ENGINE_REWARD_TYPES[(node_counter + n) % CLOUD_ENGINE_REWARD_TYPES.len()]
-            })
-            .collect();
+        let dc_nodes = &nodes_per_dc[i];
 
         // Aggregate rewardable_nodes counts per type string for this operator.
         let mut rewardable_nodes: BTreeMap<String, u32> = BTreeMap::new();
-        for (_, type_str) in &dc_node_types {
+        for (_, (_, type_str)) in dc_nodes {
             *rewardable_nodes.entry(type_str.to_string()).or_insert(0) += 1;
         }
 
@@ -423,7 +446,7 @@ pub fn setup(env: TestEnv) {
                 name: format!("operator_{}", dc.id),
                 principal_id: operator_principal,
                 node_provider_principal_id: Some(provider_principal),
-                node_allowance: NODES_PER_DC as u64,
+                node_allowance: dc_nodes.len() as u64,
                 dc_id: dc.id.to_string(),
                 rewardable_nodes,
             });
@@ -436,13 +459,12 @@ pub fn setup(env: TestEnv) {
         // );
 
         // Add unassigned nodes for this DC using the circularly-assigned types.
-        for (reward_type, _) in dc_node_types {
+        for (_, (reward_type, _)) in dc_nodes {
             ic = ic.with_unassigned_node(
                 Node::new()
                     .with_node_operator_principal_id(operator_principal)
-                    .with_node_reward_type(reward_type),
+                    .with_node_reward_type(*reward_type),
             );
-            node_counter += 1;
         }
     }
 

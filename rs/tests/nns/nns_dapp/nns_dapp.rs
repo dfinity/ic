@@ -130,7 +130,7 @@ fn install_ii_canisters(
 ) -> (Principal, Principal) {
     let backend_canister_id = node.create_and_install_canister_with_arg(
         &env::var("II_BACKEND_WASM_PATH").expect("II_BACKEND_WASM_PATH not set"),
-        Some(build_internet_identity_backend_install_arg(dummy_auth)),
+        Some(build_internet_identity_backend_install_arg()),
     );
 
     // Create the II frontend canister first to get its canister ID

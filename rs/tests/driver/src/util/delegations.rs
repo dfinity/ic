@@ -188,7 +188,15 @@ struct InternetIdentityInit {
     pub dummy_auth: Option<Option<DummyAuthConfig>>,
 }
 
-pub fn build_internet_identity_backend_install_arg(dummy_auth: bool) -> Vec<u8> {
+pub fn build_dummy_internet_identity_backend_install_arg() -> Vec<u8> {
+    build_ii_backend_install_arg_inner(true)
+}
+
+pub fn build_internet_identity_backend_install_arg() -> Vec<u8> {
+    build_ii_backend_install_arg_inner(false)
+}
+
+fn build_ii_backend_install_arg_inner(dummy_auth: bool) -> Vec<u8> {
     let dummy_auth = if dummy_auth {
         Some(Some(DummyAuthConfig {
             prompt_for_index: true,
