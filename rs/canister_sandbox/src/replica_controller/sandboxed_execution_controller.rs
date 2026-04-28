@@ -1028,7 +1028,7 @@ impl WasmExecutor for SandboxedExecutionController {
         // Wait for completion.
         let result = rx
             .recv()
-            .expect("Sandboxed_execution_controller reply channel closed unexpectedly");
+            .unwrap_or_else(|_| panic_sandboxed_execution_controller_reply_channel_closed());
         drop(wait_timer);
         let _finish_timer = self
             .metrics
