@@ -127,6 +127,17 @@ RUN mkdir -p /var/lib/ic/backup \
              /var/lib/ic/crypto \
              /var/lib/ic/data
 
+# Pre-create the directories where the ollama binary and CPU runtime
+# libraries are injected at ext4-build time via the rootfs `extras` map in
+# ic-os/guestos/defs.bzl. The published guestos-base image referenced by
+# docker-base.{prod,dev} pre-dates the introduction of /opt/ollama, so
+# without this `mkdir -p` the ext4 builder's `cp` step fails with
+# "No such file or directory" for /opt/ollama/bin/ollama. Once the
+# updated base image (with `mkdir -p /opt/ollama/...` in Dockerfile.base)
+# is published and referenced from docker-base.{prod,dev}, this step
+# becomes a no-op but is harmless.
+RUN mkdir -p /opt/ollama/bin /opt/ollama/lib/ollama
+
 # Create two mount points for temporary use during setup of "var" partition
 RUN mkdir -p /mnt/var_old /mnt/var_new
 
