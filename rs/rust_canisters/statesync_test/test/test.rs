@@ -160,6 +160,54 @@ fn test_create_many_canisters() {
 
     // We created `num_canisters` in addition to the seed canister.
     assert_eq!(env.num_running_canisters(), num_canisters + 1);
+
+    let created_canister_ids = match canister_creation_status() {
+        CanisterCreationStatus::Done(ids) => ids,
+        s => panic!("Expected Done, got {s:?}"),
+    };
+    assert_eq!(created_canister_ids.len(), num_canisters as usize);
+
+    let result = env
+        .execute_ingress(
+            seed_canister_id,
+            "update_many_canisters",
+            Encode!(&()).unwrap(),
+        )
+        .unwrap();
+    let _ = assert_reply(result);
+
+    let initial_versions: Vec<(_, u64)> = created_canister_ids
+        .iter()
+        .copied()
+        .map(|canister_id| {
+            let canister_id_ic = CanisterId::unchecked_from_principal(canister_id.into());
+            let version = env
+                .canister_status_query_as(seed_canister_id.into(), canister_id_ic)
+                .unwrap()
+                .unwrap()
+                .version();
+            (canister_id, version)
+        })
+        .collect();
+
+    loop {
+        let all_at_version =
+            initial_versions
+                .iter()
+                .copied()
+                .all(|(canister_id, initial_version)| {
+                    let canister_id = CanisterId::unchecked_from_principal(canister_id.into());
+                    env.canister_status_query_as(seed_canister_id.into(), canister_id)
+                        .unwrap()
+                        .unwrap()
+                        .version()
+                        >= initial_version + 2
+                });
+        if all_at_version {
+            break;
+        }
+        env.tick();
+    }
 }
 
 fn assert_reply(res: WasmResult) -> Vec<u8> {
