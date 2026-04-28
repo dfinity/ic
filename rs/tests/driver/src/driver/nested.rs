@@ -160,7 +160,6 @@ fn allocated_vm_for_bare_metal_instance(
         hostname: "".to_string(),
         ipv6: host_address,
         mac6: mgmt_mac.to_string(),
-        ipv4: None,
         bare_metal: true,
     })
 }

@@ -485,7 +485,12 @@ impl InternalState {
                     | NodeRewardType::Type1dot1 => {
                         self.get_subnet_node_urls(nns_subnet_id, version)
                     }
-                    NodeRewardType::Type4 => self.get_api_boundary_node_urls(version),
+                    NodeRewardType::Type4
+                    | NodeRewardType::Type4dot1
+                    | NodeRewardType::Type4dot2
+                    | NodeRewardType::Type4dot3
+                    | NodeRewardType::Type4dot4
+                    | NodeRewardType::Type4dot5 => self.get_api_boundary_node_urls(version),
                 },
             },
         }
@@ -834,7 +839,12 @@ mod test {
                     // config URL as fallback.
                     maybe_nns_node_url.or(maybe_config_nns_url)
                 }
-                NodeRewardType::Type4 => {
+                NodeRewardType::Type4
+                | NodeRewardType::Type4dot1
+                | NodeRewardType::Type4dot2
+                | NodeRewardType::Type4dot3
+                | NodeRewardType::Type4dot4
+                | NodeRewardType::Type4dot5 => {
                     // For type4 nodes, we contact API BNs.
                     // Though, if we fail to find API BNs in the registry, we use the config URL as
                     // fallback.

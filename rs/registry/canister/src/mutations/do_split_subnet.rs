@@ -114,8 +114,11 @@ impl Registry {
         };
 
         let create_cup_contents = |nodes| async {
-            let request =
-                SetupInitialDKGArgs::new(nodes, RegistryVersion::new(pre_call_registry_version));
+            let request = SetupInitialDKGArgs::new(
+                nodes,
+                RegistryVersion::new(pre_call_registry_version),
+                None, // Initial DKG request is handled by the NNS subnet
+            );
             let raw_response = call(
                 CanisterId::ic_00(),
                 "setup_initial_dkg",

@@ -506,6 +506,15 @@ type delete_canister_snapshot_args = record {
   snapshot_id : snapshot_id;
 };
 
+type canister_id_range = record {
+    start : principal;
+    end : principal;
+};
+
+type list_canisters_result = record {
+    canisters : vec canister_id_range;
+};
+
 type fetch_canister_logs_args = record {
     canister_id : canister_id;
     filter: opt variant {
@@ -698,4 +707,7 @@ service ic : {
 
     // canister logging
     fetch_canister_logs : (fetch_canister_logs_args) -> (fetch_canister_logs_result) query;
+
+    // list canisters
+    list_canisters : () -> (list_canisters_result) query;
 };

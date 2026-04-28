@@ -23,7 +23,7 @@ use ic_test_utilities_types::{
     messages::SignedIngressBuilder,
 };
 use ic_types::{
-    CanisterId,
+    CanisterId, ExecutionRound,
     ingress::{IngressState, IngressStatus},
     messages::{MessageId, SignedIngress},
     time::UNIX_EPOCH,
@@ -41,6 +41,7 @@ impl IngressHistoryWriter for NoopIngressHistoryWriter {
         _state: &mut ReplicatedState,
         _message_id: MessageId,
         _status: IngressStatus,
+        _current_round: ExecutionRound,
     ) -> Arc<IngressStatus> {
         IngressStatus::Unknown.into()
     }
@@ -100,9 +101,9 @@ fn induct_message_with_successful_history_update() {
         let mut ingress_history_writer = MockIngressHistory::new();
         ingress_history_writer
             .expect_set_status()
-            .with(always(), eq(msg.id()), always())
+            .with(always(), eq(msg.id()), always(), always())
             .times(1)
-            .returning(move |state, _, _| {
+            .returning(move |state, _, _, _| {
                 state.set_ingress_status(
                     msg_id.clone(),
                     IngressStatus::Known {
@@ -135,7 +136,12 @@ fn induct_message_with_successful_history_update() {
         let mut state = ReplicatedState::new(subnet_test_id(1), subnet_type);
         insert_canister(&mut state, canister_id);
 
-        valid_set_rule.induct_message(&mut state, signed_ingress, SMALL_APP_SUBNET_MAX_SIZE);
+        valid_set_rule.induct_message(
+            &mut state,
+            signed_ingress,
+            SMALL_APP_SUBNET_MAX_SIZE,
+            ExecutionRound::from(0),
+        );
         assert_eq!(ingress_queue_size(&state, canister_id), 1);
         assert_inducted_ingress_messages_eq(
             metric_vec(&[(&[(LABEL_STATUS, LABEL_VALUE_SUCCESS)], 1)]),
@@ -176,9 +182,10 @@ fn induct_message_fails_for_stopping_canister() {
                         format!("Canister {canister_id} is stopping"),
                     )),
                 }),
+                always(),
             )
             .times(1)
-            .returning(move |state, _, status| {
+            .returning(move |state, _, status, _| {
                 state.set_ingress_status(msg_id.clone(), status, NumBytes::from(u64::MAX), |_| {});
                 IngressStatus::Unknown.into()
             });
@@ -194,7 +201,12 @@ fn induct_message_fails_for_stopping_canister() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.put_canister_state(get_stopping_canister(canister_id));
 
-        valid_set_rule.induct_message(&mut state, signed_ingress, SMALL_APP_SUBNET_MAX_SIZE);
+        valid_set_rule.induct_message(
+            &mut state,
+            signed_ingress,
+            SMALL_APP_SUBNET_MAX_SIZE,
+            ExecutionRound::from(0),
+        );
         assert_eq!(ingress_queue_size(&state, canister_id), 0);
         assert_inducted_ingress_messages_eq(
             metric_vec(&[(&[(LABEL_STATUS, LABEL_VALUE_CANISTER_STOPPING)], 1)]),
@@ -232,9 +244,10 @@ fn induct_message_fails_for_stopped_canister() {
                         format!("Canister {canister_id} is stopped"),
                     )),
                 }),
+                always(),
             )
             .times(1)
-            .returning(move |state, _, status| {
+            .returning(move |state, _, status, _| {
                 state.set_ingress_status(msg_id.clone(), status, NumBytes::from(u64::MAX), |_| {});
                 IngressStatus::Unknown.into()
             });
@@ -251,7 +264,12 @@ fn induct_message_fails_for_stopped_canister() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.put_canister_state(get_stopped_canister(canister_id));
 
-        valid_set_rule.induct_message(&mut state, signed_ingress, SMALL_APP_SUBNET_MAX_SIZE);
+        valid_set_rule.induct_message(
+            &mut state,
+            signed_ingress,
+            SMALL_APP_SUBNET_MAX_SIZE,
+            ExecutionRound::from(0),
+        );
         assert_eq!(ingress_queue_size(&state, canister_id), 0);
         assert_inducted_ingress_messages_eq(
             metric_vec(&[(&[(LABEL_STATUS, LABEL_VALUE_CANISTER_STOPPED)], 1)]),
@@ -275,9 +293,9 @@ fn try_to_induct_a_message_marked_as_already_inducted() {
         let mut ingress_history_writer = MockIngressHistory::new();
         ingress_history_writer
             .expect_set_status()
-            .with(always(), eq(msg.id()), always())
+            .with(always(), eq(msg.id()), always(), always())
             .times(1)
-            .returning(|_, _, _| panic!("duplicate message induction"));
+            .returning(|_, _, _, _| panic!("duplicate message induction"));
         let ingress_history_writer = Arc::new(ingress_history_writer);
         let metrics_registry = MetricsRegistry::new();
         let valid_set_rule = ValidSetRuleImpl::new(
@@ -297,7 +315,12 @@ fn try_to_induct_a_message_marked_as_already_inducted() {
             state: IngressState::Received,
         };
         state.set_ingress_status(msg.id(), status, NumBytes::from(u64::MAX), |_| {});
-        valid_set_rule.induct_message(&mut state, signed_ingress, SMALL_APP_SUBNET_MAX_SIZE);
+        valid_set_rule.induct_message(
+            &mut state,
+            signed_ingress,
+            SMALL_APP_SUBNET_MAX_SIZE,
+            ExecutionRound::from(0),
+        );
     });
 }
 
@@ -323,9 +346,9 @@ fn update_history_if_induction_failed() {
         let status_clone = status.clone();
         ingress_history_writer
             .expect_set_status()
-            .with(always(), eq(msg.id()), always())
+            .with(always(), eq(msg.id()), always(), always())
             .times(1)
-            .returning(move |state, _, _| {
+            .returning(move |state, _, _, _| {
                 state.set_ingress_status(
                     msg_id.clone(),
                     status.clone(),
@@ -351,6 +374,7 @@ fn update_history_if_induction_failed() {
             &mut state,
             signed_ingress.clone(),
             SMALL_APP_SUBNET_MAX_SIZE,
+            ExecutionRound::from(0),
         );
         assert!(state.canister_state(&canister_id).is_none());
         assert_eq!(state.get_ingress_status(&msg.id()), &status_clone);
@@ -392,9 +416,9 @@ fn dont_induct_duplicate_messages() {
 
         ingress_history_writer
             .expect_set_status()
-            .with(always(), eq(msg3.id()), always())
+            .with(always(), eq(msg3.id()), always(), always())
             .times(1)
-            .returning(|state, message_id3, _| {
+            .returning(|state, message_id3, _, _| {
                 state.set_ingress_status(
                     message_id3,
                     IngressStatus::Known {
@@ -444,7 +468,7 @@ fn dont_induct_duplicate_messages() {
         insert_canister(&mut state, canister_id1);
         insert_canister(&mut state, canister_id2);
 
-        valid_set_rule.induct_messages(&mut state, vec![msg1, msg2, msg3]);
+        valid_set_rule.induct_messages(&mut state, vec![msg1, msg2, msg3], ExecutionRound::from(0));
         assert_eq!(ingress_queue_size(&state, canister_id1), 0);
         assert_eq!(ingress_queue_size(&state, canister_id2), 1);
         assert_inducted_ingress_messages_eq(
@@ -513,7 +537,7 @@ fn canister_on_application_subnet_charges_for_ingress() {
         .system_state
         .balance();
 
-    valid_set_rule.induct_messages(&mut state, vec![signed_ingress]);
+    valid_set_rule.induct_messages(&mut state, vec![signed_ingress], ExecutionRound::from(0));
 
     let balance_after = state
         .canister_state(&canister_test_id(0))
@@ -560,7 +584,7 @@ fn canister_on_system_subnet_does_not_charge_for_ingress() {
     let msg = SignedIngressBuilder::new()
         .canister_id(canister_test_id(0))
         .build();
-    valid_set_rule.induct_messages(&mut state, vec![msg]);
+    valid_set_rule.induct_messages(&mut state, vec![msg], ExecutionRound::from(0));
 
     let balance_after = state
         .canister_state(&canister_test_id(0))
@@ -665,7 +689,12 @@ fn running_canister_on_application_subnet_accepts_and_charges_for_ingress() {
             )
             .cost();
 
-        valid_set_rule.induct_message(&mut state, ingress, SMALL_APP_SUBNET_MAX_SIZE);
+        valid_set_rule.induct_message(
+            &mut state,
+            ingress,
+            SMALL_APP_SUBNET_MAX_SIZE,
+            ExecutionRound::from(0),
+        );
 
         let balance_after = state
             .canister_state(&canister_id)
@@ -704,7 +733,12 @@ fn running_canister_on_system_subnet_accepts_and_does_not_charge_for_ingress() {
         state.put_canister_state(canister);
 
         let ingress = SignedIngressBuilder::new().build();
-        valid_set_rule.induct_message(&mut state, ingress, SMALL_APP_SUBNET_MAX_SIZE);
+        valid_set_rule.induct_message(
+            &mut state,
+            ingress,
+            SMALL_APP_SUBNET_MAX_SIZE,
+            ExecutionRound::from(0),
+        );
 
         let balance_after = state
             .canister_state(&canister_id)
@@ -857,9 +891,9 @@ fn ingress_history_max_messages_impl(subnet_type: SubnetType) {
         let mut ingress_history_writer = MockIngressHistory::new();
         ingress_history_writer
             .expect_set_status()
-            .with(always(), always(), always())
+            .with(always(), always(), always(), always())
             .times(4)
-            .returning(move |state, msg_id, status| {
+            .returning(move |state, msg_id, status, _| {
                 state.set_ingress_status(msg_id, status, NumBytes::from(u64::MAX), |_| {});
                 IngressStatus::Unknown.into()
             });
@@ -885,7 +919,7 @@ fn ingress_history_max_messages_impl(subnet_type: SubnetType) {
         valid_set_rule.ingress_history_max_messages = 3;
 
         // Attempt inducting all 4 messages.
-        valid_set_rule.induct_messages(&mut state, msgs);
+        valid_set_rule.induct_messages(&mut state, msgs, ExecutionRound::from(0));
 
         match subnet_type {
             // System subnets ignore the `ingress_history_max_messages` limit.

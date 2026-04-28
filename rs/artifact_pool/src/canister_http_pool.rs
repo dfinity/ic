@@ -263,6 +263,7 @@ mod tests {
                 id: CallbackId::from(id),
                 content_hash: CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
                 content_size: 42,
+                is_reject: false,
                 registry_version: RegistryVersion::from(id),
                 replica_version: ReplicaVersion::default(),
             },

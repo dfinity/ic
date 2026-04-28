@@ -1913,7 +1913,8 @@ fn setup_initial_dkg_method_interface() {
         // keys for other nodes, yet the test fixture instantiates the registry
         // for a single node.
         let node_ids = vec![canister.node_id()];
-        let request_payload = ic00::SetupInitialDKGArgs::new(node_ids, RegistryVersion::new(1));
+        let request_payload =
+            ic00::SetupInitialDKGArgs::new(node_ids, RegistryVersion::new(1), None);
         let response = canister
             .update(wasm().call_simple(
                 ic00::IC_00,
