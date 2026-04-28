@@ -334,7 +334,7 @@ mod tests {
             let metrics = StateSyncManagerMetrics::new(&MetricsRegistry::default());
 
             let manager = StateSyncManager {
-                log: log,
+                log,
                 advert_receiver: handler_rx,
                 ongoing_state_sync: None,
                 metrics,

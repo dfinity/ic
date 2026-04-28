@@ -516,7 +516,7 @@ mod tests {
                 NodeOperatorRecord {
                     node_operator_principal_id: new_node_operator_id.to_vec(),
                     node_provider_principal_id: new_node_provider_id.to_vec(),
-                    dc_id: dc_id,
+                    dc_id,
                     ..Default::default()
                 }
                 .encode_to_vec(),

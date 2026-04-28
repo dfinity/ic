@@ -1452,7 +1452,7 @@ fn test_canister_http_with_transform() {
         response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
             status: 200,
             headers: vec![],
-            body: body,
+            body,
         }),
         additional_responses: vec![],
     };
@@ -1578,7 +1578,7 @@ fn test_canister_http_with_one_additional_response() {
         additional_responses: vec![CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
             status: 200,
             headers: vec![],
-            body: body,
+            body,
         })],
     };
     pic.mock_canister_http_response(mock_canister_http_response);

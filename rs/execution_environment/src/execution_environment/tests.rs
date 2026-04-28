@@ -2372,7 +2372,7 @@ fn http_request_bound_holds() {
     let transform_method_name = "transform".to_string();
     let transform_context = vec![0, 1, 2];
     let args = CanisterHttpRequestArgs {
-        url: url,
+        url,
         max_response_bytes: Some(response_size_limit),
         headers: BoundedHttpHeaders::new(vec![]),
         body: None,

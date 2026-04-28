@@ -3210,7 +3210,7 @@ mod tests {
             icrc1_memo: Some(ByteBuf::from(43_u64.to_le_bytes().to_vec())),
 
             // Irrelevant to this test.
-            operation: operation,
+            operation,
             created_at_time: None,
         };
 
@@ -3318,7 +3318,7 @@ mod tests {
                 icrc1_memo: None,
 
                 // Irrelevant to this test.
-                operation: operation,
+                operation,
                 created_at_time: None,
             };
 

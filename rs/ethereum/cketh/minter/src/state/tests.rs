@@ -1483,7 +1483,7 @@ mod eth_balance {
         let effective_gas_price = WeiPerGas::from(0x596cfd9a_u64);
         let effective_gas_used = GasAmount::from(0xb003_u32);
         let withdrawal_flow = WithdrawalFlow {
-            tx_fee: tx_fee,
+            tx_fee,
             gas_limit,
             effective_gas_price,
             effective_gas_used,

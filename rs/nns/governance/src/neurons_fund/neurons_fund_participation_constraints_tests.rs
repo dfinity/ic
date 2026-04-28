@@ -161,7 +161,7 @@ fn test_diff_with_empty_snapshot() {
                     maturity_equivalent_icp_e8s: 9000,
                     is_capped: false,
                     controller,
-                    hotkeys: hotkeys,
+                    hotkeys,
                 }
             },
         })

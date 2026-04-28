@@ -234,7 +234,7 @@ fn add_node_operator_with_dc(
         node_allowance,
         node_provider_principal_id: np_principal.to_vec(),
         dc_id: dc_id.clone(),
-        rewardable_nodes: rewardable_nodes,
+        rewardable_nodes,
         ipv6: None,
         max_rewardable_nodes: Default::default(),
     };

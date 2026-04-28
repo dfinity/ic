@@ -157,7 +157,7 @@ impl Icrc1LedgerBuilder {
             canister_id: self.canister_id,
             init_args: self.init_args_builder.build(),
             infinite_freezing_threshold: self.infinite_freezing_threshold,
-            agent: agent,
+            agent,
         }
     }
 }

@@ -1035,7 +1035,7 @@ mod to_authentication {
             let authentication = Authentication::Authenticated(UserSignature {
                 signature: signature.to_vec(),
                 signer_pubkey: signer_pubkey.to_vec(),
-                sender_delegation: sender_delegation,
+                sender_delegation,
             });
             Setup {
                 sender_pubkey: signer_pubkey,

@@ -655,8 +655,8 @@ mod update_balance {
                             Some(vec![idx as u8].into())
                         };
                         Ok(GetUtxosResponse {
-                            next_page: next_page,
-                            utxos: utxos,
+                            next_page,
+                            utxos,
                             ..get_uxos_response()
                         })
                     });
