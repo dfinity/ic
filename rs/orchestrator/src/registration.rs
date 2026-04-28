@@ -854,10 +854,10 @@ fn generate_node_registration_attestation(
     use der::asn1::OctetStringRef;
     use sev::firmware::guest::Firmware;
     use sev_guest::attestation_package::generate_attestation_package;
-    use sev_guest::is_sev_active;
+    use sev_guest::is_tee_enabled;
 
     // Check if SEV is active
-    let is_sev_active = match is_sev_active() {
+    let is_tee_enabled = match is_tee_enabled() {
         Ok(active) => active,
         Err(err) => {
             info!(
@@ -868,7 +868,7 @@ fn generate_node_registration_attestation(
         }
     };
 
-    if !is_sev_active {
+    if !is_tee_enabled {
         info!(
             log,
             "SEV is not active, skipping node registration attestation"
