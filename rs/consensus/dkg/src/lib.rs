@@ -1761,7 +1761,8 @@ mod tests {
                 deps.crypto.as_ref(),
                 &pool_reader,
                 &*deps.dkg_pool.read().unwrap(),
-                parent,
+                parent.clone(),
+                &pool_reader.dkg_summary_block(&parent).unwrap(),
                 block.payload.as_ref(),
                 deps.state_manager.as_ref(),
                 &block.context,
@@ -1864,6 +1865,7 @@ mod tests {
                 }
                 _ => panic!("expected data block"),
             };
+
             assert!(
                 validate_payload(
                     subnet_test_id(0),
@@ -1871,7 +1873,8 @@ mod tests {
                     deps.crypto.as_ref(),
                     &pool_reader,
                     &*deps.dkg_pool.read().unwrap(),
-                    parent,
+                    parent.clone(),
+                    &pool_reader.dkg_summary_block(&parent).unwrap(),
                     &payload_without_early_remote,
                     deps.state_manager.as_ref(),
                     &block.context,
@@ -2130,6 +2133,7 @@ mod tests {
                         &pool_reader,
                         &*deps.dkg_pool.read().unwrap(),
                         parent.clone(),
+                        &pool_reader.dkg_summary_block(&parent).unwrap(),
                         &payload,
                         deps.state_manager.as_ref(),
                         &validation_context,
