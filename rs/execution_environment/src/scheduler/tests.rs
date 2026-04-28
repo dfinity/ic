@@ -69,7 +69,7 @@ fn state_sync_clears_paused_execution_registry() {
     test.state_mut().put_canister_state(clean_canister);
     let canister_priority = test.state_mut().canister_priority_mut(canister);
     canister_priority.long_execution_start_round = None;
-    canister_priority.executed_slices = 0;
+    canister_priority.executed_rounds = 0;
     assert!(!test.canister_state(canister).has_long_execution());
 
     // Execute another round. The scheduler detects that no canister has a paused

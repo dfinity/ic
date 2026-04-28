@@ -13,13 +13,15 @@ pub struct CanisterPriority {
     /// in the vector d that corresponds to this canister.
     pub accumulated_priority: AccumulatedPriority,
 
-    /// Number of DTS slices executed so far in the current long execution, if any.
-    /// (Also used transiently by `finish_round()` to charge for full executions.)
+    /// Number of rounds during which the current long execution, if any, has
+    /// executed at least one slice. (Also used transiently by `finish_round()` to
+    /// charge for full executions.)
     ///
-    /// During a long execution, this is incremented for each DTS slice executed.
-    /// In the meantime, the canister accumulates priority normally. It is only
-    /// charged for these slices when the long execution completes.
-    pub executed_slices: i64,
+    /// During a long execution, this is incremented for each round in which the
+    /// canister was executed. In the meantime, the canister accumulates priority
+    /// normally. It is only charged for these rounds when the long execution
+    /// completes.
+    pub executed_rounds: i64,
 
     /// The round when the current long execution started. `None` means the canister
     /// is not in a long execution.
@@ -36,7 +38,7 @@ impl CanisterPriority {
     /// subnet schedule.
     pub const DEFAULT: CanisterPriority = CanisterPriority {
         accumulated_priority: AccumulatedPriority::new(0),
-        executed_slices: 0,
+        executed_rounds: 0,
         long_execution_start_round: None,
         last_full_execution_round: ExecutionRound::new(0),
     };
