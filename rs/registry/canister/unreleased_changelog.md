@@ -9,12 +9,8 @@ on the process that this file is part of, see
 
 ## Added
 * Added an optional field `initial_dkg_subnet_id` to `SplitSubnetPayload` and `FulfillSubnetRentalRequest`,
-  which, when present, determines the subnet to which the resulting `SetupInitialDKG` management
-  canister call should be routed.
-* Added an optional field `initial_dkg_subnet_id` to `CreateSubnetPayload` and `RecoverSubnetPayload`
-  which, when present, determines the subnet to which the resulting `SetupInitialDKG` management
-  canister call should be routed.
-* Added type4.1 through type4.5 node reward types for cloud-engine sub-variants.
+  which, allows the proposer to choose which subnet should be responsible for generating the initial key
+  material of the split or rented subnet.
 
 ## Changed
 
