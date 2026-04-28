@@ -7806,6 +7806,34 @@ fn create_canister_reserves_cycles_for_memory_allocation() {
 }
 
 #[test]
+fn create_canister_reverts_subnet_available_memory_on_failure() {
+    // subnet_available_memory is decremented by the memory allocation step in
+    // validate_and_update_canister_settings before the cycles check runs.
+    // A huge freezing threshold makes the required cycles exceed the balance,
+    // so the cycles check fails after subnet_available_memory was already changed.
+    // The caller must revert subnet_available_memory from the round_limits snapshot.
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let initial_subnet_available_memory = test.subnet_available_memory().get_execution_memory();
+
+    let err = test
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000_000),
+            CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(MIB)
+                .with_freezing_threshold(u64::MAX)
+                .build(),
+        )
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryAllocation);
+    assert_eq!(
+        test.subnet_available_memory().get_execution_memory(),
+        initial_subnet_available_memory,
+    );
+}
+
+#[test]
 fn create_canister_fails_with_reserved_cycles_limit_exceeded() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
     const CAPACITY: u64 = 20_000_000_000;
