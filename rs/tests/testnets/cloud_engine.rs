@@ -75,6 +75,8 @@ const DM1_DMZ_GATEWAY: Ipv4Addr = Ipv4Addr::new(23, 142, 184, 238);
 /// and do not need to own the same number of DCs / nodes.
 #[derive(Clone, Copy, Debug)]
 enum NodeProvider {
+    // Required because of DFINITY-capitalization-check pre-commit
+    #[allow(clippy::upper_case_acronyms)]
     DFINITY,
     Alusion,
     OneSixtyTwoDigitalCapital,
