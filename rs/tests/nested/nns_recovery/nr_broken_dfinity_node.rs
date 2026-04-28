@@ -53,14 +53,6 @@ fn main() -> Result<()> {
             sequential_np_actions: false,
         }))
         .with_timeout_per_test(Duration::from_mins(30))
-        // The test performs a `systemctl restart ic-replica`
-        // which causes a SIGTERM to be sent to the replica process
-        // which sometimes causes the sandbox_execution_controller to panic with:
-        // "Sandboxed_execution_controller reply channel closed unexpectedly" which we allow:
-        .add_unallowed_log_pattern_except(
-            "panicked",
-            "rs/canister_sandbox/src/replica_controller/allowed_panics.rs:4",
-        )
         .execute_from_args()?;
 
     Ok(())
