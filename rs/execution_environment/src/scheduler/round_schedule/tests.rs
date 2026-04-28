@@ -90,6 +90,9 @@ impl RoundScheduleFixture {
     fn canister_with_long_execution(&mut self) -> CanisterId {
         let canister_id = self.canister();
         self.add_long_execution(canister_id);
+        let canister_priority = self.state.canister_priority_mut(canister_id);
+        canister_priority.long_execution_start_round = Some(self.current_round);
+        canister_priority.executed_slices = 1;
         canister_id
     }
 
@@ -265,9 +268,6 @@ impl RoundScheduleFixture {
                 id: PausedExecutionId(0),
                 input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
             });
-        self.state
-            .canister_priority_mut(canister_id)
-            .long_execution_start_round = Some(self.current_round);
     }
 
     /// Removes the `PausedExecution` from the front of the canister's task queue,
@@ -414,6 +414,11 @@ impl RoundScheduleBuilder {
         self
     }
 
+    fn with_install_code_rate_limit(mut self, install_code_rate_limit: NumInstructions) -> Self {
+        self.install_code_rate_limit = install_code_rate_limit;
+        self
+    }
+
     fn build(
         self,
         state: &mut ReplicatedState,
@@ -515,7 +520,9 @@ fn fixture_add_canister_with_long_execution() {
     assert_eq!(next_execution, NextExecution::ContinueLong);
 }
 
-// --- start_iteration tests (TEST_PLAN §1.1) ---
+//
+// --- start_iteration tests ---
+//
 
 /// Empty state: no canisters at all → empty schedule, empty scheduled_canisters.
 #[test]
@@ -663,9 +670,10 @@ fn start_iteration_later_iteration_not_fully_executed() {
     assert!(!fixture.fully_executed_canisters().contains(&new_id));
 }
 
-/// First iteration: long execution canisters get `long_execution_progress` initialized.
+/// First iteration: long execution canisters get `long_execution_start_round`
+/// initialized.
 #[test]
-fn start_iteration_first_iteration_long_execution_progress() {
+fn start_iteration_first_iteration_long_execution_start_round() {
     let mut fixture = RoundScheduleFixture::new();
     let long_id = fixture.canister_with_long_execution();
 
@@ -712,16 +720,98 @@ fn start_iteration_with_heap_delta_rate_limit() {
     let canister_id = fixture.canister_with_input();
     fixture.add_heap_delta_debit(canister_id, limit);
 
+    for is_first_iteration in [true, false] {
+        fixture.start_round(
+            ExecutionRound::new(1),
+            RoundScheduleBuilder::new().with_heap_delta_rate_limit(limit),
+        );
+
+        let iteration = fixture.start_iteration_only(is_first_iteration);
+
+        // Canister is rate-limited so not in the iteration schedule.
+        assert!(iteration.is_empty());
+        assert!(fixture.rate_limited_canisters().contains(&canister_id));
+        assert!(fixture.scheduled_canisters().contains(&canister_id));
+    }
+}
+
+#[test]
+fn start_iteration_with_install_code_rate_limit() {
+    let limit = NumInstructions::new(1000);
+    let mut fixture = RoundScheduleFixture::new();
+    let canister_id = fixture.canister_with_input();
+    fixture.add_install_code_debit(canister_id, limit);
+
+    for is_first_iteration in [true, false] {
+        fixture.start_round(
+            ExecutionRound::new(1),
+            RoundScheduleBuilder::new().with_install_code_rate_limit(limit),
+        );
+
+        let iteration = fixture.start_iteration_only(is_first_iteration);
+
+        // Canister is rate-limited so not in the iteration schedule.
+        assert!(iteration.is_empty());
+        assert!(fixture.rate_limited_canisters().contains(&canister_id));
+        assert!(fixture.scheduled_canisters().contains(&canister_id));
+    }
+}
+
+/// On the first iteration of a round, a rate-limited canister has its
+/// accumulated priority charged by `ONE_HUNDRED_PERCENT` (as if it had executed
+/// a full round). Later iterations in the same round must not charge it again.
+#[test]
+fn start_iteration_first_iteration_charges_rate_limited_canisters() {
+    let mut fixture = RoundScheduleFixture::new();
+
+    // A heap delta rate-limited canister with a non-trivial starting AP, so we can
+    // verify the exact 100% decrement.
+    let heap_delta_limit = ic_base_types::NumBytes::new(1000);
+    let heap_delta = fixture.canister_with_input();
+    fixture.add_heap_delta_debit(heap_delta, heap_delta_limit);
+    fixture.set_priority(heap_delta, priority(40));
+
+    // An install code rate-limited canister with a non-trivial starting AP, so we
+    // can verify the exact 100% decrement.
+    let install_code_limit = NumInstructions::new(2000);
+    let install_code = fixture.canister_with_input();
+    fixture.add_install_code_debit(install_code, install_code_limit);
+    fixture.set_priority(install_code, priority(50));
+
+    // A non-rate-limited control canister; its AP must not be charged.
+    let control = fixture.canister_with_input();
+    fixture.set_priority(control, priority(60));
+
     fixture.start_round(
         ExecutionRound::new(1),
-        RoundScheduleBuilder::new().with_heap_delta_rate_limit(limit),
+        RoundScheduleBuilder::new()
+            .with_heap_delta_rate_limit(heap_delta_limit)
+            .with_install_code_rate_limit(install_code_limit),
     );
-    let iteration = fixture.start_iteration_only(true);
 
-    // Canister is rate-limited so not in the iteration schedule.
-    assert!(iteration.is_empty());
-    assert!(fixture.rate_limited_canisters().contains(&canister_id));
-    assert!(fixture.scheduled_canisters().contains(&canister_id));
+    for is_first_iteration in [true, false] {
+        fixture.start_iteration_only(is_first_iteration);
+
+        assert!(fixture.rate_limited_canisters().contains(&heap_delta));
+        assert!(fixture.rate_limited_canisters().contains(&install_code));
+        // Rate-limited canisters are charged 100% AP only once, in the first iteration.
+        // A subsequent iteration in the same round must not charge them again.
+        assert_eq!(
+            fixture.canister_priority(&heap_delta).accumulated_priority,
+            AccumulatedPriority::new((40 - 100) * MULTIPLIER),
+        );
+        assert_eq!(
+            fixture
+                .canister_priority(&install_code)
+                .accumulated_priority,
+            AccumulatedPriority::new((50 - 100) * MULTIPLIER),
+        );
+        // Non-rate-limited canister is not charged by `start_iteration`.
+        assert_eq!(
+            fixture.canister_priority(&control).accumulated_priority,
+            AccumulatedPriority::new(60 * MULTIPLIER),
+        );
+    }
 }
 
 #[test]
@@ -753,7 +843,9 @@ fn start_iteration_scheduler_compute_allocation_invariant_broken() {
     );
 }
 
-// --- end_iteration tests (TEST_PLAN §1.2) ---
+//
+// --- end_iteration tests ---
+//
 
 /// end_iteration accumulates executed_canisters and canisters_with_completed_messages.
 #[test]
@@ -786,10 +878,37 @@ fn end_iteration_accumulates_executed_and_completed() {
     );
 }
 
+/// end_iteration sets `long_execution_start_round` for a newly started long
+/// execution and marks the canister as fully executed.
+#[test]
+fn end_iteration_sets_long_execution_start_round() {
+    let mut fixture = RoundScheduleFixture::new();
+    let canister_id = fixture.canister_with_input();
+
+    fixture.start_round(ExecutionRound::new(1), RoundScheduleBuilder::new());
+    fixture.start_iteration_only(true);
+
+    // Replace the input with a long execution.
+    fixture.pop_input(canister_id);
+    fixture.add_long_execution(canister_id);
+
+    fixture.end_iteration(&btreeset! {canister_id}, &btreeset! {}, &btreeset! {});
+
+    // `long_execution_start_round` was set to the current round.
+    let canister_priority = fixture.canister_priority(&canister_id);
+    assert_eq!(
+        canister_priority.long_execution_start_round,
+        Some(fixture.current_round)
+    );
+    // `executed_slices` is still zero, but the canister was marked fully executed.
+    assert_eq!(canister_priority.executed_slices, 0);
+    assert!(fixture.fully_executed_canisters().contains(&canister_id));
+}
+
 /// end_iteration resets long_execution_start_round for canisters with completed
 /// messages.
 #[test]
-fn end_iteration_clears_long_execution_start_round() {
+fn end_iteration_resets_long_execution_start_round_for_completed_messages() {
     let mut fixture = RoundScheduleFixture::new();
 
     // At the end of the round, `canister_a` has an in-progress long execution.
@@ -812,6 +931,31 @@ fn end_iteration_clears_long_execution_start_round() {
     assert_eq!(
         fixture
             .canister_priority(&canister_b)
+            .long_execution_start_round,
+        None
+    );
+}
+
+/// end_iteration resets `long_execution_start_round` for canisters with low
+/// cycle balance.
+#[test]
+fn end_iteration_resets_long_execution_start_round_for_low_cycle_balance() {
+    let mut fixture = RoundScheduleFixture::new();
+    fixture.current_round = ExecutionRound::new(13);
+
+    // Canister has a long execution at round start.
+    let canister_id = fixture.canister_with_long_execution();
+    fixture.start_iteration(true);
+
+    // Canister runs out of cycles: the long execution terminates...
+    fixture.remove_long_execution(canister_id);
+    // ...and end_iteration is called with the canister as having low cycle balance.
+    fixture.end_iteration(&btreeset! {}, &btreeset! {}, &btreeset! {canister_id});
+
+    // `long_execution_start_round` was reset.
+    assert_eq!(
+        fixture
+            .canister_priority(&canister_id)
             .long_execution_start_round,
         None
     );
@@ -856,7 +1000,37 @@ fn end_iteration_adds_idle_completed_to_fully_executed() {
     );
 }
 
-// --- finish_round tests (TEST_PLAN §1.3) ---
+#[test]
+fn advance_long_execution_preserves_long_execution_start_round() {
+    let mut fixture = RoundScheduleFixture::new();
+    fixture.current_round = ExecutionRound::new(13);
+
+    // A canister with a long execution at round start.
+    let canister_id = fixture.canister_with_long_execution();
+    let long_execution_start_round = ExecutionRound::new(8);
+    fixture.set_long_execution_progress(canister_id, long_execution_start_round, 2);
+
+    // Simulate a round of execution where the canister executes in two iterations.
+    fixture.start_iteration(true);
+    fixture.end_iteration(&btreeset! {canister_id}, &btreeset! {}, &btreeset! {});
+    fixture.start_iteration(false);
+    fixture.end_iteration(&btreeset! {canister_id}, &btreeset! {}, &btreeset! {});
+    fixture.finish_round();
+
+    // `long_execution_start_round` was preserved.
+    assert_eq!(
+        fixture
+            .canister_priority(&canister_id)
+            .long_execution_start_round,
+        Some(long_execution_start_round)
+    );
+    // `executed_slices` was incremented by 1.
+    assert_eq!(fixture.canister_priority(&canister_id).executed_slices, 3);
+}
+
+//
+// --- finish_round tests ---
+//
 
 /// finish_round gives fully_executed canisters priority_credit += 100% and
 /// last_full_execution_round = current_round (the credit is then applied in
