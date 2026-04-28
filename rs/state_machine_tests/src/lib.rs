@@ -607,7 +607,7 @@ fn make_fresh_registry_cup(
         replica_logger,
     )
     .unwrap();
-    cup.cup.into()
+    cup.into()
 }
 
 /// Convert an object into CBOR binary.

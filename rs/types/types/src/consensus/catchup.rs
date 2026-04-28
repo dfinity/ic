@@ -421,6 +421,12 @@ pub struct RegistryCUP {
     pub cup_type: RegistryCupType,
 }
 
+impl From<RegistryCUP> for pb::CatchUpPackage {
+    fn from(RegistryCUP { cup, cup_type: _ }: RegistryCUP) -> Self {
+        cup.into()
+    }
+}
+
 pub struct SubnetSplittingArgs {
     pub destination_subnet_id: SubnetId,
 }
