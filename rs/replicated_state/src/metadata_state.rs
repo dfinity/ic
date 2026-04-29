@@ -635,6 +635,8 @@ impl SystemMetadata {
     ///
     /// Note. The last canister allocation range is never dropped.
     pub fn commit_new_canister_id(&mut self, canister_id: CanisterId) {
+        debug_assert_eq!(canister_id, self.peek_new_canister_id().unwrap());
+
         self.last_generated_canister_id = Some(canister_id);
 
         while self.canister_allocation_ranges.len() > 1
