@@ -202,16 +202,16 @@ fn dts_long_execution_aborted_after_checkpoint() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // Canister has a paused execution and non-zero priority credit.
+    // Canister has a paused execution and non-zero executed rounds.
     assert!(test.canister_state(canister).has_paused_execution());
-    assert_ne!(test.state().canister_priority(&canister).executed_slices, 0);
+    assert_ne!(test.state().canister_priority(&canister).executed_rounds, 0);
 
     test.execute_round(ExecutionRoundType::CheckpointRound);
 
     // After a checkpoint round, the canister has an aborted execution and zero
-    // priority credit.
+    // executed rounds.
     assert!(test.canister_state(canister).has_aborted_execution());
-    assert_eq!(test.state().canister_priority(&canister).executed_slices, 0);
+    assert_eq!(test.state().canister_priority(&canister).executed_rounds, 0);
 
     // Complete the long execution.
     for _ in 0..3 {
@@ -222,10 +222,10 @@ fn dts_long_execution_aborted_after_checkpoint() {
         ErrorCode::CanisterDidNotReply,
     );
 
-    // After completion, there is no paused or aborted execution. And the priority
-    // credit is again zero.
+    // After completion, there is no paused or aborted execution. And executed
+    // rounds is again zero.
     assert!(!test.canister_state(canister).has_long_execution());
-    assert_eq!(test.state().canister_priority(&canister).executed_slices, 0);
+    assert_eq!(test.state().canister_priority(&canister).executed_rounds, 0);
 
     // 2 + 3 slices were executed.
     assert_eq!(test.scheduler().metrics.round.slices.get_sample_sum(), 5.0);
@@ -304,12 +304,12 @@ fn respect_max_paused_executions(
             .filter(|canister| {
                 let priority = subnet_schedule.get(&canister.canister_id());
                 if canister.has_paused_execution() {
-                    // All paused executions have non-zero priority credit.
-                    assert_ne!(priority.executed_slices, 0);
+                    // All paused executions have non-zero executed rounds.
+                    assert_ne!(priority.executed_rounds, 0);
                     true
                 } else {
-                    // All aborted (or not started) executions have zero priority credit.
-                    assert_eq!(priority.executed_slices, 0);
+                    // All aborted (or not started) executions have zero executed rounds.
+                    assert_eq!(priority.executed_rounds, 0);
                     false
                 }
             })

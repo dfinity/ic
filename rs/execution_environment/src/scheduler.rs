@@ -2201,7 +2201,7 @@ fn subnet_heap_delta_capacity(
 
 /// Aborts the paused execution, if any, of the given canister.
 ///
-/// If a paused execution was aborted, resets the canister's priority credit to
+/// If a paused execution was aborted, resets the canister's executed rounds to
 /// zero. Canisters must not be charged for aborted DTS executions.
 fn abort_canister(
     canister: &mut Arc<CanisterState>,
@@ -2214,7 +2214,7 @@ fn abort_canister(
         // Reset `executed_slices` to zero.
         subnet_schedule
             .get_mut(canister.canister_id())
-            .executed_slices = 0;
+            .executed_rounds = 0;
     }
 }
 

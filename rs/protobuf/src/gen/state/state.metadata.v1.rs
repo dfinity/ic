@@ -599,7 +599,7 @@ pub struct CanisterPriority {
     #[prost(int64, tag = "2")]
     pub accumulated_priority: i64,
     #[prost(int64, tag = "3")]
-    pub executed_slices: i64,
+    pub executed_rounds: i64,
     #[prost(uint64, optional, tag = "4")]
     pub long_execution_start_round: ::core::option::Option<u64>,
     #[prost(uint64, tag = "5")]
