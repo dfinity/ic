@@ -226,9 +226,14 @@ pub(crate) fn create_early_remote_transcripts(
         // For each config, try to build the necessary (dkg_id, callback_id, transcript_result) triple
         for config in configs.iter() {
             let dealings = all_dealings.remove(config.dkg_id()).unwrap_or_else(|| {
-                unreachable!(
+                error!(
+                    logger,
                     "We checked that all configs have enough dealings above. This is a bug."
-                )
+                );
+                // Just in case, return an empty map of dealings to make the next call to
+                // `create_transcript` fail with a reproducible error for not having enough
+                // dealings. This will send back a reject response to the canister.
+                BTreeMap::new()
             });
             // Generate the transcript. We need to retry transient errors, as a payload containing
             // transient errors may not be verifiable by peers.
