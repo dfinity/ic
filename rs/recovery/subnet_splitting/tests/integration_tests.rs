@@ -54,8 +54,14 @@ fn load_metrics_e2e_test() {
                 .unwrap()
                 .path();
         let load_samples_baseline_path = dir.path().join("load_samples_baseline.csv");
-        ic_state_tool::commands::canister_metrics::get(checkpoint_dir, &load_samples_baseline_path)
-            .expect("Should compute canister metrics for a valid checkpoint");
+        let connectivity_samples_baseline_path =
+            dir.path().join("connectivity_samples_baseline.csv");
+        ic_state_tool::commands::canister_metrics::get(
+            checkpoint_dir,
+            &load_samples_baseline_path,
+            &connectivity_samples_baseline_path,
+        )
+        .expect("Should compute canister metrics for a valid checkpoint");
 
         info!(logger, "Setting up state machines");
         set_up(
@@ -90,16 +96,13 @@ fn load_metrics_e2e_test() {
             "Using `state-tool` to extract the canister metrics from the replicated state."
         );
         let load_samples_path = dir.path().join("load_samples.csv");
-        ic_state_tool::commands::canister_metrics::get(checkpoint_dir.clone(), &load_samples_path)
-            .expect("Should compute canister metrics for a valid checkpoint");
         let communication_samples_path = dir.path().join("comm_samples.csv");
-        // TODO(CON-1569): use actual connectivity metrics
-        {
-            let communication_data = include_str!("../test_data/fake_communication_sample.csv");
-            let mut communication_samples_file =
-                std::fs::File::create(&communication_samples_path).unwrap();
-            write!(communication_samples_file, "{communication_data}").unwrap();
-        }
+        ic_state_tool::commands::canister_metrics::get(
+            checkpoint_dir.clone(),
+            &load_samples_path,
+            &communication_samples_path,
+        )
+        .expect("Should compute canister metrics for a valid checkpoint");
 
         info!(
             logger,
@@ -117,6 +120,10 @@ fn load_metrics_e2e_test() {
             .args([
                 "--communication-data-path",
                 &communication_samples_path.display().to_string(),
+            ])
+            .args([
+                "--communication-baseline-data-path",
+                &connectivity_samples_baseline_path.display().to_string(),
             ])
             .args(["--output-path", &split_output_path.display().to_string()])
             .args(["--load-type", "instructions_executed"])

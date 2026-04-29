@@ -664,7 +664,7 @@ pub struct TaskQueue {
     #[prost(message, repeated, tag = "3")]
     pub queue: ::prost::alloc::vec::Vec<ExecutionTask>,
 }
-/// Next ID: 65
+/// Next ID: 66
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
@@ -708,6 +708,8 @@ pub struct CanisterStateBits {
     pub controllers: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
     #[prost(message, optional, tag = "26")]
     pub cycles_balance: ::core::option::Option<super::super::queues::v1::Cycles>,
+    #[prost(message, repeated, tag = "65")]
+    pub connection_metrics: ::prost::alloc::vec::Vec<CanisterToCanisterMetrics>,
     /// The size of the canister's stable memory in bytes.
     #[prost(uint64, tag = "27")]
     pub stable_memory_size64: u64,
@@ -804,6 +806,15 @@ pub mod canister_state_bits {
         #[prost(message, tag = "13")]
         Stopped(super::CanisterStatusStopped),
     }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterToCanisterMetrics {
+    #[prost(message, optional, tag = "1")]
+    pub other_canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
+    #[prost(uint64, tag = "2")]
+    pub timestamp_nanos: u64,
+    #[prost(uint64, tag = "3")]
+    pub count: u64,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

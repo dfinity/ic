@@ -436,7 +436,7 @@ message TaskQueue {
   repeated ExecutionTask queue = 3;
 }
 
-// Next ID: 65
+// Next ID: 66
 message CanisterStateBits {
   reserved 1, 3, 6, 9, 10, 14, 16, 17, 24, 30, 35, 42, 47, 52, 53;
 
@@ -466,6 +466,7 @@ message CanisterStateBits {
   uint64 freeze_threshold = 23;
   repeated types.v1.PrincipalId controllers = 25;
   state.queues.v1.Cycles cycles_balance = 26;
+  repeated CanisterToCanisterMetrics connection_metrics = 65;
   // The size of the canister's stable memory in bytes.
   uint64 stable_memory_size64 = 27;
   // The memory delta debit of this canister. This is tracked for the purposes
@@ -520,4 +521,10 @@ message CanisterStateBits {
   map<string, string> environment_variables = 55;
   // Snapshot visibility for the canister.
   SnapshotVisibility snapshot_visibility = 64;
+}
+
+message CanisterToCanisterMetrics {
+  types.v1.CanisterId other_canister_id = 1;
+  uint64 timestamp_nanos = 2;
+  uint64 count = 3;
 }
