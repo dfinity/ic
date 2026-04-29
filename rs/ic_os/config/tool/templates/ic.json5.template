@@ -230,6 +230,10 @@
 \n\
   chain OUTPUT {\n\
     type filter hook output priority 0; policy accept;\n\
+    # Allow ic-http-adapter to reach the ollama TLS reverse proxy on port\n\
+    # 11434. This must come before the blanket 1-19999 reject below;\n\
+    # nftables evaluates top-down, so the accept short-circuits the reject.\n\
+    meta skuid ic-http-adapter ct state { new } tcp dport { 11434 } accept # Allow ic-http-adapter outbound to ollama (port 11434)\n\
     meta skuid ic-http-adapter ip daddr { 127.0.0.0/8 } ct state { new } tcp dport { 1-19999 } reject # Block restricted localhost ic-http-adapter HTTPS access\n\
     <<IPv4_OUTBOUND_RULES>>\n\
   }\n\
@@ -293,6 +297,10 @@ table ip6 filter {\n\
 \n\
   chain OUTPUT {\n\
     type filter hook output priority 0; policy accept;\n\
+    # Allow ic-http-adapter to reach the ollama TLS reverse proxy on port\n\
+    # 11434. This must come before the blanket 1-19999 rejects below;\n\
+    # nftables evaluates top-down, so the accept short-circuits the reject.\n\
+    meta skuid ic-http-adapter ct state { new } tcp dport { 11434 } accept # Allow ic-http-adapter outbound to ollama (port 11434)\n\
     meta skuid ic-http-adapter fib daddr type local ct state { new } tcp dport { 1-19999 } reject # Block restricted local addresses ic-http-adapter HTTPS access\n\
     meta skuid ic-http-adapter ip6 daddr { 2a00:fb01:400:42::/64, 2602:fb2b:110::/48, 2602:fb2b:100::/48, 2602:fb2b:120::/48 } ct state { new } tcp dport { 1-19999 } reject # Block restricted outbound ic-http-adapter HTTPS access\n\
     <<IPv6_OUTBOUND_RULES>>\n\

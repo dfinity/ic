@@ -31,7 +31,10 @@ StateDirectoryMode=0750
 # and seeding it from /opt/ollama-models.
 Environment=HOME=/var/lib/ollama
 Environment=OLLAMA_MODELS=/opt/ollama-models
-Environment=OLLAMA_HOST=0.0.0.0:11434
+# Bind to loopback only on a non-privileged port. External clients must
+# reach ollama through the TLS-terminating stunnel proxy listening on
+# 0.0.0.0:11434 (see /etc/systemd/system/ollama-tls.service).
+Environment=OLLAMA_HOST=127.0.0.1:11435
 Environment=LD_LIBRARY_PATH=/opt/ollama/lib/ollama
 
 ExecStart=/opt/ollama/bin/ollama serve

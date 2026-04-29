@@ -1,0 +1,34 @@
+[Unit]
+Description=stunnel TLS terminator in front of ollama
+Documentation=man:stunnel(8)
+
+# stunnel runs independently of ollama.service: it just listens on
+# 11434/tcp and forwards to 127.0.0.1:11435. If ollama is not running,
+# clients get a connection-refused on the upstream side, but the TLS
+# listener stays up so monitoring (and `systemctl enable --now
+# ollama.service` on demand) just works.
+#
+# Do NOT use BindsTo=ollama.service here. ollama.service is explicitly
+# disabled in the GuestOS Dockerfile (it must be started on demand via
+# `systemctl enable --now ollama.service`), and a BindsTo would cause
+# systemd to immediately Stop ollama-tls.service at boot because its
+# binding target is inactive -- which is exactly what was happening on
+# nodes shipped before this fix.
+After=network-online.target generate-ollama-tls-cert.service
+Wants=network-online.target generate-ollama-tls-cert.service
+
+# The cert is mandatory; if the generator failed, refuse to start.
+ConditionPathExists=/var/lib/ollama-tls/stunnel.pem
+
+[Service]
+Type=simple
+# stunnel binds 11434 (well above the privileged-port cutoff of 1024);
+# starts as root, reads its config + cert, then drops to the stunnel4
+# user as set in the conf.
+ExecStart=/usr/bin/stunnel /etc/stunnel/ollama-tls.conf
+
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

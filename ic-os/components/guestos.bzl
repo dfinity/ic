@@ -57,6 +57,18 @@ def component_files(mode):
         #   systemctl enable --now ollama.service
         Label("guestos/ollama/ollama.service"): "/etc/systemd/system/ollama.service",
         Label("guestos/ollama/manage-ollama.sh"): "/opt/ic/bin/manage-ollama.sh",
+        # TLS reverse proxy in front of the local ollama backend.
+        # generate-ollama-tls-cert.service runs once at boot and writes a
+        # self-signed cert into /var/lib/ollama-tls/, then ollama-tls.service
+        # runs stunnel terminating TLS on 0.0.0.0:11434 and forwarding to
+        # the local ollama listener on 127.0.0.1:11435. Both units are
+        # pulled in by multi-user.target via the blanket `systemctl enable`
+        # loop in the GuestOS Dockerfile (unlike ollama.service, which is
+        # explicitly disabled there).
+        Label("guestos/ollama/generate-ollama-tls-cert.sh"): "/opt/ic/bin/generate-ollama-tls-cert.sh",
+        Label("guestos/ollama/generate-ollama-tls-cert.service"): "/etc/systemd/system/generate-ollama-tls-cert.service",
+        Label("guestos/ollama/ollama-tls.conf"): "/etc/stunnel/ollama-tls.conf",
+        Label("guestos/ollama/ollama-tls.service"): "/etc/systemd/system/ollama-tls.service",
         Label("guestos/remote-attestation-server.service"): "/etc/systemd/system/remote-attestation-server.service",
         Label("guestos/generate-ic-config/generate-ic-config.service"): "/etc/systemd/system/generate-ic-config.service",
         Label("guestos/share/ic-boundary.env"): "/opt/ic/share/ic-boundary.env",

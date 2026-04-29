@@ -1,0 +1,22 @@
+[Unit]
+Description=Generate self-signed TLS cert for the ollama stunnel proxy
+Documentation=man:openssl-req(1)
+
+# /var must be mounted (cert lives in /var/lib/ollama-tls). The rootfs is
+# read-only so we cannot bake the key into the image.
+After=var.mount local-fs.target
+RequiresMountsFor=/var/lib
+
+# Skip running on systems that already have all three files. Idempotency is
+# also enforced by the script itself, but ConditionPathExists shaves a
+# fork+exec off subsequent boots.
+ConditionPathExists=!/var/lib/ollama-tls/stunnel.pem
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/ic/bin/generate-ollama-tls-cert.sh
+
+[Install]
+# Pulled in by the stunnel-for-ollama unit; no need to enable globally.
+WantedBy=multi-user.target

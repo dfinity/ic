@@ -9,7 +9,10 @@ set -eu
 
 export OLLAMA_MODELS=/opt/ollama-models
 export LD_LIBRARY_PATH=/opt/ollama/lib/ollama
-export OLLAMA_HOST=127.0.0.1:11434
+# Use the same internal plaintext port that the runtime ollama.service
+# binds to. Public access at runtime goes through the TLS-terminating
+# stunnel proxy on 11434 (see ollama-tls.service).
+export OLLAMA_HOST=127.0.0.1:11435
 
 mkdir -p "${OLLAMA_MODELS}"
 

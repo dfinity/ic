@@ -38,6 +38,9 @@ jq
 less
 lvm2
 nftables
+# Used by generate-ollama-tls-cert.sh to mint a self-signed TLS cert at
+# first boot for the ollama stunnel proxy.
+openssl
 parted
 rsync
 sudo
@@ -49,6 +52,12 @@ zstd
 
 # Required for API boundary nodes to enable IPv4 HTTP outcalls
 dante-server
+
+# Reverse-proxy / TLS terminator used in front of the local ollama backend
+# (see /etc/systemd/system/ollama-tls.service). stunnel terminates TLS on
+# 0.0.0.0:11434 with a self-signed certificate generated at first boot and
+# forwards plaintext traffic to ollama on 127.0.0.1:11435.
+stunnel4
 
 # SELinux support
 selinux-policy-default
