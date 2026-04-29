@@ -897,7 +897,7 @@ mod tests {
 
     use super::{
         super::test_utils::{
-            complement_state_manager_with_dkg_contexts_mut, create_dealing, local_dkg_id,
+            complement_state_manager_with_dkg_contexts, create_dealing, local_dkg_id,
             make_test_config, remote_dkg_id, remote_dkg_id_with_target,
         },
         *,
@@ -924,10 +924,7 @@ mod tests {
         crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet},
         time::UNIX_EPOCH,
     };
-    use std::{
-        collections::{BTreeMap, BTreeSet},
-        sync::{Arc, Mutex},
-    };
+    use std::collections::{BTreeMap, BTreeSet};
 
     // Tests creation of local configs.
     #[test]
@@ -1125,7 +1122,7 @@ mod tests {
 
                 let target_nodes: BTreeSet<_> =
                     vec![10, 11, 12].into_iter().map(node_test_id).collect();
-                let contexts = Arc::new(Mutex::new(vec![
+                let contexts = vec![
                     SubnetCallContext::SetupInitialDKG(SetupInitialDkgContext {
                         request: RequestBuilder::new().build(),
                         nodes_in_target_subnet: target_nodes.clone(),
@@ -1141,8 +1138,8 @@ mod tests {
                         time: UNIX_EPOCH,
                         target_id: reshare_target,
                     }),
-                ]));
-                complement_state_manager_with_dkg_contexts_mut(
+                ];
+                complement_state_manager_with_dkg_contexts(
                     deps.state_manager.clone(),
                     contexts,
                     None,

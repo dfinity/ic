@@ -438,7 +438,7 @@ impl<Pool: DkgPool> BouncerFactory<DkgMessageId, Pool> for DkgBouncer {
 mod tests {
     use super::*;
     use crate::test_utils::{
-        complement_state_manager_with_dkg_contexts, complement_state_manager_with_dkg_contexts_mut,
+        complement_state_manager_with_dkg_contexts,
         complement_state_manager_with_setup_initial_dkg_request, create_dealing,
         extract_dkg_configs_from_highest_block, make_reshare_chain_key_context,
         make_setup_initial_dkg_context,
@@ -2086,26 +2086,33 @@ mod tests {
                 )],
             );
 
-            let contexts = Arc::new(Mutex::new(Vec::new()));
-            complement_state_manager_with_dkg_contexts_mut(
-                deps.state_manager.clone(),
-                contexts.clone(),
-                None,
-            );
+            // No contexts at the beginning
+            complement_state_manager_with_dkg_contexts(deps.state_manager.clone(), vec![], None);
 
             // Advance until the first vetkd transcript is created
             deps.pool
                 .advance_round_normal_operation_n(EARLY_DKG_INTERVAL + 3);
 
-            contexts
-                .lock()
-                .unwrap()
-                .push(make_reshare_chain_key_context(
-                    deps.registry.get_latest_version(),
-                    key_id.clone(),
-                    vec![10, 11, 12, 13],
-                    target_id,
-                ));
+            // Latest summary should contain only local configs.
+            let summary_block = PoolReader::new(&deps.pool).get_highest_finalized_summary_block();
+            let summary = &summary_block.payload.as_ref().as_summary().dkg;
+            assert_eq!(
+                summary
+                    .configs
+                    .keys()
+                    .filter(|id| id.target_subnet != NiDkgTargetSubnet::Local)
+                    .count(),
+                0
+            );
+
+            let contexts = vec![make_reshare_chain_key_context(
+                deps.registry.get_latest_version(),
+                key_id.clone(),
+                vec![10, 11, 12, 13],
+                target_id,
+            )];
+            deps.state_manager.get_mut().checkpoint();
+            complement_state_manager_with_dkg_contexts(deps.state_manager.clone(), contexts, None);
 
             let remote_dkg_ids = vec![NiDkgId {
                 start_block_height: Height::from(EARLY_DKG_INTERVAL + 1),
