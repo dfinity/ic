@@ -1173,6 +1173,74 @@ fn finish_round_idle_at_zero_dropped_from_schedule() {
     );
 }
 
+/// finish_round applies an exponential decay to AP values outside the
+/// `[AP_ROUNDS_MIN, AP_ROUNDS_MAX]` window, in both directions; values inside
+/// the window are left untouched.
+///
+/// The setup uses 4 canisters with very high AP plus 1 canister with very low
+/// AP, chosen so that the post-decay sum of AP stays strictly positive. That
+/// keeps the free-compute distribution at the end of `finish_round` a no-op,
+/// so the only thing affecting AP between input and output is the decay
+/// itself.
+#[test]
+fn finish_round_exponential_decay() {
+    // Soft bounds in percent.
+    const AP_MIN_PERCENT: i64 = AP_ROUNDS_MIN * 100;
+    const AP_MAX_PERCENT: i64 = AP_ROUNDS_MAX * 100;
+
+    // Initial APs, well outside the soft bounds.
+    const LOW_AP_PERCENT: i64 = AP_MIN_PERCENT - 1000;
+    const HIGH_AP_PERCENT: i64 = AP_MAX_PERCENT + 500;
+
+    // Expected AP after decay: bound + (initial - bound) * AP_DECAY_PERCENT / 100.
+    const LOW_DECAYED_PERCENT: i64 = AP_MIN_PERCENT - 1000 * AP_DECAY_PERCENT / 100;
+    const HIGH_DECAYED_PERCENT: i64 = AP_MAX_PERCENT + 500 * AP_DECAY_PERCENT / 100;
+
+    // Sanity check: post-decay sum is strictly positive, so `finish_round`'s
+    // free-compute distribution is a no-op and any AP change we observe is
+    // attributable to the decay.
+    const POST_DECAY_TOTAL_PERCENT: i64 = 4 * HIGH_DECAYED_PERCENT + LOW_DECAYED_PERCENT;
+    const {
+        assert!(POST_DECAY_TOTAL_PERCENT > 0);
+    }
+
+    let mut fixture = RoundScheduleFixture::new();
+
+    // A canister below AP_MIN.
+    let below_min_canister = fixture.canister_with_input();
+    *fixture.canister_priority_mut(below_min_canister) = priority(LOW_AP_PERCENT);
+    // 4 canisters above AP_MAX. With only one, the post-decay sum would be negative
+    // (HIGH_DECAYED_PERCENT < |LOW_DECAYED_PERCENT|) and the free-compute
+    // distribution would adjust the AP of `below_min_canister`.
+    let above_max_canisters: Vec<_> = (0..4)
+        .map(|_| {
+            let id = fixture.canister_with_input();
+            *fixture.canister_priority_mut(id) = priority(HIGH_AP_PERCENT);
+            id
+        })
+        .collect();
+
+    // Record all canisters as scheduled, so they don't get treated as idle (and
+    // have 100 AP burned down).
+    fixture.round_schedule.scheduled_canisters = above_max_canisters.iter().cloned().collect();
+    fixture.round_schedule.scheduled_canisters.insert(below_min_canister);
+
+    fixture.finish_round();
+
+    for canister_id in &above_max_canisters {
+        assert_eq!(
+            fixture.canister_priority(canister_id).accumulated_priority,
+            AccumulatedPriority::new(HIGH_DECAYED_PERCENT * MULTIPLIER)
+        );
+    }
+    assert_eq!(
+        fixture
+            .canister_priority(&below_min_canister)
+            .accumulated_priority,
+        AccumulatedPriority::new(LOW_DECAYED_PERCENT * MULTIPLIER)
+    );
+}
+
 #[test]
 fn finish_round_grant_heap_delta_and_install_code_credits() {
     let mut fixture = RoundScheduleFixture::new();

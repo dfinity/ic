@@ -44,6 +44,10 @@ const AP_ROUNDS_MAX: i64 = 5;
 /// exponential decay to AP values less than this.
 const AP_ROUNDS_MIN: i64 = -20;
 
+/// Exponential decay factor (in percent) for accumulated priorities outside the
+/// `[AP_ROUNDS_MIN, AP_ROUNDS_MAX]` soft bounds.
+const AP_DECAY_PERCENT: i64 = 80;
+
 /// Round metrics required to prioritize a canister.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub(super) struct CanisterRoundState {
@@ -577,11 +581,11 @@ impl RoundSchedule {
             const AP_MIN: AccumulatedPriority =
                 AccumulatedPriority::new(AP_ROUNDS_MIN * 100 * MULTIPLIER);
             if canister_priority.accumulated_priority > AP_MAX {
-                canister_priority.accumulated_priority =
-                    AP_MAX + (canister_priority.accumulated_priority - AP_MAX) * 80 / 100;
+                canister_priority.accumulated_priority = AP_MAX
+                    + (canister_priority.accumulated_priority - AP_MAX) * AP_DECAY_PERCENT / 100;
             } else if canister_priority.accumulated_priority < AP_MIN {
-                canister_priority.accumulated_priority =
-                    AP_MIN + (canister_priority.accumulated_priority - AP_MIN) * 80 / 100;
+                canister_priority.accumulated_priority = AP_MIN
+                    + (canister_priority.accumulated_priority - AP_MIN) * AP_DECAY_PERCENT / 100;
             }
 
             total_ap += canister_priority.accumulated_priority;
