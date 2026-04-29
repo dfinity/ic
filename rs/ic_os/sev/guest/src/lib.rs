@@ -9,7 +9,7 @@ pub mod key_deriver;
 // of this crate but then there would be a cyclic dependency with the sev_guest_testing crate).
 pub use sev_guest_firmware as firmware;
 
-/// Checks if SEV is active in the Guest Virtual Machine
+/// Checks if Trusted Execution Environment (via SEV) is active in the Guest Virtual Machine
 pub fn is_tee_enabled() -> Result<bool> {
     let cmdline = std::fs::read_to_string("/proc/cmdline")
         .context("Could not read kernel command line from /proc/cmdline")?;
