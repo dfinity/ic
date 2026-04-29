@@ -921,7 +921,7 @@ wast = "245.0.0"
 wat = "~1.245.0"
 webpki-roots = "1.0.6"
 which = "6.0.3"
-wirm = { version = "2.1.0", features = ["parallel"] }
+wirm = { version = "4.0.4", features = ["parallel"] }
 wsl = "0.1.0"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }

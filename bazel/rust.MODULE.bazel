@@ -1914,7 +1914,7 @@ crate.spec(
 crate.spec(
     features = ["parallel"],
     package = "wirm",
-    version = "2.1.0",
+    version = "4.0.4",
 )
 crate.spec(
     package = "wsl",
