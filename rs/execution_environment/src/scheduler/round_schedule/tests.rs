@@ -1104,6 +1104,89 @@ fn finish_round_accumulated_priority_zero_sum() {
     );
 }
 
+/// `finish_round` charges 100% AP up front for any canister that started a
+/// long execution this round (`executed_rounds == 1` and
+/// `long_execution_start_round == Some(current_round)`). This is in order to
+/// charge all canisters scheduled as new executions in the same round,
+/// regardless of whether they end up as long executions or not.
+#[test]
+fn finish_round_charge_first_slice_of_new_long_execution() {
+    let mut fixture = RoundScheduleFixture::new();
+
+    // A canister with an input, pre-loaded to > 100 AP so we can observe the charge
+    // without free compute distribution kicking in.
+    let canister_id = fixture.canister_with_input();
+    const INITIAL_AP: AccumulatedPriority = AccumulatedPriority::new(200 * MULTIPLIER);
+    fixture
+        .canister_priority_mut(canister_id)
+        .accumulated_priority = INITIAL_AP;
+
+    fixture.start_iteration_only(true);
+
+    // Consume the input, replacing it with a long execution.
+    fixture.pop_input(canister_id);
+    fixture.add_long_execution(canister_id);
+    fixture.end_iteration(&btreeset! {canister_id}, &btreeset! {}, &btreeset! {});
+
+    // After `end_iteration` the canister is marked as fully executed and its long
+    // execution start round is recorded.
+    assert!(fixture.fully_executed_canisters().contains(&canister_id));
+    let priority = fixture.canister_priority(&canister_id);
+    assert_eq!(priority.executed_rounds, 0);
+    assert_eq!(
+        priority.long_execution_start_round,
+        Some(fixture.current_round),
+    );
+
+    fixture.finish_round();
+
+    let priority = fixture.canister_priority(&canister_id);
+    // The canister still has a long execution, so `executed_rounds` was bumped and
+    // `long_execution_start_round` was preserved.
+    assert_eq!(priority.executed_rounds, 1);
+    assert_eq!(
+        priority.long_execution_start_round,
+        Some(fixture.current_round),
+    );
+    // But `finish_round` charged for the first round of execution.
+    assert_eq!(
+        priority.accumulated_priority,
+        INITIAL_AP - ONE_HUNDRED_PERCENT
+    );
+}
+
+/// `finish_round` does not charge a canister with an in-flight long execution
+/// that wasn't scheduled this round (`executed_rounds == 0`): both charge
+/// branches in `finish_round` are gated on `executed_rounds > 0`, so neither
+/// fires.
+#[test]
+fn finish_round_in_flight_long_execution_no_charge() {
+    let mut fixture = RoundScheduleFixture::new();
+    let current_round = fixture.current_round;
+
+    let canister_id = fixture.canister_with_long_execution();
+    // Sanity checks.
+    let priority = fixture.canister_priority_mut(canister_id);
+    assert_eq!(priority.executed_rounds, 1);
+    assert_eq!(priority.long_execution_start_round, Some(current_round));
+    // Set some initial positive AP, so we can check that it's not charged.
+    const INITIAL_AP: AccumulatedPriority = AccumulatedPriority::new(50 * MULTIPLIER);
+    priority.accumulated_priority = INITIAL_AP;
+
+    fixture.start_iteration_only(true);
+    fixture.end_iteration(&btreeset! {canister_id}, &btreeset! {}, &btreeset! {});
+
+    fixture.finish_round();
+
+    let priority = fixture.canister_priority(&canister_id);
+    // AP is unchanged: no charge, no free compute distributed.
+    assert_eq!(priority.accumulated_priority, INITIAL_AP);
+    // Executed rounds was bumped by 1.
+    assert_eq!(priority.executed_rounds, 2);
+    // Long execution start round was preserved.
+    assert_eq!(priority.long_execution_start_round, Some(current_round),);
+}
+
 /// finish_round charges for executed rounds (clears executed_rounds, reduces
 /// accumulated_priority, resets long_execution_start_round) for canisters that
 /// complete a long execution.
@@ -1420,6 +1503,75 @@ fn finish_round_heartbeat_treated_same_as_input() {
         ap_a, ap_b,
         "heartbeat canister should get same priority as input canister"
     );
+}
+
+//
+// --- CanisterRoundState::Ord tests ---
+//
+
+/// Creates a `CanisterRoundState`, with parameters in the order in which they
+/// are compared by `CanisterRoundState::Ord`.
+fn canister_round_state(
+    executed_rounds: i64,
+    accumulated_priority: AccumulatedPriority,
+    long_execution_start_round: Option<u64>,
+    canister_id: CanisterId,
+) -> CanisterRoundState {
+    CanisterRoundState {
+        canister_id,
+        accumulated_priority,
+        compute_allocation: AccumulatedPriority::new(0),
+        executed_rounds,
+        long_execution_start_round: long_execution_start_round.map(ExecutionRound::new),
+    }
+}
+
+#[test]
+fn canister_round_state_ord() {
+    // Reuse canister IDs, to ensure they don't accidentally affect the ordering.
+    const CANISTER_1: CanisterId = CanisterId::from_u64(1);
+    const CANISTER_2: CanisterId = CanisterId::from_u64(2);
+
+    let rs = vec![
+        canister_round_state(2, ONE_HUNDRED_PERCENT, Some(1), CANISTER_1),
+        // Higher canister ID.
+        canister_round_state(2, ONE_HUNDRED_PERCENT, Some(1), CANISTER_2),
+        // Later start round.
+        canister_round_state(2, ONE_HUNDRED_PERCENT, Some(2), CANISTER_1),
+        // Lower AP.
+        canister_round_state(2, ZERO, Some(1), CANISTER_1),
+        // Fewer executed rounds.
+        canister_round_state(1, ONE_HUNDRED_PERCENT, Some(1), CANISTER_1),
+        // New execution.
+        canister_round_state(0, ONE_HUNDRED_PERCENT, None, CANISTER_1),
+        // Higher canister ID.
+        canister_round_state(0, ONE_HUNDRED_PERCENT, None, CANISTER_2),
+        // Lower AP.
+        canister_round_state(0, ZERO, None, CANISTER_1),
+    ];
+
+    for (lhs, rhs) in rs.iter().zip(rs.iter().skip(1)) {
+        assert_eq!(lhs.cmp(rhs), std::cmp::Ordering::Less);
+        assert_eq!(rhs.cmp(lhs), std::cmp::Ordering::Greater);
+    }
+}
+
+/// `CanisterRoundState::Ord` clamps `executed_rounds` to a minimum of 1 when
+/// comparing long executions, so an aborted long execution
+/// (`executed_rounds == 0`) ranks equally to a freshly started one
+/// (`executed_rounds == 1`) on the primary key, falling through to the AP /
+/// start round / canister-id tiebreakers. Without the clamp, an aborted long
+/// execution would always lose to any long execution that has at least one
+/// slice executed, leading to starvation.
+#[test]
+fn canister_round_state_ord_aborted_equivalent_to_first_round() {
+    const CANISTER_ID: CanisterId = CanisterId::from_u64(1);
+
+    let aborted = canister_round_state(0, ONE_HUNDRED_PERCENT, Some(1), CANISTER_ID);
+    let first_round = canister_round_state(1, ZERO, Some(1), CANISTER_ID);
+
+    assert_eq!(aborted.cmp(&first_round), std::cmp::Ordering::Less);
+    assert_eq!(first_round.cmp(&aborted), std::cmp::Ordering::Greater);
 }
 
 //
