@@ -1242,6 +1242,92 @@ fn finish_round_exponential_decay() {
     );
 }
 
+/// Sets up 4 canisters with compute allocations of 100%, 70%, 20% and 0%
+/// (sum = 190%, all starting with AP = 0); "charges" the first canister
+/// `executed_rounds` rounds (so its pre-CA AP becomes `-executed_rounds * 100%`,
+/// while the others remain at 0); calls `finish_round`; and verifies that each
+/// canister's resulting AP matches the corresponding entry of `expected_aps`.
+///
+/// Used to characterize `finish_round`'s free-compute distribution: free
+/// compute = `executed_rounds * 100% - 190%` (sum of CAs), distributed in
+/// CA-descending order with each canister's share capped at
+/// `per_canister_cap - CA`.
+fn check_finish_round_free_compute_grants(executed_rounds: i64, expected_aps: [i64; 4]) {
+    let mut fixture = RoundScheduleFixture::new();
+
+    const COMPUTE_ALLOCATIONS: [u64; 4] = [100, 70, 20, 0];
+    let canisters: [CanisterId; 4] = std::array::from_fn(|i| {
+        let id = fixture.canister_with_input();
+        fixture.set_compute_allocation(id, COMPUTE_ALLOCATIONS[i]);
+        // Add the canister to the subnet schedule with default (0) priority.
+        fixture.canister_priority_mut(id);
+        id
+    });
+
+    // Charge canister 0 for the executed rounds.
+    let executed_rounds_cost = ONE_HUNDRED_PERCENT * executed_rounds;
+    fixture
+        .canister_priority_mut(canisters[0])
+        .accumulated_priority = -executed_rounds_cost;
+
+    fixture.finish_round();
+
+    // "Refund" canister 0's AP, to make it easier to compare with its expected AP.
+    fixture
+        .canister_priority_mut(canisters[0])
+        .accumulated_priority += executed_rounds_cost;
+
+    for (i, canister_id) in canisters.iter().enumerate() {
+        let canister_priority = fixture.canister_priority(canister_id);
+        assert_eq!(
+            canister_priority.accumulated_priority.get() / MULTIPLIER,
+            expected_aps[i],
+            "canister {i} (CA={}%, executed_rounds={executed_rounds}): unexpected AP",
+            COMPUTE_ALLOCATIONS[i],
+        );
+    }
+}
+
+/// `finish_round` distributes the free compute (i.e. `-total_AP` after CA
+/// grants, when positive) across canisters in CA-descending order, with each
+/// canister's share capped at `per_canister_cap - CA`. With sum of CAs = 190%
+/// across 4 canisters, the per-canister cap stays at the default 100% until
+/// charged compute exceeds 400% (i.e. `100% * canister_count`), at which point
+/// it shifts to `ceil((free + total_CA) / canister_count)` to avoid
+/// systematically dropping AP below the floor.
+#[test]
+fn finish_round_free_compute_capped() {
+    // 0 executed rounds: no charge; total_AP = +190% (sum of CAs); free_compute
+    // is negative; no distribution. Each canister's AP equals its CA.
+    check_finish_round_free_compute_grants(0, [100, 70, 20, 0]);
+
+    // 1 executed round: charge 100%; total_AP = +90%; free_compute still
+    // negative; no distribution.
+    check_finish_round_free_compute_grants(1, [100, 70, 20, 0]);
+
+    // 2 executed rounds: charge 200%; total_AP = -10%; free_compute = +10%.
+    // The 100%-CA canister is already at its 100% cap and gets nothing; the
+    // remaining 10% is split (with integer-division remainder) among the other
+    // three canisters.
+    check_finish_round_free_compute_grants(2, [100, 73, 23, 3]);
+
+    // 3 executed rounds: charge 300%; total_AP = -110%; free_compute = +110%.
+    // The 100%-CA canister still gets nothing; the 70%-CA canister hits its
+    // 100% cap; the remaining 80% is split equally between the last two.
+    check_finish_round_free_compute_grants(3, [100, 100, 60, 40]);
+
+    // 4 executed rounds: charge 400%; total_AP = -210%; free_compute = +210%.
+    // free + total_CA = 400% = 100% * canister_count exactly (`>` is false), so
+    // the per-canister cap stays at 100% and B/C/D all reach it.
+    check_finish_round_free_compute_grants(4, [100, 100, 100, 100]);
+
+    // 5 executed rounds: charge 500%; total_AP = -310%; free_compute = +310%.
+    // free + total_CA = 500% > 400%, so the per-canister cap shifts to
+    // ceil(500% / 4) = 125%. The 100%-CA canister now also receives a 25%
+    // top-up, while B/C/D all reach the new 125% cap.
+    check_finish_round_free_compute_grants(5, [125, 125, 125, 125]);
+}
+
 #[test]
 fn finish_round_grant_heap_delta_and_install_code_credits() {
     let mut fixture = RoundScheduleFixture::new();
