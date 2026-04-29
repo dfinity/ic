@@ -31,7 +31,7 @@ fn check_no_failed_systemd_units(env: TestEnv) {
             .expect("Failed to establish SSH session to GuestOS node");
 
         let failed_units = node
-            .block_on_bash_script("systemctl list-units --failed --no-legend --no-pager")
+            .block_on_bash_script("systemctl list-units --failed --no-legend --no-pager --plain")
             .expect("Failed to run systemctl list-units --failed on GuestOS node");
         info!(
             logger,
@@ -43,13 +43,10 @@ fn check_no_failed_systemd_units(env: TestEnv) {
                 if line.is_empty() {
                     continue;
                 }
-                // Lines from `systemctl list-units --failed --no-legend` typically
-                // start with a status glyph (e.g. `●`) followed by the unit name.
-                // Skip the glyph if present and take the unit name as the next token.
-                let unit = line
-                    .split_whitespace()
-                    .find(|tok: &&str| !tok.chars().all(|c| !c.is_alphanumeric()));
-                let Some(unit) = unit else {
+                // With `--plain`, lines have no leading status glyph or tree
+                // structure, so the first whitespace-separated token is the
+                // unit name.
+                let Some(unit) = line.split_whitespace().next() else {
                     continue;
                 };
                 let cmd = format!("journalctl -u '{}' --no-pager -n 500", unit);
