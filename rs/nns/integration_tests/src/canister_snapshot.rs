@@ -1,5 +1,5 @@
 use candid::{Nat, Principal};
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId, SnapshotId};
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_management_canister_types_private::CanisterSnapshotResponse;
 use ic_nervous_system_common::E8;
@@ -10,7 +10,10 @@ use ic_nervous_system_integration_tests::pocket_ic_helpers::{
 };
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::pb::v1::ProposalStatus;
-use ic_nns_governance_api::{MakeProposalRequest, Motion, ProposalActionRequest};
+use ic_nns_governance_api::{
+    MakeProposalRequest, Motion, ProposalActionRequest, SuccessfulProposalExecutionValue,
+    TakeCanisterSnapshotOk,
+};
 use icp_ledger::{AccountIdentifier, DEFAULT_TRANSFER_FEE, Tokens};
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use pocket_ic::{PocketIcBuilder, nonblocking::PocketIc};
@@ -181,6 +184,16 @@ async fn test_canister_snapshot() {
     }
     assert_snapshot_seems_reasonable(first_snapshot);
 
+    // Step 3A.2: Verify that the snapshot ID is recorded in success_value.
+    let snapshot_id_from_proposal = match &first_proposal_info.success_value {
+        Some(SuccessfulProposalExecutionValue::TakeCanisterSnapshot(ok)) => ok.snapshot_id.clone(),
+        other => panic!("Expected TakeCanisterSnapshot success value, got: {other:#?}"),
+    };
+    assert_eq!(
+        snapshot_id_from_proposal,
+        first_snapshot.snapshot_id().as_slice(),
+    );
+
     // Scenario B: Replace an existing snapshot.
 
     // Step 2(B): Run code under test.
@@ -236,6 +249,16 @@ async fn test_canister_snapshot() {
     // first one should be CLOBBERED, blown away, replaced by the new one.
     let second_snapshot = &list_canister_snapshots_response[0];
     assert_ne!(second_snapshot.snapshot_id(), first_snapshot.snapshot_id());
+
+    // Also verify that the replace proposal's success_value records the new snapshot ID.
+    let snapshot_id_from_replace_proposal = match &replace_proposal_info.success_value {
+        Some(SuccessfulProposalExecutionValue::TakeCanisterSnapshot(ok)) => ok.snapshot_id.clone(),
+        other => panic!("Expected TakeCanisterSnapshot success value, got: {other:#?}"),
+    };
+    assert_eq!(
+        snapshot_id_from_replace_proposal,
+        second_snapshot.snapshot_id().as_slice(),
+    );
 
     // Generic checks of the second snapshot.
     assert_snapshot_seems_reasonable(second_snapshot);
@@ -450,7 +473,7 @@ async fn test_governance_canister_snapshot() {
             "Take a snapshot of the Governance canister.".to_string(),
         ],
     );
-    let _take_snapshot_proposal_id = extract_proposal_id(&output);
+    let take_canister_snapshot_proposal_id = extract_proposal_id(&output);
 
     // Wait for the effect of the proposal happen. This cannot be done in
     // the normal way (i.e. wait for the proposal status to become Executed,
@@ -473,6 +496,22 @@ async fn test_governance_canister_snapshot() {
     assert_eq!(snapshots.len(), 1, "{snapshots:#?}");
     let snapshot = &snapshots[0];
     assert_eq!(snapshot.id.get_canister_id(), GOVERNANCE_CANISTER_ID);
+
+    // Verify that success_value is populated. When the target is Governance,
+    // Root returns a placeholder/optimistic response to avoid a deadlock
+    // (it cannot stop Governance while Governance is waiting for it). The
+    // snapshot ID in that placeholder is zeroed.
+    let take_canister_snapshot_proposal_info =
+        nns::governance::get_proposal_info(&pocket_ic, take_canister_snapshot_proposal_id)
+            .await
+            .unwrap();
+    let optimistic_snapshot_id = SnapshotId::from((CanisterId::from_u64(0), 0_u64)).to_vec();
+    assert_eq!(
+        take_canister_snapshot_proposal_info.success_value.unwrap(),
+        SuccessfulProposalExecutionValue::from(TakeCanisterSnapshotOk {
+            snapshot_id: optimistic_snapshot_id,
+        }),
+    );
 
     // Change Governance's state by creating ANOTHER (Motion) proposal.
     // This will get blown away at the end when we load the snapshot,

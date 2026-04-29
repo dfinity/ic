@@ -323,6 +323,7 @@ impl<T: DkgPool> PoolMutationsProducer<T> for DkgImpl {
             return ChangeAction::Purge(start_height).into();
         }
 
+        // Consider NiDKG configs from the latest state and summary block.
         let remote_config_results = self
             .state_reader
             .get_latest_certified_state()
@@ -335,6 +336,13 @@ impl<T: DkgPool> PoolMutationsProducer<T> for DkgImpl {
                     dkg_summary,
                     &self.logger,
                 )
+                .inspect_err(|err| {
+                    error!(
+                        every_n_seconds => 15,
+                        self.logger,
+                        "Error building callback id config map: {err:?}"
+                    )
+                })
                 .ok()
             })
             .unwrap_or_default();
@@ -867,6 +875,7 @@ mod tests {
                 dkg_pool.write().unwrap().apply(change_set);
                 assert!(dkg.on_state_change(&*dkg_pool.read().unwrap()).is_empty());
 
+                // Dealings should be included in a block.
                 pool.advance_round_normal_operation();
                 let dealings = extract_dealings_from_highest_block(&pool);
                 assert_eq!(dealings.len(), 4);
@@ -889,7 +898,7 @@ mod tests {
                 }
 
                 // After the next summary, remote transcripts are finalized and we should not
-                // attempt creating remote dealings again.
+                // attempt to create remote dealings again.
                 pool.advance_round_normal_operation_n(dkg_interval_length);
                 let latest_summary = PoolReader::new(&pool).get_highest_finalized_summary_block();
                 assert_eq!(

@@ -13,7 +13,7 @@ use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
 use ic_crypto_tree_hash::{Digest, LabeledTree, MatchPatternPath, MixedHashTree, Witness};
-use ic_http_endpoints_public::start_server;
+use ic_http_endpoints_public::{query, start_server};
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     execution_environment::{
@@ -48,7 +48,7 @@ use ic_replicated_state::{
 };
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
-    CanisterId, CryptoHashOfPartialState, Height, RegistryVersion,
+    CanisterId, CryptoHashOfPartialState, Height, PrincipalId, RegistryVersion,
     artifact::UnvalidatedArtifactMutation,
     batch::RawQueryStats,
     consensus::certification::{Certification, CertificationContent},
@@ -113,6 +113,25 @@ impl UpdateEndpoint {
             UpdateEndpoint::Subnet(_) => ic_http_endpoints_test_agent::IngressMessage::default()
                 .with_canister_id(CanisterId::ic_00().get(), CanisterId::ic_00().get())
                 .with_method_name("create_canister".to_string()),
+        }
+    }
+}
+
+pub async fn query_endpoint(version: query::Version, addr: SocketAddr) -> reqwest::Response {
+    match version {
+        query::Version::V2 | query::Version::V3 => {
+            ic_http_endpoints_test_agent::Query::new(
+                PrincipalId::default(),
+                PrincipalId::default(),
+                version,
+            )
+            .query(addr)
+            .await
+        }
+        query::Version::SubnetV3 => {
+            ic_http_endpoints_test_agent::Query::new_subnet(subnet_test_id(1).get())
+                .query(addr)
+                .await
         }
     }
 }

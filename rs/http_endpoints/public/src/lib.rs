@@ -133,6 +133,7 @@ struct HttpHandler {
     subnet_call_v4_router: Router,
     query_v2_router: Router,
     query_v3_router: Router,
+    subnet_query_v3_router: Router,
     catchup_router: Router,
     dashboard_router: Router,
     status_router: Router,
@@ -339,6 +340,7 @@ pub fn start_server(
             ingress_verifier.clone(),
             nns_delegation_reader.clone(),
             query_execution_service.clone(),
+            subnet_id,
             version,
         )
         .with_health_status(health_status.clone())
@@ -348,6 +350,7 @@ pub fn start_server(
 
     let query_v2_router = query_router(query::Version::V2);
     let query_v3_router = query_router(query::Version::V3);
+    let subnet_query_v3_router = query_router(query::Version::SubnetV3);
 
     let read_state_router = |version, target| {
         ReadStateServiceBuilder::builder(
@@ -417,6 +420,7 @@ pub fn start_server(
         subnet_call_v4_router,
         query_v2_router,
         query_v3_router,
+        subnet_query_v3_router,
         status_router,
         catchup_router,
         dashboard_router,
@@ -607,6 +611,9 @@ fn make_router(
                 GlobalConcurrencyLimitLayer::new(config.max_query_concurrent_requests),
             )))
             .merge(http_handler.query_v3_router.layer(service_builder(
+                GlobalConcurrencyLimitLayer::new(config.max_query_concurrent_requests),
+            )))
+            .merge(http_handler.subnet_query_v3_router.layer(service_builder(
                 GlobalConcurrencyLimitLayer::new(config.max_query_concurrent_requests),
             )))
             .merge(
@@ -814,6 +821,10 @@ pub(crate) mod tests {
             ),
             query_v3_router: Router::new().route(
                 QueryService::route(query::Version::V3),
+                axum::routing::post(dummy_cbor),
+            ),
+            subnet_query_v3_router: Router::new().route(
+                QueryService::route(query::Version::SubnetV3),
                 axum::routing::post(dummy_cbor),
             ),
             catchup_router: Router::new().route(

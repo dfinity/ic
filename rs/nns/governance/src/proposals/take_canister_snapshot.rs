@@ -1,14 +1,18 @@
 use crate::{
-    pb::v1::{GovernanceError, TakeCanisterSnapshot, Topic},
+    pb::v1::{GovernanceError, TakeCanisterSnapshot, Topic, governance_error::ErrorType},
     proposals::{
-        call_canister::CallCanister, invalid_proposal_error, self_describing::DocumentedAction,
+        call_canister::{CallCanister, CallCanisterReply},
+        invalid_proposal_error,
+        self_describing::DocumentedAction,
         topic_to_manage_canister,
     },
 };
-use candid::Encode;
+use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nns_constants::ROOT_CANISTER_ID;
-use ic_nns_handler_root_interface::TakeCanisterSnapshotRequest;
+use ic_nns_handler_root_interface::{
+    TakeCanisterSnapshotOk, TakeCanisterSnapshotRequest, TakeCanisterSnapshotResponse,
+};
 
 impl TakeCanisterSnapshot {
     pub fn validate(&self) -> Result<(), GovernanceError> {
@@ -33,8 +37,7 @@ impl TakeCanisterSnapshot {
 }
 
 impl CallCanister for TakeCanisterSnapshot {
-    // TODO: Use a typed reply instead of () so that the result is recorded.
-    type Reply = ();
+    type Reply = TakeCanisterSnapshotOk;
 
     fn canister_and_function(&self) -> Result<(CanisterId, &str), GovernanceError> {
         Ok((ROOT_CANISTER_ID, "take_canister_snapshot"))
@@ -44,6 +47,25 @@ impl CallCanister for TakeCanisterSnapshot {
         let args = convert_take_canister_snapshot_from_proposal_to_root_request(self)?;
         Encode!(&args)
             .map_err(|e| invalid_proposal_error(&format!("Failed to encode payload: {e}")))
+    }
+}
+
+impl CallCanisterReply for TakeCanisterSnapshotOk {
+    fn try_decode(encoded_reply: &[u8]) -> Result<Option<Self>, GovernanceError> {
+        let response = Decode!(encoded_reply, TakeCanisterSnapshotResponse).map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("Failed to decode TakeCanisterSnapshotResponse: {err}"),
+            )
+        })?;
+
+        match response {
+            TakeCanisterSnapshotResponse::Ok(ok) => Ok(Some(ok)),
+            TakeCanisterSnapshotResponse::Err(err) => Err(GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("Root returned error for TakeCanisterSnapshot: {:?}", err),
+            )),
+        }
     }
 }
 

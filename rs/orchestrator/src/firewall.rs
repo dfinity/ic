@@ -5,8 +5,7 @@ use crate::{
     registry_helper::RegistryHelper,
 };
 use ic_config::firewall::{
-    BoundaryNodeConfig as BoundaryNodeFirewallConfig, FIREWALL_FILE_DEFAULT_PATH,
-    ReplicaConfig as ReplicaFirewallConfig,
+    BoundaryNodeConfig as BoundaryNodeFirewallConfig, ReplicaConfig as ReplicaFirewallConfig,
 };
 use ic_logger::{ReplicaLogger, debug, info, warn};
 use ic_protobuf::registry::{
@@ -22,7 +21,6 @@ use std::{
     collections::BTreeSet,
     convert::TryFrom,
     net::IpAddr,
-    path::PathBuf,
     sync::{Arc, RwLock},
 };
 
@@ -55,8 +53,6 @@ pub(crate) struct Firewall {
     last_applied_version: Arc<RwLock<RegistryVersion>>,
     /// If true, write the file content even if no change was detected in registry, i.e. first time
     must_write: bool,
-    /// If false, do not update the firewall rules (test mode)
-    enabled: bool,
     node_id: NodeId,
 }
 
@@ -70,18 +66,6 @@ impl Firewall {
         local_cup_reader: LocalCUPReader,
         logger: ReplicaLogger,
     ) -> Self {
-        // Disable if the config is the default one (e.g if we're in a test)
-        let enabled = replica_config
-            .config_file
-            .ne(&PathBuf::from(FIREWALL_FILE_DEFAULT_PATH));
-
-        if !enabled {
-            warn!(
-                logger,
-                "Firewall configuration not found. Orchestrator does not update firewall rules."
-            );
-        }
-
         Self {
             registry,
             metrics,
@@ -92,7 +76,6 @@ impl Firewall {
             compiled_config: Default::default(),
             last_applied_version: Default::default(),
             must_write: true,
-            enabled,
             node_id,
         }
     }
@@ -237,7 +220,12 @@ impl Firewall {
                 | NodeRewardType::Type1dot1,
             ) => true,
             (
-                NodeRewardType::Type4,
+                NodeRewardType::Type4
+                | NodeRewardType::Type4dot1
+                | NodeRewardType::Type4dot2
+                | NodeRewardType::Type4dot3
+                | NodeRewardType::Type4dot4
+                | NodeRewardType::Type4dot5,
                 NodeRewardType::Unspecified
                 | NodeRewardType::Type0
                 | NodeRewardType::Type1
@@ -245,7 +233,12 @@ impl Firewall {
                 | NodeRewardType::Type3
                 | NodeRewardType::Type3dot1
                 | NodeRewardType::Type1dot1
-                | NodeRewardType::Type4,
+                | NodeRewardType::Type4
+                | NodeRewardType::Type4dot1
+                | NodeRewardType::Type4dot2
+                | NodeRewardType::Type4dot3
+                | NodeRewardType::Type4dot4
+                | NodeRewardType::Type4dot5,
             ) => true,
             (
                 NodeRewardType::Unspecified
@@ -255,7 +248,12 @@ impl Firewall {
                 | NodeRewardType::Type3
                 | NodeRewardType::Type3dot1
                 | NodeRewardType::Type1dot1,
-                NodeRewardType::Type4,
+                NodeRewardType::Type4
+                | NodeRewardType::Type4dot1
+                | NodeRewardType::Type4dot2
+                | NodeRewardType::Type4dot3
+                | NodeRewardType::Type4dot4
+                | NodeRewardType::Type4dot5,
             ) => false,
         }
     }
@@ -582,9 +580,6 @@ impl Firewall {
     /// Checks for new firewall config, and if found, update local firewall
     /// rules
     pub fn check_and_update(&mut self) {
-        if !self.enabled {
-            return;
-        }
         let registry_version = self.registry.get_latest_version();
         debug!(
             self.logger,
@@ -822,7 +817,10 @@ fn split_ips_by_address_family(ips: &BTreeSet<IpAddr>) -> (Vec<String>, Vec<Stri
 
 #[cfg(test)]
 mod tests {
-    use std::{io::Write, path::Path};
+    use std::{
+        io::Write,
+        path::{Path, PathBuf},
+    };
 
     use config_tool::guestos::generate_ic_config;
     use ic_config::{ConfigOptional, ConfigSource};
@@ -987,7 +985,7 @@ mod tests {
     fn nftables_golden_assigned_replica_test() {
         // For assigned replicas, only Type4 (cloud engine) nodes have a different firewall
         for reward_type in NodeRewardType::iter()
-            .filter(|reward_type| *reward_type != NodeRewardType::Type4)
+            .filter(|reward_type| !is_cloud_engine_reward_type(*reward_type))
             .map(Some)
             .chain(std::iter::once(None))
         {
@@ -1016,7 +1014,7 @@ mod tests {
     fn nftables_unassigned_replica_golden_test() {
         // For unassigned replicas, only Type4 (cloud engine) nodes have a different firewall
         for reward_type in NodeRewardType::iter()
-            .filter(|reward_type| *reward_type != NodeRewardType::Type4)
+            .filter(|reward_type| !is_cloud_engine_reward_type(*reward_type))
             .map(Some)
             .chain(std::iter::once(None))
         {
@@ -1082,6 +1080,24 @@ mod tests {
                 NFTABLES_BOUNDARY_NODE_APP_SUBNET_GOLDEN_BYTES,
                 "boundary_node_app_subnet",
             );
+        }
+    }
+
+    fn is_cloud_engine_reward_type(reward_type: NodeRewardType) -> bool {
+        match reward_type {
+            NodeRewardType::Unspecified
+            | NodeRewardType::Type0
+            | NodeRewardType::Type1
+            | NodeRewardType::Type2
+            | NodeRewardType::Type3
+            | NodeRewardType::Type3dot1
+            | NodeRewardType::Type1dot1 => false,
+            NodeRewardType::Type4
+            | NodeRewardType::Type4dot1
+            | NodeRewardType::Type4dot2
+            | NodeRewardType::Type4dot3
+            | NodeRewardType::Type4dot4
+            | NodeRewardType::Type4dot5 => true,
         }
     }
 
