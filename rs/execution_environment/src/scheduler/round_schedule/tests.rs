@@ -1121,7 +1121,7 @@ fn finish_round_charge_first_slice_of_new_long_execution() {
         .canister_priority_mut(canister_id)
         .accumulated_priority = INITIAL_AP;
 
-    fixture.start_iteration_only(true);
+    fixture.start_iteration(true);
 
     // Consume the input, replacing it with a long execution.
     fixture.pop_input(canister_id);
@@ -1173,7 +1173,7 @@ fn finish_round_in_flight_long_execution_no_charge() {
     const INITIAL_AP: AccumulatedPriority = AccumulatedPriority::new(50 * MULTIPLIER);
     priority.accumulated_priority = INITIAL_AP;
 
-    fixture.start_iteration_only(true);
+    fixture.start_iteration(true);
     fixture.end_iteration(&btreeset! {canister_id}, &btreeset! {}, &btreeset! {});
 
     fixture.finish_round();
@@ -1306,7 +1306,10 @@ fn finish_round_exponential_decay() {
     // Record all canisters as scheduled, so they don't get treated as idle (and
     // have 100 AP burned down).
     fixture.round_schedule.scheduled_canisters = above_max_canisters.iter().cloned().collect();
-    fixture.round_schedule.scheduled_canisters.insert(below_min_canister);
+    fixture
+        .round_schedule
+        .scheduled_canisters
+        .insert(below_min_canister);
 
     fixture.finish_round();
 
@@ -1343,6 +1346,9 @@ fn check_finish_round_free_compute_grants(executed_rounds: i64, expected_aps: [i
         fixture.set_compute_allocation(id, COMPUTE_ALLOCATIONS[i]);
         // Add the canister to the subnet schedule with default (0) priority.
         fixture.canister_priority_mut(id);
+        // Mark the canister as scheduled, so it doesn't get treated as idle (and has
+        // 100 AP burned down).
+        fixture.round_schedule.scheduled_canisters.insert(id);
         id
     });
 
