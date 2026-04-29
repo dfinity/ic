@@ -391,7 +391,7 @@ fn system_metadata_roundtrip_encoding() {
         .subnet_schedule
         .get_mut(CanisterId::from_u64(1)) = CanisterPriority {
         accumulated_priority: 100.into(),
-        executed_slices: 2,
+        executed_rounds: 2,
         long_execution_start_round: Some(3.into()),
         last_full_execution_round: 4.into(),
     };
@@ -435,7 +435,7 @@ fn subnet_schedule_backward_compatibility() {
     let mut subnet_schedule = SubnetSchedule::default();
     *subnet_schedule.get_mut(CanisterId::from_u64(1)) = CanisterPriority {
         accumulated_priority: 100.into(),
-        executed_slices: 2,
+        executed_rounds: 2,
         long_execution_start_round: Some(3.into()),
         last_full_execution_round: 4.into(),
     };

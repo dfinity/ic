@@ -1210,7 +1210,7 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             // Ignored after the first checkpoint load during an upgrade.
             last_full_execution_round: 0.into(),
             compute_allocation: canister_state.compute_allocation(),
-            // Any long execution must have been aborted, priority credit is always zero.
+            // Value is ignored when loading.
             priority_credit: 0.into(),
             // Value is ignored when loading.
             long_execution_mode: Default::default(),
