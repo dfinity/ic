@@ -225,13 +225,11 @@ pub(crate) fn create_early_remote_transcripts(
 
         // For each config, try to build the necessary (dkg_id, callback_id, transcript_result) triple
         for config in configs.iter() {
-            let Some(dealings) = all_dealings.remove(config.dkg_id()) else {
-                error!(
-                    logger,
+            let dealings = all_dealings.remove(config.dkg_id()).unwrap_or_else(|| {
+                unreachable!(
                     "We checked that all configs have enough dealings above. This is a bug."
-                );
-                break;
-            };
+                )
+            });
             // Generate the transcript. We need to retry transient errors, as a payload containing
             // transient errors may not be verifiable by peers.
             let transcript_result = match NiDkgAlgorithm::create_transcript(
