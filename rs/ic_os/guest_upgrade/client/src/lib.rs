@@ -22,7 +22,6 @@ use rustls::pki_types::PrivateKeyDer;
 use rustls::version::TLS13;
 use sev_guest::attestation_package::generate_attestation_package;
 use sev_guest::firmware::SevGuestFirmware;
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::net::TcpStream;
