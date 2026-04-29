@@ -147,11 +147,11 @@ pub struct InternetIdentityInit {
     pub related_origins: Option<Vec<String>>,
     pub new_flow_origins: Option<Vec<String>>,
     pub openid_configs: Option<Vec<OpenIdConfig>>,
-    pub oidc_configs: Option<Vec<DiscoverableOidcConfig>>,
     pub analytics_config: Option<Option<AnalyticsConfig>>,
     pub enable_dapps_explorer: Option<bool>,
     pub is_production: Option<bool>,
     pub dummy_auth: Option<Option<DummyAuthConfig>>,
     pub backend_canister_id: Option<Principal>,
     pub backend_origin: Option<String>,
+    pub sso_discoverable_domains: Option<Vec<String>>,
 }
