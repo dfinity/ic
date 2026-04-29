@@ -34,7 +34,7 @@ system_test_nns(
         "vcpus": 24,
     },
     env = MAINNET_ENV,
-    guestos = "mainnet_nns",
+    guestos = "mainnet_app",
     guestos_update = True,
     tags = [
         "colocate",
@@ -61,7 +61,7 @@ system_test_nns(
 system_test_nns(
     name = "upgrade_downgrade_nns_subnet_test",
     env = MAINNET_ENV,
-    guestos = "mainnet_nns",
+    guestos = "mainnet_app",
     guestos_update = True,
     tags = [
         "long_test",
@@ -101,7 +101,7 @@ rust_binary(
 system_test_nns(
     name = "upgrade_app_subnet_test",
     env = MAINNET_ENV,
-    guestos = "mainnet_nns",
+    guestos = "mainnet_app",
     guestos_update = True,
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
@@ -114,7 +114,7 @@ system_test_nns(
 system_test_nns(
     name = "downgrade_app_subnet_test",
     env = MAINNET_ENV,
-    guestos_update = "mainnet_nns",
+    guestos_update = "mainnet_app",
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
