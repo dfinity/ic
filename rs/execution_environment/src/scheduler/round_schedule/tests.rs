@@ -1538,7 +1538,7 @@ fn canister_round_state_ord() {
     const CANISTER_1: CanisterId = CanisterId::from_u64(1);
     const CANISTER_2: CanisterId = CanisterId::from_u64(2);
 
-    let rs = vec![
+    let rs = [
         canister_round_state(2, ONE_HUNDRED_PERCENT, Some(1), CANISTER_1),
         // Higher canister ID.
         canister_round_state(2, ONE_HUNDRED_PERCENT, Some(1), CANISTER_2),
