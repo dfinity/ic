@@ -308,7 +308,7 @@ http_archive(
 
 # Ollama CPU-only runtime, shipped in the GuestOS. Only the `ollama` binary
 # and the CPU ggml shared libraries are kept; GPU runners (CUDA/MLX/Vulkan)
-# are stripped via the `build_file` filter.
+# are stripped via the `build_file` filter. Used for AI nodes.
 http_archive(
     name = "ollama",
     build_file = "@//third_party:BUILD.ollama.bazel",
