@@ -185,12 +185,6 @@ impl RoundScheduleFixture {
         cores
     }
 
-    /// Sets the scheduling priority for an existing canister.
-    fn set_priority(&mut self, canister_id: CanisterId, priority: CanisterPriority) {
-        assert!(self.state.canister_state(&canister_id).is_some());
-        *self.state.canister_priority_mut(canister_id) = priority;
-    }
-
     /// Sets the long execution progress for an existing canister.
     fn set_long_execution_progress(
         &mut self,
@@ -470,7 +464,7 @@ fn fixture_add_canister_with_priority() {
     let mut fixture = RoundScheduleFixture::new();
     let canister_id = fixture.canister();
     let priority = priority(100);
-    fixture.set_priority(canister_id, priority);
+    *fixture.canister_priority_mut(canister_id) = priority;
 
     let p = fixture.canister_priority(&canister_id);
     assert_eq!(p.accumulated_priority, priority.accumulated_priority);
@@ -573,8 +567,8 @@ fn start_iteration_ordering_by_priority() {
     let mut fixture = RoundScheduleFixture::new();
     let high_id = fixture.canister_with_input();
     let low_id = fixture.canister_with_input();
-    fixture.set_priority(high_id, priority(20));
-    fixture.set_priority(low_id, priority(10));
+    *fixture.canister_priority_mut(high_id) = priority(20);
+    *fixture.canister_priority_mut(low_id) = priority(10);
 
     let iteration = fixture.start_iteration(true);
 
@@ -775,18 +769,18 @@ fn start_iteration_first_iteration_charges_rate_limited_canisters() {
     let heap_delta_limit = ic_base_types::NumBytes::new(1000);
     let heap_delta = fixture.canister_with_input();
     fixture.add_heap_delta_debit(heap_delta, heap_delta_limit);
-    fixture.set_priority(heap_delta, priority(40));
+    *fixture.canister_priority_mut(heap_delta) = priority(40);
 
     // An install code rate-limited canister with a non-trivial starting AP, so we
     // can verify the exact 100% decrement.
     let install_code_limit = NumInstructions::new(2000);
     let install_code = fixture.canister_with_input();
     fixture.add_install_code_debit(install_code, install_code_limit);
-    fixture.set_priority(install_code, priority(50));
+    *fixture.canister_priority_mut(install_code) = priority(50);
 
     // A non-rate-limited control canister; its AP must not be charged.
     let control = fixture.canister_with_input();
-    fixture.set_priority(control, priority(60));
+    *fixture.canister_priority_mut(control) = priority(60);
 
     fixture.start_round(
         ExecutionRound::new(1),
