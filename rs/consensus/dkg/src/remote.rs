@@ -480,9 +480,11 @@ mod tests {
                 .collect::<BTreeSet<_>>(),
             BTreeSet::from([NiDkgTag::LowThreshold, NiDkgTag::HighThreshold])
         );
-        assert!(timeout_errors
-            .iter()
-            .all(|(id, _)| id.target_subnet == NiDkgTargetSubnet::Remote(target_id)));
+        assert!(
+            timeout_errors
+                .iter()
+                .all(|(id, _)| id.target_subnet == NiDkgTargetSubnet::Remote(target_id))
+        );
 
         // Setup context creation error should be propagated.
         state
