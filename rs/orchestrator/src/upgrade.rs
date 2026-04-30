@@ -4,7 +4,7 @@ use crate::{
     metrics::OrchestratorMetrics,
     orchestrator::SubnetAssignment,
     process_manager::{Process, ProcessManager},
-    registry_helper::{RegistryError, RegistryHelper, RegistryResult},
+    registry_helper::{RegistryError, RegistryHelper},
 };
 use async_trait::async_trait;
 use guest_upgrade_server::DiskEncryptionKeyExchangeServerAgent;

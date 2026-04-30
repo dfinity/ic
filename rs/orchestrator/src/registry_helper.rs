@@ -307,13 +307,13 @@ impl RegistryHelper {
     ) -> RegistryResult<Option<FirewallRuleSet>> {
         self.registry_client
             .get_firewall_rules(scope, version)
-            .map_err(RegistryResult::RegistryClientError)
+            .map_err(RegistryError::RegistryClientError)
     }
 
     pub(crate) fn get_node_ids(&self, version: RegistryVersion) -> RegistryResult<Vec<NodeId>> {
         self.registry_client
             .get_node_ids(version)
-            .map_err(RegistryResult::RegistryClientError)
+            .map_err(RegistryError::RegistryClientError)
     }
 
     pub(crate) fn get_available_ip_addresses_for_node_ids(
@@ -427,10 +427,10 @@ impl RegistryHelper {
         &self,
         node_id: NodeId,
         version: RegistryVersion,
-    ) -> OrchestratorResult<Option<NodeRecord>> {
+    ) -> RegistryResult<Option<NodeRecord>> {
         self.registry_client
             .get_node_record(node_id, version)
-            .map_err(OrchestratorError::RegistryClientError)
+            .map_err(RegistryError::RegistryClientError)
     }
 
     /// Return the DC ID where the current replica is located.
