@@ -20,7 +20,8 @@ pub fn benchmark(c: &mut Criterion) {
                 (exec_test, tmpdir)
             },
             |(exec_test, tmpdir)| {
-                let hypervisor = exec_test.hypervisor_deprecated();
+                let exec_env = exec_test.execution_environment();
+                let hypervisor = exec_env.hypervisor_for_testing();
                 let mut round_limits = RoundLimits {
                     instructions: as_round_instructions(MAX_NUM_INSTRUCTIONS),
                     subnet_available_memory: SubnetAvailableMemory::new_for_testing(
