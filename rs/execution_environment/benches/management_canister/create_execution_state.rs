@@ -9,10 +9,14 @@ use ic_wasm_types::CanisterModule;
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(500_000_000_000);
 
-pub fn benchmark(c: &mut Criterion) {
+fn run_benchmark(
+    c: &mut Criterion,
+    name: &str,
+    compilation_cost_handling: CompilationCostHandling,
+) {
     let canister_id = canister_test_id(1);
     let wasm = wat::parse_str("(module)").unwrap();
-    c.bench_function("create_execution_state/wasm:empty", |b| {
+    c.bench_function(name, |b| {
         b.iter_batched(
             || {
                 let exec_test = ExecutionTestBuilder::new().build();
@@ -39,7 +43,7 @@ pub fn benchmark(c: &mut Criterion) {
                         tmpdir.path().to_path_buf(),
                         canister_id,
                         &mut round_limits,
-                        CompilationCostHandling::CountFullAmount,
+                        compilation_cost_handling,
                     )
                     .1
                     .unwrap();
@@ -47,6 +51,19 @@ pub fn benchmark(c: &mut Criterion) {
             BatchSize::SmallInput,
         );
     });
+}
+
+pub fn benchmark(c: &mut Criterion) {
+    run_benchmark(
+        c,
+        "create_execution_state/wasm:empty/compilation_cost:full",
+        CompilationCostHandling::CountFullAmount,
+    );
+    run_benchmark(
+        c,
+        "create_execution_state/wasm:empty/compilation_cost:reduced",
+        CompilationCostHandling::CountReducedAmount,
+    );
 }
 
 criterion_group!(benchmarks, benchmark);
