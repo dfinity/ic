@@ -101,7 +101,6 @@ pub fn upgrade(
     nns_node: &IcNodeSnapshot,
     upgrade_version: &ReplicaVersion,
     subnet_type: SubnetType,
-    ecdsa_canister_key: Option<&(MessageCanister, BTreeMap<MasterPublicKeyId, Vec<u8>>)>,
 ) -> (IcNodeSnapshot, Principal, String) {
     let logger = env.logger();
     let (subnet_id, subnet_nodes, healthy_node, faulty_node, redundant_nodes) =
@@ -250,12 +249,6 @@ pub fn upgrade(
         msg_2
     ));
     info!(logger, "Could store and read message '{}'", msg_2);
-
-    if let Some((canister, public_keys)) = ecdsa_canister_key {
-        for (key_id, public_key) in public_keys {
-            run_chain_key_signature_test(canister, &logger, key_id, public_key.clone());
-        }
-    }
 
     info!(logger, "Starting redundant nodes ...");
     for redundant_node in &redundant_nodes {
