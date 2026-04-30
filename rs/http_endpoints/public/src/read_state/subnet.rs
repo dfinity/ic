@@ -221,16 +221,16 @@ fn verify_paths(paths: &[Path], effective_principal_id: PrincipalId) -> Result<(
             }
             [b"canister_ranges", subnet_id] => {
                 let subnet_id = parse_principal_id(subnet_id)?;
-                if let Some(last_id) = last_canister_ranges_subnet_id {
-                    if subnet_id != last_id {
-                        return Err(HttpError {
-                            status: StatusCode::BAD_REQUEST,
-                            message: format!(
-                                "More than one non-unique subnet ID exists \
+                if let Some(last_id) = last_canister_ranges_subnet_id
+                    && subnet_id != last_id
+                {
+                    return Err(HttpError {
+                        status: StatusCode::BAD_REQUEST,
+                        message: format!(
+                            "More than one non-unique subnet ID exists \
                                 in canister_ranges paths: {last_id} and {subnet_id}."
-                            ),
-                        });
-                    }
+                        ),
+                    });
                 }
 
                 last_canister_ranges_subnet_id = Some(subnet_id);
