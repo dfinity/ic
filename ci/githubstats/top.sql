@@ -3,6 +3,8 @@ WITH
     SELECT
       label,
       COUNT(*) AS "total",
+      MAX(CASE WHEN overall_status <> 1 THEN bt.first_start_time END) AS "last_non_success_at",
+      MAX(CASE WHEN overall_status = 2 THEN bt.first_start_time END) AS "last_flaky_at",
       SUM(CASE WHEN overall_status <> 1 THEN 1 ELSE 0 END) AS "non_success",
       SUM(CASE WHEN overall_status = 2 THEN 1 ELSE 0 END)  AS "flaky",
       SUM(CASE WHEN overall_status = 3 THEN 1 ELSE 0 END)  AS "timeout",
@@ -20,6 +22,8 @@ WITH
       AND ({time_filter})
       AND (NOT {only_prs} OR wr.event_type = 'pull_request')
       AND ({branch} = '' OR wr.head_branch LIKE {branch})
+      AND (wr.event_type != 'pull_request' OR wr.pull_request_number != ALL({exclude_prs}))
+      AND (bi.head_sha != ALL({exclude_commits}))
 
     GROUP BY label
   ),
@@ -27,6 +31,8 @@ WITH
     SELECT
       label,
       "total",
+      "last_non_success_at",
+      "last_flaky_at",
       "non_success",
       "flaky",
       "timeout",
@@ -36,12 +42,13 @@ WITH
       ROUND(("timeout" * 100.0) / "total", 1)  AS "timeout%",
       ROUND(("fail" * 100.0) / "total", 1)  AS "fail%",
       "non_success" * "duration_p90" AS "impact",
+      "total" * "duration_p90" AS "total_duration",
       "duration_p90"
 
     FROM
       "core"
 
-    ORDER BY {order_by} DESC
+    ORDER BY {order_by} DESC NULLS LAST
 
     LIMIT {N}
   )

@@ -213,7 +213,6 @@ impl TargetCanister {
             | TargetCanister::CkBtcMinter
             | TargetCanister::CkDogeIndex
             | TargetCanister::CkDogeLedger
-            | TargetCanister::CkDogeMinter
             | TargetCanister::CkEthArchive
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
@@ -223,6 +222,10 @@ impl TargetCanister {
             | TargetCanister::CyclesLedger
             | TargetCanister::ExchangeRateCanister
             | TargetCanister::SolRpc => self.repo_dir().into_iter().collect(),
+            TargetCanister::CkDogeMinter => vec![
+                PathBuf::from("rs/bitcoin/ckbtc"),
+                PathBuf::from("rs/dogecoin/ckdoge"),
+            ],
             TargetCanister::Bitcoin => vec![PathBuf::from("canister")],
             TargetCanister::BtcWatchdog | TargetCanister::DogeWatchdog => {
                 vec![PathBuf::from("watchdog")]
@@ -503,12 +506,12 @@ impl Display for TargetCanister {
             TargetCanister::EvmRpc => write!(f, "EVM RPC"),
             TargetCanister::CyclesLedger => write!(f, "cycles ledger"),
             TargetCanister::CyclesIndex => write!(f, "cycles index"),
-            TargetCanister::ExchangeRateCanister => write!(f, "exchange rate canister"),
+            TargetCanister::ExchangeRateCanister => write!(f, "exchange rate"),
             TargetCanister::SolRpc => write!(f, "SOL RPC"),
-            TargetCanister::Bitcoin => write!(f, "Bitcoin canister"),
+            TargetCanister::Bitcoin => write!(f, "Bitcoin"),
             TargetCanister::BtcWatchdog => write!(f, "Bitcoin watchdog"),
             TargetCanister::DogeWatchdog => write!(f, "Dogecoin watchdog"),
-            TargetCanister::Dogecoin => write!(f, "Dogecoin canister"),
+            TargetCanister::Dogecoin => write!(f, "Dogecoin"),
         }
     }
 }

@@ -32,10 +32,6 @@ pub(crate) fn update_signature_request_contexts(
     metrics: &SchedulerMetrics,
     logger: &ReplicaLogger,
 ) {
-    let _timer = metrics
-        .round_update_signature_request_contexts_duration
-        .start_timer();
-
     // Assign a random nonce to the context in the round immediately subsequent to its successful
     // match with a pre-signature.
     for context in &mut contexts {
@@ -45,7 +41,7 @@ pub(crate) fn update_signature_request_contexts(
                 .height()
                 .is_some_and(|height| height.get() + 1 == current_round.get())
         {
-            let mut nonce = [0u8; 32];
+            let mut nonce = [0_u8; 32];
             csprng.fill_bytes(&mut nonce);
             let _ = context.nonce.insert(nonce);
             metrics
@@ -194,7 +190,6 @@ fn match_context_with_pre_signature(
             debug_unreachable!(message);
         }
     }
-    let _ = context.matched_pre_signature.insert((pre_sig_id, height));
 }
 
 #[cfg(test)]
@@ -273,10 +268,9 @@ mod tests {
         let context = SignWithThresholdContext {
             request: RequestBuilder::new().build(),
             args,
-            pseudo_random_id: [id as u8; 32],
+            deprecated_pseudo_random_id: None,
             derivation_path: Arc::new(vec![]),
             batch_time: UNIX_EPOCH,
-            matched_pre_signature: matched_pre_signature.map(|(id, h)| (PreSigId(id), h)),
             nonce: None,
         };
 
@@ -314,11 +308,6 @@ mod tests {
         expected_id: u64,
         expected_height: Height,
     ) {
-        assert!(
-            context
-                .matched_pre_signature
-                .is_some_and(|(pid, h)| pid.id() == expected_id && h == expected_height)
-        );
         match &context.args {
             ThresholdArguments::Ecdsa(args) => {
                 let pre_sig = args.pre_signature.clone().unwrap();
@@ -360,7 +349,7 @@ mod tests {
             delivered_pre_signatures,
             vec![],
             pre_signature_stashes,
-            &mut Csprng::from_seed_and_purpose(
+            &mut Csprng::from_randomness_and_purpose(
                 &Randomness::new([1; 32]),
                 &ic_crypto_prng::RandomnessPurpose::ExecutionThread(1),
             ),

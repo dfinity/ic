@@ -17,6 +17,8 @@
 /var/lib/admin                              -d gen_context(system_u:object_r:user_home_dir_t,s0)
 /var/lib/readonly                           -d gen_context(system_u:object_r:user_home_dir_t,s0)
 /var/lib/backup                             -d gen_context(system_u:object_r:user_home_dir_t,s0)
+/var/lib/recovery                           -d gen_context(system_u:object_r:user_home_dir_t,s0)
 /var/lib/admin/.ssh(/.*)?                      gen_context(system_u:object_r:ssh_home_t,s0)
 /var/lib/readonly/.ssh(/.*)?                   gen_context(system_u:object_r:ssh_home_t,s0)
 /var/lib/backup/.ssh(/.*)?                     gen_context(system_u:object_r:ssh_home_t,s0)
+/var/lib/recovery/.ssh(/.*)?                   gen_context(system_u:object_r:ssh_home_t,s0)

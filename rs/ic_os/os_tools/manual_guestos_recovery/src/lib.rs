@@ -1,3 +1,7 @@
+//! Interactive TUI application for manual GuestOS recovery. Prompts the operator
+//! for a recovery version and hash prefix, downloads and verifies recovery
+//! artifacts, and installs the recovery GuestOS image.
+
 pub mod recovery_utils;
 mod ui;
 
@@ -18,6 +22,7 @@ use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
+use tracing::error;
 use tui_textarea::TextArea;
 
 // ============================================================================
@@ -374,7 +379,7 @@ impl GuestOSRecoveryApp {
         let terminal = match ratatui::try_init() {
             Ok(t) => t,
             Err(e) => {
-                println!("\nERROR: Manual Recovery TUI failed to start.\n{e:#}\n");
+                error!("Manual Recovery TUI failed to start: {e:#}");
                 return Err(e.into());
             }
         };

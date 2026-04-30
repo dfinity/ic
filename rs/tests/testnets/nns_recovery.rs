@@ -2,6 +2,12 @@
 //
 // The testnet will consist of a single system subnet with a single node running the NNS.
 //
+// The bazel target `mainnet_nns_recovery` also uses this testnet by setting the
+// `USE_MAINNET_STATE` environment variable to true, which makes the testnet use mainnet state. In
+// that case, it is recommended to also pass `--set-required-host-features=dc=zh1` to be physically
+// closer to the backup pod where the state is downloaded from.
+// You can pass `--set-required-host-features=dmz` to make the testnet open to the Internet.
+//
 // Then SUBNET_SIZE VMs are deployed and started booting SetupOS which will install HostOS to their virtual disks
 // and eventually boot the GuestOS in a VM nested inside the host VM.
 // These GuestOSes will then register with the NNS as unassigned nodes.
@@ -10,7 +16,7 @@
 // The driver will print how to reboot the host-1 VM and how to get to its console such that you can interact with its grub:
 //
 // ```
-// $ ict testnet create nns_recovery --verbose -- --test_env=SUBNET_SIZE=40 --test_env=DKG_INTERVAL=499 --test_env=NUM_NODES_TO_BREAK=14 --test_env=BREAK_AT_HEIGHT=2123 --test_tmpdir=./nns_recovery_testnet
+// $ ict testnet create (mainnet_)nns_recovery --verbose -- --test_env=SUBNET_SIZE=40 --test_env=DKG_INTERVAL=499 --test_env=NUM_NODES_TO_BREAK=14 --test_env=BREAK_AT_HEIGHT=2123 --test_tmpdir=./nns_recovery_testnet
 // ...
 // 2025-09-02 18:35:22.985 INFO[log_instructions:rs/tests/testnets/nested.rs:16:0] To reboot the host VM run the following command:
 // 2025-09-02 18:35:22.985 INFO[log_instructions:rs/tests/testnets/nested.rs:17:0] curl -X PUT 'https://farm.dfinity.systems/group/nested--1756837630333/vm/host-1/reboot'
@@ -31,13 +37,10 @@
 
 use anyhow::Result;
 use ic_consensus_system_test_subnet_recovery::utils::{
-    AdminAndUserKeys, break_nodes, get_admin_keys_and_generate_backup_keys,
-    node_with_highest_certification_share_height,
+    break_nodes, node_with_highest_cup_and_cert_share_heights,
 };
 use ic_limits::DKG_INTERVAL_HEIGHT;
-use ic_nested_nns_recovery_common::{
-    SetupConfig, grant_backup_access_to_all_nns_nodes, replace_nns_with_unassigned_nodes,
-};
+use ic_nested_nns_recovery_common::SetupConfig;
 use ic_system_test_driver::driver::nested::HasNestedVms;
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
@@ -46,28 +49,37 @@ use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use slog::{info, warn};
 use std::time::Duration;
 
-fn setup(env: TestEnv) {
+fn setup(env: TestEnv, use_mainnet_state: bool) {
     let subnet_size = std::env::var("SUBNET_SIZE")
         .ok()
         .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or(1);
+        .unwrap_or(0);
 
     let dkg_interval = std::env::var("DKG_INTERVAL")
         .ok()
-        .and_then(|s| s.parse::<u64>().ok())
+        .map(|s| s.parse::<u64>().expect("DKG_INTERVAL must be a valid u64"))
         .unwrap_or(DKG_INTERVAL_HEIGHT);
 
     ic_nested_nns_recovery_common::setup(
         env.clone(),
         SetupConfig {
             impersonate_upstreams: false,
+            use_mainnet_state,
             subnet_size,
             dkg_interval,
+            nested_nodes_vm_resource_overrides: Default::default(),
         },
     );
 }
 
 fn log_instructions(env: TestEnv) {
+    let nested_vms = env.get_all_nested_vms().unwrap();
+    if nested_vms.is_empty() {
+        // If there are no nested VMs, probably this testnet is meant to be public and we are now
+        // done. We wait forever for nodes to join.
+        return;
+    }
+
     let num_to_break = std::env::var("NUM_NODES_TO_BREAK")
         .ok()
         .and_then(|s| s.parse::<usize>().ok());
@@ -78,7 +90,7 @@ fn log_instructions(env: TestEnv) {
 
     let logger = env.logger();
 
-    let subnet_size = env.get_all_nested_vms().unwrap().len();
+    let subnet_size = env.topology_snapshot().root_subnet().nodes().count();
     let minimum_to_break_subnet = (subnet_size - 1) / 3 + 1;
     if let Some(nb) = num_to_break
         && nb < minimum_to_break_subnet
@@ -89,29 +101,8 @@ fn log_instructions(env: TestEnv) {
         );
     }
 
-    let AdminAndUserKeys {
-        user_auth: backup_auth,
-        ssh_user_pub_key: ssh_backup_pub_key,
-        ..
-    } = get_admin_keys_and_generate_backup_keys(&env);
-
-    nested::registration(env.clone());
-    replace_nns_with_unassigned_nodes(&env);
-    grant_backup_access_to_all_nns_nodes(&env, &backup_auth, &ssh_backup_pub_key);
-
-    let upgrade_version = get_guestos_update_img_version();
-    let upgrade_image_url = get_guestos_update_img_url();
-    let upgrade_image_hash = get_guestos_update_img_sha256();
-    info!(
-        logger,
-        r#"Working GuestOS version:
-    --upgrade-version {upgrade_version}
-    --upgrade-image-url {upgrade_image_url}
-    --upgrade-image-hash {upgrade_image_hash}"#
-    );
-
     info!(logger, "Host <-> IPs mapping:");
-    for vm in env.get_all_nested_vms().unwrap() {
+    for vm in &nested_vms {
         let vm_name = vm.vm_name();
         let host_ip = vm.get_nested_network().unwrap().host_ip;
         let guest_ip = vm.get_nested_network().unwrap().guest_ip;
@@ -125,7 +116,7 @@ fn log_instructions(env: TestEnv) {
         logger,
         "To reboot host VMs run any, or some of the following commands:"
     );
-    for vm in env.get_all_nested_vms().unwrap() {
+    for vm in &nested_vms {
         let vm_name = vm.vm_name();
         info!(
             logger,
@@ -142,10 +133,11 @@ fn log_instructions(env: TestEnv) {
     };
 
     loop {
-        let (_, highest_cert_share) = node_with_highest_certification_share_height(
+        let highest_cert_share = node_with_highest_cup_and_cert_share_heights(
             &env.topology_snapshot().root_subnet(),
             &logger,
-        );
+        )
+        .cert_share;
 
         if highest_cert_share >= break_at_height {
             info!(
@@ -162,8 +154,7 @@ fn log_instructions(env: TestEnv) {
     }
 
     break_nodes(
-        &env.get_all_nested_vms()
-            .unwrap()
+        &nested_vms
             .iter()
             .map(|vm| vm.get_guest_ssh().unwrap())
             .take(num_to_break)
@@ -175,9 +166,14 @@ fn log_instructions(env: TestEnv) {
 }
 
 fn main() -> Result<()> {
+    let use_mainnet_state = std::env::var("USE_MAINNET_STATE")
+        .map(|v| v == "1" || v.to_lowercase() == "true")
+        .expect("USE_MAINNET_STATE environment variable not set");
+
     SystemTestGroup::new()
-        .with_timeout_per_test(Duration::from_secs(90 * 60))
-        .with_setup(setup)
+        .with_timeout_per_test(Duration::from_hours(2))
+        .with_overall_timeout(Duration::from_hours(2))
+        .with_setup(move |env| setup(env, use_mainnet_state))
         .add_test(systest!(log_instructions))
         .execute_from_args()?;
     Ok(())

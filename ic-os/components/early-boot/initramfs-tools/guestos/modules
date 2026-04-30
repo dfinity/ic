@@ -17,3 +17,10 @@ nls_iso8859-1
 sev-guest
 usb_storage
 vfat
+vmw_pvscsi
+mptsas
+mptspi
+sd_mod
+xen_blkfront
+xen_netfront
+xen_platform_pci

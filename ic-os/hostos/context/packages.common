@@ -21,20 +21,18 @@ openssh-server
 # Smartcard support
 pcscd
 opensc
+usbutils
+libusb-1.0-0
 
 # Required system setup tools
 attr
 ca-certificates
 curl
-faketime
-fdisk
 iproute2
 iputils-ping
-isc-dhcp-client
 jq
 less
 lvm2
-net-tools
 netcat-openbsd
 nftables
 traceroute
@@ -44,7 +42,6 @@ python-is-python3
 rsync
 sudo
 udev
-usbutils
 zstd
 logrotate
 
@@ -64,17 +61,12 @@ dosfstools
 ethtool
 ipmitool
 lsof
-libarchive-zip-perl
-libusb-1.0-0
 locales
 moreutils
 mtools
 nvme-cli
 pciutils
-python3-libvirt
-python3-requests
 strace
-xxd
 
 # Install select components from future releases
 # Install >=2025 OVMF

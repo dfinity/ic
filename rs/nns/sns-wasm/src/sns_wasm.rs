@@ -36,7 +36,8 @@ use ic_nns_handler_root_interface::{
 use ic_sns_governance::pb::v1::governance::Version;
 use ic_sns_init::{SnsCanisterInitPayloads, pb::v1::SnsInitPayload};
 use ic_sns_root::GetSnsCanistersSummaryResponse;
-use ic_types::{Cycles, SubnetId};
+use ic_types::SubnetId;
+use ic_types_cycles::Cycles;
 use ic_wasm;
 use maplit::{btreemap, hashmap};
 use serde_json::{Value as JsonValue, json};

@@ -21,12 +21,14 @@ use ic_test_utilities_types::{
     messages::{RequestBuilder, ResponseBuilder},
 };
 use ic_types::{
-    Cycles, Height,
+    Height,
     messages::{CallbackId, Payload},
     time::UNIX_EPOCH,
     xnet::StreamIndex,
 };
+use ic_types_cycles::Cycles;
 use maplit::btreemap;
+use std::sync::Arc;
 
 fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     const NUM_STREAM_MESSAGES: u64 = 1_000;
@@ -233,12 +235,16 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     });
 
     let state_100_custom_sections = {
-        let mut state = get_initial_state(/*num_canisters=*/ 100u64, 0);
+        let mut state = get_initial_state(/*num_canisters=*/ 100_u64, 0);
         state.metadata.certification_version = CURRENT_CERTIFICATION_VERSION;
         assert_eq!(state.canister_states().len(), 100);
         for canister in state.canisters_iter_mut() {
-            canister.execution_state.as_mut().unwrap().metadata = WasmMetadata::new(btreemap! {
-                "large_section".to_string() => CustomSection::new(CustomSectionType::Public, vec![1u8; 1 << 20]),
+            Arc::make_mut(canister)
+                .execution_state
+                .as_mut()
+                .unwrap()
+                .metadata = WasmMetadata::new(btreemap! {
+                "large_section".to_string() => CustomSection::new(CustomSectionType::Public, vec![1_u8; 1 << 20]),
             });
         }
         state

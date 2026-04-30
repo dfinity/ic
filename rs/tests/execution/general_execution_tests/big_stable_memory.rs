@@ -182,7 +182,7 @@ pub fn can_access_big_heap_and_big_stable_memory(env: TestEnv) {
 
             // Update memory allocation of canister to 4GiB.
             mgr.update_settings(&canister_id)
-                .with_memory_allocation(4u64 * 1024 * 1024 * 1024)
+                .with_memory_allocation(4_u64 * 1024 * 1024 * 1024)
                 .call_and_wait()
                 .await
                 .unwrap();

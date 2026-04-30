@@ -64,7 +64,7 @@ mod tests {
             ExecutionState, ExportedFunctions, NumWasmPages,
             execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
         },
-        metadata_state::{ApiBoundaryNodeEntry, SubnetTopology},
+        metadata_state::{ApiBoundaryNodeEntry, SubnetTopology, testing::NetworkTopologyTesting},
         page_map::PageMap,
         testing::{ReplicatedStateTesting, StreamTesting},
     };
@@ -73,16 +73,15 @@ mod tests {
         canister_test_id, node_test_id, subnet_test_id, user_test_id,
     };
     use ic_types::{
-        CanisterId, CryptoHashOfPartialState, Cycles, Height,
-        batch::CanisterCyclesCostSchedule,
+        CanisterId, CryptoHashOfPartialState, Height,
         crypto::CryptoHash,
         xnet::{StreamFlags, StreamHeader},
     };
+    use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
     use std::collections::{BTreeSet, VecDeque};
     use std::convert::TryFrom;
-    use std::sync::Arc;
     use std::time::Duration;
 
     const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
@@ -768,7 +767,8 @@ mod tests {
     fn test_traverse_subnet() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
-        state.metadata.network_topology.subnets = btreemap! {
+        state.metadata.network_topology.set_subnets(btreemap! {
+            // For test coverage, this test adds one subnet for each subnet type
             subnet_test_id(0) => SubnetTopology {
                 public_key: vec![1, 2, 3, 4],
                 nodes: BTreeSet::new(),
@@ -776,21 +776,43 @@ mod tests {
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
+                subnet_admins: BTreeSet::new(),
             },
             subnet_test_id(1) => SubnetTopology {
                 public_key: vec![5, 6, 7, 8],
                 nodes: BTreeSet::new(),
-                subnet_type: SubnetType::Application,
+                subnet_type: SubnetType::System,
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
+                subnet_admins: BTreeSet::new(),
+            },
+            subnet_test_id(2) => SubnetTopology {
+                public_key: vec![9, 10, 11, 12],
+                nodes: BTreeSet::new(),
+                subnet_type: SubnetType::VerifiedApplication,
+                subnet_features: SubnetFeatures::default(),
+                chain_keys_held: BTreeSet::new(),
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
+                subnet_admins: BTreeSet::new(),
+            },
+            subnet_test_id(3) => SubnetTopology {
+                public_key: vec![13, 14, 15, 16],
+                nodes: BTreeSet::new(),
+                subnet_type: SubnetType::CloudEngine,
+                subnet_features: SubnetFeatures::default(),
+                chain_keys_held: BTreeSet::new(),
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
+                subnet_admins: BTreeSet::new(),
             }
-        };
-        state.metadata.network_topology.routing_table = Arc::new(
+        });
+        state.metadata.network_topology.set_routing_table(
             RoutingTable::try_from(btreemap! {
                 id_range(0, 10) => subnet_test_id(0),
                 id_range(11, 20) => subnet_test_id(1),
                 id_range(21, 30) => subnet_test_id(0),
+                id_range(31, 40) => subnet_test_id(2),
+                id_range(41, 50) => subnet_test_id(3),
             })
             .unwrap(),
         );
@@ -830,6 +852,16 @@ mod tests {
                             E::EnterEdge(CanisterId::from_u64(11).get().into_vec()),
                             E::VisitBlob(hex::decode("d9d9f781824a000000000000000b01014a00000000000000140101").unwrap()),
                             E::EndSubtree, // subnet_test_id(1)
+                            E::EnterEdge(subnet_test_id(2).get().into_vec()),
+                            E::StartSubtree,
+                            E::EnterEdge(CanisterId::from_u64(31).get().into_vec()),
+                            E::VisitBlob(hex::decode("d9d9f781824a000000000000001f01014a00000000000000280101").unwrap()),
+                            E::EndSubtree,
+                            E::EnterEdge(subnet_test_id(3).get().into_vec()),
+                            E::StartSubtree,
+                            E::EnterEdge(CanisterId::from_u64(41).get().into_vec()),
+                            E::VisitBlob(hex::decode("d9d9f781824a000000000000002901014a00000000000000320101").unwrap()),
+                            E::EndSubtree,
                             E::EndSubtree, // canister_ranges
                         ]
                     ),
@@ -864,7 +896,15 @@ mod tests {
                 ]),
                 Some(vec![
                     edge("public_key"),
-                    E::VisitBlob(vec![1, 2, 3, 4]),
+                    E::VisitBlob(vec![1, 2, 3, 4])
+                ]),
+                (certification_version >= V25).then_some(
+                    vec![
+                        edge("type"),
+                        E::VisitBlob(b"application".to_vec())
+                    ]
+                ),
+                Some(vec![
                     E::EndSubtree, // subnet
                     E::EnterEdge(subnet_test_id(1).get().into_vec()),
                     E::StartSubtree,
@@ -909,13 +949,73 @@ mod tests {
                 ]),
                 Some(vec![
                     edge("public_key"),
-                    E::VisitBlob(vec![5, 6, 7, 8]),
+                    E::VisitBlob(vec![5, 6, 7, 8])
+                ]),
+                (certification_version >= V25).then_some(
+                    vec![
+                        edge("type"),
+                        E::VisitBlob(b"system".to_vec())
+                    ]
+                ),
+                Some(vec![
+                    E::EndSubtree, // subnet
+                    E::EnterEdge(subnet_test_id(2).get().into_vec()),
+                    E::StartSubtree,
+                ]),
+                Some(vec![
+                    edge("canister_ranges"),
+                    // D9 D9F7                          # tag(55799)
+                    //    81                            # array(1)
+                    //       82                         # array(2)
+                    //          4A                      # bytes(10)
+                    //             000000000000001F0101 # "\x00\x00\x00\x00\x00\x00\x00\x1F\x01\x01"
+                    //          4A                      # bytes(10)
+                    //             00000000000000280101 # "\x00\x00\x00\x00\x00\x00\x00\x28\x01\x01"
+                    E::VisitBlob(hex::decode("d9d9f781824a000000000000001f01014a00000000000000280101").unwrap()),
+                ]),
+                Some(vec![
+                    edge("public_key"),
+                    E::VisitBlob(vec![9, 10, 11, 12])
+                ]),
+                (certification_version >= V25).then_some(
+                    vec![
+                        edge("type"),
+                        E::VisitBlob(b"verified_application".to_vec())
+                    ]
+                ),
+                Some(vec![
+                    E::EndSubtree, // subnet
+                    E::EnterEdge(subnet_test_id(3).get().into_vec()),
+                    E::StartSubtree,
+                ]),
+                Some(vec![
+                    edge("canister_ranges"),
+                    // D9 D9F7                          # tag(55799)
+                    //    81                            # array(1)
+                    //       82                         # array(2)
+                    //          4A                      # bytes(10)
+                    //             000000000000001F0101 # "\x00\x00\x00\x00\x00\x00\x00\x1F\x01\x01"
+                    //          4A                      # bytes(10)
+                    //             00000000000000320101 # "\x00\x00\x00\x00\x00\x00\x00\x32\x01\x01"
+                    E::VisitBlob(hex::decode("d9d9f781824a000000000000002901014a00000000000000320101").unwrap()),
+                ]),
+                Some(vec![
+                    edge("public_key"),
+                    E::VisitBlob(vec![13, 14, 15, 16])
+                ]),
+                (certification_version >= V25).then_some(
+                    vec![
+                        edge("type"),
+                        E::VisitBlob(b"cloud_engine".to_vec())
+                    ]
+                ),
+                Some(vec![
                     E::EndSubtree, // subnet
                     E::EndSubtree, // subnets
                     edge("time"),
                     leb_num(0),
                     E::EndSubtree, // global
-                ])
+                ]),
             ]
             .into_iter()
             .flat_map(Option::unwrap_or_default)
@@ -933,7 +1033,7 @@ mod tests {
     fn test_traverse_large_or_empty_routing_table() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
-        state.metadata.network_topology.subnets = btreemap! {
+        state.metadata.network_topology.set_subnets(btreemap! {
             subnet_test_id(0) => SubnetTopology {
                 public_key: vec![1, 2, 3, 4],
                 nodes: BTreeSet::new(),
@@ -941,17 +1041,19 @@ mod tests {
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
+                subnet_admins: BTreeSet::new(),
             },
             subnet_test_id(1) => SubnetTopology {
                 public_key: vec![5, 6, 7, 8],
                 nodes: BTreeSet::new(),
-                subnet_type: SubnetType::Application,
+                subnet_type: SubnetType::VerifiedApplication,
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
+                subnet_admins: BTreeSet::new(),
             }
-        };
-        state.metadata.network_topology.routing_table = Arc::new(
+        });
+        state.metadata.network_topology.set_routing_table(
             RoutingTable::try_from(btreemap! {
                 id_range(0, 10) => subnet_test_id(0),
                 id_range(21, 30) => subnet_test_id(0),
@@ -1100,7 +1202,15 @@ mod tests {
                 ]),
                 Some(vec![
                     edge("public_key"),
-                    E::VisitBlob(vec![1, 2, 3, 4]),
+                    E::VisitBlob(vec![1, 2, 3, 4])
+                ]),
+                (certification_version >= V25).then_some(
+                    vec![
+                        edge("type"),
+                        E::VisitBlob(b"application".to_vec())
+                    ]
+                ),
+                Some(vec![
                     E::EndSubtree, // subnet
                     E::EnterEdge(subnet_test_id(1).get().into_vec()),
                     E::StartSubtree,
@@ -1135,13 +1245,21 @@ mod tests {
                 ]),
                 Some(vec![
                     edge("public_key"),
-                    E::VisitBlob(vec![5, 6, 7, 8]),
+                    E::VisitBlob(vec![5, 6, 7, 8])
+                ]),
+                (certification_version >= V25).then_some(
+                    vec![
+                        edge("type"),
+                        E::VisitBlob(b"verified_application".to_vec())
+                    ]
+                ),
+                Some(vec![
                     E::EndSubtree, // subnet
                     E::EndSubtree, // subnets
                     edge("time"),
                     leb_num(0),
                     E::EndSubtree, // global
-                ])
+                ]),
             ]
             .into_iter()
             .flat_map(Option::unwrap_or_default)

@@ -42,6 +42,8 @@ mock! {
     }
 
     impl StateManager for StateManager {
+        fn tip_height(&self) -> Height;
+
         fn take_tip(&self) -> (Height, ReplicatedState);
 
         fn take_tip_at(&self, h: Height) -> StateManagerResult<ReplicatedState>;
@@ -51,6 +53,8 @@ mock! {
         fn fetch_state(&self, height: Height, root_hash: CryptoHashOfState, cup_interval_length: Height);
 
         fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata>;
+
+        fn list_state_heights_to_certify(&self) -> Vec<Height>;
 
         fn deliver_state_certification(&self, certification: Certification);
 
@@ -63,7 +67,6 @@ mock! {
         fn commit_and_certify(
             &self,
             state: ReplicatedState,
-            height: Height,
             scope: CertificationScope,
             batch_summary: Option<BatchSummary>,
         );

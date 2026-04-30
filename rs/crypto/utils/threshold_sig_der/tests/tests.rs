@@ -34,7 +34,7 @@ fn test_vectors() -> Vec<TestVector> {
 }
 
 fn raw_bytes(tv: &TestVector) -> [u8; PublicKeyBytes::SIZE] {
-    let mut bytes = [0u8; PublicKeyBytes::SIZE];
+    let mut bytes = [0_u8; PublicKeyBytes::SIZE];
     bytes.copy_from_slice(&hex::decode(&tv.raw_hex).unwrap());
     bytes
 }
@@ -81,11 +81,11 @@ fn test_corrupted_der_fails() {
 #[test]
 fn test_public_key_to_der_wrong_key_size() {
     // Key too short
-    let short_key = [0u8; PUBLIC_KEY_SIZE - 1];
+    let short_key = [0_u8; PUBLIC_KEY_SIZE - 1];
     assert!(public_key_to_der(&short_key).is_err());
 
     // Key too long
-    let long_key = [0u8; PUBLIC_KEY_SIZE + 1];
+    let long_key = [0_u8; PUBLIC_KEY_SIZE + 1];
     assert!(public_key_to_der(&long_key).is_err());
 
     // Empty key

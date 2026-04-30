@@ -114,36 +114,82 @@ def is_git_commit_sha(s: str) -> bool:
     return bool(re.match(r"^[0-9a-fA-F]{7,40}$", s))
 
 
-def get_commit_timestamp(sha: str) -> datetime:
-    """Fetch a git commit and return its commit timestamp as a timezone-aware datetime object (UTC)."""
+def commit_sha_arg(s: str) -> str:
+    """Argparse `type` validator: accept only strings that look like a git commit SHA."""
+    if not is_git_commit_sha(s):
+        raise argparse.ArgumentTypeError(f"Invalid git commit SHA '{s}': expected 7-40 hexadecimal characters.")
+    return s
+
+
+def resolve_full_commit_sha(sha: str) -> str:
+    """
+    Resolve a (possibly short) git commit SHA to its full 40-character form using `git rev-parse`.
+
+    If the commit is not yet available locally, `git fetch origin` is run once and the
+    resolution is retried. This allows callers to pass commits that have not been fetched
+    yet (e.g. commits from recent PRs on a freshly-cloned repository).
+
+    Only accepts inputs that look like a git commit SHA (hex 7-40 chars) to avoid
+    accepting arbitrary revision expressions or option injection via `git rev-parse`.
+    The `^{commit}` suffix ensures git treats the input as a commit object reference
+    rather than another kind of object (tag, tree, ...).
+    """
+    if not is_git_commit_sha(sha):
+        die(f"Invalid git commit SHA '{sha}': expected 7-40 hexadecimal characters.")
     repo_root = THIS_SCRIPT_DIR.parent.parent
 
-    try:
-        # First, resolve the full commit SHA
+    def rev_parse() -> Optional[str]:
         result = subprocess.run(
-            ["git", "rev-parse", sha],
+            ["git", "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}"],
             cwd=repo_root,
-            check=True,
             capture_output=True,
             text=True,
         )
-        full_sha = result.stdout.strip()
+        if result.returncode != 0:
+            return None
+        # Defensively take the first non-empty line of output.
+        for line in result.stdout.splitlines():
+            stripped_line = line.strip()
+            if stripped_line:
+                return stripped_line
+        return None
 
-        # Then, fetch the commit to ensure it's available locally
+    full_sha = rev_parse()
+    if full_sha is not None:
+        return full_sha
+
+    # Commit not found locally; fetch from origin and retry.
+    try:
         subprocess.run(
-            ["git", "fetch", "origin", full_sha],
+            ["git", "fetch", "origin"],
             cwd=repo_root,
             check=True,
             capture_output=True,
             text=True,
         )
     except subprocess.CalledProcessError as e:
-        die(f"Failed to fetch git commit '{sha}': {e.stderr.strip()}\nMake sure the commit exists in the repository.")
+        die(f"Failed to fetch from origin while resolving git commit '{sha}': {e.stderr.strip()}")
+
+    full_sha = rev_parse()
+    if full_sha is None:
+        die(
+            f"Failed to resolve git commit '{sha}' even after fetching from origin.\nMake sure the commit exists in the repository."
+        )
+    return full_sha
+
+
+def get_commit_timestamp(sha: str) -> datetime:
+    """Return the commit timestamp of the given git commit as a timezone-aware datetime object (UTC)."""
+    repo_root = THIS_SCRIPT_DIR.parent.parent
+
+    # Resolve the full commit SHA, fetching from origin if necessary.
+    full_sha = resolve_full_commit_sha(sha)
 
     try:
-        # Get the commit timestamp in ISO 8601 format
+        # Get the commit timestamp in ISO 8601 format. Use the fully-resolved SHA
+        # to avoid ambiguity issues after fetching.
         result = subprocess.run(
-            ["git", "log", "-1", "--format=%cI", sha],
+            ["git", "log", "-1", "--format=%cI", full_sha],
             cwd=repo_root,
             check=True,
             capture_output=True,
@@ -224,20 +270,82 @@ def normalize_duration(td: pd.Timedelta):
     )
 
 
-def download_and_process_logs(logs_base_dir, test_target: str, download_ic_logs: bool, df: pd.DataFrame):
+def filter_columns(columns_metadata, columns_list):
     """
-    Download the logs of all runs of test_target in the given DataFrame,
+    Filter and reorder columns based on user specification.
+
+    Args:
+        columns_metadata: List of 3-tuples (column_name, header, alignment)
+        columns_list: List of column names like ["label", "total", "non_success"] or ["-owners", "-timeout"]
+
+    Returns:
+        Filtered/reordered colalignments list of 3-tuples (dataframe_column, header, alignment)
+
+    """
+    if not columns_list:
+        # Return colalignments (without user_facing_name)
+        return [(column_name, header, align) for column_name, header, align in columns_metadata]
+
+    # Build mappings
+    available_columns = {column_name: (column_name, header, align) for column_name, header, align in columns_metadata}
+
+    # Check if all columns start with '-' (exclusion mode)
+    if all(col.startswith("-") for col in columns_list):
+        # Exclusion mode: start with all columns, remove specified ones
+        exclude_set = {col[1:] for col in columns_list}
+
+        # Validate that excluded columns exist
+        invalid_cols = exclude_set - set(available_columns.keys())
+        if invalid_cols:
+            die(
+                f"Invalid column names: {', '.join(sorted(invalid_cols))}\n"
+                f"Available columns: {', '.join(sorted(available_columns.keys()))}"
+            )
+
+        return [
+            (column_name, header, align)
+            for column_name, header, align in columns_metadata
+            if column_name not in exclude_set
+        ]
+
+    # Check if any columns start with '-' (mixed mode - not allowed)
+    if any(col.startswith("-") for col in columns_list):
+        die(
+            "Cannot mix inclusion and exclusion modes. Either specify columns to include, or prefix all with '-' to exclude."
+        )
+
+    # Inclusion mode: return only specified columns in specified order
+    # Validate that all columns exist
+    invalid_cols = set(columns_list) - set(available_columns.keys())
+    if invalid_cols:
+        die(
+            f"Invalid column names: {', '.join(sorted(invalid_cols))}\n"
+            f"Available columns: {', '.join(sorted(available_columns.keys()))}"
+        )
+
+    result = [available_columns[col] for col in columns_list if col in available_columns]
+
+    if not result:
+        die("No valid columns to display after filtering.")
+
+    return result
+
+
+def download_and_process_logs(
+    logs_base_dir,
+    df: pd.DataFrame,
+    *,
+    download_console_logs: bool,
+    download_ic_logs: bool,
+    verbose: bool,
+):
+    """
+    Download the logs of all runs in the given DataFrame,
     save them to the specified logs_base_dir
     and annotate the DataFrame with error summaries from the downloaded logs.
     """
     original_cwd = Path(os.environ.get("BUILD_WORKING_DIRECTORY", Path.cwd()))
-    test_name = test_target.split(":")[-1]
     timestamp = datetime.now().isoformat(timespec="seconds")
-    output_dir = original_cwd / logs_base_dir / test_name / timestamp
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    print(f"Downloading logs to: {output_dir}", file=sys.stderr)
 
     # Create a new column "error_summaries" in the DataFrame of type dict[int, SystemGroupSummary | str]
     # mapping the attempt number to either the SystemGroupSummary in case of a system-test
@@ -246,13 +354,22 @@ def download_and_process_logs(logs_base_dir, test_target: str, download_ic_logs:
 
     # Collect all download tasks
     download_tasks = []
+    output_dirs = set()
     for _ix, row in df.iterrows():
+        test_target = row["label"]
+        test_name = test_target.split(":")[-1]
+        output_dir = original_cwd / logs_base_dir / test_name / timestamp
+        output_dirs.add(output_dir)
+        if not output_dir.is_dir():
+            output_dir.mkdir(parents=True, exist_ok=True)
+            print(f"Downloading logs to: {output_dir}", file=sys.stderr)
+
         # Add a lock to each row for thread-safe updates when annotating the DataFrame with errors below
         row["lock"] = threading.Lock()
 
         buildbuddy_url = row["buildbuddy_url"]
-        invocation_id = row["invocation_id"]
-        last_started_at = row["last_started_at"].strftime("%Y-%m-%dT%H:%M:%S")
+        invocation_id = row["build_id"]
+        last_started_at = row["first_start_time"].strftime("%Y-%m-%dT%H:%M:%S")
         invocation_dir = output_dir / f"{last_started_at}_{invocation_id}"
 
         # Parse the BuildBuddy URL to extract the cluster and its base URL for use with gRPC later.
@@ -266,11 +383,21 @@ def download_and_process_logs(logs_base_dir, test_target: str, download_ic_logs:
         for attempt_num, download_url, attempt_status in log_urls:
             attempt_dir = invocation_dir / str(attempt_num)
             download_to_path = attempt_dir / f"{attempt_status}.log"
-            download_tasks.append((row, attempt_num, attempt_status, download_url, attempt_dir, download_to_path))
+            download_tasks.append(
+                (row, attempt_num, attempt_status, download_url, attempt_dir, download_to_path, output_dir)
+            )
 
-    execute_download_tasks(download_tasks, test_target, output_dir, download_ic_logs, df)
+    execute_download_tasks(
+        download_tasks,
+        df,
+        download_console_logs=download_console_logs,
+        download_ic_logs=download_ic_logs,
+        verbose=verbose,
+    )
 
-    write_log_dir_readme(output_dir / "README.md", test_target, df, timestamp)
+    if len(output_dirs) == 1:
+        output_dir = output_dirs.pop()
+        write_log_dir_readme(output_dir / "README.md", df, timestamp, download_console_logs, download_ic_logs)
 
 
 def get_all_log_urls_from_buildbuddy(
@@ -365,9 +492,15 @@ def convert_download_url(uri, cluster) -> str:
 
 
 def execute_download_tasks(
-    download_tasks: list, test_target: str, output_dir: Path, download_ic_logs: bool, df: pd.DataFrame
+    download_tasks: list,
+    df: pd.DataFrame,
+    *,
+    download_console_logs: bool,
+    download_ic_logs: bool,
+    verbose: bool,
 ):
-    print(f"Downloading {len(download_tasks)} log files...", file=sys.stderr)
+    if verbose:
+        print(f"Downloading {len(download_tasks)} log files...", file=sys.stderr)
 
     # These executors are used for downloading IC logs from ElasticSearch
     # and console logs from Farm concurrently. Limit to 10 concurrent downloads
@@ -378,7 +511,7 @@ def execute_download_tasks(
     ):
 
         def download_log(task):
-            row, attempt_num, attempt_status, download_url, attempt_dir, download_to_path = task
+            row, attempt_num, attempt_status, download_url, attempt_dir, download_to_path, output_dir = task
             shortened_path = download_to_path.relative_to(output_dir)
             try:
                 response = requests.get(download_url, timeout=60, stream=True)
@@ -392,13 +525,14 @@ def execute_download_tasks(
                         target=process_log,
                         args=(
                             row,
-                            test_target,
                             attempt_num,
                             attempt_status,
                             attempt_dir,
                             download_to_path,
                             df,
+                            download_console_logs,
                             download_ic_logs,
+                            verbose,
                             download_console_log_executor,
                             download_ic_log_executor,
                         ),
@@ -431,10 +565,11 @@ def execute_download_tasks(
     # Render the error_summaries to human-readable form.
     df["errors"] = df["error_summaries"].apply(render_error_summaries)
 
-    print(
-        f"Successfully downloaded and processed {successes}/{len(download_tasks)} logs to {output_dir}",
-        file=sys.stderr,
-    )
+    if verbose:
+        print(
+            f"Successfully downloaded and processed {successes}/{len(download_tasks)} logs.",
+            file=sys.stderr,
+        )
 
 
 TIMESTAMP_LEN = 23
@@ -442,13 +577,14 @@ TIMESTAMP_LEN = 23
 
 def process_log(
     row: pd.Series,
-    test_target: str,
     attempt_num: int,
     attempt_status: str,
     attempt_dir: Path,
     download_to_path: Path,
     df: pd.DataFrame,
+    download_console_logs: bool,
     download_ic_logs: bool,
+    verbose: bool,
     download_console_log_executor: ThreadPoolExecutor,
     download_ic_log_executor: ThreadPoolExecutor,
 ):
@@ -469,7 +605,7 @@ def process_log(
     # system-tests have structured logs with JSON objects that we can parse to get more detailed error summaries
     # and to determine the group (testnet) name for downloading the IC logs from ElasticSearch.
     # Non-system-tests just get annotated with the last line of the log which usually contains the error message.
-    if test_target.startswith("//rs/tests/"):
+    if row["label"].startswith("//rs/tests/"):
         with open(download_to_path, "r", encoding="utf-8") as f:
             for line in f:
                 if len(line) < TIMESTAMP_LEN:
@@ -504,16 +640,18 @@ def process_log(
                 except (ValueError, dacite.DaciteError):
                     continue
 
-        if len(vm_console_links) > 0:
-            console_logs_dir = attempt_dir / "console_logs"
-            console_logs_dir.mkdir(exist_ok=True)
-        for vm_name, console_link_raw in vm_console_links.items():
-            # Fork threads for downloading console logs from Farm concurrently to speed up the whole process.
-            download_console_log_executor.submit(
-                download_console_log,
-                console_link_raw,
-                console_logs_dir / f"{vm_name}.log",
-            )
+        if download_console_logs:
+            if len(vm_console_links) > 0:
+                console_logs_dir = attempt_dir / "console_logs"
+                console_logs_dir.mkdir(exist_ok=True)
+            for vm_name, console_link_raw in vm_console_links.items():
+                # Fork threads for downloading console logs from Farm concurrently to speed up the whole process.
+                download_console_log_executor.submit(
+                    download_console_log,
+                    console_link_raw,
+                    console_logs_dir / f"{vm_name}.log",
+                    verbose,
+                )
 
         if group_name is not None and download_ic_logs:
             # If it's a system-test, we want to download the IC logs from ElasticSearch to get more context on the failure.
@@ -525,6 +663,7 @@ def process_log(
                 test_start_time,
                 last_seen_timestamp,
                 vm_ipv6s,
+                verbose,
             )
     else:
         # Efficiently get the last line of the log:
@@ -659,7 +798,7 @@ def shorten(msg: str, max_length: int) -> str:
     return msg
 
 
-def download_console_log(console_link_raw: str, output_path: Path):
+def download_console_log(console_link_raw: str, output_path: Path, verbose: bool):
     """Download the log of the console of a Farm VM"""
     try:
         response = requests.get(console_link_raw, timeout=60, stream=True)
@@ -667,7 +806,8 @@ def download_console_log(console_link_raw: str, output_path: Path):
             with open(output_path, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
-            print(f"Downloaded console log to {output_path}", file=sys.stderr)
+            if verbose:
+                print(f"Downloaded console log to {output_path}", file=sys.stderr)
         else:
             print(
                 f"Failed to download console log from {console_link_raw} with HTTP {response.status_code}: '{response.text.strip()}'",
@@ -683,13 +823,14 @@ def download_and_process_ic_logs_for_system_test(
     test_start_time: datetime,
     test_end_time: datetime,
     vm_ipv6s: dict[str, str],
+    verbose: bool,
 ):
     # Create a queue for passing hits from download thread to processing thread
     hits_queue = Queue(maxsize=100)  # Limit memory usage with bounded queue
 
     # Start processing thread
     processing_thread = threading.Thread(
-        target=process_elasticsearch_hits_from_queue, args=(attempt_dir, group_name, hits_queue, vm_ipv6s)
+        target=process_elasticsearch_hits_from_queue, args=(attempt_dir, group_name, hits_queue, vm_ipv6s, verbose)
     )
     processing_thread.start()
 
@@ -727,10 +868,11 @@ def download_and_process_ic_logs_for_system_test(
 
         try:
             while True:
-                print(
-                    f"Downloading a maximum  {max_size} IC logs for attempt {attempt_dir.name} for testnet {group_name} from ElasticSearch between {gte} - {lte} with search_after={elasticsearch_query.get('search_after', None)} ...",
-                    file=sys.stderr,
-                )
+                if verbose:
+                    print(
+                        f"Downloading a maximum of {max_size} IC logs for attempt {attempt_dir.name} for testnet {group_name} from ElasticSearch between {gte} - {lte} with search_after={elasticsearch_query.get('search_after', None)} ...",
+                        file=sys.stderr,
+                    )
                 response = requests.post(url, params=params, json=elasticsearch_query, timeout=60)
 
                 if not response.ok:
@@ -768,6 +910,7 @@ def process_elasticsearch_hits_from_queue(
     group_name: str,
     hits_queue: Queue,
     vm_ipv6s: dict[str, str],
+    verbose: bool,
 ):
     """Consumer thread: Process ElasticSearch hits from queue and write IC node log files."""
     log_file_by_node = {}
@@ -781,10 +924,11 @@ def process_elasticsearch_hits_from_queue(
             if hits is None:
                 break
 
-            print(
-                f"Processing and writing {len(hits)} IC logs for attempt {attempt_dir.name} for testnet {group_name} ...",
-                file=sys.stderr,
-            )
+            if verbose:
+                print(
+                    f"Processing and writing {len(hits)} IC logs for attempt {attempt_dir.name} for testnet {group_name} ...",
+                    file=sys.stderr,
+                )
             for hit in hits:
                 # Sentinel value signals end of download
                 if hit is None:
@@ -818,33 +962,164 @@ def process_elasticsearch_hits_from_queue(
             log_file.close()
 
 
-def write_log_dir_readme(readme_path: Path, test_target: str, df: pd.DataFrame, timestamp: datetime.timestamp):
+# fmt: off
+TOP_COLUMNS = [
+    # (column_name,         header,                  alignment)
+    ("label",               "label",                 "left"),
+    ("total",               "total",                 "decimal"),
+    ("last_non_success_at", "last non success at",   "right"),
+    ("non_success",         "non_success",           "decimal"),
+    ("last_flaky_at",       "last flaky at",         "right"),
+    ("flaky",               "flaky",                 "decimal"),
+    ("timeout",             "timeout",               "decimal"),
+    ("fail",                "fail",                  "decimal"),
+    ("non_success%",        "non_success%",          "decimal"),
+    ("flaky%",              "flaky%",                "decimal"),
+    ("timeout%",            "timeout%",              "decimal"),
+    ("fail%",               "fail%",                 "decimal"),
+    ("impact",              "impact",                "right"),
+    ("total_duration",      "total duration",        "right"),
+    ("duration_p90",        "duration_p90",          "right"),
+    ("owners",              "owners",                "left"),
+]
+
+LAST_COLUMNS = [
+    # (column_name,         header,                  alignment)
+    ("last_started_at",     "last started at (UTC)", "right"),
+    ("label",               "label",                 "left"),
+    ("duration",            "duration",              "right"),
+    ("status",              "status",                "left"),
+    ("branch",              "branch",                "left"),
+    ("PR",                  "PR",                    "left"),
+    ("commit",              "commit",                "left"),
+    ("buildbuddy",          "buildbuddy",            "left"),
+    ("errors",              "errors per attempt",    "left")
+]
+# fmt: on
+
+
+def write_log_dir_readme(
+    readme_path: Path,
+    df: pd.DataFrame,
+    timestamp: datetime.timestamp,
+    download_console_logs: bool,
+    download_ic_logs: bool,
+):
     """
     Write a nice README.md in the log output directory describing the //ci/githubstats:query invocation
     that was used to generate the log output directory. This is useful when the invocation has to be redone or tweaked later.
     """
+    # fmt: off
     colalignments = [
-        ("last started at (UTC)", "right"),
-        ("duration", "right"),
-        ("status", "left"),
-        ("branch", "left"),
-        ("PR", "left"),
-        ("commit", "left"),
-        ("buildbuddy_url", "left"),
+        # (df_column,           header,                  alignment)
+        ("last_started_at",     "last started at (UTC)", "right"),
+        ("duration",            "duration",              "right"),
+        ("status",              "status",                "left"),
+        ("head_branch",         "branch",                "left"),
+        ("pull_request_number", "PR",                    "left"),
+        ("head_sha",            "commit",                "left"),
+        ("buildbuddy_url",      "buildbuddy",            "left"),
     ]
+    # fmt: on
 
     cmd = shlex.join(["bazel", "run", "//ci/githubstats:query", "--", *sys.argv[1:]])
-    columns, alignments = zip(*colalignments)
-    table_md = tabulate(df[list(columns)], headers="keys", tablefmt="github", colalign=["decimal"] + list(alignments))
-    readme = f"""Logs of `{test_target}`
+    columns, headers, alignments = zip(*colalignments)
+    kwargs = {} if df.empty else {"colalign": ["decimal"] + list(alignments)}
+    table_md = tabulate(df[list(columns)], headers=list(headers), tablefmt="github", **kwargs)
+    ic_logs_desc = (
+        """
+* an `ic_logs` directory containing the systemd-journald logs of IC nodes that were deployed as part of the test.
+  Each IC node will have its own log file named `<node_id>.log` and there will be a symlink pointing to it with the IPv6 of the node: `<node_IPv6>.log` -> `<node_id>.log`."""
+        if download_ic_logs
+        else ""
+    )
+    console_logs_desc = (
+        """
+* a `console_logs` directory containing a `<vm_name>.log` file for each VM deployed as part of the test containing the `virsh console` output of that VM. Often `<vm_name>` equals `<node_id>`."""
+        if download_console_logs
+        else ""
+    )
+    contains_system_tests = df["label"].str.startswith("//rs/tests/").any()
+    system_test_desc = (
+        f"""
+
+The attempt directory will also contain:{ic_logs_desc}{console_logs_desc}
+"""
+        if contains_system_tests and (download_ic_logs or download_console_logs)
+        else ""
+    )
+    readme = f"""Test Logs
 ===
 Generated at {timestamp} using:
 ```
 {cmd}
 ```
 {table_md}
-"""
+
+This directory contains an "invocation" directory, named like `<bazel_invocation_timestamp>_<bazel_invocation_id>`,
+per bazel invocation.
+
+The invocation directory will have a directory per attempt of the test, named like `1`, `2`, `3`, etc.
+
+Each attempt directory will either contain a `FAILED.log` or `PASSED.log` file with the log of the test if the attempt failed or passed, respectively.{system_test_desc}"""
     readme_path.write_text(readme)
+
+
+def fmt_time(t):
+    return t.strftime("%a %Y-%m-%d %X") if pd.notna(t) else ""
+
+
+def get_git_since_arg(args) -> str:
+    """
+    Convert the time filter args into a --since argument for git log.
+
+    When --since is specified, parses it via parse_datetime (which returns a
+    UTC-aware datetime) and formats it as ISO-8601 with a Z suffix so that
+    git log --since uses the same UTC time window as the SQL query.
+    """
+    if args.since:
+        dt = parse_datetime(args.since)
+        return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return f"last {period(args)}"
+
+
+def extract_test_name(label: str) -> str:
+    """Extract the test target name from a Bazel label (part after ':')."""
+    parts = label.rsplit(":", 1)
+    return parts[1] if len(parts) == 2 else label
+
+
+def get_recent_commits(git_since: str) -> list[str]:
+    """Run git log --oneline --since once and return the list of commit lines."""
+    repo_root = THIS_SCRIPT_DIR.parent.parent
+    try:
+        result = subprocess.run(
+            ["git", "log", "--oneline", "--since", git_since],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.strip().splitlines()
+    except (subprocess.CalledProcessError, OSError) as e:
+        print(f"Warning: git log failed: {e}", file=sys.stderr)
+        return []
+
+
+def has_open_pr(test_name: str) -> bool:
+    """Check if there is an open PR that mentions the test name."""
+    search_term = test_name.replace("_", " ")
+    try:
+        result = subprocess.run(
+            ["gh", "pr", "list", "--search", search_term, "--state", "open", "--repo", f"{ORG}/{REPO}", "--limit", "1"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return bool(result.stdout.strip())
+    except (subprocess.CalledProcessError, OSError) as e:
+        print(f"Warning: gh pr list failed: {e}", file=sys.stderr)
+        return False
 
 
 def top(args):
@@ -867,11 +1142,16 @@ def top(args):
         else (None, None)
     )
     if value is not None:
-        if args.order_by in ("impact", "duration_p90"):
+        if args.order_by in ("impact", "total_duration", "duration_p90"):
             try:
                 value = pd.Timedelta(value).to_pytimedelta()
             except ValueError as e:
                 die(f"Can't parse '{value}' to an interval because: {e}!")
+        elif args.order_by in ("last_non_success_at", "last_flaky_at"):
+            try:
+                value = parse_datetime(value)
+            except ValueError as e:
+                die(f"Can't parse '{value}' to a timestamp because: {e}!")
         else:
             try:
                 value = float(value)
@@ -886,6 +1166,10 @@ def top(args):
         time_filter=get_time_filter(args),
         only_prs=sql.Literal(args.prs),
         branch=sql.Literal(args.branch if args.branch else ""),
+        exclude_prs=sql.SQL("{}::int[]").format(sql.Literal(args.exclude_pr)),
+        exclude_commits=sql.SQL("{}::text[]").format(
+            sql.Literal([resolve_full_commit_sha(c) for c in dict.fromkeys(args.exclude_commit)])
+        ),
         order_by=order_by,
         N=sql.Literal(args.N),
         condition=sql.Literal(True)
@@ -904,8 +1188,35 @@ def top(args):
         headers = [desc[0] for desc in cursor.description]
         df = pd.DataFrame(cursor, columns=headers)
 
+    df["last_non_success_at"] = df["last_non_success_at"].apply(fmt_time)
+    df["last_flaky_at"] = df["last_flaky_at"].apply(fmt_time)
     df["impact"] = df["impact"].apply(normalize_duration)
+    df["total_duration"] = df["total_duration"].apply(normalize_duration)
     df["duration_p90"] = df["duration_p90"].apply(normalize_duration)
+
+    # Optionally exclude tests that appear to already be fixed:
+    if args.exclude_fixed:
+        git_since = get_git_since_arg(args)
+        commit_lines = get_recent_commits(git_since)
+        test_names = df["label"].apply(extract_test_name)
+        # Check commits in-memory first, then only call gh for the rest:
+        fixed_by_commit = test_names.apply(
+            lambda name: any(
+                re.search(re.escape(name).replace("_", "[_. ]"), line, re.IGNORECASE) for line in commit_lines
+            )
+        )
+        remaining = test_names[~fixed_by_commit]
+        max_pr_check_workers = max(1, min(4, len(remaining)))
+        with ThreadPoolExecutor(max_workers=max_pr_check_workers) as executor:
+            pr_results = dict(zip(remaining.index, executor.map(has_open_pr, remaining)))
+        fixed = fixed_by_commit | pd.Series({i: pr_results.get(i, False) for i in df.index})
+        excluded_count = fixed.sum()
+        if excluded_count > 0:
+            excluded_labels = df.loc[fixed, "label"].tolist()
+            print(f"Excluded {excluded_count} test(s) that appear already fixed:", file=sys.stderr)
+            for lbl in excluded_labels:
+                print(f"  {lbl}", file=sys.stderr)
+        df = df[~fixed]
 
     # Find the CODEOWNERS for each test target:
     owners = codeowners.CodeOwners(Path(os.environ["CODEOWNERS_PATH"]).read_text())
@@ -925,25 +1236,11 @@ def top(args):
     # Turn the Bazel labels into terminal hyperlinks to a SourceGraph search for the test target:
     df["label"] = df["label"].apply(lambda label: terminal_hyperlink(label, sourcegraph_url(label)))
 
-    colalignments = [
-        # (column, alignment)
-        ("label", "left"),
-        ("total", "decimal"),
-        ("non_success", "decimal"),
-        ("flaky", "decimal"),
-        ("timeout", "decimal"),
-        ("fail", "decimal"),
-        ("non_success%", "decimal"),
-        ("flaky%", "decimal"),
-        ("timeout%", "decimal"),
-        ("fail%", "decimal"),
-        ("impact", "right"),
-        ("duration_p90", "right"),
-        ("owners", "left"),
-    ]
-
-    columns, alignments = zip(*colalignments)
-    print(tabulate(df[list(columns)], headers="keys", tablefmt=args.tablefmt, colalign=["decimal"] + list(alignments)))
+    # Apply column filtering if --columns is specified, otherwise use all columns
+    colalignments = filter_columns(TOP_COLUMNS, args.columns)
+    columns, headers, alignments = zip(*colalignments)
+    kwargs = {} if df.empty else {"colalign": ["decimal"] + list(alignments)}
+    print(tabulate(df[list(columns)], headers=list(headers), tablefmt=args.tablefmt, **kwargs))
 
 
 def last(args):
@@ -952,24 +1249,30 @@ def last(args):
     that have either succeeded, flaked, timed out or failed
     in the specified period.
     """
-    overall_statuses = []
+    overall_statuses = set()
     if args.success:
-        overall_statuses.append(1)
+        overall_statuses.add(1)
     if args.flaky:
-        overall_statuses.append(2)
+        overall_statuses.add(2)
     if args.timedout:
-        overall_statuses.append(3)
+        overall_statuses.add(3)
     if args.failed:
-        overall_statuses.append(4)
+        overall_statuses.add(4)
+    if args.non_success:
+        overall_statuses.update({2, 3, 4})
     if len(overall_statuses) == 0:
-        overall_statuses = [1, 2, 3, 4]
+        overall_statuses = {1, 2, 3, 4}
 
     query = sql.SQL((THIS_SCRIPT_DIR / "last.sql").read_text()).format(
-        test_target=sql.Literal(args.test_target),
+        test_target=sql.Literal(args.test_target if args.test_target else ""),
         overall_statuses=sql.SQL(",".join(map(str, overall_statuses))),
         time_filter=get_time_filter(args),
         only_prs=sql.Literal(args.prs),
         branch=sql.Literal(args.branch if args.branch else ""),
+        exclude_prs=sql.SQL("{}::int[]").format(sql.Literal(args.exclude_pr)),
+        exclude_commits=sql.SQL("{}::text[]").format(
+            sql.Literal([resolve_full_commit_sha(c) for c in dict.fromkeys(args.exclude_commit)])
+        ),
     )
 
     log_psql_query(args.verbose, query.as_string(), args.conninfo)
@@ -982,53 +1285,61 @@ def last(args):
     # We need to create links to the cluster-specific BuildBuddy service.
     # To get the cluster-specific BuildBuddy URL we need to resolve the redirect via the BuildBuddy redirect service.
     # Since this I/O takes time we parallelize to speed it up by an order of magnitude.
-    def direct_url_to_buildbuddy(invocation_id):
+    def direct_url_to_buildbuddy(invocation_id, target):
         url = f"https://dash.idx.dfinity.network/invocation/{invocation_id}"
         redirect = get_redirect_location(url)
-        return f"{redirect}?target={args.test_target}" if redirect else url
+        return f"{redirect}?target={target}" if redirect else url
 
     with ThreadPoolExecutor() as executor:
-        df["buildbuddy_url"] = list(executor.map(direct_url_to_buildbuddy, df["invocation_id"]))
+        df["buildbuddy_url"] = list(executor.map(direct_url_to_buildbuddy, df["build_id"], df["label"]))
 
-    df["buildbuddy_links"] = df["buildbuddy_url"].apply(lambda url: terminal_hyperlink("logs", url))
+    df["buildbuddy"] = df["buildbuddy_url"].apply(lambda url: terminal_hyperlink("logs", url))
 
     # Turn the commit SHAs into terminal hyperlinks to the GitHub commit page
-    df["commit_link"] = df["commit"].apply(
+    df["commit"] = df["head_sha"].apply(
         lambda commit: terminal_hyperlink(commit[:7], f"https://github.com/{ORG}/{REPO}/commit/{commit}")
     )
 
-    df["last started at (UTC)"] = df["last_started_at"].apply(lambda t: t.strftime("%a %Y-%m-%d %X"))
+    # Bazel's first_start_time is really the time the last attempt started.
+    df["last_started_at"] = df["first_start_time"].apply(fmt_time)
 
-    df["branch_link"] = df["branch"].apply(
+    df["branch"] = df["head_branch"].apply(
         lambda branch: terminal_hyperlink(shorten(branch, 16), f"https://github.com/{ORG}/{REPO}/tree/{branch}")
     )
 
-    df["PR_link"] = df["PR"].apply(
+    df["PR"] = df["pull_request_number"].apply(
         lambda pr: terminal_hyperlink(f"#{pr}", f"https://github.com/{ORG}/{REPO}/pull/{pr}") if pr else ""
     )
 
     df["duration"] = df["duration"].apply(normalize_duration)
 
     if not args.skip_download:
-        download_and_process_logs(args.logs_base_dir, args.test_target, args.download_ic_logs, df)
-
-    colalignments = [
-        # (column, header, alignment)
-        ("last started at (UTC)", "last started at (UTC)", "right"),
-        ("duration", "duration", "right"),
-        ("status", "status", "left"),
-        ("branch_link", "branch", "left"),
-        ("PR_link", "PR", "left"),
-        ("commit_link", "commit", "left"),
-        ("buildbuddy_links", "buildbuddy", "left"),
-    ] + ([] if args.skip_download else [("errors", "errors per attempt", "left")])
-
-    columns, headers, alignments = zip(*colalignments)
-    print(
-        tabulate(
-            df[list(columns)], headers=list(headers), tablefmt=args.tablefmt, colalign=["decimal"] + list(alignments)
+        download_and_process_logs(
+            args.logs_base_dir,
+            df,
+            download_console_logs=args.download_console_logs,
+            download_ic_logs=args.download_ic_logs,
+            verbose=args.verbose,
         )
-    )
+
+    columns_metadata = LAST_COLUMNS
+    # When downlods are skipped we don't have any error information so skip the "errors" column.
+    if args.skip_download:
+        columns_metadata = [col for col in columns_metadata if col[0] != "errors"]
+
+    # When a specific test target is queried, the "label" column doesn't add any value
+    # because all rows have the same label, so we can skip it to save space.
+    if df["label"].nunique() == 1:
+        columns_metadata = [col for col in columns_metadata if col[0] != "label"]
+    else:
+        # Turn the Bazel labels into terminal hyperlinks to a SourceGraph search for the test target:
+        df["label"] = df["label"].apply(lambda label: terminal_hyperlink(label, sourcegraph_url(label)))
+
+    # Apply column filtering if --columns is specified, otherwise use all columns
+    colalignments = filter_columns(columns_metadata, args.columns)
+    columns, headers, alignments = zip(*colalignments)
+    kwargs = {} if df.empty else {"colalign": ["decimal"] + list(alignments)}
+    print(tabulate(df[list(columns)], headers=list(headers), tablefmt=args.tablefmt, **kwargs))
 
 
 # argparse formatter to allow newlines in --help.
@@ -1036,12 +1347,26 @@ class RawDefaultsFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawT
     pass
 
 
+def add_columns_argument(parser, columns_metadata):
+    parser.add_argument(
+        "--columns",
+        metavar="COLS",
+        type=lambda s: [col.strip() for col in s.split(",")],
+        help=f"""Comma-separated list of columns to display in order or hide if preceded by '-'. Available columns:
+{",".join([column_name.replace("%", "%%") for column_name, _, _ in columns_metadata])}""",
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(prog="bazel run //ci/githubstats:query --")
 
     # Arguments common to all subcommands:
     common_parser = argparse.ArgumentParser(add_help=False)
-    common_parser.add_argument("--verbose", action="store_true", help="Log queries")
+    common_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable verbose logging (SQL queries and log download/processing progress)",
+    )
     common_parser.add_argument(
         "--conninfo",
         metavar="STR",
@@ -1079,6 +1404,22 @@ Mutually exclusive with --day/--week/--month""",
 
     filter_parser.add_argument("--prs", action="store_true", help="Only show test runs on Pull Requests")
     filter_parser.add_argument("--branch", metavar="B", type=str, help="Filter by branch SQL LIKE pattern")
+    filter_parser.add_argument(
+        "--exclude-pr",
+        metavar="PR_NUMBER",
+        type=int,
+        action="append",
+        default=[],
+        help="Exclude workflow runs on this PR number (can be repeated)",
+    )
+    filter_parser.add_argument(
+        "--exclude-commit",
+        metavar="COMMIT_SHA",
+        type=commit_sha_arg,
+        action="append",
+        default=[],
+        help="Exclude test runs with this head commit SHA (can be repeated)",
+    )
 
     subparsers = parser.add_subparsers(required=True)
 
@@ -1116,7 +1457,9 @@ Examples:
         type=str,
         choices=[
             "total",
+            "last_non_success_at",
             "non_success",
+            "last_flaky_at",
             "flaky",
             "timeout",
             "fail",
@@ -1125,21 +1468,25 @@ Examples:
             "timeout%",
             "fail%",
             "impact",
+            "total_duration",
             "duration_p90",
         ],
         help="""COLUMN to order by and have the condition flags like --gt, --ge, etc. apply to.
 
-total:\t\tTotal runs in the specified period
-non_success:\tNumber of non-successful runs in the specified period
-flaky:\t\tNumber of flaky runs in the specified period
-timeout:\tNumber of timed-out runs in the specified period
-fail:\t\tNumber of failed runs in the specified period
-non_success%%:\tPercentage of non-successful runs in the specified period
-flaky%%:\t\tPercentage of flaky runs in the specified period
-timeout%%:\tPercentage of timed-out runs in the specified period
-fail%%:\t\tPercentage of failed runs in the specified period
-impact:\t\tnon_success * duration_p90. A rough estimate on the impact of failures
-duration_p90:\t90th percentile duration of all runs in the specified period""",
+total:\t\t\tTotal runs in the specified period
+last_non_success_at:\tTimestamp of the last non-successful run in the specified period
+non_success:\t\tNumber of non-successful runs in the specified period
+last_flaky_at:\t\tTimestamp of the last flaky run in the specified period
+flaky:\t\t\tNumber of flaky runs in the specified period
+timeout:\t\tNumber of timed-out runs in the specified period
+fail:\t\t\tNumber of failed runs in the specified period
+non_success%%:\t\tPercentage of non-successful runs in the specified period
+flaky%%:\t\t\tPercentage of flaky runs in the specified period
+timeout%%:\t\tPercentage of timed-out runs in the specified period
+fail%%:\t\t\tPercentage of failed runs in the specified period
+impact:\t\t\tnon_success * duration_p90. A rough estimate on the impact of failures in the specified period
+total_duration:\t\ttotal * duration_p90. A rough estimate on the total duration of all runs in the specified period
+duration_p90:\t\t90th percentile duration of all runs in the specified period""",
     )
 
     condition_group = top_parser.add_mutually_exclusive_group()
@@ -1158,7 +1505,11 @@ duration_p90:\t90th percentile duration of all runs in the specified period""",
         "--include", metavar="TEST", type=str, help="Include only tests matching this SQL LIKE pattern"
     )
 
-    top_parser.set_defaults(func=top)
+    top_parser.add_argument(
+        "--exclude-fixed",
+        action="store_true",
+        help="Exclude tests that appear already fixed (mentioned in a recent git commit or an open PR)",
+    )
 
     top_parser.add_argument(
         "--tablefmt",
@@ -1167,6 +1518,10 @@ duration_p90:\t90th percentile duration of all runs in the specified period""",
         default="mixed_outline",
         help="Table format. See: https://pypi.org/project/tabulate/",
     )
+
+    add_columns_argument(top_parser, TOP_COLUMNS)
+
+    top_parser.set_defaults(func=top)
 
     ## last ###################################################################
 
@@ -1188,12 +1543,21 @@ Examples:
 """,
     )
     last_runs_parser.add_argument("--success", action="store_true", help="Include successful runs")
+    last_runs_parser.add_argument(
+        "--non_success", action="store_true", help="Include non-successful runs (i.e. flaky, failed and timed-out)"
+    )
     last_runs_parser.add_argument("--flaky", action="store_true", help="Include flaky runs")
     last_runs_parser.add_argument("--failed", action="store_true", help="Include failed runs")
     last_runs_parser.add_argument("--timedout", action="store_true", help="Include timed-out runs")
 
     last_runs_parser.add_argument(
         "--skip-download", action="store_true", help="Don't download logs of the runs, just show the table"
+    )
+
+    last_runs_parser.add_argument(
+        "--download-console-logs",
+        action="store_true",
+        help="Download console logs from farm.dfinity.systems for every VM in system-tests",
     )
 
     last_runs_parser.add_argument(
@@ -1237,8 +1601,14 @@ logs
 """,
     )
 
-    last_runs_parser.add_argument("test_target", type=str, help="Bazel label of the test target to get runs of")
-    last_runs_parser.set_defaults(func=last)
+    last_runs_parser.add_argument(
+        "test_target",
+        type=str,
+        nargs="?",
+        default=None,
+        help="""Return runs of bazel targets matching the given SQL LIKE pattern.
+If omitted retuns all bazel test runs in the specified period.""",
+    )
 
     last_runs_parser.add_argument(
         "--tablefmt",
@@ -1247,6 +1617,10 @@ logs
         default="fancy_grid",
         help="Table format. See: https://pypi.org/project/tabulate/",
     )
+
+    add_columns_argument(last_runs_parser, LAST_COLUMNS)
+
+    last_runs_parser.set_defaults(func=last)
 
     ###########################################################################
 

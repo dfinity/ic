@@ -13,7 +13,7 @@ use ic_http_types::{HttpRequest, HttpResponse};
 use ic_management_canister_types::CanisterId;
 use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
 use ic_test_utilities_load_wasm::load_wasm;
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use pocket_ic::{
     PocketIc, PocketIcBuilder, RejectCode, RejectResponse,

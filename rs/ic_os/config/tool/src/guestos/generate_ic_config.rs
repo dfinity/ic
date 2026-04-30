@@ -1,18 +1,23 @@
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use askama::Template;
 use config_types::{GuestOSConfig, Ipv6Config};
-use get_if_addrs::get_if_addrs;
+use ipnet::Ipv6Net;
 use serde_json;
 use std::fs::write;
 use std::net::Ipv6Addr;
 use std::path::Path;
 use std::process::Command;
+use std::str::FromStr;
 use std::time::Duration;
+
+use crate::guestos::network::{get_best_interface_name, get_interface_addresses};
+
+const TLS_KEY_PATH: &str = "/var/lib/ic/data/ic-boundary-tls.key";
+const TLS_CERT_PATH: &str = "/var/lib/ic/data/ic-boundary-tls.crt";
 
 #[derive(Template)]
 #[template(path = "ic.json5.template", escape = "none")]
 pub struct IcConfigTemplate {
-    pub ipv6_address: String,
     pub ipv6_prefix: String,
     pub ipv4_address: String,
     pub ipv4_gateway: String,
@@ -42,12 +47,12 @@ pub fn generate_ic_config(guestos_config: &GuestOSConfig, output_path: &Path) ->
     perms.set_mode(0o644);
     std::fs::set_permissions(output_path, perms)?;
 
-    // Generate and inject a self-signed TLS certificate and key for ic-boundary
-    // for the given domain name. To be used in system tests only.
-    if let Some(domain_name) = &guestos_config
-        .guestos_settings
-        .guestos_dev_settings
-        .generate_ic_boundary_tls_cert
+    // Set up TLS certificate and key for ic-boundary (system test use only).
+    // A pre-generated cert (e.g. from a playnet) takes priority over self-signed generation.
+    let dev_settings = &guestos_config.guestos_settings.guestos_dev_settings;
+    if let Some(tls_cert) = &dev_settings.ic_boundary_tls_cert {
+        write_tls_certificate(&tls_cert.cert_pem, &tls_cert.key_pem)?;
+    } else if let Some(domain_name) = &dev_settings.generate_ic_boundary_tls_cert
         && !domain_name.is_empty()
     {
         generate_tls_certificate(domain_name)?;
@@ -63,43 +68,36 @@ pub fn render_ic_config(template: IcConfigTemplate) -> Result<String> {
         .context("Failed to render config template")
 }
 
-fn generate_ipv6_prefix(ipv6_address: &str) -> String {
-    let segments: Vec<&str> = ipv6_address.split(':').collect();
-    if segments.len() >= 4 {
-        // Join first 4 segments and append ::/64
-        let prefix = segments[..4].join(":");
-        format!("{prefix}::/64")
-    } else {
-        // Fallback to loopback for easy templating
-        "::1/128".to_string()
+fn generate_ipv6_prefix(ipv6_address: Ipv6Addr) -> String {
+    if ipv6_address.is_loopback() {
+        return "::1/128".to_string();
     }
+
+    Ipv6Net::new_assert(ipv6_address, 64).trunc().to_string()
 }
 
 fn configure_ipv6(guestos_config: &GuestOSConfig) -> Result<(String, String)> {
     match &guestos_config.network_settings.ipv6_config {
         Ipv6Config::Deterministic(_) => {
-            anyhow::bail!("GuestOS IPv6 configuration should not be 'Deterministic'.");
+            bail!("GuestOS IPv6 configuration should not be 'Deterministic'.");
         }
         Ipv6Config::Fixed(fixed_config) => {
-            // Remove the subnet part from the IPv6 address
-            let ipv6_address = fixed_config
-                .address
-                .split('/')
-                .next()
-                .unwrap_or(&fixed_config.address)
-                .to_string();
+            let ipv6_net = Ipv6Net::from_str(&fixed_config.address)
+                .context("unable to parse fixed config as IPv6 subnet")?;
 
-            let ipv6_prefix = generate_ipv6_prefix(&ipv6_address);
-            Ok((ipv6_address, ipv6_prefix))
+            let ipv6_address = ipv6_net.addr();
+            let ipv6_prefix = generate_ipv6_prefix(ipv6_address);
+
+            Ok((ipv6_address.to_string(), ipv6_prefix))
         }
         Ipv6Config::RouterAdvertisement => {
-            let ipv6_address = get_router_advertisement_ipv6_address()?;
+            let ipv6_address = get_best_interface_ipv6_address()?;
+            let ipv6_prefix = generate_ipv6_prefix(ipv6_address);
 
-            let ipv6_prefix = generate_ipv6_prefix(&ipv6_address);
-            Ok((ipv6_address, ipv6_prefix))
+            Ok((ipv6_address.to_string(), ipv6_prefix))
         }
         Ipv6Config::Unknown => {
-            anyhow::bail!("Unknown IPv6 configuration type.");
+            bail!("Unknown IPv6 configuration type.");
         }
     }
 }
@@ -116,8 +114,7 @@ fn configure_ipv4(guestos_config: &GuestOSConfig) -> (String, String) {
 }
 
 fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
-    let (ipv6_address, ipv6_prefix) = configure_ipv6(guestos_config)?;
-
+    let (_, ipv6_prefix) = configure_ipv6(guestos_config)?;
     let (ipv4_address, ipv4_gateway) = configure_ipv4(guestos_config);
 
     // Helper function to set default value if empty
@@ -190,7 +187,7 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
         .unwrap_or_default();
 
     Ok(IcConfigTemplate {
-        ipv6_address,
+        // TODO https://dfinity.atlassian.net/browse/NODE-1909
         ipv6_prefix,
         ipv4_address,
         ipv4_gateway,
@@ -205,60 +202,49 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
     })
 }
 
-fn get_router_advertisement_ipv6_address() -> Result<String> {
-    const MAX_RETRIES: usize = 12;
-    const RETRY_DELAY: Duration = Duration::from_secs(10);
+/// Picks the best matching interface and tries to get its IPv6 address
+pub fn get_best_interface_ipv6_address() -> Result<Ipv6Addr> {
+    let interface = get_best_interface_name().context("unable to pick an interface")?;
 
-    for attempt in 1..=MAX_RETRIES {
-        match get_router_advertisement_ipv6_address_helper() {
-            Ok(ipv6_addr) => return Ok(ipv6_addr.to_string()),
+    const MAX_RETRIES: usize = 5;
+    let mut delay = Duration::from_secs(1);
+
+    for attempt in 0..MAX_RETRIES {
+        match get_interface_addresses(&interface) {
+            Ok((_, Some(ipv6_addr))) => {
+                return Ok(ipv6_addr);
+            }
+
+            Ok((_, None)) => {
+                eprintln!(
+                    "No IPv6 addresses configured (retries left: {})",
+                    MAX_RETRIES - attempt,
+                );
+            }
+
             Err(e) => {
-                if attempt < MAX_RETRIES {
-                    eprintln!(
-                        "Retrying {} more times... (Failed to get IPv6 address: {})",
-                        MAX_RETRIES - attempt,
-                        e
-                    );
-                    std::thread::sleep(RETRY_DELAY);
-                } else {
-                    return Err(e.context("Failed to get IPv6 address after all retries"));
-                }
+                eprintln!(
+                    "Failed to get IPv6 address: {} (retries left: {})",
+                    e,
+                    MAX_RETRIES - attempt,
+                );
             }
         }
+
+        std::thread::sleep(delay);
+        delay *= 2;
     }
 
-    anyhow::bail!("Cannot determine an IPv6 address, aborting");
+    bail!("Cannot determine an IPv6 address, aborting");
 }
 
-fn get_router_advertisement_ipv6_address_helper() -> Result<Ipv6Addr> {
-    let ifaces = get_if_addrs().context("Failed to get network interfaces")?;
-    let ipv6_addr = ifaces
-        .iter()
-        .find_map(|iface| {
-            // Filter out virtual interfaces
-            if is_virtual_interface(&iface.name) {
-                return None;
-            }
-
-            match &iface.addr {
-                get_if_addrs::IfAddr::V6(addr) => Some(addr.ip),
-                _ => None,
-            }
-        })
-        .context("No suitable network interface with IPv6 address found")?;
-
-    Ok(ipv6_addr)
-}
-
-fn is_virtual_interface(interface_name: &str) -> bool {
-    let device_path = format!("/sys/class/net/{interface_name}/device");
-    !Path::new(&device_path).exists()
+fn write_tls_certificate(cert_pem: &str, key_pem: &str) -> Result<()> {
+    write(TLS_CERT_PATH, cert_pem).context("Failed to write TLS certificate")?;
+    write(TLS_KEY_PATH, key_pem).context("Failed to write TLS key")?;
+    set_tls_file_ownership_and_permissions()
 }
 
 fn generate_tls_certificate(domain_name: &str) -> Result<()> {
-    let tls_key_path = "/var/lib/ic/data/ic-boundary-tls.key";
-    let tls_cert_path = "/var/lib/ic/data/ic-boundary-tls.crt";
-
     let status = Command::new("openssl")
         .args([
             "req",
@@ -266,9 +252,9 @@ fn generate_tls_certificate(domain_name: &str) -> Result<()> {
             "-newkey",
             "rsa:2048",
             "-keyout",
-            tls_key_path,
+            TLS_KEY_PATH,
             "-out",
-            tls_cert_path,
+            TLS_CERT_PATH,
             "-sha256",
             "-days",
             "3650",
@@ -282,20 +268,24 @@ fn generate_tls_certificate(domain_name: &str) -> Result<()> {
         .context("Failed to generate TLS certificate")?;
 
     if !status.success() {
-        anyhow::bail!("openssl command failed with status: {}", status);
+        bail!("openssl command failed with status: {}", status);
     }
 
+    set_tls_file_ownership_and_permissions()
+}
+
+fn set_tls_file_ownership_and_permissions() -> Result<()> {
     let status = Command::new("chown")
-        .args(["ic-replica:nogroup", tls_key_path, tls_cert_path])
+        .args(["ic-replica:nogroup", TLS_KEY_PATH, TLS_CERT_PATH])
         .status()
         .context("Failed to set ownership of TLS files")?;
 
     if !status.success() {
-        anyhow::bail!("chown command failed with status: {}", status);
+        bail!("chown command failed with status: {}", status);
     }
 
     let status = Command::new("chmod")
-        .args(["644", tls_key_path, tls_cert_path])
+        .args(["644", TLS_KEY_PATH, TLS_CERT_PATH])
         .status()
         .context("Failed to set permissions of TLS files")?;
 
@@ -315,12 +305,9 @@ mod tests {
 
     #[test]
     fn test_generate_ipv6_prefix() {
-        let result = generate_ipv6_prefix("2001:db8:1234:5678:9abc:def0:1234:5678");
+        let result =
+            generate_ipv6_prefix("2001:db8:1234:5678:9abc:def0:1234:5678".parse().unwrap());
         assert_eq!(result, "2001:db8:1234:5678::/64");
-
-        // Test IPv6 address with less than 4 segments (should fallback)
-        let result = generate_ipv6_prefix("2001:db8");
-        assert_eq!(result, "::1/128");
     }
 
     #[test]
@@ -330,7 +317,6 @@ mod tests {
         let output_content = render_ic_config(template).unwrap();
 
         // Verify that all placeholders were replaced
-        assert!(!output_content.contains("{{ ipv6_address }}"));
         assert!(!output_content.contains("{{ ipv6_prefix }}"));
         assert!(!output_content.contains("{{ ipv4_address }}"));
         assert!(!output_content.contains("{{ ipv4_gateway }}"));
@@ -344,7 +330,6 @@ mod tests {
         assert!(!output_content.contains("{{ jaeger_addr }}"));
 
         // Verify that the expected values were substituted
-        assert!(output_content.contains("node_ip: \"2001:db8::1\""));
         assert!(output_content.contains("public_address: \"\""));
         assert!(output_content.contains("public_gateway: \"\""));
         assert!(output_content.contains("domain: \"\""));

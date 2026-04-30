@@ -4,8 +4,8 @@
     "sha256": "5bf34cb029e437c4ccb990b1595876d4c869566d66b8b58059d0ee742891c219"
   },
   "bitcoin_testnet": {
-    "sha256": "ee669a352fbca79f21aa6d0b7190f4daae74ef203b0ccf8d7fb82123dfd2d6a6",
-    "tag": "release/2025-12-03"
+    "sha256": "38943988a0bf168efb236ce4b371eb558004b972cf9eacdd0bd470104131f5a8",
+    "tag": "release/2026-04-15"
   },
   "ck_btc_archive": {
     "rev": "512cf412f33d430b79f42330518166d14fc6884e",
@@ -48,8 +48,8 @@
     "sha256": "9637743e1215a4db376a62ee807a0986faf20833be2b332df09b3d5dbdd7339e"
   },
   "cycles-minting": {
-    "rev": "6f1ce3bb4c253f1bc4c5f432c7c47b06dccdba7e",
-    "sha256": "40a204bf4abc14bd61553b2b56413709a2fc7175227253d2809ffdb977c934de"
+    "rev": "e114e3d7f4efef3dc9876b619e71deb79868640e",
+    "sha256": "6ef07db375180b081b2e992c9b67e1aca941b63ffbad8ac9ac68d2de8d332912"
   },
   "cycles_ledger": {
     "sha256": "ed99402535bb4f58e4ab469acc40c903f2fdeea409be16623d5c6a9131cbf120",
@@ -60,28 +60,32 @@
     "sha256": "8df72887ab235f4533ee613b1bc7293ec8d62c866525b1425934cf992ef894a7"
   },
   "dogecoin": {
-    "sha256": "2efd5a5b28315a3d4896419df14a4aad8a346174f53cc7727a63b37ec086b3ac",
-    "tag": "release/2025-12-10"
+    "sha256": "1fe3ce73e9422a0a3e0444ea7b5a615d2b36c4b940d3cbcfe9e3d5c6cdc32494",
+    "tag": "release/2026-03-12"
   },
   "genesis-token": {
     "rev": "36ceffe4c47f4c3a881e75951178f5413f777f6c",
     "sha256": "bce508df3db43b47b158c0aab9a7c9a3709a78e055a7ced76d5ff89832f9e778"
   },
   "governance": {
-    "rev": "11cd53599b79ea96e651ab7d3a12d5562fb48a83",
-    "sha256": "be458c6b8a5168c26865ed437e0b2e988dd77c145e50a7fa918ddc4c80789060"
+    "rev": "613e85748f462bc8e169195b16ddcf04706f5d7c",
+    "sha256": "87b0b0fb9fff4a17c220d467879a413cff3c401ffd3e940367618489bf04d844"
   },
   "governance-canister_test": {
-    "rev": "11cd53599b79ea96e651ab7d3a12d5562fb48a83",
-    "sha256": "b68d1e8ac88323b05fb99916df35b6ca83077bce1e71bad88b06efacf63e3cc5"
+    "rev": "613e85748f462bc8e169195b16ddcf04706f5d7c",
+    "sha256": "59b1663d26d183f3759b56da9bfe383aeef7b3b19924fd5127b86b707b1a45fd"
   },
   "index": {
     "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
-  "internet_identity_test": {
-    "sha256": "b54127064a6792ee419bfe41c9909c370817d9e02768383028aefc39c16b1d67",
-    "tag": "release-2026-02-06"
+  "internet_identity_backend": {
+    "sha256": "390305fcfda7b5be4e020ec455932e0ab2a708887155edf18f776b58be7c4d28",
+    "tag": "release-2026-04-26"
+  },
+  "internet_identity_frontend": {
+    "sha256": "3ebb9bf4726c8f15d131b6df33239f93a34555c88e046c33340aca449aaeb508",
+    "tag": "release-2026-04-26"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
@@ -96,44 +100,44 @@
     "sha256": "a7c87d163a0cc69f6a5e4ed11f9a99618bde8658d21e8d84207963bb2400347c"
   },
   "nns_dapp_test": {
-    "sha256": "93f3614c96ba8427a34d0f6fc8a8148766e11657fd34674f3febd1d119ceab38",
-    "tag": "proposal-140184"
+    "sha256": "074d5d074783413ea8330bd7c05d4036241aa495071973094bd9e7627a6e2747",
+    "tag": "proposal-141543"
   },
   "node-rewards": {
-    "rev": "6f1ce3bb4c253f1bc4c5f432c7c47b06dccdba7e",
-    "sha256": "4511bdb31e19a1ab304d897075abba82f46cc0629e6bc0f036f364f1fd7b26b7"
+    "rev": "cafe032cdc97bc6eeb2cffd47222e830e9827646",
+    "sha256": "4106fe0ccb6ea56fe61937706026b353f18f58f350f1c4537258c06eedcc6f76"
   },
   "registry": {
-    "rev": "6f1ce3bb4c253f1bc4c5f432c7c47b06dccdba7e",
-    "sha256": "3f04216742318f1ac9648b10cce5e459e83720abb523966374be5e2be3a2d02b"
+    "rev": "613e85748f462bc8e169195b16ddcf04706f5d7c",
+    "sha256": "39975170627d284f1bd1ad4ff1265572c8152dcbc65a95373f6e97764cbaaef8"
   },
   "root": {
-    "rev": "11cd53599b79ea96e651ab7d3a12d5562fb48a83",
-    "sha256": "ff1c24eb7467c048a4cbc11d043e74f8aaf7652188e4a9986ec367a06bcb065b"
+    "rev": "613e85748f462bc8e169195b16ddcf04706f5d7c",
+    "sha256": "5125b6716f0382741b7d780090d7a37da93b0dfa0d1940f40863b02327ec4c38"
   },
   "sns-wasm": {
-    "rev": "11cd53599b79ea96e651ab7d3a12d5562fb48a83",
-    "sha256": "c7a86ae13ffdfefc659873345ba1839e0cad8c63105094e9c84a6ea13b70d49c"
+    "rev": "2b7652941d6a896473e7b386dd97fc6a091633e7",
+    "sha256": "328185cf9ccbeb531c4485ad0e4a00c020ea3249f7902968c00dc9aaac739fc2"
   },
   "sns_aggregator_test": {
     "sha256": "58f3cdf3320adb0864ff2e7d880af5c9b75e056240ff47a9f3e6eda3b17066f1",
     "tag": "proposal-138924-agg"
   },
   "sns_archive": {
-    "rev": "e446c64d99a97e38166be23ff2bfade997d15ff7",
-    "sha256": "186697235c7072e94fa04e5c51a06af8500e8b36835420a9284912b977ae21a9"
+    "rev": "cf41372e3d4dc1accfe2c09a7969f8bddc729dc1",
+    "sha256": "f7f48f402a128cbd18dc7734c7f149f2814c8181766f39897a66d514d47ccf11"
   },
   "sns_governance": {
-    "rev": "724ae4101bfdd8d4443126a6a8b1ec5ca9b68a12",
-    "sha256": "12e2af5c3c6b0211365b5360c17bc1261a97adc0c917f618308f6bb1cb3f76e6"
+    "rev": "b904c9dd1bdef8841bd12f03efbc71180a015e25",
+    "sha256": "d41e8cd08a2161e56cc6f4eb99733c9a46a38b98d3f40ce80e444dc33c5580ad"
   },
   "sns_index": {
-    "rev": "e446c64d99a97e38166be23ff2bfade997d15ff7",
-    "sha256": "cf3bf8f87dc908be156f314fae3b83aae56d1f63e74a63c32994c4e02babdb2d"
+    "rev": "cf41372e3d4dc1accfe2c09a7969f8bddc729dc1",
+    "sha256": "dab6808d0dfc06e5e88336d0c3d3e45e5448c6e36c2a781f3e9e09bd450f528c"
   },
   "sns_ledger": {
-    "rev": "e446c64d99a97e38166be23ff2bfade997d15ff7",
-    "sha256": "71c27c5dc10034a1175296892b37827df0265d0ae072f5c59e99b8a1f6c45c76"
+    "rev": "cf41372e3d4dc1accfe2c09a7969f8bddc729dc1",
+    "sha256": "354dd6ecfdc72b5409805b31dea22c9db11df6e14095a5a68924eb63535e6d8a"
   },
   "sns_ledger_v2": {
     "rev": "e54d3fa34ded227c885d04e64505fa4b5d564743",
@@ -144,8 +148,8 @@
     "sha256": "d26b930d8756bb75b6caa5195346499b18bbd6448810386e1b8f2f1f808ade86"
   },
   "subnet_rental": {
-    "sha256": "f18e2effe4a0495c3b08b546bb4c63428dac9852ad7dd4316afb5daf210c4ab5",
-    "tag": "0.4.0"
+    "sha256": "419fc07a8d46655030a5b3f438a764e0fcd67ae4e13a11deac045a6f38730db2",
+    "tag": "0.5.0"
   },
   "swap": {
     "rev": "0e4c8234a9e0508ae30c5b8a7498406294c25e95",

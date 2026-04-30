@@ -2,7 +2,7 @@ use crate::types::Response;
 use ic_interfaces::execution_environment::IngressHistoryWriter;
 use ic_logger::{ReplicaLogger, error};
 use ic_replicated_state::ReplicatedState;
-use ic_types::CanisterId;
+use ic_types::{CanisterId, ExecutionRound};
 use prometheus::IntCounter;
 use std::sync::Arc;
 
@@ -48,6 +48,7 @@ pub fn process_responses(
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     log: ReplicaLogger,
     canister_not_found_error: &IntCounter,
+    current_round: ExecutionRound,
 ) {
     responses.into_iter().for_each(|response| match response {
         Response::Ingress(ingress_response) => {
@@ -55,10 +56,11 @@ pub fn process_responses(
                 state,
                 ingress_response.message_id,
                 ingress_response.status,
+                current_round,
             );
         }
         Response::Canister(canister_response) => {
-            if let Some(canister) = state.canister_state_mut(&canister_response.respondent) {
+            if let Some(canister) = state.canister_state_make_mut(&canister_response.respondent) {
                 canister.push_output_response(canister_response.into())
             } else {
                 canister_not_found_error.inc();

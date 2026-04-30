@@ -1,4 +1,4 @@
-use std::{convert::TryFrom, rc::Rc, sync::Arc};
+use std::rc::Rc;
 
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
@@ -12,8 +12,9 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::metadata_state::testing::NetworkTopologyTesting;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{
     CallOrigin, Memory, NetworkTopology, NumWasmPages, SubnetTopology, SystemState,
@@ -23,13 +24,12 @@ use ic_test_utilities_types::ids::{
     call_context_test_id, canister_test_id, subnet_test_id, user_test_id,
 };
 use ic_types::{
-    ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, PrincipalId, Time,
-    batch::CanisterCyclesCostSchedule,
+    ComputeAllocation, MemoryAllocation, NumInstructions, PrincipalId, Time,
     messages::{CallContextId, CallbackId, NO_DEADLINE, RejectContext},
     methods::SystemMethod,
     time::UNIX_EPOCH,
 };
-use maplit::btreemap;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use std::collections::BTreeMap;
 
 pub const CANISTER_CURRENT_MEMORY_USAGE: NumBytes = NumBytes::new(0);
@@ -54,19 +54,24 @@ pub fn execution_parameters(execution_mode: ExecutionMode) -> ExecutionParameter
 }
 
 fn make_network_topology(own_subnet_id: SubnetId, own_subnet_type: SubnetType) -> NetworkTopology {
-    let routing_table = Arc::new(RoutingTable::try_from(btreemap! {
-            CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => own_subnet_id,
-        }).unwrap());
-    NetworkTopology {
-        routing_table,
-        subnets: btreemap! {
-            own_subnet_id => SubnetTopology {
-                subnet_type: own_subnet_type,
-                ..SubnetTopology::default()
-            }
+    let mut topo = NetworkTopology::default();
+    topo.routing_table_mut()
+        .insert(
+            CanisterIdRange {
+                start: CanisterId::from(0),
+                end: CanisterId::from(0xff),
+            },
+            own_subnet_id,
+        )
+        .unwrap();
+    topo.subnets_mut().insert(
+        own_subnet_id,
+        SubnetTopology {
+            subnet_type: own_subnet_type,
+            ..SubnetTopology::default()
         },
-        ..NetworkTopology::default()
-    }
+    );
+    topo
 }
 
 // Not used in all test crates
@@ -88,6 +93,7 @@ impl ApiTypeBuilder {
             Cycles::zero(),
             user_test_id(1).get(),
             CallContextId::from(1),
+            None,
         )
     }
 
@@ -105,6 +111,7 @@ impl ApiTypeBuilder {
             vec![],
             user_test_id(1).get(),
             CallContextId::new(1),
+            None,
         )
     }
 
@@ -115,6 +122,7 @@ impl ApiTypeBuilder {
             subnet_test_id(1),
             vec![],
             Some(vec![1]),
+            None,
         )
     }
 
@@ -126,6 +134,7 @@ impl ApiTypeBuilder {
             vec![],
             Some(vec![1]),
             CallContextId::from(1),
+            None,
         )
     }
 
@@ -138,6 +147,7 @@ impl ApiTypeBuilder {
             CallContextId::new(1),
             false,
             0.into(),
+            None,
         )
     }
 
@@ -150,6 +160,7 @@ impl ApiTypeBuilder {
             CallContextId::new(1),
             false,
             0.into(),
+            None,
         )
     }
 
@@ -162,6 +173,7 @@ impl ApiTypeBuilder {
             call_context_test_id(1),
             false,
             0.into(),
+            None,
         )
     }
 
@@ -174,6 +186,7 @@ impl ApiTypeBuilder {
             call_context_test_id(1),
             false,
             0.into(),
+            None,
         )
     }
 
@@ -183,6 +196,7 @@ impl ApiTypeBuilder {
             "test".to_string(),
             vec![],
             UNIX_EPOCH,
+            None,
         )
     }
 
@@ -255,6 +269,7 @@ pub fn get_system_state() -> SystemState {
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
     system_state

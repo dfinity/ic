@@ -1,13 +1,35 @@
 use crate::embedders::Config as EmbeddersConfig;
 use crate::flag_status::FlagStatus;
 use ic_base_types::{CanisterId, NumSeconds};
-use ic_types::{Cycles, NumBytes, NumInstructions};
+use ic_types::{NumBytes, NumInstructions};
+use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
 use std::{str::FromStr, time::Duration};
 
-const MIB: u64 = 1024 * 1024;
-const GIB: u64 = MIB * 1024;
-const TIB: u64 = GIB * 1024;
+const KIB: u64 = 1024;
+const MIB: u64 = 1024 * KIB;
+const GIB: u64 = 1024 * MIB;
+const TIB: u64 = 1024 * GIB;
+
+const REPLICATED_INTER_CANISTER_LOG_FETCH_FEATURE: FlagStatus = FlagStatus::Disabled;
+
+// TODO(DSM-105): remove after the feature is enabled by default.
+pub const LOG_MEMORY_STORE_FEATURE_ENABLED: bool = false;
+pub const LOG_MEMORY_STORE_FEATURE: FlagStatus = if LOG_MEMORY_STORE_FEATURE_ENABLED {
+    FlagStatus::Enabled
+} else {
+    FlagStatus::Disabled
+};
+pub const TEST_DEFAULT_LOG_MEMORY_LIMIT: u64 = if LOG_MEMORY_STORE_FEATURE_ENABLED {
+    4 * KIB
+} else {
+    0
+};
+pub const TEST_DEFAULT_LOG_MEMORY_USAGE: u64 = if LOG_MEMORY_STORE_FEATURE_ENABLED {
+    4 * KIB + 4 * KIB + TEST_DEFAULT_LOG_MEMORY_LIMIT // header, index table, data region
+} else {
+    0
+};
 
 /// This specifies the threshold in bytes at which the subnet memory usage is
 /// considered to be high. If this value is greater or equal to the subnet
@@ -345,9 +367,6 @@ pub struct Config {
     /// The maximum number of snapshots allowed per canister.
     pub max_number_of_snapshots_per_canister: usize,
 
-    /// Whether environment variables are supported.
-    pub environment_variables: FlagStatus,
-
     /// The maximum number of environment variables allowed per canister.
     pub max_environment_variables: usize,
 
@@ -443,12 +462,11 @@ impl Default for Config {
             max_canister_http_requests_in_flight: MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
             default_wasm_memory_limit: DEFAULT_WASM_MEMORY_LIMIT,
             max_number_of_snapshots_per_canister: MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
-            environment_variables: FlagStatus::Enabled,
             max_environment_variables: MAX_ENVIRONMENT_VARIABLES,
             max_environment_variable_name_length: MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
             max_environment_variable_value_length: MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
-            replicated_inter_canister_log_fetch: FlagStatus::Disabled,
-            log_memory_store_feature: FlagStatus::Disabled,
+            replicated_inter_canister_log_fetch: REPLICATED_INTER_CANISTER_LOG_FETCH_FEATURE,
+            log_memory_store_feature: LOG_MEMORY_STORE_FEATURE,
         }
     }
 }

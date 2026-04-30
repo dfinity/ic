@@ -14,7 +14,7 @@ ic-agent = { workspace = true }
 ic-btc-interface = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-config = { path = "../../config" }
-ic-nervous-system-common  = { path = "../../nervous_system/common" }
+ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
@@ -23,8 +23,9 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-registry-nns-data-provider = { path = "../../registry/nns_data_provider" }
 ic-system-test-driver = { path = "../../tests/driver" }
 ic-tests-ckbtc = { path = "../../tests/ckbtc" }
+ic-types-cycles = { path = "../../types/cycles" }
 ic-types = { path = "../../types/types" }
-ic-utils = "0.40.1"
+ic-utils = { workspace = true }
 ic-universal-canister = { path = "../../universal_canister/lib" }
 ic_consensus_system_test_utils = { path = "../../tests/consensus/utils" }
 lazy_static = { workspace = true }
@@ -43,6 +44,7 @@ tokio = { workspace = true }
 cycles_minting = { path = "./cycles_minting" }
 cycles-minting-canister = { path = "../../nns/cmc" }
 wat = { workspace = true }
+serde = {workspace = true}
 serde_cbor = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 num-traits = { workspace = true }
@@ -57,7 +59,10 @@ registry-canister = { path = "../../registry/canister" }
 axum = { workspace = true }
 ic-registry-transport = { path = "../../registry/transport" }
 prost = { workspace = true }
+ic-protobuf = { path = "../../protobuf" }
 url = { workspace = true }
+ic-registry-keys = { path = "../../registry/keys" }
+
 
 [[bin]]
 name = "certified_registry_test"
@@ -66,6 +71,10 @@ path = "certified_registry_test.rs"
 [[bin]]
 name = "create_subnet_test"
 path = "create_subnet_test.rs"
+
+[[bin]]
+name = "delete_subnet_test"
+path = "delete_subnet_test.rs"
 
 # [[bin]]
 # name = "nns_canister_uninstall_test"
@@ -102,3 +111,4 @@ path = "rent_subnet_test.rs"
 [[bin]]
 name = "node_swap_test"
 path = "node_swap_test.rs"
+

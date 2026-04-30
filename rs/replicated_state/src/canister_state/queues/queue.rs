@@ -408,29 +408,27 @@ impl IngressQueue {
         self.size() == 0
     }
 
-    /// Retturns `true` if there are any ingress messages in the queue that satisfy
-    /// the filter, `false` otherwise.
-    pub(super) fn any_messages<F>(&self, mut filter: F) -> bool
+    /// Returns `true` if all ingress messages in the queue satisfy the predicate,
+    /// `false` otherwise.
+    pub(super) fn all_messages<F>(&self, mut predicate: F) -> bool
     where
         F: FnMut(&Ingress) -> bool,
     {
         self.queues
             .values()
-            .any(|queue| queue.iter().any(|msg| filter(msg)))
+            .all(|queue| queue.iter().all(|msg| predicate(msg)))
     }
 
-    /// Calls `filter` on each ingress message in the queue, retaining only the
-    /// messages for which the filter returns `true` and dropping the rest.
-    ///
-    /// Returns all dropped ingress messages.
-    pub(super) fn filter_messages<F>(&mut self, mut filter: F) -> Vec<Arc<Ingress>>
+    /// Retains only the ingress messages that satisfy the predicate, removing and
+    /// returning all the ingress messages that don't.
+    pub(super) fn retain_messages<F>(&mut self, mut predicate: F) -> Vec<Arc<Ingress>>
     where
         F: FnMut(&Ingress) -> bool,
     {
         let mut filtered_messages = vec![];
         for canister_ingress_queue in self.queues.values_mut() {
             canister_ingress_queue.retain_mut(|item| {
-                if filter(item) {
+                if predicate(item) {
                     return true;
                 }
                 // Empty `canister_ingress_queues` and their corresponding schedule entry

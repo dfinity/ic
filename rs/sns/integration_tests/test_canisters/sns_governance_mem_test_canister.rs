@@ -139,11 +139,11 @@ fn pretty_bytes(bytes: usize) -> String {
 /// once and reuse the list as needed.
 fn generate_neuron_ids(max_number_of_neurons: u64) -> Vec<NeuronId> {
     // Seed required for randomness in canister execution environment
-    let mut rng = StdRng::from_seed([0u8; 32]);
+    let mut rng = StdRng::from_seed([0_u8; 32]);
 
     let mut neuron_ids = vec![];
     for _ in 0..max_number_of_neurons {
-        let mut bytes = [0u8; SIZE_OF_NEURON_ID];
+        let mut bytes = [0_u8; SIZE_OF_NEURON_ID];
         rng.fill_bytes(&mut bytes);
         neuron_ids.push(NeuronId {
             id: Vec::from(bytes),

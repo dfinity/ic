@@ -181,6 +181,9 @@ pub mod timer_tasks;
 mod voting;
 mod voting_history_store;
 
+/// As of Feb 2026, outside of this crate, this is only used by an integration test.
+pub use neuron::dissolve_delay_bonus_multiplier;
+
 /// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
 /// The value of 10_000 follows the Candid recommendation.
 const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
@@ -207,14 +210,19 @@ thread_local! {
     static ENABLE_NEURON_FOLLOW_RESTRICTIONS: Cell<bool>
         = const { Cell::new(true) };
 
-    static ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS: Cell<bool>
+    static ENABLE_CREATE_CANISTER_AND_INSTALL_CODE_PROPOSALS: Cell<bool>
         = const { Cell::new(true) };
 
-    static ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS: Cell<bool>
-        = const { Cell::new(true) };
+    static ENABLE_SUBNET_SPLITTING_PROPOSALS: Cell<bool>
+        = const { Cell::new(false) };
 
-    // This covers both taking and loading canister snapshots.
-    static ENABLE_CANISTER_SNAPSHOT_PROPOSALS: Cell<bool>
+    // The planned effects of enabling this flag include
+    //   1. Reduce max dissolve delay from 8 years to 2 years. This includes capping existing neurons via data migration.
+    //   2. Reduce voting rewards pool by approximately 36.71% (equivalently, scale by 0.6329 times).
+    //   3. Dissolve delay bonus: quadratic instead of linear, with a maximum of 3x instead of 2x.
+    //   4. Reduce the minimum dissolve delay needed to vote to 2 weeks instead of 6 months.
+    //   5. 8 year gang 10% bonus.
+    static ENABLE_MISSION_70_VOTING_REWARDS: Cell<bool>
         = const { Cell::new(true) };
 }
 
@@ -277,46 +285,41 @@ pub fn temporarily_disable_neuron_follow_restrictions() -> Temporary {
     Temporary::new(&ENABLE_NEURON_FOLLOW_RESTRICTIONS, false)
 }
 
-pub fn is_self_describing_proposal_actions_enabled() -> bool {
-    ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS.get()
+pub fn are_create_canister_and_install_code_proposals_enabled() -> bool {
+    ENABLE_CREATE_CANISTER_AND_INSTALL_CODE_PROPOSALS.get()
 }
 
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_self_describing_proposal_actions() -> Temporary {
-    Temporary::new(&ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS, true)
+pub fn temporarily_enable_create_canister_and_install_code_proposals() -> Temporary {
+    Temporary::new(&ENABLE_CREATE_CANISTER_AND_INSTALL_CODE_PROPOSALS, true)
 }
 
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_self_describing_proposal_actions() -> Temporary {
-    Temporary::new(&ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS, false)
-}
-
-pub fn are_bless_alternative_guest_os_version_proposals_enabled() -> bool {
-    ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS.get()
+pub fn temporarily_disable_create_canister_and_install_code_proposals() -> Temporary {
+    Temporary::new(&ENABLE_CREATE_CANISTER_AND_INSTALL_CODE_PROPOSALS, false)
 }
 
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_bless_alternative_guest_os_version_proposals() -> Temporary {
-    Temporary::new(&ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS, true)
+pub fn temporarily_enable_subnet_splitting_proposals() -> Temporary {
+    Temporary::new(&ENABLE_SUBNET_SPLITTING_PROPOSALS, true)
+}
+
+pub fn are_subnet_splitting_proposals_enabled() -> bool {
+    ENABLE_SUBNET_SPLITTING_PROPOSALS.get()
+}
+
+pub fn is_mission_70_voting_rewards_enabled() -> bool {
+    ENABLE_MISSION_70_VOTING_REWARDS.get()
 }
 
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_bless_alternative_guest_os_version_proposals() -> Temporary {
-    Temporary::new(&ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS, false)
-}
-
-pub fn are_canister_snapshot_proposals_enabled() -> bool {
-    ENABLE_CANISTER_SNAPSHOT_PROPOSALS.get()
+pub fn temporarily_enable_mission_70_voting_rewards() -> Temporary {
+    Temporary::new(&ENABLE_MISSION_70_VOTING_REWARDS, true)
 }
 
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_canister_snapshot_proposals() -> Temporary {
-    Temporary::new(&ENABLE_CANISTER_SNAPSHOT_PROPOSALS, true)
-}
-
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_canister_snapshot_proposals() -> Temporary {
-    Temporary::new(&ENABLE_CANISTER_SNAPSHOT_PROPOSALS, false)
+pub fn temporarily_disable_mission_70_voting_rewards() -> Temporary {
+    Temporary::new(&ENABLE_MISSION_70_VOTING_REWARDS, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {
@@ -747,6 +750,7 @@ pub fn encode_metrics(
             public_neuron_subset_metrics,
             declining_voting_power_neuron_subset_metrics,
             fully_lost_voting_power_neuron_subset_metrics,
+            total_maturity_disbursements_in_progress_e8s_equivalent,
         } = metrics;
 
         // ICP
@@ -1006,6 +1010,12 @@ pub fn encode_metrics(
             "governance_spawning_neurons_count",
             *spawning_neurons_count as f64,
             "The number of neurons that are in the \"spawning\" state.",
+        )?;
+
+        w.encode_gauge(
+            "governance_total_maturity_disbursements_in_progress_e8s_equivalent",
+            *total_maturity_disbursements_in_progress_e8s_equivalent as f64,
+            "Total amount of maturity disbursements in progress in e8s equivalent.",
         )?;
     }
 

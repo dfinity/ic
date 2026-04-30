@@ -60,6 +60,7 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
             subnet_id,
             max_ingress_bytes_per_message: None,
             max_ingress_messages_per_block: None,
+            max_ingress_bytes_per_block: None,
             max_block_payload_size: None,
             unit_delay_millis: None,
             initial_notary_delay_millis: None,
@@ -70,6 +71,7 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
             is_halted: None,
             halt_at_cup_height: None,
             features: None,
+            resource_limits: None,
             max_number_of_canisters: Some(10),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -136,6 +138,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
         let initial_subnet_record = SubnetRecord {
             membership: vec![],
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
+            max_ingress_bytes_per_block: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
@@ -153,6 +156,9 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             ssh_backup_access: vec![],
             chain_key_config: None,
             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+            subnet_admins: vec![],
+            resource_limits: Default::default(),
+            recalled_replica_version_ids: vec![],
         };
 
         // An attacker got a canister that is trying to pass for the governance
@@ -184,6 +190,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             subnet_id,
             max_ingress_bytes_per_message: None,
             max_ingress_messages_per_block: None,
+            max_ingress_bytes_per_block: None,
             max_block_payload_size: None,
             unit_delay_millis: None,
             initial_notary_delay_millis: None,
@@ -194,6 +201,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             is_halted: None,
             halt_at_cup_height: None,
             features: None,
+            resource_limits: None,
             max_number_of_canisters: Some(100),
             ssh_readonly_access: None,
             ssh_backup_access: None,
@@ -259,6 +267,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                         SubnetRecord {
                             membership: vec![],
                             max_ingress_bytes_per_message: 60 * 1024 * 1024,
+                            max_ingress_bytes_per_block: 4 * 1024 * 1024,
                             max_ingress_messages_per_block: 1000,
                             max_block_payload_size: 4 * 1024 * 1024,
                             unit_delay_millis: 500,
@@ -277,6 +286,9 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                             chain_key_config: None,
                             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal
                                 as i32,
+                            subnet_admins: vec![],
+                            resource_limits: Default::default(),
+                            recalled_replica_version_ids: vec![],
                         }
                         .encode_to_vec(),
                     )],
@@ -300,6 +312,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
             subnet_id,
             max_ingress_bytes_per_message: None,
             max_ingress_messages_per_block: None,
+            max_ingress_bytes_per_block: None,
             max_block_payload_size: None,
             unit_delay_millis: Some(100),
             initial_notary_delay_millis: None,
@@ -310,6 +323,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
             is_halted: Some(true),
             halt_at_cup_height: Some(true),
             features: None,
+            resource_limits: None,
             max_number_of_canisters: Some(42),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -351,6 +365,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
             SubnetRecord {
                 membership: vec![],
                 max_ingress_bytes_per_message: 60 * 1024 * 1024,
+                max_ingress_bytes_per_block: 4 * 1024 * 1024,
                 max_block_payload_size: 4 * 1024 * 1024,
                 max_ingress_messages_per_block: 1000,
                 unit_delay_millis: 100,
@@ -368,6 +383,9 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                 ssh_backup_access: vec!["pub_key_1".to_string()],
                 chain_key_config: None,
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+                subnet_admins: vec![],
+                resource_limits: Default::default(),
+                recalled_replica_version_ids: vec![],
             }
         );
 
@@ -434,6 +452,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
         let initial_subnet_record = SubnetRecord {
             membership: vec![],
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
+            max_ingress_bytes_per_block: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
@@ -451,6 +470,9 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
             ssh_backup_access: vec![],
             chain_key_config: None,
             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+            subnet_admins: vec![],
+            resource_limits: Default::default(),
+            recalled_replica_version_ids: vec![],
         };
 
         // Just create the registry canister and wait until the subnet_handler ID is
@@ -646,6 +668,7 @@ fn empty_update_subnet_payload(subnet_id: SubnetId) -> UpdateSubnetPayload {
     UpdateSubnetPayload {
         subnet_id,
         max_ingress_bytes_per_message: None,
+        max_ingress_bytes_per_block: None,
         max_ingress_messages_per_block: None,
         max_block_payload_size: None,
         unit_delay_millis: None,
@@ -657,6 +680,7 @@ fn empty_update_subnet_payload(subnet_id: SubnetId) -> UpdateSubnetPayload {
         is_halted: None,
         halt_at_cup_height: None,
         features: None,
+        resource_limits: None,
         max_number_of_canisters: None,
         ssh_readonly_access: None,
         ssh_backup_access: None,

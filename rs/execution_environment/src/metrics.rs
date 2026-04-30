@@ -1,15 +1,13 @@
-use crate::units::{GIB, KIB, MIB};
 use ic_embedders::wasmtime_embedder::system_api::sandbox_safe_system_state::RequestMetadataStats;
-use ic_error_types::UserError;
+use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::QueryMethod;
-use ic_metrics::{
-    MetricsRegistry,
-    buckets::{decimal_buckets, decimal_buckets_with_zero},
+use ic_metrics::MetricsRegistry;
+use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
+use ic_replicated_state::metrics::{
+    duration_histogram, instructions_histogram, messages_histogram, slices_histogram,
 };
-use ic_types::{
-    MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, NumInstructions, NumMessages, NumSlices,
-    Time,
-};
+use ic_types::ingress::WasmResult;
+use ic_types::{NumInstructions, NumMessages, NumSlices, Time};
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
 use std::{cell::RefCell, rc::Rc, time::Instant};
 
@@ -189,6 +187,8 @@ pub(crate) struct QueryHandlerMetrics {
     pub transient_errors: IntCounter,
     /// Duration of a subnet query message execution, in seconds, similar to `execution_subnet_message_duration_seconds`.
     pub subnet_query_messages: HistogramVec,
+    /// Response size in bytes of a successful subnet query message execution.
+    pub subnet_query_message_response_bytes: HistogramVec,
 }
 
 impl QueryHandlerMetrics {
@@ -291,24 +291,37 @@ impl QueryHandlerMetrics {
                 decimal_buckets(-3, 2),
                 &["method_name", "status"],
             ),
+            subnet_query_message_response_bytes: metrics_registry.histogram_vec(
+                "execution_subnet_query_message_response_bytes",
+                "Response size in bytes of a successful subnet query message execution.",
+                decimal_buckets_with_zero(0, 7),
+                &["method_name"],
+            ),
         }
     }
 
-    pub fn observe_subnet_query_message<T>(
+    pub fn observe_subnet_query_message(
         &self,
         query_method: QueryMethod,
         duration: f64,
-        result: &Result<T, UserError>,
+        result: &Result<WasmResult, UserError>,
     ) {
         let method_name_label = &format!("query_ic00_{query_method}");
         let status_label = match result {
-            Ok(_) => SUCCESS_STATUS_LABEL,
+            Ok(WasmResult::Reply(_)) => SUCCESS_STATUS_LABEL,
+            Ok(WasmResult::Reject(_)) => &format!("{:?}", ErrorCode::CanisterRejectedMessage),
             Err(user_error) => &format!("{:?}", user_error.code()),
         };
 
         self.subnet_query_messages
             .with_label_values(&[method_name_label.as_str(), status_label])
             .observe(duration);
+
+        if let Ok(WasmResult::Reply(bytes)) = result {
+            self.subnet_query_message_response_bytes
+                .with_label_values(&[method_name_label.as_str()])
+                .observe(bytes.len() as f64);
+        }
     }
 }
 
@@ -418,141 +431,6 @@ impl<'a> Clone for MeasurementScope<'a> {
     }
 }
 
-/// Returns a histogram with buckets appropriate for durations.
-pub fn duration_histogram<S: Into<String>>(
-    name: S,
-    help: S,
-    metrics_registry: &MetricsRegistry,
-) -> Histogram {
-    let mut buckets = decimal_buckets_with_zero(-4, 1);
-    buckets.push(100.0);
-    // Buckets are [0, 100µs, 200µs, 500µs, ..., 10s, 20s, 50s, 100s].
-    metrics_registry.histogram(name, help, buckets)
-}
-
-/// Returns buckets appropriate for instructions.
-pub fn instructions_buckets() -> Vec<f64> {
-    let mut buckets: Vec<NumInstructions> = decimal_buckets_with_zero(4, 11)
-        .into_iter()
-        .map(|x| NumInstructions::from(x as u64))
-        .collect();
-
-    // Add buckets for counting no-op and small messages.
-    buckets.push(NumInstructions::from(10));
-    buckets.push(NumInstructions::from(1000));
-    for value in (1_000_000_000..10_000_000_000).step_by(1_000_000_000) {
-        buckets.push(NumInstructions::from(value));
-    }
-
-    // Add buckets for counting install_code messages
-    for value in (100_000_000_000..=1_000_000_000_000).step_by(100_000_000_000) {
-        buckets.push(NumInstructions::from(value));
-    }
-
-    // Ensure that all buckets are unique.
-    buckets.sort_unstable();
-    buckets.dedup();
-    // Buckets are [0, 10, 1K, 10K, 20K, ..., 100B, 200B, 500B, 1T] + [1B, 2B, 3B, ..., 9B] + [100B,
-    // 200B, 300B, ..., 900B].
-    buckets.into_iter().map(|x| x.get() as f64).collect()
-}
-
-/// Returns a histogram with buckets appropriate for dts pause/abort executions.
-pub fn dts_pause_or_abort_histogram<S: Into<String>>(
-    name: S,
-    help: S,
-    metrics_registry: &MetricsRegistry,
-) -> Histogram {
-    let mut buckets: Vec<f64> = (0..10).map(f64::from).collect();
-    buckets.extend(decimal_buckets(1, 4));
-    metrics_registry.histogram(name, help, buckets)
-}
-
-/// Returns a histogram with buckets appropriate for instructions.
-pub fn instructions_histogram<S: Into<String>>(
-    name: S,
-    help: S,
-    metrics_registry: &MetricsRegistry,
-) -> Histogram {
-    metrics_registry.histogram(name, help, instructions_buckets())
-}
-
-/// Returns a histogram with buckets appropriate for Cycles.
-pub fn cycles_histogram<S: Into<String>>(
-    name: S,
-    help: S,
-    metrics_registry: &MetricsRegistry,
-) -> Histogram {
-    metrics_registry.histogram(name, help, decimal_buckets_with_zero(6, 15))
-}
-
-/// Returns unique and sorted buckets.
-pub fn unique_sorted_buckets(buckets: &[u64]) -> Vec<f64> {
-    // Ensure that all buckets are unique
-    let mut buckets = buckets.to_vec();
-    buckets.sort_unstable();
-    buckets.dedup();
-    buckets.into_iter().map(|x| x as f64).collect()
-}
-
-/// Returns buckets appropriate for Wasm and Stable memories
-fn memory_buckets() -> Vec<f64> {
-    unique_sorted_buckets(&[
-        0,
-        4 * KIB,
-        64 * KIB,
-        MIB,
-        10 * MIB,
-        50 * MIB,
-        100 * MIB,
-        500 * MIB,
-        GIB,
-        2 * GIB,
-        3 * GIB,
-        4 * GIB,
-        5 * GIB,
-        6 * GIB,
-        7 * GIB,
-        8 * GIB,
-        MAX_STABLE_MEMORY_IN_BYTES,
-        MAX_WASM_MEMORY_IN_BYTES,
-    ])
-}
-
-/// Returns a histogram with buckets appropriate for Canister memory.
-pub fn memory_histogram<S: Into<String>>(
-    name: S,
-    help: S,
-    metrics_registry: &MetricsRegistry,
-) -> Histogram {
-    metrics_registry.histogram(name, help, memory_buckets())
-}
-
-/// Returns buckets appropriate for messages and slices.
-pub fn messages_buckets() -> Vec<f64> {
-    decimal_buckets_with_zero(0, 3)
-}
-
-/// Returns a histogram with buckets appropriate for messages.
-pub fn messages_histogram<S: Into<String>>(
-    name: S,
-    help: S,
-    metrics_registry: &MetricsRegistry,
-) -> Histogram {
-    // Buckets are [0, 1, 2, 5, ..., 1K, 2K, 5K].
-    metrics_registry.histogram(name, help, messages_buckets())
-}
-
-/// Returns a histogram with buckets appropriate for slices.
-pub fn slices_histogram<S: Into<String>>(
-    name: S,
-    help: S,
-    metrics_registry: &MetricsRegistry,
-) -> Histogram {
-    // Re-use the messages histogram.
-    messages_histogram(name, help, metrics_registry)
-}
-
 #[derive(Debug)]
 struct MeasurementScopeCore<'a> {
     metrics: &'a ScopedMetrics,
@@ -584,7 +462,8 @@ impl Drop for MeasurementScopeCore<'_> {
 
 #[cfg(test)]
 mod tests {
-    use ic_types::NumMessages;
+    use ic_replicated_state::metrics::{instructions_buckets, memory_buckets};
+    use ic_types::{MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, NumMessages};
 
     use super::*;
 

@@ -11,7 +11,7 @@ use ic_ledger_suite_in_memory_ledger::{
 };
 use ic_ledger_suite_state_machine_helpers::{
     TransactionGenerationParameters, generate_transactions, get_all_ledger_and_archive_blocks,
-    get_blocks, list_archives, retrieve_metrics,
+    get_blocks, list_archives, retrieve_metrics, stop_and_upgrade_canister_as_controller,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic;
 use ic_state_machine_tests::{StateMachine, UserError};
@@ -199,7 +199,7 @@ impl LedgerSuiteConfig {
         // part of the upgrade/downgrade testing.
         top_up_canisters(state_machine, ledger_canister_id, index_canister_id);
         // Advance the time to make sure the ledger gets the current time for checking allowances.
-        state_machine.advance_time(Duration::from_secs(1u64));
+        state_machine.advance_time(Duration::from_secs(1_u64));
         state_machine.tick();
         let mut previous_ledger_state = None;
         if self.extended_testing {
@@ -321,11 +321,13 @@ impl LedgerSuiteConfig {
         for archive in archives {
             let archive_canister_id =
                 CanisterId::unchecked_from_principal(PrincipalId(archive.canister_id));
-            state_machine
-                .upgrade_canister(archive_canister_id, wasm.clone().bytes(), vec![])
-                .unwrap_or_else(|e| {
-                    panic!("should successfully upgrade archive '{archive_canister_id}': {e}")
-                });
+            stop_and_upgrade_canister_as_controller(
+                state_machine,
+                archive_canister_id,
+                wasm.clone().bytes(),
+                vec![],
+            )
+            .expect("should successfully stop, upgrade, and restart archive canister");
         }
         println!("Upgraded {num_archives} archive(s)");
     }
@@ -335,12 +337,19 @@ impl LedgerSuiteConfig {
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.index_id).unwrap());
         let index_upgrade_arg = IndexArg::Upgrade(IndexUpgradeArg {
             ledger_id: None,
+            #[allow(deprecated)]
             retrieve_blocks_from_ledger_interval_seconds: None,
+            min_retrieve_blocks_from_ledger_interval_seconds: None,
+            max_retrieve_blocks_from_ledger_interval_seconds: None,
         });
         let args = Encode!(&index_upgrade_arg).unwrap();
-        state_machine
-            .upgrade_canister(canister_id, wasm.clone().bytes(), args.clone())
-            .expect("should successfully upgrade index canister");
+        stop_and_upgrade_canister_as_controller(
+            state_machine,
+            canister_id,
+            wasm.clone().bytes(),
+            args.clone(),
+        )
+        .expect("should successfully stop, upgrade, and restart index canister");
         println!("Upgraded {} index '{}'", self.canister_name, self.index_id);
     }
 
@@ -349,12 +358,22 @@ impl LedgerSuiteConfig {
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.ledger_id).unwrap());
         let args = ic_icrc1_ledger::LedgerArgument::Upgrade(None);
         let args = Encode!(&args).unwrap();
+        let controller = state_machine
+            .get_controllers(canister_id)
+            .and_then(|cs| cs.into_iter().next())
+            .expect("should have at least one controller");
+        state_machine
+            .stop_canister_as(controller, canister_id)
+            .expect("should successfully stop ledger canister");
         match state_machine.upgrade_canister(canister_id, wasm.clone().bytes(), args.clone()) {
             Ok(_) => {
                 println!(
                     "Upgraded {} ledger '{}'",
                     self.canister_name, self.ledger_id
                 );
+                state_machine
+                    .start_canister_as(controller, canister_id)
+                    .expect("should successfully start ledger canister");
                 self.print_ledger_metrics(state_machine);
                 Ok(())
             }
@@ -1110,7 +1129,7 @@ mod index {
             env.tick();
             num_blocks_synced = u64::try_from(status(env, index_id).num_blocks_synced.0)
                 .expect("num_blocks_synced should fit in u64");
-            chain_length = get_index_blocks(env, ledger_id, 0u64, 0u64).chain_length;
+            chain_length = get_index_blocks(env, ledger_id, 0_u64, 0_u64).chain_length;
             if num_blocks_synced == chain_length {
                 return;
             }

@@ -89,6 +89,7 @@ system_test_nns(
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
+    test_timeout = "eternal",  # the suite runs many sub-tests sequentially and is close to the "long" (15min) limit.
     deps = [
         # Keep sorted.
         "//rs/nns/common",
@@ -103,7 +104,6 @@ system_test_nns(
 
 system_test_nns(
     name = "unstuck_subnet_test",
-    flaky = True,  # flakiness rate of over 2.1% over the month from 2025-02-11 till 2025-03-11.
     guestos_update = "test",
     tags = [
         "long_test",
@@ -116,7 +116,6 @@ system_test_nns(
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
-        "@crate_index//:ssh2",
     ],
 )
 

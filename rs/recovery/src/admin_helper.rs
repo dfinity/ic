@@ -6,6 +6,7 @@ use serde::Serialize;
 use url::Url;
 
 use std::{
+    collections::BTreeMap,
     fmt::Display,
     path::{Path, PathBuf},
     process::Command,
@@ -14,6 +15,7 @@ use std::{
 
 pub const SUMMARY_ARG: &str = "summary";
 pub const SSH_READONLY_ACCESS_ARG: &str = "ssh-readonly-access";
+pub const SSH_WRITE_ACCESS_ARG: &str = "ssh-node-state-write-access";
 
 pub type IcAdmin = Vec<String>;
 
@@ -69,14 +71,6 @@ impl AdminHelper {
         ic_admin
     }
 
-    pub fn add_propose_to_update_subnet_base(&self, ic_admin: &mut IcAdmin, subnet_id: SubnetId) {
-        ic_admin
-            .add_positional_argument("propose-to-update-subnet")
-            .add_argument("subnet", subnet_id);
-
-        self.add_proposer_args(ic_admin);
-    }
-
     // Existence of [NeuronArgs] implies no testing mode. Add proposer neuron id,
     // else add test neuron proposer.
     pub fn add_proposer_args(&self, ic_admin: &mut IcAdmin) {
@@ -87,27 +81,60 @@ impl AdminHelper {
         }
     }
 
-    pub fn get_halt_subnet_command(
+    pub fn get_propose_to_take_subnet_offline_for_repairs_command(
         &self,
         subnet_id: SubnetId,
-        is_halted: bool,
-        keys: &[String],
+        subnet_readonly_keys: &[String],
+        node_write_keys: &BTreeMap<NodeId, Vec<String>>,
     ) -> IcAdmin {
         let mut ic_admin = self.get_ic_admin_cmd_base();
-        self.add_propose_to_update_subnet_base(&mut ic_admin, subnet_id);
 
-        ic_admin.add_argument("is-halted", is_halted);
-        if !keys.is_empty() {
-            ic_admin.add_arguments(SSH_READONLY_ACCESS_ARG, keys.iter().map(quote));
+        ic_admin
+            .add_positional_argument("propose-to-take-subnet-offline-for-repairs")
+            .add_argument("subnet", subnet_id);
+        if !subnet_readonly_keys.is_empty() {
+            ic_admin.add_arguments(
+                SSH_READONLY_ACCESS_ARG,
+                subnet_readonly_keys.iter().map(quote),
+            );
+        }
+        if !node_write_keys.is_empty() {
+            ic_admin.add_arguments(
+                SSH_WRITE_ACCESS_ARG,
+                node_write_keys
+                    .iter()
+                    .map(|(node_id, keys)| quote(format!("{}:{}", node_id, keys.join(","),))),
+            );
         }
         ic_admin.add_argument(
             SUMMARY_ARG,
             quote(format!(
-                "{} subnet {}, for recovery and update ssh readonly access",
-                if is_halted { "Halt" } else { "Unhalt" },
-                subnet_id,
+                "Take subnet {subnet_id} offline for recovery, updating readonly and write access ssh keys",
             )),
         );
+
+        self.add_proposer_args(&mut ic_admin);
+
+        ic_admin
+    }
+
+    pub fn get_propose_to_bring_subnet_back_online_after_repairs_command(
+        &self,
+        subnet_id: SubnetId,
+    ) -> IcAdmin {
+        let mut ic_admin = self.get_ic_admin_cmd_base();
+
+        ic_admin
+            .add_positional_argument("propose-to-bring-subnet-back-online-after-repairs")
+            .add_argument("subnet", subnet_id)
+            .add_argument(
+                SUMMARY_ARG,
+                quote(format!(
+                    "Bring subnet {subnet_id} back online after repairs",
+                )),
+            );
+
+        self.add_proposer_args(&mut ic_admin);
 
         ic_admin
     }
@@ -168,6 +195,7 @@ impl AdminHelper {
         subnet_id: SubnetId,
         checkpoint_height: Height,
         state_hash: String,
+        initial_dkg_subnet_id: Option<SubnetId>,
         chain_key_config: Option<(ChainKeyConfig, SubnetId)>,
         replacement_nodes: &[NodeId],
         registry_params: Option<RegistryParams>,
@@ -180,6 +208,10 @@ impl AdminHelper {
             .add_argument("subnet-index", subnet_id)
             .add_argument("height", checkpoint_height)
             .add_argument("state-hash", state_hash);
+
+        if let Some(initial_dkg_subnet_id) = initial_dkg_subnet_id {
+            ic_admin.add_argument("initial-dkg-subnet-id", initial_dkg_subnet_id);
+        }
 
         if let Some((config, subnet_id)) = chain_key_config {
             let key_requests = config
@@ -367,12 +399,12 @@ mod tests {
     const FAKE_REPLICA_VERSION: &str = "fake_replica_version";
 
     #[test]
-    fn get_halt_subnet_command_test() {
+    fn get_propose_to_take_subnet_offline_for_repairs_without_keys_command_test() {
         let result = fake_admin_helper()
-            .get_halt_subnet_command(
+            .get_propose_to_take_subnet_offline_for_repairs_command(
                 subnet_id_from_str(FAKE_SUBNET_ID_1),
-                /*is_halted=*/ true,
-                &["fake public key".to_string()],
+                &[],
+                &BTreeMap::new(),
             )
             .join(" ");
 
@@ -380,12 +412,77 @@ mod tests {
             result,
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
-            propose-to-update-subnet \
+            propose-to-take-subnet-offline-for-repairs \
             --subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
-            --test-neuron-proposer \
-            --is-halted true \
+            --summary \"Take subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe offline for recovery, updating readonly and write access ssh keys\" \
+            --test-neuron-proposer"
+        );
+    }
+
+    #[test]
+    fn get_propose_to_take_subnet_offline_for_repairs_with_readonly_key_command_test() {
+        let result = fake_admin_helper()
+            .get_propose_to_take_subnet_offline_for_repairs_command(
+                subnet_id_from_str(FAKE_SUBNET_ID_1),
+                &["fake public key".to_string()],
+                &BTreeMap::new(),
+            )
+            .join(" ");
+
+        assert_eq!(
+            result,
+            "/fake/ic/admin/dir/ic-admin \
+            --nns-url \"https://fake_nns_url.com:8080/\" \
+            propose-to-take-subnet-offline-for-repairs \
+            --subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
             --ssh-readonly-access \"fake public key\" \
-            --summary \"Halt subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe, for recovery and update ssh readonly access\""
+            --summary \"Take subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe offline for recovery, updating readonly and write access ssh keys\" \
+            --test-neuron-proposer"
+        );
+    }
+
+    #[test]
+    fn get_propose_to_take_subnet_offline_for_repairs_with_readonly_and_write_keys_command_test() {
+        let result = fake_admin_helper()
+            .get_propose_to_take_subnet_offline_for_repairs_command(
+                subnet_id_from_str(FAKE_SUBNET_ID_1),
+                &["fake public key".to_string()],
+                &BTreeMap::from([(
+                    node_id_from_str(FAKE_NODE_ID),
+                    vec!["fake write access public key".to_string()],
+                )]),
+            )
+            .join(" ");
+
+        assert_eq!(
+            result,
+            "/fake/ic/admin/dir/ic-admin \
+            --nns-url \"https://fake_nns_url.com:8080/\" \
+            propose-to-take-subnet-offline-for-repairs \
+            --subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
+            --ssh-readonly-access \"fake public key\" \
+            --ssh-node-state-write-access \"nqpqw-cp42a-rmdsx-fpui3-ncne5-kzq6o-m67an-w25cx-zu636-lcf2v-fqe:fake write access public key\" \
+            --summary \"Take subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe offline for recovery, updating readonly and write access ssh keys\" \
+            --test-neuron-proposer"
+        );
+    }
+
+    #[test]
+    fn get_propose_to_bring_subnet_back_online_after_repairs_command_test() {
+        let result = fake_admin_helper()
+            .get_propose_to_bring_subnet_back_online_after_repairs_command(subnet_id_from_str(
+                FAKE_SUBNET_ID_1,
+            ))
+            .join(" ");
+
+        assert_eq!(
+            result,
+            "/fake/ic/admin/dir/ic-admin \
+            --nns-url \"https://fake_nns_url.com:8080/\" \
+            propose-to-bring-subnet-back-online-after-repairs \
+            --subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
+            --summary \"Bring subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe back online after repairs\" \
+            --test-neuron-proposer"
         );
     }
 
@@ -446,6 +543,7 @@ mod tests {
                 Height::from(666),
                 "fake_state_hash".to_string(),
                 None,
+                None,
                 &[],
                 None,
                 UNIX_EPOCH + Duration::from_nanos(123456),
@@ -504,6 +602,7 @@ mod tests {
                 subnet_id_from_str(FAKE_SUBNET_ID_1),
                 Height::from(666),
                 "fake_state_hash".to_string(),
+                Some(subnet_id_from_str(FAKE_SUBNET_ID_2)),
                 Some((chain_key_config, subnet_id_from_str(FAKE_SUBNET_ID_2))),
                 &[node_id_from_str(FAKE_NODE_ID)],
                 Some(RegistryParams {
@@ -528,6 +627,7 @@ mod tests {
             --subnet-index gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
             --height 666 \
             --state-hash fake_state_hash \
+            --initial-dkg-subnet-id mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe \
             --initial-chain-key-configs-to-request '[\
                 {\"subnet_id\":\"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\",\"key_id\":\"ecdsa:Secp256k1:test_key_1\",\"pre_signatures_to_create_in_advance\":\"77\",\"max_queue_size\":\"30\"},\
                 {\"subnet_id\":\"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\",\"key_id\":\"schnorr:Bip340Secp256k1:test_key_2\",\"pre_signatures_to_create_in_advance\":\"12\",\"max_queue_size\":\"32\"},\

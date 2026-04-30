@@ -1,12 +1,13 @@
-use crate::{crypto_validate_dealing, payload_builder, utils};
+use self::payload_builder::create_early_remote_transcripts;
+use super::{crypto_validate_dealing, payload_builder, utils};
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{
     dkg::{DkgPayloadValidationError, DkgPool},
     validation::ValidationResult,
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateManager;
-use ic_logger::{ReplicaLogger, warn};
+use ic_interfaces_state_manager::StateReader;
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -31,7 +32,7 @@ pub fn validate_payload(
     dkg_pool: &dyn DkgPool,
     parent: Block,
     payload: &BlockPayload,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
     validation_context: &ValidationContext,
     metrics: &IntCounterVec,
     log: &ReplicaLogger,
@@ -65,9 +66,9 @@ pub fn validate_payload(
                 last_dkg_summary,
                 &parent,
                 registry_version,
-                state_manager,
+                state_reader,
                 validation_context,
-                ic_logger::replica_logger::no_op_logger(),
+                log.clone(),
             )?;
             if summary_payload.dkg != expected_summary {
                 return Err(InvalidDkgPayloadReason::MismatchedDkgSummary(
@@ -123,6 +124,9 @@ pub fn validate_payload(
                 &data_payload.dkg,
                 max_dealings_per_block,
                 &parent,
+                state_reader,
+                validation_context,
+                log,
                 metrics,
             )
         }
@@ -139,6 +143,9 @@ fn validate_dealings_payload(
     dealings: &DkgDataPayload,
     max_dealings_per_payload: usize,
     parent: &Block,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
+    validation_context: &ValidationContext,
+    log: &ReplicaLogger,
     metrics: &IntCounterVec,
 ) -> ValidationResult<DkgPayloadValidationError> {
     if dealings.start_height != parent.payload.as_ref().dkg_interval_start_height() {
@@ -193,6 +200,36 @@ fn validate_dealings_payload(
         crypto_validate_dealing(crypto, config, message)?;
     }
 
+    // If we have early transcripts, we compare them
+    if !dealings.transcripts_for_remote_subnets.is_empty() {
+        let expected_transcripts = create_early_remote_transcripts(
+            pool_reader,
+            crypto,
+            parent,
+            last_summary,
+            state_reader,
+            validation_context,
+            log.clone(),
+        )?;
+
+        if dealings.transcripts_for_remote_subnets != expected_transcripts {
+            warn!(
+                log,
+                "Failed to validate {} early remote DKG transcripts in data block payload at height {}",
+                dealings.transcripts_for_remote_subnets.len(),
+                parent.height.increment(),
+            );
+            return Err(InvalidDkgPayloadReason::InvalidEarlyNiDkgTranscripts.into());
+        }
+
+        info!(
+            log,
+            "Validated {} early remote DKG transcripts in data block payload at height {}",
+            dealings.transcripts_for_remote_subnets.len(),
+            parent.height.increment(),
+        );
+    }
+
     Ok(())
 }
 
@@ -203,7 +240,7 @@ mod tests {
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
     use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
-    use ic_crypto_test_utils_ni_dkg::dummy_dealing;
+    use ic_crypto_test_utils_ni_dkg::{dummy_dealing, dummy_transcript_for_tests};
     use ic_interfaces::{
         consensus_pool::ConsensusPool,
         dkg::ChangeAction,
@@ -226,6 +263,7 @@ mod tests {
             idkg,
         },
         crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        messages::CallbackId,
         time::UNIX_EPOCH,
     };
     use std::{
@@ -443,6 +481,101 @@ mod tests {
         );
     }
 
+    #[test]
+    fn validate_dealings_payload_when_invalid_early_remote_transcripts_present_fails_test() {
+        // Data payloads with invalid early/remote transcripts are rejected.
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let registry_version = 1;
+            let committee = [NODE_1, NODE_2, NODE_3];
+
+            let Dependencies {
+                crypto,
+                pool,
+                dkg_pool,
+                registry,
+                state_manager,
+                ..
+            } = dependencies_with_subnet_params(
+                pool_config.clone(),
+                SUBNET_1,
+                vec![(
+                    registry_version,
+                    SubnetRecordBuilder::from(&committee)
+                        .with_dkg_dealings_per_block(1)
+                        .build(),
+                )],
+            );
+
+            let mut parent = Block::from(pool.make_next_block());
+            parent.payload = Payload::new(
+                ic_types::crypto::crypto_hash,
+                BlockPayload::Data(DataPayload {
+                    batch: BatchPayload::default(),
+                    dkg: DkgDataPayload::new(Height::from(0), vec![]),
+                    idkg: idkg::Payload::default(),
+                }),
+            );
+
+            let context = ValidationContext {
+                registry_version: RegistryVersion::from(registry_version),
+                certified_height: Height::from(0),
+                time: ic_types::time::UNIX_EPOCH,
+            };
+
+            let dkg_data_with_remote_transcripts = DkgDataPayload {
+                start_height: Height::from(0),
+                messages: vec![],
+                transcripts_for_remote_subnets: vec![
+                    (
+                        NiDkgId {
+                            start_block_height: Height::from(0),
+                            dealer_subnet: SUBNET_1,
+                            target_subnet: NiDkgTargetSubnet::Local,
+                            dkg_tag: NiDkgTag::HighThreshold,
+                        },
+                        CallbackId::from(0),
+                        Err("dummy".to_string()),
+                    ),
+                    (
+                        NiDkgId {
+                            start_block_height: Height::from(0),
+                            dealer_subnet: SUBNET_1,
+                            target_subnet: NiDkgTargetSubnet::Local,
+                            dkg_tag: NiDkgTag::LowThreshold,
+                        },
+                        CallbackId::from(1),
+                        Ok(dummy_transcript_for_tests()),
+                    ),
+                ],
+            };
+
+            let block_payload = BlockPayload::Data(DataPayload {
+                batch: BatchPayload::default(),
+                dkg: dkg_data_with_remote_transcripts,
+                idkg: idkg::Payload::default(),
+            });
+
+            assert_eq!(
+                validate_payload(
+                    SUBNET_1,
+                    registry.as_ref(),
+                    crypto.as_ref(),
+                    &PoolReader::new(&pool),
+                    dkg_pool.read().unwrap().deref(),
+                    parent,
+                    &block_payload,
+                    state_manager.as_ref(),
+                    &context,
+                    &mock_metrics(),
+                    &no_op_logger(),
+                ),
+                Err(DkgPayloadValidationError::InvalidArtifact(
+                    InvalidDkgPayloadReason::InvalidEarlyNiDkgTranscripts
+                ))
+            );
+        })
+    }
+
     /// Configures all the dependencies and calls [`validate_payload`] with
     /// `dealings_to_validate` as an argument.
     #[allow(clippy::result_large_err)]
@@ -631,7 +764,8 @@ mod tests {
                 MetricsRegistry::new(),
                 no_op_logger(),
             );
-            let mut dkg_pool = DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+            let mut dkg_pool =
+                DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger(), dkg_summary.height);
             // Update start height
             let start_height = Height::new(10);
             dkg_pool.apply(vec![ChangeAction::Purge(start_height)]);

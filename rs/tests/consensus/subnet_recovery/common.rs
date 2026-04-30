@@ -29,17 +29,15 @@ Success::
 end::catalog[] */
 
 use crate::utils::{
-    AdminAndUserKeys, Cursor, assert_subnet_is_broken, break_nodes,
-    get_admin_keys_and_generate_readonly_keys, get_node_certification_share_height, halt_subnet,
-    local::app_subnet_recovery_local_cli_args, node_with_highest_certification_share_height,
-    remote_recovery, unhalt_subnet,
+    NodeHeights, READONLY_USERNAME, RECOVERY_USERNAME, SshKeys, assert_subnet_is_broken,
+    break_nodes, get_ssh_keys_for_user, halt_subnet, local::app_subnet_recovery_local_cli_args,
+    node_with_highest_cup_and_cert_share_heights, remote_recovery, unhalt_subnet,
 };
-use anyhow::bail;
 use canister_test::Canister;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
     node::{assert_node_is_assigned_with_ssh_session, assert_node_is_unassigned_with_ssh_session},
-    rw_message::{install_nns_and_check_progress, store_message},
+    rw_message::{install_nns_and_check_progress, store_message_with_retries},
     ssh_access::{disable_ssh_access_to_node, wait_until_authentication_is_granted},
     subnet::{
         assert_subnet_is_healthy, disable_chain_key_on_subnet, enable_chain_key_signing_on_subnet,
@@ -53,7 +51,7 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
-    RecoveryArgs,
+    NodeMetrics, RecoveryArgs,
     admin_helper::AdminHelper,
     app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs, StepType},
     get_node_metrics,
@@ -76,7 +74,7 @@ use std::{
 use std::{io::Read, time::Duration};
 use std::{io::Write, path::Path};
 
-const DKG_INTERVAL: u64 = 20;
+const DKG_INTERVAL: u64 = 49;
 const NNS_NODES: usize = 4;
 const APP_NODES: usize = 4;
 const UNASSIGNED_NODES: usize = 4;
@@ -87,11 +85,118 @@ const APP_NODES_LARGE: usize = 37;
 /// plus 14 as a safety margin
 const DKG_INTERVAL_LARGE: u64 = 4 * NNS_NODES_LARGE as u64 + 14;
 
+/// A very large DKG interval to test recovery when the subnet stalls during its first DKG
+/// interval.
+const DKG_INTERVAL_HUGE: u64 = 999;
+
 const IC_ADMIN_REMOTE_PATH: &str = "/var/lib/admin/ic-admin";
 const GUEST_LAUNCH_MEASUREMENTS_PATH: &str = "guest_launch_measurements.json";
 
 pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const PRE_SIGNATURES_TO_CREATE_IN_ADVANCE: u32 = 5;
+
+struct SetupConfig {
+    nns_nodes: usize,
+    source_nodes: usize,
+    app_nodes: usize,
+    unassigned_nodes: usize,
+    nns_dkg_interval: u64,
+    app_dkg_interval: u64,
+}
+
+impl SetupConfig {
+    fn new() -> Self {
+        Self {
+            nns_nodes: NNS_NODES,
+            source_nodes: APP_NODES,
+            app_nodes: APP_NODES,
+            unassigned_nodes: 0,
+            nns_dkg_interval: DKG_INTERVAL,
+            app_dkg_interval: DKG_INTERVAL,
+        }
+    }
+
+    fn with_nns_nodes(mut self, nns_nodes: usize) -> Self {
+        assert!(nns_nodes > 0, "Subnets must have at least one node");
+
+        self.nns_nodes = nns_nodes;
+        self
+    }
+
+    // Because of the inter-dependency with `with_chain_keys`, this method needs to be called before
+    // it.
+    fn with_app_nodes(mut self, app_nodes: usize) -> Self {
+        assert!(app_nodes > 0, "Subnets must have at least one node");
+        assert!(
+            self.app_nodes > 0,
+            "`with_app_nodes` should be called before `with_chain_keys`"
+        );
+
+        self.source_nodes = app_nodes;
+        self.app_nodes = app_nodes;
+        self
+    }
+
+    // Because of the inter-dependency with `with_app_nodes`, this method needs to be called after
+    // it.
+    fn with_chain_keys(mut self) -> Self {
+        self.unassigned_nodes += self.app_nodes;
+        self.app_nodes = 0;
+        self
+    }
+
+    fn add_unassigned_nodes(mut self, unassigned_nodes: usize) -> Self {
+        self.unassigned_nodes += unassigned_nodes;
+        self
+    }
+
+    fn with_nns_dkg_interval(mut self, dkg_interval: u64) -> Self {
+        self.nns_dkg_interval = dkg_interval;
+        self
+    }
+
+    fn with_app_dkg_interval(mut self, dkg_interval: u64) -> Self {
+        self.app_dkg_interval = dkg_interval;
+        self
+    }
+}
+
+pub fn setup_large_chain_keys(env: TestEnv) {
+    let config = SetupConfig::new()
+        .with_nns_nodes(NNS_NODES_LARGE)
+        .with_app_nodes(APP_NODES_LARGE)
+        .with_chain_keys()
+        .with_nns_dkg_interval(DKG_INTERVAL_LARGE)
+        .with_app_dkg_interval(DKG_INTERVAL_LARGE);
+    setup(env, config);
+}
+
+pub fn setup_same_nodes_huge_dkg_interval(env: TestEnv) {
+    let config = SetupConfig::new().with_app_dkg_interval(DKG_INTERVAL_HUGE);
+    setup(env, config);
+}
+
+pub fn setup_same_nodes_chain_keys(env: TestEnv) {
+    let config = SetupConfig::new().with_chain_keys();
+    setup(env, config);
+}
+
+pub fn setup_failover_nodes_chain_keys(env: TestEnv) {
+    let config = SetupConfig::new()
+        .with_chain_keys()
+        .add_unassigned_nodes(UNASSIGNED_NODES);
+    setup(env, config);
+}
+
+pub fn setup_same_nodes(env: TestEnv) {
+    let config = SetupConfig::new();
+    setup(env, config);
+}
+
+pub fn setup_failover_nodes(env: TestEnv) {
+    let config = SetupConfig::new().add_unassigned_nodes(UNASSIGNED_NODES);
+    setup(env, config);
+}
 
 /// Setup an IC with the given number of unassigned nodes and
 /// an app subnet with the given number of nodes
@@ -112,12 +217,12 @@ fn setup(env: TestEnv, cfg: SetupConfig) {
     let mut ic = InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
-                .with_dkg_interval_length(Height::from(cfg.dkg_interval))
+                .with_dkg_interval_length(Height::from(cfg.nns_dkg_interval))
                 .add_nodes(cfg.nns_nodes),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_dkg_interval_length(Height::from(cfg.dkg_interval))
+                .with_dkg_interval_length(Height::from(cfg.app_dkg_interval))
                 .add_nodes(cfg.source_nodes)
                 .with_chain_key_config(ChainKeyConfig {
                     key_configs,
@@ -130,7 +235,7 @@ fn setup(env: TestEnv, cfg: SetupConfig) {
     if cfg.app_nodes > 0 {
         ic = ic.add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_dkg_interval_length(Height::from(cfg.dkg_interval))
+                .with_dkg_interval_length(Height::from(cfg.app_dkg_interval))
                 .add_nodes(cfg.app_nodes),
         );
     }
@@ -140,80 +245,8 @@ fn setup(env: TestEnv, cfg: SetupConfig) {
     install_nns_and_check_progress(env.topology_snapshot());
 }
 
-struct SetupConfig {
-    nns_nodes: usize,
-    source_nodes: usize,
-    app_nodes: usize,
-    unassigned_nodes: usize,
-    dkg_interval: u64,
-}
-
-pub fn setup_large_chain_keys(env: TestEnv) {
-    setup(
-        env,
-        SetupConfig {
-            nns_nodes: NNS_NODES_LARGE,
-            source_nodes: APP_NODES_LARGE,
-            app_nodes: 0,
-            unassigned_nodes: APP_NODES_LARGE,
-            dkg_interval: DKG_INTERVAL_LARGE,
-        },
-    );
-}
-
-pub fn setup_same_nodes_chain_keys(env: TestEnv) {
-    setup(
-        env,
-        SetupConfig {
-            nns_nodes: NNS_NODES,
-            source_nodes: APP_NODES,
-            app_nodes: 0,
-            unassigned_nodes: APP_NODES,
-            dkg_interval: DKG_INTERVAL,
-        },
-    );
-}
-
-pub fn setup_failover_nodes_chain_keys(env: TestEnv) {
-    setup(
-        env,
-        SetupConfig {
-            nns_nodes: NNS_NODES,
-            source_nodes: APP_NODES,
-            app_nodes: 0,
-            unassigned_nodes: APP_NODES + UNASSIGNED_NODES,
-            dkg_interval: DKG_INTERVAL,
-        },
-    );
-}
-
-pub fn setup_same_nodes(env: TestEnv) {
-    setup(
-        env,
-        SetupConfig {
-            nns_nodes: NNS_NODES,
-            source_nodes: APP_NODES,
-            app_nodes: APP_NODES,
-            unassigned_nodes: 0,
-            dkg_interval: DKG_INTERVAL,
-        },
-    );
-}
-
-pub fn setup_failover_nodes(env: TestEnv) {
-    setup(
-        env,
-        SetupConfig {
-            nns_nodes: NNS_NODES,
-            source_nodes: APP_NODES,
-            app_nodes: APP_NODES,
-            unassigned_nodes: UNASSIGNED_NODES,
-            dkg_interval: DKG_INTERVAL,
-        },
-    );
-}
-
-enum CupCorruption {
+#[derive(Debug)]
+pub enum CupCorruption {
     NotCorrupted,
     CorruptedWithValidNiDkgId,
     CorruptedIncludingInvalidNiDkgId,
@@ -240,114 +273,127 @@ struct TestConfig {
     subnet_size: usize,
     upgrade: bool,
     chain_key: bool,
+    remote_initial_dkg: bool,
     corrupt_cup: CupCorruption,
     local_recovery: bool,
+    provision_write_access: bool,
+}
+
+impl TestConfig {
+    fn new() -> Self {
+        Self {
+            subnet_size: APP_NODES,
+            upgrade: true,
+            chain_key: false,
+            remote_initial_dkg: false,
+            corrupt_cup: CupCorruption::NotCorrupted,
+            local_recovery: false,
+            provision_write_access: false,
+        }
+    }
+
+    fn with_subnet_size(mut self, subnet_size: usize) -> Self {
+        self.subnet_size = subnet_size;
+        self
+    }
+
+    fn with_no_upgrade(mut self) -> Self {
+        self.upgrade = false;
+        self
+    }
+
+    fn with_chain_key(mut self) -> Self {
+        self.chain_key = true;
+        self
+    }
+
+    fn with_remote_initial_dkg(mut self) -> Self {
+        self.remote_initial_dkg = true;
+        self
+    }
+
+    fn with_corrupt_cup(mut self, corrupt_cup: CupCorruption) -> Self {
+        self.corrupt_cup = corrupt_cup;
+        self
+    }
+
+    fn with_local_recovery(mut self) -> Self {
+        self.local_recovery = true;
+        self
+    }
+
+    fn with_provision_write_access(mut self) -> Self {
+        self.provision_write_access = true;
+        self
+    }
 }
 
 pub fn test_with_chain_keys(env: TestEnv) {
-    app_subnet_recovery_test(
-        env,
-        TestConfig {
-            subnet_size: APP_NODES,
-            upgrade: true,
-            chain_key: true,
-            corrupt_cup: CupCorruption::NotCorrupted,
-            local_recovery: false,
-        },
-    );
+    let config = TestConfig::new().with_chain_key();
+    app_subnet_recovery_test(env, config);
 }
 
-pub fn test_without_chain_keys(env: TestEnv) {
-    // Test the unrecoverable corrupt CUP case when recovering on failover nodes because nodes will
-    // not be able to see the recovery CUP in the registry
-    let corrupt_cup = if env.topology_snapshot().unassigned_nodes().count() > 0 {
-        CupCorruption::CorruptedIncludingInvalidNiDkgId
-    } else {
-        CupCorruption::NotCorrupted
-    };
-    app_subnet_recovery_test(
-        env,
-        TestConfig {
-            subnet_size: APP_NODES,
-            upgrade: true,
-            chain_key: false,
-            corrupt_cup,
-            local_recovery: false,
-        },
-    );
+pub fn test_with_chain_keys_and_remote_initial_dkg(env: TestEnv) {
+    let config = TestConfig::new().with_chain_key().with_remote_initial_dkg();
+    app_subnet_recovery_test(env, config);
 }
 
-pub fn test_no_upgrade_with_chain_keys(env: TestEnv) {
-    // Test the recoverable corrupt CUP case only when recovering an app subnet with chain keys
-    // without upgrade
-    let corrupt_cup = if env.topology_snapshot().unassigned_nodes().count() > 0 {
-        // A corrupted CUP whose NiDkgId can still be parsed can tell nodes to which subnet they
-        // belong to, see the recovery CUP, and thus allow the recovery on the same nodes.
-        CupCorruption::CorruptedWithValidNiDkgId
-    } else {
-        CupCorruption::NotCorrupted
-    };
-    app_subnet_recovery_test(
-        env,
-        TestConfig {
-            subnet_size: APP_NODES,
-            upgrade: false,
-            chain_key: true,
-            corrupt_cup,
-            local_recovery: false,
-        },
-    );
+pub fn test_without_chain_keys(env: TestEnv, corrupt_cup: CupCorruption) {
+    let config = TestConfig::new().with_corrupt_cup(corrupt_cup);
+    app_subnet_recovery_test(env, config);
 }
 
-pub fn test_large_with_chain_keys(env: TestEnv) {
-    app_subnet_recovery_test(
-        env,
-        TestConfig {
-            subnet_size: APP_NODES_LARGE,
-            upgrade: false,
-            chain_key: true,
-            corrupt_cup: CupCorruption::NotCorrupted,
-            local_recovery: false,
-        },
-    );
+pub fn test_no_upgrade_with_chain_keys(env: TestEnv, corrupt_cup: CupCorruption) {
+    let config = TestConfig::new()
+        .with_no_upgrade()
+        .with_chain_key()
+        .with_corrupt_cup(corrupt_cup);
+    app_subnet_recovery_test(env, config);
+}
+
+pub fn test_large_no_upgrade_with_chain_keys(env: TestEnv) {
+    let config = TestConfig::new()
+        .with_subnet_size(APP_NODES_LARGE)
+        .with_no_upgrade()
+        .with_chain_key();
+    app_subnet_recovery_test(env, config);
 }
 
 pub fn test_no_upgrade_without_chain_keys(env: TestEnv) {
-    app_subnet_recovery_test(
-        env,
-        TestConfig {
-            subnet_size: APP_NODES,
-            upgrade: false,
-            chain_key: false,
-            corrupt_cup: CupCorruption::NotCorrupted,
-            local_recovery: false,
-        },
-    );
+    let config = TestConfig::new().with_no_upgrade();
+    app_subnet_recovery_test(env, config);
 }
 
 pub fn test_no_upgrade_without_chain_keys_local(env: TestEnv) {
-    app_subnet_recovery_test(
-        env,
-        TestConfig {
-            subnet_size: APP_NODES,
-            upgrade: false,
-            chain_key: false,
-            corrupt_cup: CupCorruption::NotCorrupted,
-            local_recovery: true,
-        },
-    );
+    let config = TestConfig::new().with_no_upgrade().with_local_recovery();
+    app_subnet_recovery_test(env, config);
+}
+
+pub fn test_no_upgrade_provision_write_access(env: TestEnv) {
+    let config = TestConfig::new()
+        .with_no_upgrade()
+        .with_provision_write_access();
+    app_subnet_recovery_test(env, config);
 }
 
 fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let logger = env.logger();
 
-    let AdminAndUserKeys {
-        ssh_admin_priv_key_path,
-        admin_auth,
-        ssh_user_priv_key_path: ssh_readonly_priv_key_path,
-        ssh_user_pub_key: ssh_readonly_pub_key,
-        ..
-    } = get_admin_keys_and_generate_readonly_keys(&env);
+    let SshKeys {
+        ssh_priv_key_path: ssh_admin_priv_key_path,
+        auth: admin_auth,
+        ssh_pub_key: _,
+    } = get_ssh_keys_for_user(&env, SSH_USERNAME);
+    let SshKeys {
+        ssh_priv_key_path: ssh_readonly_priv_key_path,
+        auth: _,
+        ssh_pub_key: ssh_readonly_pub_key,
+    } = get_ssh_keys_for_user(&env, READONLY_USERNAME);
+    let SshKeys {
+        ssh_priv_key_path: ssh_recovery_priv_key_path,
+        auth: _,
+        ssh_pub_key: ssh_recovery_pub_key,
+    } = get_ssh_keys_for_user(&env, RECOVERY_USERNAME);
     // We can deploy the read-only key only if the CUP is not corrupted in a way that prevents
     // nodes from determining their subnet ID.
     let ssh_readonly_pub_key_deployed = cfg
@@ -438,19 +484,19 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         })
         .expect("there is no application subnet");
     let mut app_nodes = app_subnet.nodes();
-    let download_state_node = app_nodes.next().expect("there is no application node");
+    let app_node = app_nodes.next().expect("there is no application node");
     info!(
         logger,
         "Selected random application subnet node to download the state from: {} ({:?})",
-        download_state_node.node_id,
-        download_state_node.get_ip_addr()
+        app_node.node_id,
+        app_node.get_ip_addr()
     );
 
     info!(logger, "Ensure app subnet is functional");
     let init_msg = "subnet recovery works!";
-    let app_can_id = store_message(
-        &download_state_node.get_public_url(),
-        download_state_node.effective_canister_id(),
+    let app_can_id = store_message_with_retries(
+        &app_node.get_public_url(),
+        app_node.effective_canister_id(),
         init_msg,
         &logger,
     );
@@ -525,77 +571,36 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         let f = (cfg.subnet_size - 1) / 3;
         break_nodes(&app_nodes.take(f + 1).collect::<Vec<_>>(), &logger);
     } else {
-        halt_subnet(
-            &admin_helper,
-            &download_state_node,
-            app_subnet_id,
-            &[],
-            &logger,
-        )
+        halt_subnet(&admin_helper, &app_node, app_subnet_id, &logger);
     }
-    assert_subnet_is_broken(
-        &download_state_node.get_public_url(),
-        app_can_id,
-        msg,
-        true,
-        &logger,
+    assert_subnet_is_broken(&app_node.get_public_url(), app_can_id, msg, true, &logger);
+
+    let RecoveryParameters {
+        download_pool_node,
+        download_state_node,
+        upload_node,
+        admin_nodes,
+        replay_height,
+        download_state_height,
+    } = get_recovery_parameters(
+        &env,
+        cfg.corrupt_cup.can_determine_subnet_id(),
+        cfg.provision_write_access,
+        /* failover_nodes_recovery=*/
+        env.topology_snapshot().unassigned_nodes().next().is_some(),
+        &app_subnet,
+        &app_node,
     );
-
-    // If there are unassigned nodes, we are in a failover nodes scenario. Otherwise, just use the
-    // same node that we downloaded the state from.
-    let upload_node = env
-        .topology_snapshot()
-        .unassigned_nodes()
-        .next()
-        .unwrap_or_else(|| download_state_node.clone());
-
-    let (download_pool_node, replay_height, admin_nodes) = if ssh_readonly_pub_key_deployed
-        .is_some()
-    {
-        // If we can deploy read-only access to the subnet, then we can download the consensus
-        // poll from the node with highest certification, and we only need admin access on the
-        // upload node to upload the state
-
-        let (download_pool_node, highest_cert_share) =
-            node_with_highest_certification_share_height(&app_subnet, &logger);
-        info!(
-            logger,
-            "Selected node {} ({:?}) as download pool with certification share height {}",
-            download_pool_node.node_id,
-            download_pool_node.get_ip_addr(),
-            highest_cert_share,
-        );
-        let admins = vec![&upload_node];
-
-        (download_pool_node, highest_cert_share, admins)
-    } else {
-        // If we cannot deploy read-only access to the subnet, this would mean that the CUP is
-        // corrupted on enough nodes to stall the subnet which, in practice, should happen only
-        // during upgrades. In that case, all nodes stalled at the same height (the upgrade height)
-        // and the node with admin access (if not lagging behind) will have the highest
-        // certification height (and thus state), which can be used to download both the consensus
-        // pool and the state. Though, this means that this node requires admin access to read them
-        // without a readonly key.
-        //
-        // Note: inside this system test, it is not the case that all nodes stalled at the same
-        // height, and it is not the case that they stalled at an upgrade height. We would normally
-        // not need to replay anything (because it would be an upgrade height), but we need here,
-        // and since we do not break `download_state_node`, we know that it will have the highest
-        // certification height available in the subnet.
-
-        let download_pool_node = download_state_node.clone();
-        info!(
-            logger,
-            "Using node {} ({:?}) both as download pool and download state node as read-only access cannot be deployed",
-            download_pool_node.node_id,
-            download_pool_node.get_ip_addr(),
-        );
-        let node_cert_share =
-            get_node_certification_share_height(&download_state_node, &logger).unwrap();
-        let admins = vec![&upload_node, &download_state_node];
-
-        (download_pool_node, node_cert_share, admins)
-    };
+    info!(
+        logger,
+        "Using node {} to download the consensus pool, node {} to download the state, and node {} to upload the state. \
+        Admin nodes: {:?}. Replaying until height {}.",
+        download_pool_node.node_id,
+        download_state_node.node_id,
+        upload_node.node_id,
+        admin_nodes.iter().map(|n| n.node_id).collect::<Vec<_>>(),
+        replay_height,
+    );
 
     if cfg.corrupt_cup.is_corrupted() {
         info!(logger, "Corrupting the latest CUP on all nodes");
@@ -651,7 +656,6 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         admin_key_file: Some(ssh_admin_priv_key_path),
         test_mode: true,
         skip_prompts: true,
-        use_local_binaries: cfg.local_recovery,
     };
 
     // Unlike during a production recovery using the CLI, here we already know all parameters ahead
@@ -666,12 +670,21 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         replay_until_height: Some(replay_height),
         readonly_pub_key: ssh_readonly_pub_key_deployed,
         readonly_key_file: Some(ssh_readonly_priv_key_path),
+        write_node_id_and_pub_key: cfg
+            .provision_write_access
+            .then_some((upload_node.node_id, ssh_recovery_pub_key)),
+        recovery_key_file: Some(ssh_recovery_priv_key_path),
         download_pool_node: Some(download_pool_node.get_ip_addr()),
         download_state_method: Some(DataLocation::Remote(download_state_node.get_ip_addr())),
         keep_downloaded_state: Some(cfg.chain_key),
+        // If the state height to download was computed to be 0 (i.e. the subnet stalled in its
+        // first DKG interval), there is no checkpoint yet and we should actually not provide a
+        // height to the recovery tool
+        download_state_height: (download_state_height != 0).then_some(download_state_height),
         upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
         wait_for_cup_node: Some(upload_node.get_ip_addr()),
         chain_key_subnet_id: cfg.chain_key.then_some(source_subnet_id),
+        initial_dkg_subnet_id: cfg.remote_initial_dkg.then_some(source_subnet_id),
         next_step: None,
         // Skip validating the output if the CUP is corrupted, as in this case no replica will be
         // running to compare the heights to.
@@ -876,16 +889,12 @@ fn corrupt_latest_cup(
 
     info!(
         logger,
-        "Setting journal cursor on node {:?}",
+        "Getting journal cursor on node {:?}",
         app_node.get_ip_addr()
     );
-    let message_str = app_node
-        .block_on_bash_script_from_session(
-            &session,
-            "journalctl -n1 -o json --output-fields='__CURSOR'",
-        )
-        .expect("journal message");
-    let message: Cursor = serde_json::from_str(&message_str).expect("JSON journal message");
+    let journal_streamer = JournalStreamer::new(session.clone())
+        .from_now()
+        .expect("Failed to create journal streamer");
 
     info!(logger, "Reading CUP from node {:?}", app_node.get_ip_addr());
     let (mut channel, _) = session.scp_recv(Path::new(CUP_PATH)).unwrap();
@@ -911,6 +920,15 @@ fn corrupt_latest_cup(
     };
     let bytes = corrupted_proto_cup.encode_to_vec();
 
+    // Stop all replicas first to prevent restarted nodes from fetching valid CUPs
+    // from peers that haven't been corrupted yet.
+    for node in subnet.nodes() {
+        info!(logger, "Stopping replica on node {:?}", node.get_ip_addr());
+        node.block_on_bash_script("sudo systemctl stop ic-replica")
+            .expect("stop replica");
+    }
+
+    // Upload corrupted CUPs to all nodes.
     for node in subnet.nodes() {
         info!(
             logger,
@@ -919,49 +937,51 @@ fn corrupt_latest_cup(
             node.get_ip_addr()
         );
         let session = node.block_on_ssh_session().unwrap();
-        app_node
-            .block_on_bash_script_from_session(
-                &session,
-                &format!("sudo touch {NEW_CUP_PATH}; sudo chmod a+rw {NEW_CUP_PATH}"),
-            )
-            .expect("touch");
+        node.block_on_bash_script_from_session(
+            &session,
+            &format!("sudo touch {NEW_CUP_PATH}; sudo chmod a+rw {NEW_CUP_PATH}"),
+        )
+        .expect("touch");
+
         let mut channel = session
             .scp_send(Path::new(NEW_CUP_PATH), 0o666, bytes.len() as u64, None)
             .unwrap();
         channel.write_all(&bytes).unwrap();
+        // Ensure the SCP upload has fully completed before moving the CUP file.
+        channel.flush().unwrap();
+        channel.send_eof().unwrap();
+        channel.wait_eof().unwrap();
+        channel.close().unwrap();
+        channel.wait_close().unwrap();
 
-        info!(logger, "Restarting node {:?}", node.get_ip_addr());
-        app_node
-            .block_on_bash_script_from_session(
-                &session,
-                &format!("sudo mv {NEW_CUP_PATH} {CUP_PATH}; sudo systemctl restart ic-replica"),
-            )
-            .expect("restart");
+        node.block_on_bash_script_from_session(
+            &session,
+            &format!("sudo mv {NEW_CUP_PATH} {CUP_PATH}"),
+        )
+        .expect("replace CUP");
     }
 
-    ic_system_test_driver::retry_with_msg!(
-        "check if cup is corrupted",
-        logger.clone(),
-        secs(120),
-        secs(10),
-        || {
-            let res = app_node.block_on_bash_script_from_session(
-                &session,
-                &format!(
-                    "journalctl --after-cursor='{}' | grep -c 'Failed to deserialize CatchUpPackage'",
-                    message.cursor
-                ),
-            );
-            if res.is_ok_and( |r| r.trim().parse::<i32>().unwrap() > 0) {
-                Ok(())
-            } else {
-                bail!("Did not find log entry that cup is corrupted.")
-            }
-        }
-    )
-    .expect("Failed to detect broken subnet.");
+    // Restart ic-replica on all nodes with the corrupted CUPs.
+    for node in subnet.nodes() {
+        info!(
+            logger,
+            "Starting ic-replica on node {:?}",
+            node.get_ip_addr()
+        );
+        node.block_on_bash_script("sudo systemctl start ic-replica")
+            .expect("start replica");
+    }
 
-    unhalt_subnet(admin_helper, subnet.subnet_id, &[], logger);
+    assert!(
+        journal_streamer
+            .follow()
+            .max_lines(1)
+            .contains("Failed to deserialize CatchUpPackage")
+            .unwrap_or_default(),
+        "Did not find log entry that CUP is corrupted"
+    );
+
+    unhalt_subnet(admin_helper, subnet.subnet_id, logger);
 }
 
 /// Print ID and IP of the source subnet, the first app subnet found that is not the source, and all
@@ -1086,4 +1106,125 @@ fn enable_chain_key_on_new_subnet(
 
     assert_eq!(app_keys, source_keys);
     app_keys
+}
+
+struct RecoveryParameters {
+    download_pool_node: IcNodeSnapshot,
+    download_state_node: IcNodeSnapshot,
+    upload_node: IcNodeSnapshot,
+    admin_nodes: Vec<IcNodeSnapshot>,
+    replay_height: u64,
+    download_state_height: u64,
+}
+
+fn get_recovery_parameters(
+    env: &TestEnv,
+    can_deploy_readonly_access: bool,
+    provisioning_write_access: bool,
+    failover_nodes_recovery: bool,
+    app_subnet: &SubnetSnapshot,
+    app_node: &IcNodeSnapshot,
+) -> RecoveryParameters {
+    let logger = env.logger();
+
+    let mut parameters = if can_deploy_readonly_access {
+        // If we can deploy read-only access to the subnet, then:
+        //   - We can download the consensus pool from the node with highest certification and
+        //     CUP share height.
+        //   - The node where we download the state from must have a last manifest height at
+        //     least as high as the highest CUP height to be able to replay correctly.
+        //   - The upload node is either an unassigned node (in case of failover nodes recovery)
+        //     or the same as the download state node (in case of same nodes recovery).
+        //   - The admin nodes are only the upload node.
+
+        let NodeHeights {
+            node: download_pool_node,
+            cup: highest_cup,
+            cert_share: highest_cert_share,
+        } = node_with_highest_cup_and_cert_share_heights(app_subnet, &logger);
+
+        let download_state_node = app_subnet
+            .nodes()
+            .filter_map(|n| {
+                block_on(get_node_metrics(&logger, &n.get_ip_addr()))
+                    .map(|m| (n, m.manifest_height.get()))
+            })
+            .find(|(_node, manifest_height)| *manifest_height >= highest_cup)
+            .map(|(node, _)| node)
+            .expect("No node found with last manifest height >= highest CUP height");
+
+        let upload_node = if failover_nodes_recovery {
+            env.topology_snapshot()
+                .unassigned_nodes()
+                .next()
+                .expect("To do a failover nodes recovery we must have unassigned nodes")
+        } else {
+            download_state_node.clone()
+        };
+
+        let admin_nodes = vec![upload_node.clone()];
+
+        RecoveryParameters {
+            download_pool_node,
+            download_state_node,
+            upload_node,
+            admin_nodes,
+            replay_height: highest_cert_share,
+            download_state_height: highest_cup,
+        }
+    } else {
+        // If we cannot deploy read-only access to the subnet, this would mean that the CUP is
+        // corrupted on enough nodes to stall the subnet which, in practice, should happen only
+        // during upgrades. In that case, all nodes stalled at the same height (the upgrade height)
+        // and the node with admin access (if not lagging behind) will have the highest
+        // certification height (and thus state), which can be used to download both the consensus
+        // pool and the state. Though, this means that this node requires admin access to read them
+        // without a readonly key.
+        // Note: inside this system test, it is not the case that all nodes stalled at the same
+        // height, and it is not the case that they stalled at an upgrade height. We would normally
+        // not need to replay anything (because it would be an upgrade height), but we need here,
+        // and since we do not break `app_node`, we know that it will have the highest
+        // certification height available in the subnet.
+
+        let download_pool_node = app_node.clone();
+
+        let download_state_node = download_pool_node.clone();
+
+        let upload_node = if failover_nodes_recovery {
+            env.topology_snapshot()
+                .unassigned_nodes()
+                .next()
+                .expect("To do a failover nodes recovery we must have unassigned nodes")
+        } else {
+            download_state_node.clone()
+        };
+
+        let admin_nodes = vec![upload_node.clone(), download_state_node.clone()];
+
+        let NodeMetrics {
+            certification_share_height: highest_cert_share,
+            catch_up_package_height: highest_cup,
+            ..
+        } = block_on(get_node_metrics(
+            &logger,
+            &download_state_node.get_ip_addr(),
+        ))
+        .expect("Could not fetch metrics from download node");
+
+        RecoveryParameters {
+            download_pool_node,
+            download_state_node,
+            upload_node,
+            admin_nodes,
+            replay_height: highest_cert_share.get(),
+            download_state_height: highest_cup.get(),
+        }
+    };
+
+    // If we provision write access to a node, there are no admin nodes in the subnet
+    if provisioning_write_access {
+        parameters.admin_nodes = vec![];
+    }
+
+    parameters
 }

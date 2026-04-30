@@ -261,6 +261,7 @@ message AbridgedNeuron {
   optional Visibility visibility = 23;
   optional uint64 voting_power_refreshed_timestamp_seconds = 24;
   optional uint32 recent_ballots_next_entry_index = 25;
+  uint64 eight_year_gang_bonus_base_e8s = 26;
 
   reserved 1;
   reserved "id";
@@ -495,6 +496,15 @@ enum NnsFunction {
 
   // Take subnet offline or bring back online. Used as part of subnet recovery.
   NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL = 55;
+
+  // The proposal requests to split a subnet.
+  NNS_FUNCTION_SPLIT_SUBNET = 56;
+
+  // Delete a subnet. The subnet record, catch-up package, threshold signing key
+  // and routing table entries are removed from the registry, and the subnet's
+  // nodes become unassigned.
+  // Currently limited to CloudEngine subnets.
+  NNS_FUNCTION_DELETE_SUBNET = 57;
 }
 
 // Payload of a proposal that calls a function on another NNS
@@ -711,6 +721,8 @@ message Proposal {
     TakeCanisterSnapshot take_canister_snapshot = 32;
     // Load a canister snapshot.
     LoadCanisterSnapshot load_canister_snapshot = 33;
+    // Create a canister in a (possibly non-NNS) subnet and install code into it.
+    CreateCanisterAndInstallCode create_canister_and_install_code = 34;
   }
 }
 
@@ -1235,6 +1247,30 @@ message ProposalData {
   // field should not be set in normal circumstances, and if it is set, it is an indicator that a
   // bug might have caused the voting power spike.
   optional uint64 previous_ballots_timestamp_seconds = 24;
+
+  // When an adopted proposal has been executed successfully, this may contain
+  // a value produced by the execution (e.g. the ID of a newly created canister).
+  // This is the dual of failure_reason: that field is populated on failure,
+  // this field is populated on success.
+  optional SuccessfulProposalExecutionValue success_value = 25;
+}
+
+// A value produced by successfully executing a proposal.
+// Not all proposal types produce a value; for those that don't, this field
+// is simply not set.
+message SuccessfulProposalExecutionValue {
+  oneof proposal_type {
+    CreateCanisterAndInstallCodeOk create_canister_and_install_code = 1;
+    TakeCanisterSnapshotOk take_canister_snapshot = 2;
+  }
+}
+
+message CreateCanisterAndInstallCodeOk {
+  ic_base_types.pb.v1.PrincipalId canister_id = 1;
+}
+
+message TakeCanisterSnapshotOk {
+  bytes snapshot_id = 1;
 }
 
 // This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
@@ -1878,6 +1914,9 @@ message InstallCode {
   optional CanisterInstallMode install_mode = 2;
 
   // The wasm module to install. required.
+  // If we add support for chunked WASMs later, the WasmModule type should
+  // probably be used in place of this field in order to be consistent with
+  // CreateCanisterAndInstallCode.
   optional bytes wasm_module = 3;
   // The arg to pass to the canister. Optional.
   optional bytes arg = 4;
@@ -1903,10 +1942,9 @@ message StopOrStartCanister {
   optional CanisterAction action = 2;
 }
 
-message UpdateCanisterSettings {
-  // The target canister ID to call update_settings on. Required.
-  optional ic_base_types.pb.v1.PrincipalId canister_id = 1;
-
+// The CanisterSettings struct as defined in the ic-interface-spec
+// https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid.
+message CanisterSettings {
   // Log visibility of a canister.
   enum LogVisibility {
     LOG_VISIBILITY_UNSPECIFIED = 0;
@@ -1916,24 +1954,35 @@ message UpdateCanisterSettings {
     LOG_VISIBILITY_PUBLIC = 2;
   }
 
-  // The controllers of the canister. We use a message to wrap the repeated field because prost does
+  // Snapshot visibility of a canister.
+  enum SnapshotVisibility {
+    SNAPSHOT_VISIBILITY_UNSPECIFIED = 0;
+    // Snapshots are visible to the controllers of the dapp canister.
+    SNAPSHOT_VISIBILITY_CONTROLLERS = 1;
+    // Snapshots are visible to the public.
+    SNAPSHOT_VISIBILITY_PUBLIC = 2;
+  }
+
+  // We used a message to wrap the repeated field because prost does
   // not generate `Option<Vec<T>>` for repeated fields.
   message Controllers {
     // The controllers of the canister.
     repeated ic_base_types.pb.v1.PrincipalId controllers = 1;
   }
 
-  // The CanisterSettings struct as defined in the ic-interface-spec
-  // https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid.
-  message CanisterSettings {
-    optional Controllers controllers = 1;
-    optional uint64 compute_allocation = 2;
-    optional uint64 memory_allocation = 3;
-    optional uint64 freezing_threshold = 4;
-    optional LogVisibility log_visibility = 5;
-    optional uint64 wasm_memory_limit = 6;
-    optional uint64 wasm_memory_threshold = 7;
-  }
+  optional Controllers controllers = 1;
+  optional uint64 compute_allocation = 2;
+  optional uint64 memory_allocation = 3;
+  optional uint64 freezing_threshold = 4;
+  optional LogVisibility log_visibility = 5;
+  optional uint64 wasm_memory_limit = 6;
+  optional uint64 wasm_memory_threshold = 7;
+  optional SnapshotVisibility snapshot_visibility = 8;
+}
+
+message UpdateCanisterSettings {
+  // The target canister ID to call update_settings on. Required.
+  optional ic_base_types.pb.v1.PrincipalId canister_id = 1;
 
   // The settings to update. Required.
   optional CanisterSettings settings = 2;
@@ -1957,6 +2006,49 @@ message LoadCanisterSnapshot {
 
   // The ID of the snapshot to load.
   bytes snapshot_id = 2;
+}
+
+// A WASM module. Currently only supports inlined WASMs.
+message WasmModule {
+  oneof content {
+    bytes inlined = 1;
+    // Chunked WASMs could be added here as another oneof variant.
+  }
+  // Derived from the `content` field. Cached here to speed up responses by
+  // avoiding re-calculation.
+  optional bytes hash = 10;
+}
+
+// Create a canister in a (possibly non-NNS) subnet and install code into it.
+// The canister is created by the NNS Root canister, which becomes its default
+// controller.
+message CreateCanisterAndInstallCode {
+  // The subnet where the canister will be created.
+  optional ic_base_types.pb.v1.PrincipalId host_subnet_id = 1;
+
+  // Settings for the new canister.
+  // If not specified, defaults are used (Root becomes the sole controller).
+  optional CanisterSettings canister_settings = 2;
+
+  // The WASM module to install.
+  optional WasmModule wasm_module = 3;
+
+  // The argument to pass to the canister's install handler.
+  optional bytes install_arg = 4;
+
+  // Derived from the `install_arg` field. Cached here to speed up responses by
+  // avoiding re-calculation.
+  optional bytes install_arg_hash = 6;
+}
+
+// Snapshot of a neuron's dissolve state, recorded before clamping to the
+// Mission 70 maximum. Used to restore the original dissolve state if the
+// maximum dissolve delay is ever increased again.
+message NeuronDissolveStateSnapshot {
+  oneof dissolve_state {
+    uint64 dissolve_delay_seconds = 1;
+    uint64 when_dissolved_timestamp_seconds = 2;
+  }
 }
 
 // This represents the whole NNS governance system. It contains all
@@ -2014,6 +2106,7 @@ message Governance {
       ic_nns_common.pb.v1.NeuronId spawn = 20;
       SyncCommand sync_command = 21;
       FinalizeDisburseMaturity finalize_disburse_maturity = 22;
+      CreateNeuron create_neuron = 23;
     }
   }
 
@@ -2119,6 +2212,7 @@ message Governance {
     map<uint64, double> not_dissolving_neurons_e8s_buckets_seed = 34;
     map<uint64, double> not_dissolving_neurons_e8s_buckets_ect = 35;
     uint64 spawning_neurons_count = 42;
+    uint64 total_maturity_disbursements_in_progress_e8s_equivalent = 43;
 
     // Deprecated. Use non_self_authenticating_controller_neuron_subset_metrics instead.
     optional uint64 total_voting_power_non_self_authenticating_controller = 36;
@@ -2192,6 +2286,17 @@ message Governance {
 
   // Map of proposal IDs to their topics for those garbage collected.
   map<uint64, Topic> topic_of_garbage_collected_proposals = 29;
+
+  // Whether the eight year gang bonus base migration has run for all neurons.
+  // This prevents the migration from running more than once.
+  bool eight_year_gang_bonus_migration_done = 31;
+
+  // Snapshot of each neuron's dissolve state taken while clamping to the Mission 70 maximum
+  // dissolve delay. Enables restoring original dissolve states if the maximum is reversed.
+  map<uint64, NeuronDissolveStateSnapshot> neuron_id_to_pre_clamp_dissolve_state = 32;
+
+  // Whether the relaxed eight year gang member induction is done.
+  bool relaxed_eight_year_gang_bonus_migration_done = 33;
 
   reserved 30;
   reserved "first_proposal_id_to_record_voting_history";
@@ -2667,6 +2772,35 @@ message FinalizeDisburseMaturity {
 
   // The account identifer to which to transfer the ICPs.
   ic_ledger.pb.v1.AccountIdentifier to_account_identifier = 5;
+}
+
+// Records information needed to recover from a failed create_neuron call.
+// Most fields are copied from the request/argument that was passed to the
+// create_neuron canister method.
+message CreateNeuron {
+  // The neuron ID being created.
+  ic_nns_common.pb.v1.NeuronId neuron_id = 1;
+
+  // The neuron's subaccount.
+  bytes neuron_subaccount = 2;
+
+  // The source account from which to transfer ICP.
+  Account source_account = 3;
+
+  // The amount to stake in e8s.
+  uint64 amount_e8s = 4;
+
+  // The controller of the neuron.
+  ic_base_types.pb.v1.PrincipalId controller = 5;
+
+  // The dissolve delay of the neuron in seconds.
+  uint64 dissolve_delay_seconds = 6;
+
+  // The timestamp when the operation started.
+  uint64 timestamp_seconds = 7;
+
+  // The followees to set for the neuron.
+  optional ManageNeuron.SetFollowing followees = 8;
 }
 
 // An ICRC-3-like value.

@@ -43,6 +43,7 @@ ic-registry-canister-api = { path = "../../registry/canister/api" }
 ic-registry-canister-chunkify = { path = "../../registry/canister/chunkify" }
 ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-node-provider-rewards = { path = "../node_provider_rewards" }
+ic-registry-resource-limits = { path = "../../registry/resource_limits" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
@@ -58,6 +59,8 @@ maplit = "1.0.2"
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = { workspace = true }
 serde = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
 url = { workspace = true }
 canbench-rs = { workspace = true, optional = true }
 rand = { workspace = true }
@@ -105,6 +108,7 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 pretty_assertions = { workspace = true }
+rstest = { workspace = true }
 ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 

@@ -20,12 +20,12 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{binary_buckets_with_zero, decimal_buckets_with_zero, linear_buckets};
 use ic_replicated_state::{ExecutionState, NetworkTopology, ReplicatedState, SystemState};
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::canister_log::CanisterLogMetrics;
 use ic_types::{
     CanisterId, DiskBytes, NumBytes, NumInstructions, SubnetId, Time, messages::RequestMetadata,
     methods::FuncRef,
 };
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, IntCounter, IntGaugeVec};
 use std::{
@@ -325,8 +325,8 @@ impl Hypervisor {
             cost_schedule,
         );
         let (slice, mut output, canister_state_changes) = match execution_result {
-            WasmExecutionResult::Finished(slice, output, system_state_modifications) => {
-                (slice, output, system_state_modifications)
+            WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
+                (slice, output, canister_state_changes)
             }
             WasmExecutionResult::Paused(_, _) => {
                 unreachable!("DTS is not supported");

@@ -144,3 +144,15 @@ system_test(
     },
     test_driver_target = ":kill_start_test_bin",
 )
+
+# Tests that no systemd units have failed on GuestOS nodes after they boot.
+system_test(
+    name = "guestos_no_failed_systemd_units",
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
+)

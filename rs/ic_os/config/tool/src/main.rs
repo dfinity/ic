@@ -1,6 +1,6 @@
 use anyhow::{Context, Error, Result, bail};
 use clap::{Parser, Subcommand};
-use config_tool::guestos::bootstrap_ic_node::bootstrap_ic_node;
+use config_tool::guestos::bootstrap_ic_node::{bootstrap_ic_node, populate_nns_public_key};
 use config_tool::guestos::generate_ic_config;
 use config_tool::serialize_and_write_config;
 use config_tool::setupos::config_ini::{ConfigIniSettings, get_config_ini_settings};
@@ -60,6 +60,10 @@ pub enum Commands {
             value_name = "node_operator_private_key.pem"
         )]
         node_operator_private_key_path: PathBuf,
+    },
+    PopulateNnsPublicKey {
+        #[arg(long, default_value = config_tool::DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, value_name = "config-guestos.json")]
+        guestos_config_json_path: PathBuf,
     },
     /// Dumps OS configuration
     DumpOSConfig {
@@ -229,6 +233,18 @@ pub fn main() -> Result<()> {
 
             bootstrap_ic_node(&bootstrap_dir, guestos_config)
         }
+        Some(Commands::PopulateNnsPublicKey {
+            #[allow(unused_variables)]
+            guestos_config_json_path,
+        }) => {
+            #[cfg(feature = "dev")]
+            let guestos_config: GuestOSConfig =
+                config_tool::deserialize_config(&guestos_config_json_path)?;
+            populate_nns_public_key(
+                #[cfg(feature = "dev")]
+                &guestos_config,
+            )
+        }
         Some(Commands::GenerateICConfig {
             guestos_config_json_path,
             output_path,
@@ -331,7 +347,6 @@ pub fn assemble_setupos_config(
         mgmt_mac,
         deployment_environment,
         nns_urls: nns_urls.to_vec(),
-        use_node_operator_private_key: node_operator_private_key.is_some(),
         node_operator_private_key,
         enable_trusted_execution_environment,
         use_ssh_authorized_keys,

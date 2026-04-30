@@ -64,7 +64,7 @@ fn test_create_neuron() {
             .await;
 
         // Stake the minimum amount 100 million e8s
-        let staked_amount = 100_000_000u64;
+        let staked_amount = 100_000_000_u64;
         let neuron_index = 0;
         let from_subaccount = [0; 32];
 
@@ -220,7 +220,7 @@ fn test_set_neuron_dissolve_delay_timestamp() {
             .await;
 
         // Stake the minimum amount 100 million e8s
-        let staked_amount = 100_000_000u64;
+        let staked_amount = 100_000_000_u64;
         let neuron_index = 0;
         let from_subaccount = [0; 32];
 
@@ -310,7 +310,7 @@ fn test_start_and_stop_neuron_dissolve() {
             .await;
 
         // Stake the minimum amount 100 million e8s
-        let staked_amount = 100_000_000u64;
+        let staked_amount = 100_000_000_u64;
         let neuron_index = 0;
         let from_subaccount = [0; 32];
 
@@ -434,7 +434,7 @@ fn test_change_auto_stake_maturity() {
             .await;
 
         // Stake the minimum amount 100 million e8s
-        let staked_amount = 100_000_000u64;
+        let staked_amount = 100_000_000_u64;
         let neuron_index = 0;
         let from_subaccount = [0; 32];
 
@@ -679,7 +679,7 @@ fn test_list_known_neurons() {
             .await;
 
         // Stake the minimum amount 100 million e8s
-        let staked_amount = 100_000_000u64;
+        let staked_amount = 100_000_000_u64;
 
         env.rosetta_client
             .create_neuron(
@@ -750,7 +750,7 @@ fn test_get_neuron_info() {
             .await;
 
         // Stake the minimum amount 100 million e8s
-        let staked_amount = 100_000_000u64;
+        let staked_amount = 100_000_000_u64;
         let neuron_index = 0;
 
         env.rosetta_client
@@ -867,7 +867,7 @@ fn test_hotkey_management() {
                         .await;
 
                     // Stake the minimum amount 100 million e8s
-                    let staked_amount = 100_000_000u64;
+                    let staked_amount = 100_000_000_u64;
                     let neuron_index = 0;
 
                     env.rosetta_client
@@ -1025,7 +1025,7 @@ fn test_stake_maturity() {
             .await;
 
         // Stake the minimum amount 100 million e8s
-        let staked_amount = 100_000_000u64;
+        let staked_amount = 100_000_000_u64;
         let neuron_index = 0;
 
         env.rosetta_client
@@ -1129,7 +1129,7 @@ fn test_spawn_neuron() {
                         .await;
 
                     // Stake the minimum amount 100 million e8s
-                    let staked_amount = 100_000_000u64;
+                    let staked_amount = 100_000_000_u64;
                     let neuron_index = 0;
 
                     env.rosetta_client
@@ -1323,7 +1323,7 @@ fn test_list_neurons() {
         assert_eq!(list_neurons_response.full_neurons.len(), 0);
 
         // Stake the minimum amount 100 million e8s
-        let staked_amount = 100_000_000u64;
+        let staked_amount = 100_000_000_u64;
         let neuron_index = 0;
         let from_subaccount = [0; 32];
 
@@ -1399,7 +1399,7 @@ fn test_refresh_voting_power() {
                         .await;
 
                     // Stake the minimum amount 100 million e8s
-                    let staked_amount = 100_000_000u64;
+                    let staked_amount = 100_000_000_u64;
                     let neuron_index = 0;
                     let from_subaccount = [0; 32];
 
@@ -1516,7 +1516,7 @@ fn test_disburse_maturity() {
             .build()
             .await;
 
-        let staked_amount = 1_000_000_000u64;
+        let staked_amount = 1_000_000_000_u64;
         let neuron_index = 0;
 
         env.rosetta_client

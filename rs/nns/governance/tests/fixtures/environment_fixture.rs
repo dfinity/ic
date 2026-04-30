@@ -230,7 +230,7 @@ impl RandomnessGenerator for EnvironmentFixture {
             .as_mut()
         {
             Some(rand) => {
-                let mut bytes = [0u8; 32];
+                let mut bytes = [0_u8; 32];
                 rand.fill_bytes(&mut bytes);
                 Ok(bytes)
             }

@@ -6,9 +6,17 @@ on:
     branches:
       - master
       - 'dev-gh-*'
+      - 'public-hotfix-*'
   pull_request:
     branches-ignore:
       - hotfix-* # This is to ensure that this workflow is not triggered twice on ic-private, as it's already triggered from release-testing
+  workflow_dispatch:
+    inputs:
+      release-build:
+        description: Whether this CI run is for a release build, which may require additional steps such as uploading artifacts.
+        required: false
+        default: ''
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
@@ -17,17 +25,20 @@ concurrency:
 jobs:
   ci-main:
     name: CI Main
-    # if in the ic or ic-private repo:
-    # run on all events except for forked PRs
+    # for dfinity/ic: run on all events except for forked PRs
+    # for dfinity/ic-private: only run on PRs
     if: |
-      contains(fromJson('["dfinity/ic","dfinity/ic-private"]'), github.repository) && 
-      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+      (github.repository == 'dfinity/ic' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) ||
+      (github.repository == 'dfinity/ic-private' && github.event_name == 'pull_request')
     uses: ./.github/workflows/ci-main.yml
     secrets: inherit
     with:
       commit-sha: ${{ github.sha }}
+      release-build: ${{ inputs.release-build }}
     permissions:
+      actions: write
       contents: read
+      id-token: write
       pull-requests: read
 
   ci-pr-only:
@@ -58,7 +69,7 @@ jobs:
       pull-requests: write
       statuses: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.sha }}
       - uses: ./.github/actions/post-commit-status
@@ -78,7 +89,7 @@ jobs:
       pull-requests: write
       statuses: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.sha }}
       - uses: ./.github/actions/post-commit-status
@@ -99,7 +110,7 @@ jobs:
       pull-requests: write
       statuses: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.sha }}
       - uses: ./.github/actions/post-commit-status

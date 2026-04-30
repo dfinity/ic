@@ -1,3 +1,9 @@
+//! Read, modify, and write GRUB environment blocks. Used by HostOS tools
+//! to manage GuestOS A/B boot partition selection and boot cycle state
+//! (stable, first_boot, failsafe_check, install). HostOS manages this because
+//! it launches the GuestOS VM and must read grubenv to determine which
+//! partition and kernel to boot (`guest_vm_runner`, `hostos_tool`).
+
 use ic_sys::fs::{Clobber, write_atomically};
 use regex::Regex;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -9,12 +15,14 @@ use thiserror::Error;
 
 const GRUB_ENV_SIZE: usize = 1024;
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy, EnumString, Display)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, EnumString, Display, clap::ValueEnum)]
 pub enum BootAlternative {
     // Bash scripts depend on the string representations, be very careful if you want to change them
     #[strum(serialize = "A")]
+    #[clap(name = "A")]
     A,
     #[strum(serialize = "B")]
+    #[clap(name = "B")]
     B,
 }
 

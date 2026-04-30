@@ -6,7 +6,8 @@ use std::time::Duration;
 use crate::execution_environment::{NUMBER_OF_EXECUTION_THREADS, SUBNET_HEAP_DELTA_CAPACITY};
 use ic_base_types::NumBytes;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{Cycles, ExecutionRound, NumInstructions};
+use ic_types::{ExecutionRound, NumInstructions};
+use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
 
 const GIB: u64 = 1024 * 1024 * 1024;
@@ -106,6 +107,9 @@ pub const MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS: f64 = 5.0;
 ///   long installs + long updates + query threads = 1 + 4 + 2 = 7
 ///
 const MAX_PAUSED_EXECUTIONS: usize = 4;
+
+/// Cost for creating a new canister.
+pub const CANISTER_CREATION_FEE: Cycles = Cycles::new(500_000_000_000);
 
 /// 10B cycles corresponds to 1 SDR cent. Assuming we can create 1 signature per
 /// second, that would come to  26k SDR per month if we spent the whole time
@@ -355,11 +359,16 @@ impl SchedulerConfig {
         Self::application_subnet()
     }
 
+    pub fn cloud_engine() -> Self {
+        Self::application_subnet()
+    }
+
     pub fn default_for_subnet_type(subnet_type: SubnetType) -> Self {
         match subnet_type {
             SubnetType::Application => Self::application_subnet(),
             SubnetType::System => Self::system_subnet(),
             SubnetType::VerifiedApplication => Self::verified_application_subnet(),
+            SubnetType::CloudEngine => Self::cloud_engine(),
         }
     }
 }
@@ -452,7 +461,7 @@ impl CyclesAccountManagerConfig {
         let ten_update_instructions_execution_fee_in_cycles = 10;
         Self {
             reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
-            canister_creation_fee: Cycles::new(500_000_000_000),
+            canister_creation_fee: CANISTER_CREATION_FEE,
             compute_percent_allocated_per_second_fee: Cycles::new(10_000_000),
 
             // The following fields are set based on a thought experiment where
@@ -469,8 +478,8 @@ impl CyclesAccountManagerConfig {
             xnet_byte_transmission_fee: Cycles::new(1_000),
             ingress_message_reception_fee: Cycles::new(1_200_000),
             ingress_byte_reception_fee: Cycles::new(2_000),
-            // 4 SDR per GiB per year => 4e12 Cycles per year
-            gib_storage_per_second_fee: Cycles::new(127_000),
+            // 10 SDR per GiB per year => 10e12 Cycles per year
+            gib_storage_per_second_fee: Cycles::new(317_500),
             duration_between_allocation_charges: Duration::from_secs(10),
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
             schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
@@ -481,8 +490,8 @@ impl CyclesAccountManagerConfig {
             http_response_per_byte_fee: Cycles::new(800),
             max_storage_reservation_period: Duration::from_secs(300_000_000),
             default_reserved_balance_limit: DEFAULT_RESERVED_BALANCE_LIMIT,
-            fetch_canister_logs_base_fee: Cycles::new(1_000_000),
-            fetch_canister_logs_per_byte_fee: Cycles::new(800),
+            fetch_canister_logs_base_fee: Cycles::new(5_000_000),
+            fetch_canister_logs_per_byte_fee: Cycles::new(80),
         }
     }
 
@@ -555,6 +564,10 @@ impl CyclesAccountManagerConfig {
             fetch_canister_logs_per_byte_fee: Cycles::zero(),
         }
     }
+
+    pub fn cloud_engine() -> Self {
+        Self::application_subnet()
+    }
 }
 
 /// If a component has at least one static configuration that is different for
@@ -571,6 +584,7 @@ impl SubnetConfig {
             SubnetType::Application => Self::default_application_subnet(),
             SubnetType::System => Self::default_system_subnet(),
             SubnetType::VerifiedApplication => Self::default_verified_application_subnet(),
+            SubnetType::CloudEngine => Self::default_cloud_engine(),
         }
     }
 
@@ -597,6 +611,14 @@ impl SubnetConfig {
             scheduler_config: SchedulerConfig::verified_application_subnet(),
             cycles_account_manager_config: CyclesAccountManagerConfig::verified_application_subnet(
             ),
+        }
+    }
+
+    /// Returns the subnet configuration for a cloud engine subnet type.
+    fn default_cloud_engine() -> Self {
+        Self {
+            scheduler_config: SchedulerConfig::cloud_engine(),
+            cycles_account_manager_config: CyclesAccountManagerConfig::cloud_engine(),
         }
     }
 }

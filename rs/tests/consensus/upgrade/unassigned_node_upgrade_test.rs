@@ -29,7 +29,7 @@ use ic_consensus_system_test_utils::upgrade::{
 use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
     ssh_access::{
-        AuthMean, generate_key_strings, get_updatesshreadonlyaccesskeyspayload,
+        AuthMean, generate_key_strings, get_update_ssh_keys_for_all_unassigned_nodes_payload,
         update_ssh_keys_for_all_unassigned_nodes, wait_until_authentication_is_granted,
     },
 };
@@ -70,7 +70,8 @@ fn test(env: TestEnv) {
 
     // obtain readonly access
     let (readonly_private_key, readonly_public_key) = generate_key_strings();
-    let payload = get_updatesshreadonlyaccesskeyspayload(vec![readonly_public_key.clone()]);
+    let payload =
+        get_update_ssh_keys_for_all_unassigned_nodes_payload(vec![readonly_public_key.clone()]);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         payload,

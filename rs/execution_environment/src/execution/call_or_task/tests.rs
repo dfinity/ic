@@ -3,7 +3,6 @@ use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_error_types::ErrorCode;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{
     CallOrigin,
@@ -11,10 +10,10 @@ use ic_replicated_state::{
 };
 use ic_state_machine_tests::WasmResult;
 use ic_sys::PAGE_SIZE;
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::ingress::IngressState;
 use ic_types::messages::{CallbackId, RequestMetadata};
-use ic_types::{Cycles, NumInstructions, NumOsPages};
+use ic_types::{NumBytes, NumInstructions, NumOsPages};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_universal_canister::{call_args, wasm};
 use more_asserts::assert_gt;
 use std::time::Duration;
@@ -181,18 +180,21 @@ fn dts_update_concurrent_cycles_change_succeeds() {
     // The memory usage of the canister increases during the message execution.
     // `ic0.call_perform()` used the current freezing threshold. This value is
     // an upper bound on the additional freezing threshold.
-    let additional_freezing_threshold = Cycles::new(500);
+    let additional_freezing_threshold = Cycles::new(1_250);
 
-    let max_execution_cost = test.cycles_account_manager().execution_cost(
-        NumInstructions::from(instruction_limit),
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
-        test.canister_wasm_execution_mode(a_id),
-    );
+    let max_execution_cost = test
+        .cycles_account_manager()
+        .execution_cost(
+            NumInstructions::from(instruction_limit),
+            test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
+            test.canister_wasm_execution_mode(a_id),
+        )
+        .real();
 
-    let call_charge = test.call_fee("update", &b)
+    let call_charge = test.call_fee("update", &b).real()
         + max_execution_cost
-        + test.max_response_fee()
+        + test.max_response_fee().real()
         + transferred_cycles;
 
     let cycles_debit = Cycles::new(1000);
@@ -234,7 +236,7 @@ fn dts_update_concurrent_cycles_change_succeeds() {
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
             - call_charge
-            - (test.canister_execution_cost(a_id) - initial_execution_cost)
+            - (test.canister_execution_cost(a_id) - initial_execution_cost).real()
             - cycles_debit,
     );
 }
@@ -273,12 +275,15 @@ fn dts_replicated_query_concurrent_cycles_change_succeeds() {
 
     let freezing_threshold = test.freezing_threshold(canister_id);
 
-    let max_execution_cost = test.cycles_account_manager().execution_cost(
-        NumInstructions::from(instruction_limit),
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
-        test.canister_wasm_execution_mode(canister_id),
-    );
+    let max_execution_cost = test
+        .cycles_account_manager()
+        .execution_cost(
+            NumInstructions::from(instruction_limit),
+            test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
+            test.canister_wasm_execution_mode(canister_id),
+        )
+        .real();
 
     let cycles_debit = Cycles::new(1000);
 
@@ -315,7 +320,7 @@ fn dts_replicated_query_concurrent_cycles_change_succeeds() {
         test.canister_state(canister_id).system_state.balance(),
         initial_cycles
             - cycles_to_burn
-            - (test.canister_execution_cost(canister_id) - initial_execution_cost)
+            - (test.canister_execution_cost(canister_id) - initial_execution_cost).real()
             - cycles_debit,
     );
 }
@@ -326,9 +331,10 @@ fn dts_update_concurrent_cycles_change_fails() {
     // 1. Canister A starts running the update method.
     // 2. While canister A is paused, we emulate a postponed charge
     //    of 1000 cycles (i.e. add 1000 to `ingress_induction_cycles_debit`).
-    // 3. The update method resumes and calls canister B with 1000 cycles.
+    // 3. The update method resumes and attempts to grow stable memory.
     // 4. The update method fails because there are not enough cycles
-    //    in the canister balance to cover both the call and 'ingress_induction_cycles_debit'.
+    //    in the canister balance to cover both growing memory and
+    //    'ingress_induction_cycles_debit'.
     let instruction_limit = 100_000_000;
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
@@ -336,81 +342,86 @@ fn dts_update_concurrent_cycles_change_fails() {
         .with_manual_execution()
         .build();
 
-    let a_id = test.universal_canister().unwrap();
-    let b_id = test.universal_canister().unwrap();
+    let canister_id = test.universal_canister().unwrap();
 
-    let transferred_cycles = Cycles::new(1000);
-
-    let b = wasm()
-        .accept_cycles(transferred_cycles)
-        .message_payload()
-        .append_and_reply()
-        .build();
-
+    let pages_to_grow = 1;
+    let bytes_to_grow = pages_to_grow * WASM_PAGE_SIZE_IN_BYTES;
     let a = wasm()
         .instruction_counter_is_at_least(1_000_000)
-        .call_with_cycles(
-            b_id,
-            "update",
-            call_args().other_side(b.clone()),
-            transferred_cycles,
-        )
+        .stable64_grow(pages_to_grow as u64)
+        .reply()
         .build();
 
-    test.update_freezing_threshold(a_id, NumSeconds::from(1))
+    let freezing_threshold_period = NumSeconds::from(1);
+    test.update_freezing_threshold(canister_id, freezing_threshold_period)
         .unwrap();
-    test.canister_update_allocations_settings(a_id, Some(1), None)
+    test.canister_update_allocations_settings(canister_id, Some(1), None)
         .unwrap();
 
-    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+    // We first successfully execute the payload on the universal canister to set up its heap.
+    let (ingress_id, _) = test.ingress_raw(canister_id, "update", a.clone());
+    test.execute_message(canister_id);
+    check_ingress_status(test.ingress_status(&ingress_id)).unwrap();
 
-    let freezing_threshold = test.freezing_threshold(a_id);
+    let canister = test.canister_state(canister_id);
 
-    // The memory usage of the canister increases during the message execution.
-    // `ic0.call_perform()` used the current freezing threshold. This value is
-    // an upper bound on the additional freezing threshold.
-    let additional_freezing_threshold = Cycles::new(500);
+    // The memory usage of the canister increases during the message execution
+    // by the amount that stable memory grew. Use that amount to calculate the
+    // freezing threshold that would be induced by it on top of the other parts
+    // that contribute to it.
+    let freezing_threshold_with_stable_grow =
+        test.cycles_account_manager().freeze_threshold_cycles(
+            freezing_threshold_period,
+            canister.memory_allocation(),
+            canister.memory_usage() + NumBytes::from(bytes_to_grow as u64),
+            canister.message_memory_usage(),
+            canister.compute_allocation(),
+            test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
+            Cycles::zero(),
+        );
 
-    let max_execution_cost = test.cycles_account_manager().execution_cost(
-        NumInstructions::from(instruction_limit),
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
-        test.canister_wasm_execution_mode(a_id),
-    );
-
-    let call_charge = test.call_fee("update", &b)
-        + max_execution_cost
-        + test.max_response_fee()
-        + transferred_cycles;
+    let max_execution_cost = test
+        .cycles_account_manager()
+        .execution_cost(
+            NumInstructions::from(instruction_limit),
+            test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
+            test.canister_wasm_execution_mode(canister_id),
+        )
+        .real();
 
     // Reset the cycles balance to simplify cycles bookkeeping,
-    let initial_cycles =
-        freezing_threshold + additional_freezing_threshold + max_execution_cost + call_charge;
-    let initial_execution_cost = test.canister_execution_cost(a_id);
-    test.canister_state_mut(a_id)
+    let initial_cycles = freezing_threshold_with_stable_grow + max_execution_cost;
+    let initial_execution_cost = test.canister_execution_cost(canister_id);
+    test.canister_state_mut(canister_id)
         .system_state
         .set_balance(initial_cycles);
 
-    test.execute_slice(a_id);
+    // Now we execute the same payload on the universal canister again
+    // and expect a failure due to low cycles balance.
+    let (ingress_id, _) = test.ingress_raw(canister_id, "update", a);
+
+    test.execute_slice(canister_id);
     assert_eq!(
-        test.canister_state(a_id).next_execution(),
+        test.canister_state(canister_id).next_execution(),
         NextExecution::ContinueLong,
     );
 
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(canister_id).system_state.balance(),
         initial_cycles - max_execution_cost,
     );
 
-    let cycles_debit = test.canister_state(a_id).system_state.balance();
-    test.canister_state_mut(a_id)
+    let cycles_debit = test.canister_state(canister_id).system_state.balance();
+    test.canister_state_mut(canister_id)
         .system_state
         .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
 
-    test.execute_message(a_id);
+    test.execute_message(canister_id);
 
     assert_eq!(
-        test.canister_state(a_id).next_execution(),
+        test.canister_state(canister_id).next_execution(),
         NextExecution::None,
     );
 
@@ -422,16 +433,16 @@ fn dts_update_concurrent_cycles_change_fails() {
         format!(
             "Canister {} is out of cycles: \
              please top up the canister with at least {} additional cycles",
-            a_id,
-            (freezing_threshold + call_charge)
-                - (initial_cycles - max_execution_cost - cycles_debit)
+            canister_id,
+            freezing_threshold_with_stable_grow
+                - (initial_cycles - max_execution_cost - cycles_debit),
         )
     );
 
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(canister_id).system_state.balance(),
         initial_cycles
-            - (test.canister_execution_cost(a_id) - initial_execution_cost)
+            - (test.canister_execution_cost(canister_id) - initial_execution_cost).real()
             - cycles_debit,
     );
 }
@@ -470,12 +481,15 @@ fn dts_replicated_query_concurrent_cycles_change_fails() {
 
     let freezing_threshold = test.freezing_threshold(canister_id);
 
-    let max_execution_cost = test.cycles_account_manager().execution_cost(
-        NumInstructions::from(instruction_limit),
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
-        test.canister_wasm_execution_mode(canister_id),
-    );
+    let max_execution_cost = test
+        .cycles_account_manager()
+        .execution_cost(
+            NumInstructions::from(instruction_limit),
+            test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
+            test.canister_wasm_execution_mode(canister_id),
+        )
+        .real();
 
     let cycles_debit = Cycles::new(1000);
 
@@ -519,7 +533,7 @@ fn dts_replicated_query_concurrent_cycles_change_fails() {
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         initial_cycles
-            - (test.canister_execution_cost(canister_id) - initial_execution_cost)
+            - (test.canister_execution_cost(canister_id) - initial_execution_cost).real()
             - cycles_debit,
     );
 }
@@ -746,7 +760,7 @@ fn dts_replicated_execution_resume_fails_due_to_cycles_change() {
         let balance = test.canister_state(a_id).system_state.balance();
         test.canister_state_mut(a_id)
             .system_state
-            .add_cycles(balance + Cycles::new(1), CyclesUseCase::NonConsumed);
+            .add_cycles(balance + Cycles::new(1));
 
         test.execute_slice(a_id);
 
@@ -812,6 +826,7 @@ fn dts_replicated_execution_resume_fails_due_to_call_context_change() {
                 Cycles::new(0),
                 time,
                 RequestMetadata::for_new_call_tree(time),
+                None,
             )
             .unwrap();
 
@@ -981,14 +996,15 @@ fn dts_abort_of_replicated_execution_works() {
             test.canister_state(a_id).system_state.balance(),
             Cycles::new(initial_cycles)
                 - transferred_cycles
-                - test.canister_execution_cost(a_id)
-                - test.call_fee(method, &b)
-                - test.reply_fee(&[42])
+                - test.canister_execution_cost(a_id).real()
+                - test.call_fee(method, &b).real()
+                - test.reply_fee(&[42]).real()
         );
 
         assert_eq!(
             test.canister_state(b_id).system_state.balance(),
-            Cycles::new(initial_cycles) + transferred_cycles - test.canister_execution_cost(b_id)
+            Cycles::new(initial_cycles) + transferred_cycles
+                - test.canister_execution_cost(b_id).real()
         );
     });
 }
@@ -1057,7 +1073,7 @@ fn dts_ingress_induction_cycles_debit_is_applied_on_replicated_execution_aborts(
         assert_eq!(
             test.canister_state(a_id).system_state.balance(),
             Cycles::new(initial_canister_cycles)
-                - test.canister_execution_cost(a_id)
+                - test.canister_execution_cost(a_id).real()
                 - cycles_debit
         );
     });
