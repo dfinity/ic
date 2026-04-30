@@ -37,7 +37,7 @@ fn run_benchmark(
                     compute_allocation_used: 0,
                     subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
                 };
-                hypervisor.create_execution_state(
+                let _ = hypervisor.create_execution_state(
                     CanisterModule::new(wasm.clone()),
                     tmpdir.path().to_path_buf(),
                     canister_id,
