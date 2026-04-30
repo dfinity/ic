@@ -379,18 +379,18 @@ fn test(env: TestEnv) {
         ] {
             info!(logger, "Checking /subnet and /canister_ranges on {name}...");
 
-            // Build paths: /subnet/<id>/public_key and /canister_ranges/<id>
-            // for every known subnet ID. These are allowed on the subnet
-            // read_state endpoint.
-            let mut paths: Vec<Vec<Label<Vec<u8>>>> = Vec::new();
-            for (_target_name, id) in &all_subnets {
-                let id_label: Label<Vec<u8>> = id.get_ref().as_slice().into();
-                paths.push(vec!["subnet".into(), id_label.clone(), "public_key".into()]);
-                paths.push(vec!["canister_ranges".into(), id_label]);
-            }
+            // Query /subnet/<id>/public_key for all known subnet IDs in one
+            // call (no restriction on mixing subnet IDs in /subnet paths).
+            let subnet_paths: Vec<Vec<Label<Vec<u8>>>> = all_subnets
+                .iter()
+                .map(|(_target_name, id)| {
+                    let id_label: Label<Vec<u8>> = id.get_ref().as_slice().into();
+                    vec!["subnet".into(), id_label, "public_key".into()]
+                })
+                .collect();
 
             let cert = agent
-                .read_subnet_state_raw(paths, own_subnet_id.get().into())
+                .read_subnet_state_raw(subnet_paths, own_subnet_id.get().into())
                 .await
                 .expect("read_state should succeed");
 
@@ -411,8 +411,18 @@ fn test(env: TestEnv) {
                      (expected visible={should_be_visible}, got {subnet_result:?})"
                 );
 
-                // Check /canister_ranges/<id>
-                let cr_result = cert
+                // Check /canister_ranges/<id> in separate calls per subnet ID
+                // (the endpoint rejects requests with multiple distinct subnet IDs
+                // in canister_ranges paths).
+                let id_label: Label<Vec<u8>> = id.get_ref().as_slice().into();
+                let cr_cert = agent
+                    .read_subnet_state_raw(
+                        vec![vec!["canister_ranges".into(), id_label]],
+                        own_subnet_id.get().into(),
+                    )
+                    .await
+                    .expect("read_state for canister_ranges should succeed");
+                let cr_result = cr_cert
                     .tree
                     .lookup_subtree(&[b"canister_ranges".as_slice(), id_bytes]);
                 assert_eq!(
