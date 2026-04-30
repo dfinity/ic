@@ -48,6 +48,9 @@ use std::time::Duration;
 /// Maximum number of inputs for a Dogecoin transaction.
 pub const DOGECOIN_MAX_NUM_INPUTS_IN_TRANSACTION: usize = 500;
 
+/// How often the minter refreshes the Dogecoin fee percentiles.
+pub const REFRESH_FEE_PERCENTILES_FREQUENCY: Duration = Duration::from_secs(360);
+
 pub const DOGECOIN_CANISTER_RUNTIME: DogeCanisterRuntime = DogeCanisterRuntime {};
 
 #[derive(Copy, Clone)]
@@ -67,8 +70,7 @@ impl CanisterRuntime for DogeCanisterRuntime {
     }
 
     fn refresh_fee_percentiles_frequency(&self) -> Duration {
-        const SIX_MINUTES: Duration = Duration::from_secs(360);
-        SIX_MINUTES
+        REFRESH_FEE_PERCENTILES_FREQUENCY
     }
 
     async fn get_current_fee_percentiles(

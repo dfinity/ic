@@ -141,19 +141,17 @@ impl MinterCanister {
     }
 
     /// Trigger a refresh of the median fee percentiles by advancing time past
-    /// the `refresh_fee_percentiles_frequency` (6 minutes for ckDOGE) and
-    /// ticking. This is useful in tests to ensure that
-    /// `last_median_fee_per_vbyte` is updated to a value derived from the
-    /// dogecoin canister fee percentiles, rather than the default value of 1
-    /// millikoinu/byte. This is needed in cases where the periodic
-    /// `RefreshFeePercentiles` task scheduled at minter init fired before the
-    /// dogecoin canister was fully synced and trapped, leaving the median fee
-    /// at its default.
+    /// [`ic_ckdoge_minter::REFRESH_FEE_PERCENTILES_FREQUENCY`] and ticking.
+    /// This is useful in tests to ensure that `last_median_fee_per_vbyte` is
+    /// updated to a value derived from the dogecoin canister fee percentiles,
+    /// rather than the default value of 1 millikoinu/byte. This is needed in
+    /// cases where the periodic `RefreshFeePercentiles` task scheduled at
+    /// minter init fired before the dogecoin canister was fully synced and
+    /// trapped, leaving the median fee at its default.
     pub fn refresh_fee_percentiles(&self) {
-        // 6 minutes (the ckDOGE `refresh_fee_percentiles_frequency`) plus a buffer.
-        const REFRESH_FEE_PERCENTILES_FREQUENCY: Duration = Duration::from_secs(360);
-        self.env
-            .advance_time(REFRESH_FEE_PERCENTILES_FREQUENCY + Duration::from_secs(1));
+        self.env.advance_time(
+            ic_ckdoge_minter::REFRESH_FEE_PERCENTILES_FREQUENCY + Duration::from_secs(1),
+        );
         // Multiple ticks to allow the timer to fire and the inter-canister call
         // (and its response) to be processed.
         for _ in 0..5 {
