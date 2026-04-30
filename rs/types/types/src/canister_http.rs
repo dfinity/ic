@@ -1715,18 +1715,19 @@ mod tests {
     }
 
     #[rstest]
-    #[case(HttpMethod::PUT, 2, 3, false)]
-    #[case(HttpMethod::DELETE, 2, 3, false)]
-    #[case(HttpMethod::PUT, 3, 3, true)]
-    #[case(HttpMethod::DELETE, 3, 3, true)]
-    #[case(HttpMethod::PUT, 2, 2, false)]
+    #[case(HttpMethod::PUT, 3, 2, 3, false)]
+    #[case(HttpMethod::DELETE, 3, 2, 3, false)]
+    #[case(HttpMethod::PUT, 3, 3, 3, true)]
+    #[case(HttpMethod::DELETE, 3, 3, 3, true)]
+    #[case(HttpMethod::PUT, 3, 2, 2, false)]
+    #[case(HttpMethod::DELETE, 3, 2, 2, false)]
     fn flexible_methods_require_deterministic_response_counts(
         #[case] method: HttpMethod,
+        #[case] total_requests: u32,
         #[case] min_responses: u32,
         #[case] max_responses: u32,
         #[case] should_succeed: bool,
     ) {
-        let total_requests = 3;
         let rng = &mut ReproducibleRng::new();
         let node_ids = BTreeSet::from([node_test_id(1), node_test_id(2), node_test_id(3)]);
         let request = dummy_request();
