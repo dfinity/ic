@@ -411,7 +411,7 @@ fn test(env: TestEnv) {
                      (expected visible={should_be_visible}, got {subnet_result:?})"
                 );
 
-                // Check /canister_ranges/<id> in a separate call per subnet ID
+                // Check /canister_ranges/<id> in separate calls per subnet ID
                 // (the endpoint rejects requests with multiple distinct subnet IDs
                 // in canister_ranges paths).
                 let id_label: Label<Vec<u8>> = id.get_ref().as_slice().into();
