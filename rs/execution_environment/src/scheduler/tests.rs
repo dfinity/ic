@@ -748,7 +748,7 @@ fn finalization_clears_scheduled_canister_log_delta_sizes() {
     next_idx += 1;
 
     // Also append a delta log to canister_b's canister_log.
-    append_delta_log(next_idx, test.canister_state_mut(canister_b), "oops");
+    let size3 = append_delta_log(next_idx, test.canister_state_mut(canister_b), "oops");
 
     // Both canisters have delta log sizes.
     fn has_delta_log_sizes(canister: &CanisterState) -> bool {
@@ -767,18 +767,16 @@ fn finalization_clears_scheduled_canister_log_delta_sizes() {
     test.send_ingress(canister_a, ingress(1));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // After the round, delta_log_sizes have been cleared for canister_a but not for
-    // canister_b (because it was not one of the scheduled canisters).
+    // After the round, delta_log_sizes have been cleared for both canisters.
     assert!(!has_delta_log_sizes(test.canister_state(canister_a)));
-    assert!(has_delta_log_sizes(test.canister_state(canister_b)));
+    assert!(!has_delta_log_sizes(test.canister_state(canister_b)));
 
-    // The metric must have recorded exactly the two delta sizes we appended to
-    // canister_a.
+    // The metric must have recorded all delta sizes we appended.
     let canister_log_delta_memory_usage = &test.scheduler().metrics.canister_log_delta_memory_usage;
-    assert_eq!(canister_log_delta_memory_usage.get_sample_count(), 2);
+    assert_eq!(canister_log_delta_memory_usage.get_sample_count(), 3);
     assert_eq!(
         canister_log_delta_memory_usage.get_sample_sum() as usize,
-        size1 + size2
+        size1 + size2 + size3
     );
 }
 
