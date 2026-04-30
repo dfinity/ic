@@ -566,12 +566,14 @@ impl ReplicatedStateMetrics {
             .observe(log_memory_usage as f64);
 
         // Observe retention from whichever log store is active.
-        if LOG_MEMORY_STORE_FEATURE_ENABLED {
+        let retention = if LOG_MEMORY_STORE_FEATURE_ENABLED {
             canister.system_state.log_memory_store.retention()
         } else {
             canister.system_state.canister_log.retention()
+        };
+        if let Some(retention) = retention {
+            self.canister_log_retention.observe(retention.as_secs_f64());
         }
-        .map(|retention| self.canister_log_retention.observe(retention.as_secs_f64()));
     }
 }
 
