@@ -124,6 +124,10 @@ pub struct Hypervisor {
     canister_guaranteed_callback_quota: usize,
 }
 
+// Base cost charged per `create_execution_state` call to cover fixed overhead
+// beyond per-instruction compilation cost (~10ms observed via benchmark).
+const CREATE_EXECUTION_STATE_BASE_COST: NumInstructions = NumInstructions::new(20_000_000);
+
 impl Hypervisor {
     pub(crate) fn subnet_id(&self) -> SubnetId {
         self.own_subnet_id
@@ -146,12 +150,14 @@ impl Hypervisor {
             Ok(size) => std::cmp::max(size, canister_module.len()),
             Err(_) => canister_module.len(),
         };
+        let mut total_cost = CREATE_EXECUTION_STATE_BASE_COST;
         let compilation_cost = self.cost_to_compile_wasm_instruction * wasm_size as u64;
         if let Err(err) = wasm_size_result {
-            round_limits.instructions -= as_round_instructions(compilation_cost);
+            total_cost += compilation_cost;
+            round_limits.instructions -= as_round_instructions(total_cost);
             self.compilation_cache
                 .insert_err(&canister_module, err.clone().into());
-            return (compilation_cost, Err(err.into()));
+            return (total_cost, Err(err.into()));
         }
 
         let creation_result = self.wasm_executor.create_execution_state(
@@ -169,14 +175,14 @@ impl Hypervisor {
                         self.compilation_cache.disk_bytes(),
                     );
                 }
-                let adjusted_compilation_cost =
-                    compilation_cost_handling.adjusted_compilation_cost(compilation_cost);
-                round_limits.instructions -= as_round_instructions(adjusted_compilation_cost);
-                (adjusted_compilation_cost, Ok(execution_state))
+                total_cost += compilation_cost_handling.adjusted_compilation_cost(compilation_cost);
+                round_limits.instructions -= as_round_instructions(total_cost);
+                (total_cost, Ok(execution_state))
             }
             Err(err) => {
-                round_limits.instructions -= as_round_instructions(compilation_cost);
-                (compilation_cost, Err(err))
+                total_cost += compilation_cost;
+                round_limits.instructions -= as_round_instructions(total_cost);
+                (total_cost, Err(err))
             }
         }
     }
