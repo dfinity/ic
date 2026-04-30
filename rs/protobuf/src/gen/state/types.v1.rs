@@ -655,13 +655,6 @@ pub struct PreSignatureTranscriptRef {
     pub key_unmasked_ref: ::core::option::Option<UnmaskedTranscript>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CompletedSignature {
-    #[prost(message, optional, tag = "3")]
-    pub unreported: ::core::option::Option<ConsensusResponse>,
-    #[prost(bytes = "vec", tag = "4")]
-    pub pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgReshareRequest {
     #[prost(message, repeated, tag = "2")]
     pub receiving_node_ids: ::prost::alloc::vec::Vec<NodeId>,

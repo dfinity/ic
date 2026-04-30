@@ -209,13 +209,6 @@ message PreSignatureTranscriptRef {
   UnmaskedTranscript key_unmasked_ref = 3;
 }
 
-message CompletedSignature {
-  reserved 1;
-  reserved 2;
-  ConsensusResponse unreported = 3;
-  bytes pseudo_random_id = 4;
-}
-
 message IDkgReshareRequest {
   reserved 1, 4;
   repeated types.v1.NodeId receiving_node_ids = 2;
