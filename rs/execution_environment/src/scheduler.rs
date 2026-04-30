@@ -1499,11 +1499,9 @@ impl Scheduler for SchedulerImpl {
         {
             let _timer = self.metrics.round_finalization_duration.start_timer();
 
-            for canister_id in round_schedule.scheduled_canisters() {
-                let Some(canister) = state.canister_state_mut_arc(canister_id) else {
-                    continue;
-                };
-
+            // TODO(DSM-103): Get rid of this. Iterating only over scheduled canisters does
+            // not work, likely because of log records produced during upgrades.
+            for canister in state.canisters_iter_mut() {
                 let new_log = &canister.system_state.log_memory_store;
                 let old_log = &canister.system_state.canister_log;
                 let delta_log_sizes = if LOG_MEMORY_STORE_FEATURE_ENABLED {
