@@ -84,7 +84,7 @@ jobs:
           # Only push to GHCR if we are targeting dfinity/ic, from dfinity/ic
           # on master, or with the CI_PUSH_BASE_IMAGE label
           push: |
-            ${{ (github.repository == 'dfinity/ic' && github.event.pull_request.head.repo.full_name == github.repository) &&
+            ${{ (github.repository == 'dfinity/ic' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) &&
             (github.ref_name == 'master' || env.IS_BRANCH_IMAGE == 'true') }}
           tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.IMAGE }}${{ case(env.IS_BRANCH_IMAGE == 'true', '-branch', '') }}:${{ env.DATE }}
           build-args: ${{ matrix.BUILD_ARGS }}
