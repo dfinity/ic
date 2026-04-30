@@ -209,7 +209,7 @@ pub struct RoundSchedule {
 
     /// Canisters that were scheduled.
     scheduled_canisters: BTreeSet<CanisterId>,
-    /// Canisters that executed at least one long execution slice this round.
+    /// Canisters that had a long execution at the start of this round.
     long_execution_canisters: BTreeSet<CanisterId>,
     /// Canisters that advanced or completed a message execution.
     executed_canisters: BTreeSet<CanisterId>,
@@ -308,7 +308,9 @@ impl RoundSchedule {
                     }
 
                     NextExecution::ContinueLong => {
-                        self.long_execution_canisters.insert(*canister_id);
+                        if is_first_iteration {
+                            self.long_execution_canisters.insert(*canister_id);
+                        }
                         let priority = subnet_schedule.get_mut(*canister_id);
                         let rs = CanisterRoundState::new(canister, priority);
                         long_executions_count += 1;
@@ -473,7 +475,7 @@ impl RoundSchedule {
                         .long_execution_start_round
                         .get_or_insert(current_round);
                 }
-                // Completed a long execution.
+                // Completed a long execution that had started before this round.
                 NextExecution::StartNew if self.long_execution_canisters.contains(canister_id) => {
                     self.fully_executed_canisters.insert(*canister_id);
                 }
@@ -536,12 +538,22 @@ impl RoundSchedule {
             // On message completion (or short execution), charge for the remaining rounds.
             if canister_priority.executed_rounds > 0
                 && (!canister.has_long_execution()
-                    // FIXME: This will break if we continue executing long execution canisters.
                     || self.canisters_with_completed_messages.contains(canister_id))
             {
                 canister_priority.accumulated_priority -=
                     ONE_HUNDRED_PERCENT * (canister_priority.executed_rounds - 1).max(1);
-                canister_priority.executed_rounds = 0;
+                if canister.has_long_execution()
+                    && self.long_execution_canisters.contains(canister_id)
+                {
+                    // Safety net: canister had a long execution at the start of this round;
+                    // completed it; and started another long execution; this branch is currently
+                    // never taken, because we never reschedule canisters that completed a long
+                    // execution this round; but if we ever change that behavior, skip charging for
+                    // the first round of the new long execution but do charge for the second round.
+                    canister_priority.executed_rounds = 1;
+                } else {
+                    canister_priority.executed_rounds = 0;
+                }
             }
 
             Arc::make_mut(canister)

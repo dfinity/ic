@@ -103,7 +103,7 @@ impl SchedulerMetrics {
             ),
             compute_utilization_per_core: metrics_registry.histogram(
                 "scheduler_compute_utilization_per_core",
-                "The Internet Computer's compute utilization as a percent per cpu core.",
+                "The Internet Computer's compute utilization per CPU core as a 0.0-1.0 fraction.",
                 linear_buckets(0.0, 0.05, 21),
             ),
             msg_execution_duration: duration_histogram(

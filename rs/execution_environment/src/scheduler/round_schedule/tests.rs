@@ -1779,6 +1779,10 @@ prop_compose! {
 ///
 /// Only does one iteration per round. And one message or slice per canister.
 /// But this is sufficient to approximate the full range of scheduler behavior.
+///
+/// `debug_canister_idx` is a mechanism that enables verbose debugging output
+/// for a specific canister and for the scheduler state as a whole every round.
+/// Set to `Some(canister_idx)` to enable debug output.
 fn run_multi_round_simulation(
     scheduler_cores: usize,
     num_rounds: usize,
@@ -1969,6 +1973,24 @@ fn run_multi_round_simulation(
         }
     }
 
+    if debug_canister_idx.is_some() {
+        println!(
+            "executed rounds: {:?}",
+            sims.iter().map(|s| s.full_rounds).collect::<Vec<_>>()
+        );
+        println!(
+            "canister priorities: {:?}",
+            sims.iter()
+                .map(|sim| fixture
+                    .state
+                    .canister_priority(&sim.canister_id)
+                    .accumulated_priority
+                    .get()
+                    / MULTIPLIER)
+                .collect::<Vec<_>>()
+        );
+    }
+
     (fixture.state, sims)
 }
 
@@ -1981,21 +2003,6 @@ fn assert_multi_round_invariants(
     total_compute_allocation: usize,
     expected_long_execution_efficiency_percent: usize,
 ) -> Result<(), TestCaseError> {
-    println!(
-        "executed rounds: {:?}",
-        sims.iter().map(|s| s.full_rounds).collect::<Vec<_>>()
-    );
-    println!(
-        "canister priorities: {:?}",
-        sims.iter()
-            .map(|sim| state
-                .canister_priority(&sim.canister_id)
-                .accumulated_priority
-                .get()
-                / MULTIPLIER)
-            .collect::<Vec<_>>()
-    );
-
     // The sum of accumulated priorities should be zero (or slightly positive, in
     // case e.g. we just distributed compute allocation after not having executed
     // anything this round).
@@ -2083,7 +2090,7 @@ fn multi_round_priority_invariants(
 
     // Expect 90%+ efficient scheduling of long executions.
     //
-    // Because long executions are prioritized for throughput (in-progress ones are
+    // Because long executions are prioritized for throughput (in-progress ones get
     // prioritized over new ones); and due to AP exponential decay; long executions
     // are scheduled less efficiently.
     let expected_long_execution_efficiency_percent = 90;

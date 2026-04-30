@@ -731,9 +731,7 @@ impl SchedulerImpl {
             max_instructions_executed_per_thread =
                 max_instructions_executed_per_thread.max(instructions_executed);
 
-            // FIXME: `instructions` can be as low as `1` (and it keeps decreasing after
-            // each iteration). We should divide by `max_instructions_per_slice` instead.
-            let divisor = round_limits_per_thread.instructions.get();
+            let divisor = self.config.max_instructions_per_slice.get();
             debug_assert_ne!(divisor, 0, "prevent divide by zero panic");
             if divisor > 0 {
                 let value = instructions_executed.get() as f64 / divisor as f64;
