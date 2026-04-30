@@ -242,12 +242,15 @@ pub(crate) fn get_updated_remote_dkg_attempts(
     // Iterate over all remote DKG contexts
     for (_, context) in remote_dkg_contexts(call_contexts) {
         let target_id = *context.target_id();
-        let attempts = previous_remote_dkg_attempts
-            .get(&target_id)
-            .copied()
-            .unwrap_or(0)
-            .saturating_add(1);
-        remote_dkg_attempts.insert(target_id, attempts);
+        let new_attempts = match previous_remote_dkg_attempts.get(&target_id) {
+            // Carry forward completed contexts that still appear in the state.
+            Some(&0) => 0,
+            // Increment the attempt count for non-completed contexts.
+            Some(attempts) => attempts.saturating_add(1),
+            // For new contexts, set the attempt count to 1.
+            None => 1,
+        };
+        remote_dkg_attempts.insert(target_id, new_attempts);
     }
 
     // Completed target IDs remain tracked with attempt counter set to 0.
@@ -709,12 +712,16 @@ mod tests {
         let new_target = NiDkgTargetId::new([3_u8; 32]);
         let completed_target = NiDkgTargetId::new([4_u8; 32]);
         let filtered_idkg_target = NiDkgTargetId::new([5_u8; 32]);
+        let zero_attempts_persisted_target = NiDkgTargetId::new([6_u8; 32]);
+        let zero_attempts_removed_target = NiDkgTargetId::new([7_u8; 32]);
 
         let previous_attempts = BTreeMap::from([
             (persisted_target, 2),
             (removed_target, 7),
             (completed_target, 3),
             (filtered_idkg_target, 11),
+            (zero_attempts_persisted_target, 0),
+            (zero_attempts_removed_target, 0),
         ]);
         let summary = test_dkg_summary(
             Height::from(42),
@@ -769,6 +776,18 @@ mod tests {
         state
             .metadata
             .subnet_call_context_manager
+            .setup_initial_dkg_contexts
+            .insert(
+                CallbackId::from(5),
+                test_setup_initial_dkg_context(
+                    zero_attempts_persisted_target,
+                    RegistryVersion::from(1),
+                    (50..54).map(node_test_id).collect(),
+                ),
+            );
+        state
+            .metadata
+            .subnet_call_context_manager
             .reshare_chain_key_contexts
             .insert(
                 CallbackId::from(4),
@@ -790,6 +809,8 @@ mod tests {
         assert_eq!(attempts.get(&persisted_target), Some(&3));
         assert_eq!(attempts.get(&new_target), Some(&1));
         assert_eq!(attempts.get(&completed_target), Some(&0));
+        assert_eq!(attempts.get(&zero_attempts_persisted_target), Some(&0));
+        assert!(!attempts.contains_key(&zero_attempts_removed_target));
         assert!(!attempts.contains_key(&removed_target));
         assert!(!attempts.contains_key(&filtered_idkg_target));
     }
