@@ -147,10 +147,9 @@ impl Hypervisor {
             Ok(size) => std::cmp::max(size, canister_module.len()),
             Err(_) => canister_module.len(),
         };
-        let mut total_cost = self.create_execution_state_base_cost;
         let compilation_cost = self.cost_to_compile_wasm_instruction * wasm_size as u64;
         if let Err(err) = wasm_size_result {
-            total_cost += compilation_cost;
+            let total_cost = self.create_execution_state_base_cost + compilation_cost;
             round_limits.instructions -= as_round_instructions(total_cost);
             self.compilation_cache
                 .insert_err(&canister_module, err.clone().into());
@@ -172,12 +171,13 @@ impl Hypervisor {
                         self.compilation_cache.disk_bytes(),
                     );
                 }
-                total_cost += compilation_cost_handling.adjusted_compilation_cost(compilation_cost);
+                let total_cost = self.create_execution_state_base_cost
+                    + compilation_cost_handling.adjusted_compilation_cost(compilation_cost);
                 round_limits.instructions -= as_round_instructions(total_cost);
                 (total_cost, Ok(execution_state))
             }
             Err(err) => {
-                total_cost += compilation_cost;
+                let total_cost = self.create_execution_state_base_cost + compilation_cost;
                 round_limits.instructions -= as_round_instructions(total_cost);
                 (total_cost, Err(err))
             }
