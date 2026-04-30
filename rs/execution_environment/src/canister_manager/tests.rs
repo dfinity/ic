@@ -2469,6 +2469,9 @@ fn failed_upgrade_hooks_consume_instructions() {
             &mut round_limits,
         );
         // Function + unreachable.
+        // `fails_before_compiling_upgrade_wasm indicates` whether the upgrade fails during the pre-upgrade hook
+        // (before the upgrade WASM is ever compiled), as opposed to failing during or after compilation of the upgrade WASM;
+        // hence no overhead applies in such a case
         let expected = NumInstructions::from(2)
             + if fails_before_compiling_upgrade_wasm {
                 NumInstructions::new(0)

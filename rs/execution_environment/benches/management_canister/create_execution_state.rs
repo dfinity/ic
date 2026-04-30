@@ -12,10 +12,10 @@ const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(500_000_000_0
 fn run_benchmark(
     c: &mut Criterion,
     name: &str,
+    wasm: Vec<u8>,
     compilation_cost_handling: CompilationCostHandling,
 ) {
     let canister_id = canister_test_id(1);
-    let wasm = wat::parse_str("(module)").unwrap();
     c.bench_function(name, |b| {
         b.iter_batched(
             || {
@@ -37,16 +37,13 @@ fn run_benchmark(
                     compute_allocation_used: 0,
                     subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
                 };
-                hypervisor
-                    .create_execution_state(
-                        CanisterModule::new(wasm.clone()),
-                        tmpdir.path().to_path_buf(),
-                        canister_id,
-                        &mut round_limits,
-                        compilation_cost_handling,
-                    )
-                    .1
-                    .unwrap();
+                hypervisor.create_execution_state(
+                    CanisterModule::new(wasm.clone()),
+                    tmpdir.path().to_path_buf(),
+                    canister_id,
+                    &mut round_limits,
+                    compilation_cost_handling,
+                );
             },
             BatchSize::SmallInput,
         );
@@ -54,15 +51,24 @@ fn run_benchmark(
 }
 
 pub fn benchmark(c: &mut Criterion) {
+    let valid_wasm = wat::parse_str("(module)").unwrap();
     run_benchmark(
         c,
         "create_execution_state/wasm:empty/compilation_cost:full",
+        valid_wasm.clone(),
         CompilationCostHandling::CountFullAmount,
     );
     run_benchmark(
         c,
         "create_execution_state/wasm:empty/compilation_cost:reduced",
+        valid_wasm,
         CompilationCostHandling::CountReducedAmount,
+    );
+    run_benchmark(
+        c,
+        "create_execution_state/wasm:invalid/compilation_cost:full",
+        vec![],
+        CompilationCostHandling::CountFullAmount,
     );
 }
 
