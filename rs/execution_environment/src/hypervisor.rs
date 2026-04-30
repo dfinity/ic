@@ -119,14 +119,11 @@ pub struct Hypervisor {
     log: ReplicaLogger,
     cycles_account_manager: Arc<CyclesAccountManager>,
     compilation_cache: Arc<CompilationCache>,
+    create_execution_state_base_cost: NumInstructions,
     cost_to_compile_wasm_instruction: NumInstructions,
     dirty_page_overhead: NumInstructions,
     canister_guaranteed_callback_quota: usize,
 }
-
-// Base cost charged per `create_execution_state` call to cover fixed overhead
-// beyond per-instruction compilation cost (~10ms observed via benchmark).
-const CREATE_EXECUTION_STATE_BASE_COST: NumInstructions = NumInstructions::new(20_000_000);
 
 impl Hypervisor {
     pub(crate) fn subnet_id(&self) -> SubnetId {
@@ -150,7 +147,7 @@ impl Hypervisor {
             Ok(size) => std::cmp::max(size, canister_module.len()),
             Err(_) => canister_module.len(),
         };
-        let mut total_cost = CREATE_EXECUTION_STATE_BASE_COST;
+        let mut total_cost = self.create_execution_state_base_cost;
         let compilation_cost = self.cost_to_compile_wasm_instruction * wasm_size as u64;
         if let Err(err) = wasm_size_result {
             total_cost += compilation_cost;
@@ -236,6 +233,9 @@ impl Hypervisor {
                     .with_dir(tempfile::tempdir_in(temp_dir).unwrap())
                     .build(),
             ),
+            create_execution_state_base_cost: config
+                .embedders_config
+                .create_execution_state_base_cost,
             cost_to_compile_wasm_instruction: config
                 .embedders_config
                 .cost_to_compile_wasm_instruction,
@@ -250,6 +250,7 @@ impl Hypervisor {
         log: ReplicaLogger,
         cycles_account_manager: Arc<CyclesAccountManager>,
         wasm_executor: Arc<dyn WasmExecutor>,
+        create_execution_state_base_cost: NumInstructions,
         cost_to_compile_wasm_instruction: NumInstructions,
         dirty_page_overhead: NumInstructions,
         canister_guaranteed_callback_quota: usize,
@@ -266,6 +267,7 @@ impl Hypervisor {
                     .with_dir(tempfile::tempdir().unwrap())
                     .build(),
             ),
+            create_execution_state_base_cost,
             cost_to_compile_wasm_instruction,
             dirty_page_overhead,
             canister_guaranteed_callback_quota,
