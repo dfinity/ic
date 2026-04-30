@@ -21,6 +21,7 @@ use ic_system_test_driver::{
     systest,
     util::{MessageCanister, block_on, runtime_from_url},
 };
+use ic_types::Height;
 
 /// Tests whether a call to `sign_with_ecdsa`/`sign_with_schnorr` can be timed out when setting signature_request_timeout_ns.
 fn test(env: TestEnv) {
@@ -47,7 +48,7 @@ fn test(env: TestEnv) {
         )
         .await;
         let msg_can = MessageCanister::new(&app_agent, app_node.effective_canister_id()).await;
-        let message_hash = vec![0xabu8; 32];
+        let message_hash = vec![0xab_u8; 32];
         for key_id in key_ids {
             // Get the public key first to make sure feature is working
             let _public_key = get_public_key_with_logger(&key_id, &msg_can, &log)
@@ -62,14 +63,9 @@ fn test(env: TestEnv) {
             )
             .await
             .unwrap_err();
-            let expected_message = if key_id.is_idkg_key() {
-                "Signature request expired"
-            } else {
-                "VetKD request expired"
-            };
             let expected_reject = RejectResponse {
                 reject_code: RejectCode::CanisterReject,
-                reject_message: expected_message.to_string(),
+                reject_message: "Chain key request expired".to_string(),
                 error_code: Some("IC0406".to_string()),
             };
             match error {
@@ -80,9 +76,13 @@ fn test(env: TestEnv) {
     });
 }
 
+fn setup(test_env: TestEnv) {
+    setup_without_ecdsa_on_nns(test_env, Height::from(19));
+}
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(setup_without_ecdsa_on_nns)
+        .with_setup(setup)
         .add_test(systest!(test))
         .execute_from_args()?;
     Ok(())

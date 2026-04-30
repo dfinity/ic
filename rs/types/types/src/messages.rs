@@ -14,13 +14,13 @@ pub use self::http::{
     HttpQueryContent, HttpQueryResponse, HttpQueryResponseReply, HttpReadState,
     HttpReadStateContent, HttpReadStateResponse, HttpReply, HttpRequest, HttpRequestContent,
     HttpRequestEnvelope, HttpRequestError, HttpSignedQueryResponse, HttpStatusResponse,
-    HttpUserQuery, NodeSignature, QueryResponseHash, RawHttpRequestVal, ReplicaHealthStatus,
-    SignedDelegation,
+    HttpUserQuery, NodeSignature, QueryResponseHash, RawHttpRequestVal, RawSignedSenderInfo,
+    ReplicaHealthStatus, SenderInfoContent, SignedDelegation, SignedSenderInfo,
 };
 use crate::methods::Callback;
 pub use crate::methods::SystemMethod;
 use crate::time::CoarseTime;
-use crate::{Cycles, NumBytes, UserId, user_id_into_protobuf, user_id_try_from_option};
+use crate::{NumBytes, UserId, user_id_into_protobuf, user_id_try_from_option};
 pub use blob::Blob;
 use ic_base_types::{CanisterId, PrincipalId};
 #[cfg(test)]
@@ -29,8 +29,10 @@ use ic_management_canister_types_private::CanisterChangeOrigin;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
+use ic_types_cycles::Cycles;
 pub use ingress_messages::{
-    Ingress, ParseIngressError, SignedIngress, SignedIngressContent, extract_effective_canister_id,
+    Ingress, ParseIngressError, SenderInfo, SignedIngress, SignedIngressContent,
+    extract_effective_canister_id,
 };
 pub use inter_canister::{
     CallContextId, CallbackId, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE, Payload, Refund,
@@ -147,8 +149,8 @@ impl StopCanisterContext {
     }
 }
 
-impl From<(CanisterCall, StopCanisterCallId)> for StopCanisterContext {
-    fn from(input: (CanisterCall, StopCanisterCallId)) -> Self {
+impl From<(&mut CanisterCall, StopCanisterCallId)> for StopCanisterContext {
+    fn from(input: (&mut CanisterCall, StopCanisterCallId)) -> Self {
         let (msg, call_id) = input;
         assert_eq!(
             msg.method_name(),
@@ -156,11 +158,11 @@ impl From<(CanisterCall, StopCanisterCallId)> for StopCanisterContext {
             "Converting a CanisterCall into StopCanisterContext should only happen with stop_canister calls."
         );
         match msg {
-            CanisterCall::Request(mut req) => StopCanisterContext::Canister {
+            CanisterCall::Request(req) => StopCanisterContext::Canister {
                 sender: req.sender,
                 reply_callback: req.sender_reply_callback,
                 call_id: Some(call_id),
-                cycles: Arc::make_mut(&mut req).payment.take(),
+                cycles: Arc::make_mut(req).payment.take(),
                 deadline: req.deadline,
             },
             CanisterCall::Ingress(ingress) => StopCanisterContext::Ingress {
@@ -411,6 +413,14 @@ impl CanisterCall {
         }
     }
 
+    /// Returns the sender info of the message if it is an ingress message with a sender info.
+    pub fn sender_info(&self) -> Option<&SenderInfo> {
+        match self {
+            CanisterCall::Request(_) => None,
+            CanisterCall::Ingress(msg) => msg.sender_info.as_ref(),
+        }
+    }
+
     pub fn canister_change_origin(&self, canister_version: Option<u64>) -> CanisterChangeOrigin {
         match self {
             CanisterCall::Ingress(msg) => CanisterChangeOrigin::from_user(msg.source.get()),
@@ -646,6 +656,7 @@ mod tests {
                         sender: Blob(vec![0x04]),
                         nonce: None,
                         ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+                        sender_info: None,
                     },
                 },
                 sender_pubkey: Some(Blob(vec![])),
@@ -680,6 +691,7 @@ mod tests {
                         sender: Blob(vec![0x04]),
                         nonce: None,
                         ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+                        sender_info: None,
                     },
                 },
                 sender_pubkey: Some(Blob(vec![])),
@@ -702,7 +714,7 @@ mod tests {
     }
 
     #[test]
-    fn decoding_submit_call_with_nonce() {
+    fn decoding_submit_call_with_nonce_and_sender_info() {
         let expiry_time = expiry_time_from_now();
         assert_cbor_de_equal(
             &HttpRequestEnvelope::<HttpCallContent> {
@@ -714,6 +726,11 @@ mod tests {
                         sender: Blob(vec![0x04]),
                         nonce: Some(Blob(vec![1, 2, 3, 4, 5])),
                         ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+                        sender_info: Some(RawSignedSenderInfo {
+                            info: Blob(vec![1, 2, 3]),
+                            signer: Blob(vec![42; 8]),
+                            sig: Blob(vec![4, 5, 6]),
+                        }),
                     },
                 },
                 sender_pubkey: Some(Blob(vec![])),
@@ -729,6 +746,11 @@ mod tests {
                     text("sender") => bytes(&[0x04][..]),
                     text("ingress_expiry") => integer(expiry_time.as_nanos_since_unix_epoch()),
                     text("nonce") => bytes(&[1, 2, 3, 4, 5][..]),
+                    text("sender_info") => Value::Map(btreemap! {
+                        text("info") => bytes(&[1, 2, 3][..]),
+                        text("signer") => bytes(&[42; 8][..]),
+                        text("sig") => bytes(&[4, 5, 6][..]),
+                    }),
                 }),
                 text("sender_pubkey") => bytes(b""),
                 text("sender_sig") => bytes(b""),
@@ -748,6 +770,11 @@ mod tests {
                     sender: Blob(vec![0x04]),
                     nonce: None,
                     ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+                    sender_info: Some(RawSignedSenderInfo {
+                        info: Blob(vec![1, 2, 3]),
+                        signer: Blob(vec![42; 8]),
+                        sig: Blob(vec![4, 5, 6]),
+                    }),
                 },
             },
             sender_pubkey: Some(Blob(vec![2; 32])),
@@ -808,6 +835,7 @@ mod tests {
                     sender: Blob(vec![0x04]),
                     nonce: None,
                     ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+                    sender_info: None,
                 },
             },
             sender_pubkey: None,

@@ -35,6 +35,7 @@ ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
+ic-nns-governance-conversions = { path = "../../nns/governance/conversions" }
 ic-nns-handler-root = { path = "../../nns/handlers/root/impl" }
 ic-nns-init = { path = "../../nns/init" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
@@ -47,6 +48,7 @@ ic-registry-local-store = { path = "../local_store" }
 ic-registry-nns-data-provider = { path = "../nns_data_provider" }
 ic-registry-nns-data-provider-wrappers = { path = "../nns_data_provider_wrappers" }
 ic-registry-provisional-whitelist = { path = "../provisional_whitelist" }
+ic-registry-resource-limits = { path = "../resource_limits" }
 ic-registry-routing-table = { path = "../routing_table" }
 ic-registry-subnet-features = { path = "../subnet_features" }
 ic-registry-subnet-type = { path = "../subnet_type" }

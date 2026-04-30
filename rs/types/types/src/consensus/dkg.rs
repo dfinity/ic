@@ -402,11 +402,11 @@ fn build_initial_dkg_attempts_map(
 ) -> BTreeMap<NiDkgTargetId, u32> {
     vec.iter()
         .map(|item| {
-            let mut id = [0u8; NiDkgTargetId::SIZE];
+            let mut id = [0_u8; NiDkgTargetId::SIZE];
             // Safely convert the received slice to a fixed-size slice.
             let mut v = Vec::<u8>::new();
             v.extend_from_slice(&item.target_id);
-            v.resize(NiDkgTargetId::SIZE, 0u8);
+            v.resize(NiDkgTargetId::SIZE, 0_u8);
             id.copy_from_slice(&v);
             // Return the key-value pair.
             (NiDkgTargetId::new(id), item.attempt_no)
@@ -505,17 +505,30 @@ impl TryFrom<pb::DkgDataPayload> for DkgDataPayload {
 }
 
 impl DkgDataPayload {
-    /// Return an empty DealingsPayload using the given start_height.
+    /// Return an empty [`DkgDataPayload`] using the given start_height.
     pub fn new_empty(start_height: Height) -> Self {
         Self::new(start_height, vec![])
     }
 
-    /// Return an new DealingsPayload.
+    /// Return a new [`DkgDataPayload`].
     pub fn new(start_height: Height, messages: DealingMessages) -> Self {
         Self {
             start_height,
             messages,
             transcripts_for_remote_subnets: vec![],
+        }
+    }
+
+    /// Return a new [`DkgDataPayload`] with the given remote DKG transcripts.
+    pub fn new_with_remote_dkg_transcripts(
+        start_height: Height,
+        messages: DealingMessages,
+        remote_dkg_transcripts: Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)>,
+    ) -> Self {
+        Self {
+            start_height,
+            messages,
+            transcripts_for_remote_subnets: remote_dkg_transcripts,
         }
     }
 

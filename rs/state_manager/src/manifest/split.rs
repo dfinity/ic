@@ -225,7 +225,7 @@ impl ManifestBuilder {
 
         if data.is_empty() {
             // File has zero chunks.
-            0u32.update_hash(&mut file_hasher);
+            0_u32.update_hash(&mut file_hasher);
         } else {
             let mut chunk_hasher = chunk_hasher();
             chunk_hasher.write(data);
@@ -237,7 +237,7 @@ impl ManifestBuilder {
             };
 
             // File has one chunk.
-            1u32.update_hash(&mut file_hasher);
+            1_u32.update_hash(&mut file_hasher);
             write_chunk_hash(&mut file_hasher, &chunk_info, self.manifest.version);
 
             self.manifest.chunk_table.push(chunk_info);

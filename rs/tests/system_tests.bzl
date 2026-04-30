@@ -22,7 +22,6 @@ def system_test(
         runtime_deps = {},
         tags = [],
         test_timeout = "long",
-        flaky = False,
         enable_metrics = False,
         prometheus_vm_required_host_features = [],
         prometheus_vm_resources = default_vm_resources,
@@ -52,7 +51,6 @@ def system_test(
       runtime_deps: dependencies to make available to the test when it runs.
       tags: additional tags for the system_test.
       test_timeout: bazel test timeout (short, moderate, long or eternal).
-      flaky: rerun in case of failure (up to 3 times).
       enable_metrics: if True, a PrometheusVm will be spawned running both p8s (configured to scrape the testnet) & Grafana.
       prometheus_vm_required_host_features: a list of strings specifying the required host features of the PrometheusVm.
       prometheus_vm_resources: a structure describing the required resources of the PrometheusVm. For example:
@@ -224,7 +222,6 @@ def system_test(
         tags = tags + (["manual"] if "colocate" in tags else []),
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
-        flaky = flaky,
         visibility = visibility,
     )
 
@@ -252,7 +249,6 @@ def system_test(
         tags = tags + (["manual"] if not "colocate" in tags else []) + additional_colocate_tags,
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
-        flaky = flaky,
         visibility = visibility,
     )
     return struct(test_driver_target = test_driver_target)

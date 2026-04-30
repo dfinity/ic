@@ -1,6 +1,7 @@
 //! This module encapsulates all components required for establishing of a
 //! distributed consensus.
 
+mod allowed_panics;
 pub mod batch_delivery;
 mod block_maker;
 pub mod bounds;
@@ -24,10 +25,11 @@ pub mod validator;
 mod proptests;
 
 use crate::consensus::{
-    block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker, finalizer::Finalizer,
-    metrics::ConsensusMetrics, notary::Notary, payload_builder::PayloadBuilderImpl,
-    priority::new_bouncer, purger::Purger, random_beacon_maker::RandomBeaconMaker,
-    random_tape_maker::RandomTapeMaker, share_aggregator::ShareAggregator, validator::Validator,
+    allowed_panics::panic_with_no_subnet_record, block_maker::BlockMaker,
+    catchup_package_maker::CatchUpPackageMaker, finalizer::Finalizer, metrics::ConsensusMetrics,
+    notary::Notary, payload_builder::PayloadBuilderImpl, priority::new_bouncer, purger::Purger,
+    random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
+    share_aggregator::ShareAggregator, validator::Validator,
 };
 use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
@@ -48,7 +50,7 @@ use ic_interfaces::{
     time_source::TimeSource,
 };
 use ic_interfaces_registry::{POLLING_PERIOD, RegistryClient};
-use ic_interfaces_state_manager::StateManager;
+use ic_interfaces_state_manager::{StateManager, StateReader};
 use ic_logger::{ReplicaLogger, debug, error, info, trace, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -140,7 +142,7 @@ pub struct ConsensusImpl {
     metrics: ConsensusMetrics,
     time_source: Arc<dyn TimeSource>,
     registry_client: Arc<dyn RegistryClient>,
-    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
     last_invoked: RefCell<BTreeMap<ConsensusSubcomponent, Time>>,
     schedule: RoundRobin,
@@ -164,7 +166,7 @@ impl ConsensusImpl {
         self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
         canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
         query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
-        vetkd_payload_builder: Arc<dyn BatchPayloadBuilder>,
+        chain_key_payload_builder: Arc<dyn BatchPayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         idkg_pool: Arc<RwLock<dyn IDkgPool>>,
         dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
@@ -194,7 +196,7 @@ impl ConsensusImpl {
             self_validating_payload_builder,
             canister_http_payload_builder,
             query_stats_payload_builder,
-            vetkd_payload_builder,
+            chain_key_payload_builder,
             metrics_registry.clone(),
             logger.clone(),
         ));
@@ -262,7 +264,6 @@ impl ConsensusImpl {
                 payload_builder.clone(),
                 dkg_pool.clone(),
                 idkg_pool.clone(),
-                thread_pool.clone(),
                 state_manager.clone(),
                 stable_registry_version_age,
                 metrics_registry.clone(),
@@ -300,7 +301,7 @@ impl ConsensusImpl {
             log: logger,
             time_source,
             registry_client,
-            state_manager,
+            state_reader: state_manager,
             malicious_flags,
             replica_config,
             last_invoked: RefCell::new(last_invoked),
@@ -355,10 +356,7 @@ impl ConsensusImpl {
             .get_is_halted(self.replica_config.subnet_id, version)
         {
             Ok(None) => {
-                panic!(
-                    "No subnet record found for registry version={:?} and subnet_id={:?}",
-                    version, self.replica_config.subnet_id,
-                );
+                panic_with_no_subnet_record(version, self.replica_config.subnet_id);
             }
             Err(err) => {
                 error!(
@@ -450,7 +448,7 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusImpl {
             "Consensus finalized height: {}, state available: {}, DKG key material available: {}",
             pool_reader.get_finalized_height(),
             pool_reader.get_finalized_tip().context.certified_height
-                <= self.state_manager.latest_certified_height(),
+                <= self.state_reader.latest_certified_height(),
             self.dkgs_available(&pool_reader)
         );
 

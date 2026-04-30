@@ -5,7 +5,7 @@ use ic_config::execution_environment::{
 };
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
-use ic_execution_environment::units::KIB;
+use ic_execution_environment::units::{KIB, MIB};
 use ic_management_canister_types_private::{
     self as ic00, BoundedAllowedViewers, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord,
     CanisterSettingsArgs, CanisterSettingsArgsBuilder, DataSize, EmptyBlob,
@@ -13,20 +13,28 @@ use ic_management_canister_types_private::{
     FetchCanisterLogsResponse, LogVisibilityV2, Payload,
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::system_state::log_memory_store::LogMemoryStore;
 use ic_state_machine_tests::{
     ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, SubmitIngressError, UserError,
 };
 use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use ic_test_utilities_execution_environment::{get_reject, get_reply, wat_canister, wat_fn};
 use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats, labels};
-use ic_types::{CanisterId, Cycles, NumInstructions, ingress::WasmResult};
-use more_asserts::{assert_le, assert_lt};
+use ic_types::{CanisterId, NumInstructions, ingress::WasmResult};
+use ic_types_cycles::Cycles;
+use more_asserts::{assert_gt, assert_le, assert_lt};
 use proptest::{prelude::ProptestConfig, prop_assume};
 use std::time::{Duration, SystemTime};
 
 const TEST_DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * KIB as usize;
 const MAX_LOG_MESSAGE_LEN: usize = 4 * KIB as usize;
 const TIME_STEP: Duration = Duration::from_nanos(111_111);
+
+/// Returns the number of log records needed to fill a buffer of the given size
+/// with messages of the given length.
+fn records_to_fill(buffer_size: u64, message_len: usize) -> u32 {
+    (buffer_size / LogMemoryStore::estimate_record_size(message_len) as u64 + 1) as u32
+}
 
 // Change limits in order not to duplicate prod values.
 // Setting the instruction limit per round equal to the instruction limit per slice
@@ -38,7 +46,7 @@ const MAX_INSTRUCTIONS_PER_ROUND: NumInstructions = NumInstructions::new(5 * B);
 const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions::new(25 * B);
 const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(5 * B);
 
-const CANISTER_INIT_CYCLES: Cycles = Cycles::new(301_000_000_000_u128);
+const CANISTER_INIT_CYCLES: Cycles = Cycles::new(310_000_000_000_u128);
 
 fn system_time_to_nanos(t: SystemTime) -> u64 {
     t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64
@@ -143,7 +151,7 @@ fn restart_node(env: StateMachine) -> StateMachine {
     ))
 }
 
-fn fetch_canister_logs(
+fn fetch_canister_logs_query(
     env: &StateMachine,
     sender: PrincipalId,
     canister_id: CanisterId,
@@ -154,6 +162,51 @@ fn fetch_canister_logs(
         "fetch_canister_logs",
         FetchCanisterLogsRequest::new(canister_id).encode(),
     )
+}
+
+fn fetch_log_records(
+    env: &StateMachine,
+    sender: PrincipalId,
+    canister_id: CanisterId,
+) -> Vec<CanisterLogRecord> {
+    let reply = fetch_canister_logs_query(env, sender, canister_id);
+    FetchCanisterLogsResponse::decode(&get_reply(reply))
+        .unwrap()
+        .canister_log_records
+}
+
+fn fetch_canister_logs_intercanister(
+    env: &StateMachine,
+    universal_canister: CanisterId,
+    canister_id: CanisterId,
+    cycles: Cycles,
+) -> Result<WasmResult, UserError> {
+    env.execute_ingress(
+        universal_canister,
+        "update",
+        wasm()
+            .call_with_cycles(
+                CanisterId::ic_00(),
+                "fetch_canister_logs",
+                call_args()
+                    .other_side(FetchCanisterLogsRequest::new(canister_id).encode())
+                    .on_reject(wasm().reject_message().reject()),
+                cycles,
+            )
+            .build(),
+    )
+}
+
+fn fetch_log_records_intercanister(
+    env: &StateMachine,
+    universal_canister: CanisterId,
+    canister_id: CanisterId,
+    cycles: Cycles,
+) -> Vec<CanisterLogRecord> {
+    let reply = fetch_canister_logs_intercanister(env, universal_canister, canister_id, cycles);
+    FetchCanisterLogsResponse::decode(&get_reply(reply))
+        .unwrap()
+        .canister_log_records
 }
 
 #[test]
@@ -226,24 +279,24 @@ fn test_fetch_canister_logs_via_query_call() {
 }
 
 #[test]
-fn test_metrics_for_fetch_canister_logs_via_query_call() {
-    fn fetch_canister_logs_count(env: &StateMachine) -> u64 {
-        fetch_histogram_vec_stats(
-            env.metrics_registry(),
-            "execution_subnet_query_message_duration_seconds",
-        )
-        .get(&labels(&[
-            ("method_name", "query_ic00_fetch_canister_logs"),
-            ("status", "success"),
-        ]))
-        .map_or(0, |stats| stats.count)
+fn test_metric_fetch_canister_logs_via_query_call() {
+    // Query calls to `fetch_canister_logs` are captured by the subnet query
+    // message duration histogram with `method_name="query_ic00_fetch_canister_logs"`.
+    const METRIC: &str = "execution_subnet_query_message_duration_seconds";
+    fn count(env: &StateMachine) -> u64 {
+        fetch_histogram_vec_stats(env.metrics_registry(), METRIC)
+            .get(&labels(&[
+                ("method_name", "query_ic00_fetch_canister_logs"),
+                ("status", "success"),
+            ]))
+            .map_or(0, |s| s.count)
     }
     let user_controller = PrincipalId::new_user_test_id(42);
     let (env, canister_id) = setup_with_controller(user_controller, wat_canister().build_wasm());
 
-    assert_eq!(fetch_canister_logs_count(&env), 0);
-    let _ = fetch_canister_logs(&env, user_controller, canister_id);
-    assert_eq!(fetch_canister_logs_count(&env), 1);
+    assert_eq!(count(&env), 0);
+    let _ = fetch_canister_logs_query(&env, user_controller, canister_id);
+    assert_eq!(count(&env), 1);
 }
 
 #[test]
@@ -651,7 +704,7 @@ fn test_log_visibility_of_fetch_canister_logs() {
                 .build(),
             wat_canister().build_wasm(),
         );
-        let actual_result = fetch_canister_logs(&env, sender, canister_id);
+        let actual_result = fetch_canister_logs_query(&env, sender, canister_id);
         assert_eq!(
             actual_result, expected_result,
             "Failed for log_visibility: {log_visibility:?}, sender: {sender}"
@@ -673,7 +726,7 @@ fn test_appending_logs_in_replied_update_call(#[strategy("\\PC*")] message: Stri
     env.advance_time(Duration::from_secs(1));
     let timestamp = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![(0, timestamp, message.as_bytes().to_vec())])
@@ -694,7 +747,7 @@ fn test_appending_logs_in_trapped_update_call(#[strategy("\\PC*")] message: Stri
     env.advance_time(Duration::from_secs(1));
     let timestamp = env.time();
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![
@@ -718,7 +771,7 @@ fn test_appending_logs_in_replied_replicated_query_call(#[strategy("\\PC*")] mes
     env.advance_time(Duration::from_secs(1));
     let timestamp = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![(0, timestamp, message.as_bytes().to_vec())])
@@ -739,7 +792,7 @@ fn test_appending_logs_in_trapped_replicated_query_call(#[strategy("\\PC*")] mes
     env.advance_time(Duration::from_secs(1));
     let timestamp = env.time();
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![
@@ -779,7 +832,7 @@ fn test_canister_log_record_index_increment_for_different_calls() {
     let timestamp_23 = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test2", vec![]);
 
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![
@@ -825,7 +878,7 @@ fn test_canister_log_record_index_increment_after_node_restart() {
     let timestamp_23 = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test2", vec![]);
 
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![
@@ -851,7 +904,7 @@ fn test_logging_in_trapped_wasm_execution() {
     // Grow stable memory by 1 page (64kb), reading outside of the page should trap.
     let timestamp = env.time();
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![(
@@ -873,7 +926,7 @@ fn test_logging_explicit_canister_trap_without_message() {
     env.advance_time(Duration::from_secs(1));
     let timestamp = env.time();
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![(0, timestamp, "[TRAP]: (no message)".to_string())]
@@ -893,7 +946,7 @@ fn test_logging_explicit_canister_trap_with_message() {
     env.advance_time(Duration::from_secs(1));
     let timestamp = env.time();
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![(0, timestamp, "[TRAP]: some text".to_string())]
@@ -919,12 +972,10 @@ fn test_canister_log_stays_within_limit() {
         let _ = env.execute_ingress(canister_id, "test", vec![]);
         env.tick();
     }
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap();
+    let canister_log_records = fetch_log_records(&env, user_controller, canister_id);
     // Expect records' total size to be under the limit, excluding the outer vector's static size.
     assert_le!(
-        response
-            .canister_log_records
+        canister_log_records
             .iter()
             .map(|r| r.data_size())
             .sum::<usize>(),
@@ -972,7 +1023,7 @@ fn test_logging_trap_in_heartbeat() {
             .build_wasm(),
     );
     let timestamp = env.time();
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![
@@ -997,7 +1048,7 @@ fn test_logging_trap_in_timer() {
             .build_wasm(),
     );
     let timestamp = env.time();
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![
@@ -1028,7 +1079,7 @@ fn test_deleting_logs_on_reinstall() {
     env.advance_time(TIME_STEP);
 
     // Expect the log record from cansiter version #1.
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![
@@ -1059,7 +1110,7 @@ fn test_deleting_logs_on_reinstall() {
     env.advance_time(TIME_STEP);
 
     // Expect only the log records after reinstall.
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![
@@ -1094,7 +1145,7 @@ fn test_deleting_logs_on_uninstall() {
     env.stop_canister_as(user_controller, canister_id).unwrap();
 
     // Expect logs to be available.
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![
@@ -1114,7 +1165,7 @@ fn test_deleting_logs_on_uninstall() {
     .unwrap();
 
     // Expect logs to be deleted.
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![])
@@ -1161,7 +1212,7 @@ fn test_logging_debug_print_persists_over_upgrade() {
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     env.advance_time(TIME_STEP);
 
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![
@@ -1202,7 +1253,7 @@ fn test_logging_trap_at_install_start() {
     // Assert install fails due to trap.
     assert_eq!(result.unwrap_err().code(), ErrorCode::CanisterCalledTrap);
 
-    let result = fetch_canister_logs(&env, canister_id.into(), canister_id);
+    let result = fetch_canister_logs_query(&env, canister_id.into(), canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![
@@ -1237,7 +1288,7 @@ fn test_logging_trap_at_install_init() {
     // Assert install fails due to trap.
     assert_eq!(result.unwrap_err().code(), ErrorCode::CanisterCalledTrap);
 
-    let result = fetch_canister_logs(&env, canister_id.into(), canister_id);
+    let result = fetch_canister_logs_query(&env, canister_id.into(), canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![
@@ -1295,7 +1346,7 @@ fn test_logging_trap_in_pre_upgrade() {
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     env.advance_time(TIME_STEP);
 
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![
@@ -1354,7 +1405,7 @@ fn test_logging_trap_after_upgrade_in_start() {
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     env.advance_time(TIME_STEP);
 
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![
@@ -1418,7 +1469,7 @@ fn test_logging_trap_after_upgrade_in_post_upgrade() {
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     env.advance_time(TIME_STEP);
 
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![
@@ -1467,7 +1518,7 @@ fn test_logging_debug_print_over_dts() {
     let _msg_id = env.send_ingress(PrincipalId::new_anonymous(), canister_id, "test", vec![]);
     // Since one slice was processed in `send_ingress` iterate over one slice less.
     for i in 1..number_of_slices {
-        let result = fetch_canister_logs(&env, user_controller, canister_id);
+        let result = fetch_canister_logs_query(&env, user_controller, canister_id);
         assert_eq!(
             FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
             canister_log_response(vec![]),
@@ -1478,7 +1529,7 @@ fn test_logging_debug_print_over_dts() {
     }
 
     // Expect all the log messages after the last slice is processed with the timestamp of the first slice.
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![
@@ -1521,7 +1572,7 @@ fn test_logging_trap_over_dts() {
     let _msg_id = env.send_ingress(PrincipalId::new_anonymous(), canister_id, "test", vec![]);
     // Since one slice was processed in `send_ingress` iterate over one slice less.
     for i in 1..number_of_slices {
-        let result = fetch_canister_logs(&env, user_controller, canister_id);
+        let result = fetch_canister_logs_query(&env, user_controller, canister_id);
         assert_eq!(
             FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
             canister_log_response(vec![]),
@@ -1532,7 +1583,7 @@ fn test_logging_trap_over_dts() {
     }
 
     // Expect all the log messages after the last slice is processed with the timestamp of the first slice.
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![
@@ -1604,7 +1655,7 @@ fn test_logging_of_long_running_dts_over_checkpoint() {
         }
     }
     // Expect no log messages right after the checkpoint round, since the message did not finish.
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![])
@@ -1615,7 +1666,7 @@ fn test_logging_of_long_running_dts_over_checkpoint() {
     // Rounds #B0 and further: Afther the checkpoint process the message again through all the slices.
     let timestamp_after_checkpoint = system_time_to_nanos(env.time());
     for i in 0..number_of_slices {
-        let result = fetch_canister_logs(&env, user_controller, canister_id);
+        let result = fetch_canister_logs_query(&env, user_controller, canister_id);
         assert_eq!(
             FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
             canister_log_response(vec![]),
@@ -1630,7 +1681,7 @@ fn test_logging_of_long_running_dts_over_checkpoint() {
     env.advance_time(TIME_STEP);
 
     // Expect all the log messages after the last slice is processed with the timestamp of the first slice.
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![
@@ -1644,52 +1695,215 @@ fn test_logging_of_long_running_dts_over_checkpoint() {
     );
 }
 
+const METRIC_BYTES_OVERHEAD_FACTOR: f64 = 1.05;
+const METRIC_PAYLOAD_SIZE: usize = 1_000;
+
 #[test]
-fn test_canister_log_memory_usage_bytes_old() {
+fn test_metric_canister_log_memory_usage_bytes_from_canister_log() {
+    // When the log memory store feature is disabled, the metric tracks
+    // `CanisterLog.bytes_used()`, which grows with each debug_print.
     if LOG_MEMORY_STORE_FEATURE_ENABLED {
         return;
     }
-    let metric = "canister_log_memory_usage_bytes_v2";
-    const PAYLOAD_SIZE: usize = 1_000;
+    const METRIC: &str = "canister_log_memory_usage_bytes_v3";
     let env = setup_env();
     let canister_id = create_and_install_canister(
         &env,
         CanisterSettingsArgsBuilder::new().build(),
         wat_canister()
-            .update("test", wat_fn().debug_print(&[37; PAYLOAD_SIZE]))
+            .update("test", wat_fn().debug_print(&[37; METRIC_PAYLOAD_SIZE]))
             .build_wasm(),
     );
-    // Assert canister log size metric is zero initially.
-    let stats = fetch_histogram_stats(env.metrics_registry(), metric).unwrap();
+
+    // Nothing logged yet — sum is zero.
+    let stats = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
     assert_eq!(stats.sum, 0.0);
 
-    // Add log message.
+    // One debug_print — sum reflects the payload plus small record metadata.
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-
-    // Assert canister log size metric is within the expected range.
-    let stats = fetch_histogram_stats(env.metrics_registry(), metric).unwrap();
-    assert_le!(PAYLOAD_SIZE as f64, stats.sum);
-    assert_le!(stats.sum, 1.05 * (PAYLOAD_SIZE as f64));
+    let stats = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
+    assert_le!(METRIC_PAYLOAD_SIZE as f64, stats.sum);
+    assert_le!(
+        stats.sum,
+        METRIC_BYTES_OVERHEAD_FACTOR * METRIC_PAYLOAD_SIZE as f64
+    );
 }
 
 #[test]
-fn test_canister_log_memory_usage_bytes_new() {
+fn test_metric_canister_log_memory_usage_bytes_from_log_memory_store() {
+    // When the log memory store feature is enabled, the metric tracks
+    // `LogMemoryStore.memory_usage()` — the allocated capacity of the store.
+    // It is set at canister creation from the default limit and stays stable
+    // under debug_print; only a `log_memory_limit` resize changes it.
     if !LOG_MEMORY_STORE_FEATURE_ENABLED {
         return;
     }
-    // Test canister logging metrics record the size of the log.
-    let metric = "canister_log_memory_usage_bytes_v2";
+    const METRIC: &str = "canister_log_memory_usage_bytes_v3";
     let env = setup_env();
-    let _canister_id = create_and_install_canister(
+    let canister_id = create_and_install_canister(
         &env,
         CanisterSettingsArgsBuilder::new().build(),
+        wat_canister()
+            .update("test", wat_fn().debug_print(&[37; METRIC_PAYLOAD_SIZE]))
+            .build_wasm(),
+    );
+
+    // Every per-round observation equals the default allocated store size.
+    let before = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
+    assert_eq!(
+        before.sum as u64 / before.count,
+        TEST_DEFAULT_LOG_MEMORY_USAGE
+    );
+
+    // After a debug_print: allocation unchanged; new observations carry the
+    // same value, so the per-observation average remains the default.
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+    let after = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
+    assert_gt!(after.count, before.count);
+    assert_eq!(
+        after.sum as u64 / after.count,
+        TEST_DEFAULT_LOG_MEMORY_USAGE
+    );
+}
+
+#[test]
+fn test_metric_canister_log_delta_memory_usage_bytes() {
+    // Recorded by the scheduler at round finalization for every canister that
+    // produced delta log records that round. One debug_print in one round
+    // yields exactly one additional sample.
+    const METRIC: &str = "canister_log_delta_memory_usage_bytes";
+    let env = setup_env();
+    let canister_id = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new().build(),
+        wat_canister()
+            .update("test", wat_fn().debug_print(&[37; METRIC_PAYLOAD_SIZE]))
+            .build_wasm(),
+    );
+    let before = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
+
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+
+    let after = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
+    assert_eq!(after.count, before.count + 1);
+    let delta_sum = after.sum - before.sum;
+    assert_le!(METRIC_PAYLOAD_SIZE as f64, delta_sum);
+    assert_le!(
+        delta_sum,
+        METRIC_BYTES_OVERHEAD_FACTOR * METRIC_PAYLOAD_SIZE as f64
+    );
+}
+
+#[test]
+fn test_metric_canister_log_retention_seconds() {
+    // Observed by the scheduler at round finalization for canisters that
+    // appended log records this round. Retention is the wall-clock span
+    // between the oldest and newest records held in the buffer. Both log
+    // stores (old `CanisterLog` and new `LogMemoryStore`) compute it the
+    // same way — the assertions hold regardless of the feature flag.
+    const METRIC: &str = "canister_log_retention_seconds";
+    const TIME_ADVANCE: Duration = Duration::from_secs(60);
+    let env = setup_env();
+    let canister_id = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new().build(),
+        wat_canister()
+            .update("test", wat_fn().debug_print(b"hello"))
+            .build_wasm(),
+    );
+    // Seed the buffer with a first record so retention is non-zero on the
+    // second observation.
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+    let before = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
+
+    // Advance simulated time and append another record.
+    env.advance_time(TIME_ADVANCE);
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+
+    let after = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
+    assert_eq!(after.count, before.count + 1);
+    let sample = after.sum - before.sum;
+    // The new sample should report at least the advanced wall-clock gap.
+    assert_le!(TIME_ADVANCE.as_secs_f64(), sample);
+}
+
+#[test]
+fn test_metric_canister_log_resize_duration_seconds() {
+    // Observed at the resize call site in `CanisterManager::update_settings`
+    // whenever `log_memory_limit` actually changes. The `would_resize` gate
+    // ensures no-op resizes (same limit) do not emit samples.
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    const METRIC: &str = "canister_log_resize_duration_seconds";
+    let controller = PrincipalId::new_anonymous();
+    let (env, canister_id) = setup_with_controller(controller, UNIVERSAL_CANISTER_WASM.to_vec());
+    let before = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
+
+    // Change the log memory limit — triggers a resize.
+    let new_limit = (TEST_DEFAULT_LOG_MEMORY_LIMIT + 1000) as u64;
+    env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(new_limit)
+            .build(),
+    )
+    .unwrap();
+
+    let after = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
+    assert_eq!(after.count, before.count + 1);
+
+    // Same limit again — the `would_resize` gate holds, no new sample.
+    env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(new_limit)
+            .build(),
+    )
+    .unwrap();
+    let after2 = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
+    assert_eq!(after2.count, after.count);
+}
+
+#[test]
+fn test_metric_fetch_canister_logs_via_update_call() {
+    // Inter-canister update calls to `fetch_canister_logs` are captured by the
+    // general subnet-message duration histogram with
+    // `method_name="ic00_fetch_canister_logs"`.
+    const METRIC: &str = "execution_subnet_message_duration_seconds";
+    fn count(env: &StateMachine) -> u64 {
+        fetch_histogram_vec_stats(env.metrics_registry(), METRIC)
+            .get(&labels(&[
+                ("method_name", "ic00_fetch_canister_logs"),
+                ("outcome", "finished"),
+                ("status", "success"),
+                ("speed", "fast"),
+            ]))
+            .map_or(0, |s| s.count)
+    }
+    // canister_a is a universal canister controlled by the user; it makes the
+    // inter-canister call. canister_b is controlled by canister_a and its
+    // logs are fetched.
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_a) =
+        setup_with_controller(user_controller, UNIVERSAL_CANISTER_WASM.to_vec());
+    let canister_b = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibilityV2::Controllers)
+            .with_controllers(vec![canister_a.get()])
+            .build(),
         wat_canister().build_wasm(),
     );
 
-    // Assert canister log size metric is equal to the default log memory usage.
-    let stats = fetch_histogram_stats(env.metrics_registry(), metric).unwrap();
-    let average_memory_usage = stats.sum as u64 / stats.count;
-    assert_eq!(average_memory_usage, TEST_DEFAULT_LOG_MEMORY_USAGE);
+    assert_eq!(count(&env), 0);
+    let _ = fetch_canister_logs_intercanister(
+        &env,
+        canister_a,
+        canister_b,
+        Cycles::new(50_000_000_000),
+    );
+    assert_eq!(count(&env), 1);
 }
 
 #[test]
@@ -1738,7 +1952,7 @@ fn test_canister_log_on_reply() {
         (number_of_slices - 1) * round_time_increment
     );
 
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         canister_log_response(vec![
@@ -1803,7 +2017,7 @@ fn test_canister_log_on_cleanup() {
         (number_of_slices - 1) * round_time_increment
     );
 
-    let result = fetch_canister_logs(&env, user_controller, canister_id);
+    let result = fetch_canister_logs_query(&env, user_controller, canister_id);
     assert_eq!(
         readable_logs_without_backtraces(result),
         vec![
@@ -1900,10 +2114,9 @@ fn test_canister_reinstall_clears_logs_but_preserves_log_memory_limit() {
     let (env, canister_id) = setup_with_controller(controller, wasm.clone());
     // Populate logs.
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let reply = fetch_canister_logs(&env, controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
+    let logs_before = fetch_log_records(&env, controller, canister_id);
     // Assert non-empty logs.
-    assert_eq!(response.canister_log_records.len(), 1);
+    assert_eq!(logs_before.len(), 1);
 
     let status = env.canister_status(canister_id).unwrap().unwrap();
     assert_eq!(status.log_memory_store_size().get(), expected_memory_usage);
@@ -1912,9 +2125,8 @@ fn test_canister_reinstall_clears_logs_but_preserves_log_memory_limit() {
     let _ = env.reinstall_canister(canister_id, wasm, vec![]);
 
     // Logs should be cleared.
-    let reply = fetch_canister_logs(&env, controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
-    assert_eq!(response.canister_log_records.len(), 0);
+    let logs_after = fetch_log_records(&env, controller, canister_id);
+    assert_eq!(logs_after.len(), 0);
     // Log memory limit should be preserved.
     let status = env.canister_status(canister_id).unwrap().unwrap();
     assert_eq!(status.log_memory_store_size().get(), expected_memory_usage);
@@ -1967,9 +2179,8 @@ fn test_canister_uninstall_and_install_clears_log_memory() {
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let reply = fetch_canister_logs(&env, controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
-    assert_eq!(response.canister_log_records.len(), 3);
+    let logs_before = fetch_log_records(&env, controller, canister_id);
+    assert_eq!(logs_before.len(), 3);
 
     // Do uninstall code and install again.
     let _ = env.uninstall_code(canister_id).unwrap();
@@ -1982,10 +2193,44 @@ fn test_canister_uninstall_and_install_clears_log_memory() {
 
     // After uninstall code.
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let reply = fetch_canister_logs(&env, controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
+    let logs_after = fetch_log_records(&env, controller, canister_id);
     // Expect zero, because log memory store is deallocated.
-    assert_eq!(response.canister_log_records.len(), 0);
+    assert_eq!(logs_after.len(), 0);
+}
+
+#[test]
+fn test_large_delta_log_in_single_execution() {
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    // Test that a single message execution can generate a large delta log
+    // (e.g., ~1.5 MiB) that exceeds the default 4 KiB capacity but is still
+    // within the configured canister log memory limit.
+    let log_memory_limit = 2 * MIB;
+    let message_count = 1_500;
+    let message = [b'a'; 1_000];
+
+    let env = setup_env();
+    let controller = PrincipalId::new_anonymous();
+    let canister_id = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![controller])
+            .with_log_memory_limit(log_memory_limit)
+            .build(),
+        wat_canister()
+            .update(
+                "generate_logs",
+                wat_fn().repeat(message_count, wat_fn().debug_print(&message)),
+            )
+            .build_wasm(),
+    );
+
+    // Execute a single message that generates a large amount of logs.
+    let _ = env.execute_ingress(canister_id, "generate_logs", vec![]);
+
+    let logs = fetch_log_records(&env, controller, canister_id);
+    assert_eq!(logs.len(), message_count as usize);
 }
 
 #[test]
@@ -1993,35 +2238,51 @@ fn test_canister_resize_up_preserves_logs() {
     if !LOG_MEMORY_STORE_FEATURE_ENABLED {
         return;
     }
-    let controller = PrincipalId::new_anonymous();
-    let wasm = wat_canister()
-        .update("test", wat_fn().debug_print(b"hello"))
-        .build_wasm();
-    let (env, canister_id) = setup_with_controller(controller, wasm.clone());
+    let log_memory_limit = 2 * MIB;
 
-    // Before resizing.
-    let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let reply = fetch_canister_logs(&env, controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
-    let logs_before = response.canister_log_records;
-    assert_eq!(logs_before.len(), 3);
+    let env = setup_env();
+    let main_controller = PrincipalId::new_anonymous();
+    let universal_canister = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![main_controller])
+            .build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+    let fetch_cycles = Cycles::new(100_000_000_000);
 
-    // Resize up.
-    let new_memory_limit = (TEST_DEFAULT_LOG_MEMORY_LIMIT + 1000) as u64;
+    let canister_id = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![main_controller, universal_canister.get()])
+            .with_log_memory_limit(log_memory_limit - 1)
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
+        wat_canister()
+            .update(
+                "fill_logs",
+                wat_fn().repeat(
+                    records_to_fill(log_memory_limit, 100),
+                    wat_fn().debug_print(&[b'a'; 100]),
+                ),
+            )
+            .build_wasm(),
+    );
+
+    let _ = env.execute_ingress(canister_id, "fill_logs", vec![]);
+    let logs_before =
+        fetch_log_records_intercanister(&env, universal_canister, canister_id, fetch_cycles);
+
     let _ = env.update_settings(
         &canister_id,
         CanisterSettingsArgsBuilder::new()
-            .with_log_memory_limit(new_memory_limit)
+            .with_log_memory_limit(log_memory_limit)
             .build(),
     );
 
-    // After resizing.
-    let reply = fetch_canister_logs(&env, controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
-    let logs_after = response.canister_log_records;
-    assert_eq!(logs_after.len(), 3);
+    let logs_after =
+        fetch_log_records_intercanister(&env, universal_canister, canister_id, fetch_cycles);
+    assert_eq!(logs_before.len(), logs_after.len());
     assert_eq!(logs_before, logs_after);
 }
 
@@ -2030,34 +2291,341 @@ fn test_canister_resize_down_preserves_logs() {
     if !LOG_MEMORY_STORE_FEATURE_ENABLED {
         return;
     }
-    let controller = PrincipalId::new_anonymous();
-    let wasm = wat_canister()
-        .update("test", wat_fn().debug_print(b"hello"))
-        .build_wasm();
-    let (env, canister_id) = setup_with_controller(controller, wasm.clone());
+    let log_memory_limit = 2 * MIB;
 
-    // Before resizing.
-    let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let reply = fetch_canister_logs(&env, controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
-    let logs_before = response.canister_log_records;
-    assert_eq!(logs_before.len(), 3);
+    let env = setup_env();
+    let main_controller = PrincipalId::new_anonymous();
+    let universal_canister = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![main_controller])
+            .build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+    let fetch_cycles = Cycles::new(100_000_000_000);
 
-    // Resize down.
-    let new_memory_limit = (TEST_DEFAULT_LOG_MEMORY_LIMIT - 1000) as u64;
+    let canister_id = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![main_controller, universal_canister.get()])
+            .with_log_memory_limit(log_memory_limit)
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
+        wat_canister()
+            .update(
+                "fill_logs",
+                wat_fn().repeat(
+                    records_to_fill(log_memory_limit, 100),
+                    wat_fn().debug_print(&[b'a'; 100]),
+                ),
+            )
+            .build_wasm(),
+    );
+
+    let _ = env.execute_ingress(canister_id, "fill_logs", vec![]);
+    let logs_before =
+        fetch_log_records_intercanister(&env, universal_canister, canister_id, fetch_cycles);
+
     let _ = env.update_settings(
         &canister_id,
         CanisterSettingsArgsBuilder::new()
-            .with_log_memory_limit(new_memory_limit)
+            .with_log_memory_limit(log_memory_limit - 1)
             .build(),
     );
 
-    // After resizing.
-    let reply = fetch_canister_logs(&env, controller, canister_id);
-    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
-    let logs_after = response.canister_log_records;
-    assert_eq!(logs_after.len(), 3);
+    let logs_after =
+        fetch_log_records_intercanister(&env, universal_canister, canister_id, fetch_cycles);
+    assert_eq!(logs_before.len(), logs_after.len());
     assert_eq!(logs_before, logs_after);
+}
+
+#[test]
+fn test_canister_log_resize_deducts_cycles() {
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    let log_memory_limit = 2 * MIB;
+
+    let env = setup_env();
+    let controller = PrincipalId::new_anonymous();
+    let canister_id = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![controller])
+            .with_log_memory_limit(log_memory_limit)
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
+        wat_canister()
+            .update(
+                "fill_logs",
+                wat_fn().repeat(
+                    records_to_fill(log_memory_limit, 100),
+                    wat_fn().debug_print(&[b'a'; 100]),
+                ),
+            )
+            .build_wasm(),
+    );
+
+    let _ = env.execute_ingress(canister_id, "fill_logs", vec![]);
+
+    let balance_before = env.cycle_balance(canister_id);
+    let result = env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(log_memory_limit - 1)
+            .build(),
+    );
+    assert!(result.is_ok());
+    let balance_after = env.cycle_balance(canister_id);
+
+    // The resize cost is proportional to bytes_used. With a full 2 MiB buffer,
+    // expect at least 1.5 MiB * cost_per_byte (allowing slack for partial fill).
+    // Must match LOG_RESIZE_COST_PER_BYTE in canister_manager.rs.
+    let log_resize_cost_per_byte: u64 = 32;
+    let cycles_deducted = balance_before - balance_after;
+    let min_expected = 3 * MIB / 2 * log_resize_cost_per_byte;
+    assert_gt!(
+        cycles_deducted,
+        min_expected as u128,
+        "Expected at least {} cycles deducted for log resize, got {}",
+        min_expected,
+        cycles_deducted
+    );
+}
+
+#[test]
+fn test_canister_log_resize_rejected_insufficient_cycles() {
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    let log_memory_limit = 256 * KIB;
+
+    let env = setup_env();
+    let controller = PrincipalId::new_anonymous();
+    let canister_id = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![controller])
+            .with_log_memory_limit(log_memory_limit)
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
+        wat_canister()
+            .update(
+                "fill_logs",
+                wat_fn().repeat(
+                    records_to_fill(log_memory_limit, 100),
+                    wat_fn().debug_print(&[b'a'; 100]),
+                ),
+            )
+            .build_wasm(),
+    );
+
+    let _ = env.execute_ingress(canister_id, "fill_logs", vec![]);
+
+    // Set a very high freezing threshold so the canister's balance is locked up.
+    let _ = env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(10_u64.pow(15))
+            .build(),
+    );
+
+    let err = env
+        .update_settings(
+            &canister_id,
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(log_memory_limit - 1)
+                .build(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
+    assert!(
+        err.description()
+            .contains("Cannot resize canister log memory due to insufficient cycles"),
+        "Unexpected error message: {}",
+        err.description(),
+    );
+}
+
+#[test]
+fn test_canister_log_resize_empty_buffer_minimal_charge() {
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    let log_memory_limit = 2 * MIB;
+    let env = setup_env();
+    let controller = PrincipalId::new_anonymous();
+    let canister_id = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![controller])
+            .with_log_memory_limit(log_memory_limit)
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
+        wat_canister().build_wasm(),
+    );
+
+    // Baseline: update_settings without log_memory_limit.
+    let balance_before_baseline = env.cycle_balance(canister_id);
+    let _ = env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
+    );
+    let baseline_cost = balance_before_baseline - env.cycle_balance(canister_id);
+
+    // Resize the empty buffer — should cost roughly the same as baseline.
+    let balance_before_resize = env.cycle_balance(canister_id);
+    let result = env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(log_memory_limit - 1)
+            .build(),
+    );
+    assert!(result.is_ok());
+    let resize_cost = balance_before_resize - env.cycle_balance(canister_id);
+
+    assert_le!(
+        resize_cost,
+        baseline_cost * 2,
+        "Empty buffer resize cost ({}) should be close to baseline ({})",
+        resize_cost,
+        baseline_cost
+    );
+}
+
+#[test]
+fn test_canister_log_resize_no_extra_charge_feature_disabled() {
+    if LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    let env = setup_env();
+    let controller = PrincipalId::new_anonymous();
+    let canister_id = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![controller])
+            .build(),
+        wat_canister()
+            .update("test", wat_fn().debug_print(b"hello"))
+            .build_wasm(),
+    );
+
+    // Write some logs (goes to old canister_log, not log_memory_store).
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+
+    // Baseline: update_settings without log_memory_limit.
+    let balance_before_baseline = env.cycle_balance(canister_id);
+    let _ = env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
+    );
+    let baseline_cost = balance_before_baseline - env.cycle_balance(canister_id);
+
+    // Update_settings with log_memory_limit — should cost the same as baseline
+    // because log_memory_store.bytes_used() is 0 when the feature is disabled.
+    let balance_before_resize = env.cycle_balance(canister_id);
+    let result = env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(4096)
+            .build(),
+    );
+    assert!(result.is_ok());
+    let resize_cost = balance_before_resize - env.cycle_balance(canister_id);
+
+    // Costs should be roughly equal — no extra charge for resize.
+    assert_le!(
+        resize_cost,
+        baseline_cost * 2,
+        "With feature disabled, resize cost ({}) should be close to baseline ({})",
+        resize_cost,
+        baseline_cost
+    );
+}
+
+#[test]
+fn test_fetch_canister_logs_update_call_rejected_insufficient_cycles() {
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let env = setup_env();
+    let canister_a = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![user_controller])
+            .build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+    let canister_b = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibilityV2::Controllers)
+            .with_controllers(vec![canister_a.get()])
+            .build(),
+        wat_canister()
+            .update("test", wat_fn().debug_print(b"message"))
+            .build_wasm(),
+    );
+    let _ = env.execute_ingress(canister_b, "test", vec![]);
+
+    // Send with 1 cycle — far below the required max fee.
+    let result = fetch_canister_logs_intercanister(&env, canister_a, canister_b, Cycles::new(1));
+    let reject_message = get_reject(result);
+    assert!(
+        reject_message.contains("cycles are required"),
+        "Expected insufficient cycles error, got: {reject_message}"
+    );
+}
+
+#[test]
+fn test_fetch_canister_logs_update_call_deducts_cycles() {
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let env = setup_env();
+    let canister_a = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![user_controller])
+            .build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+    let canister_b = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibilityV2::Controllers)
+            .with_controllers(vec![canister_a.get()])
+            .build(),
+        wat_canister()
+            .update("test", wat_fn().debug_print(b"message"))
+            .build_wasm(),
+    );
+    let _ = env.execute_ingress(canister_b, "test", vec![]);
+
+    let balance_before = env.cycle_balance(canister_a);
+
+    // Provide more than enough cycles for the fetch.
+    let cycles_sent = Cycles::new(5_000_000_000);
+    let records = fetch_log_records_intercanister(&env, canister_a, canister_b, cycles_sent);
+    assert_eq!(records.len(), 1);
+
+    let balance_after = env.cycle_balance(canister_a);
+    let cycles_spent = balance_before - balance_after;
+
+    // Some cycles must have been deducted (fetch fee + execution overhead).
+    assert!(
+        cycles_spent > 0,
+        "Expected some cycles to be spent, but balance is unchanged"
+    );
+    // The refund should have returned most of the overpayment.
+    // cycles_sent was 5B, and the actual fetch fee for a small response
+    // plus execution overhead should be well under 2B.
+    assert_lt!(
+        cycles_spent,
+        2_000_000_000,
+        "Expected most cycles to be refunded, but {} were spent",
+        cycles_spent
+    );
 }

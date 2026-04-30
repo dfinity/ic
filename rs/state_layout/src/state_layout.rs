@@ -1,7 +1,7 @@
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::{
-    Global, LogVisibilityV2, OnLowWasmMemoryHookStatus, SnapshotSource,
+    Global, LogVisibilityV2, OnLowWasmMemoryHookStatus, SnapshotSource, SnapshotVisibility,
 };
 use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_protobuf::state::{
@@ -13,18 +13,17 @@ use ic_replicated_state::{
     CanisterStatus, ExportedFunctions, NumWasmPages,
     canister_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
-        system_state::{
-            CanisterHistory, CyclesUseCase, TaskQueue, wasm_chunk_store::WasmChunkStoreMetadata,
-        },
+        system_state::{CanisterHistory, TaskQueue, wasm_chunk_store::WasmChunkStoreMetadata},
     },
     page_map::{Shard, StorageLayout, StorageResult},
 };
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
 use ic_types::{
-    AccumulatedPriority, CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, Cycles,
-    ExecutionRound, Height, LongExecutionMode, MemoryAllocation, NumInstructions, PrincipalId,
-    SnapshotId, Time, batch::TotalQueryStats, nominal_cycles::NominalCycles,
+    AccumulatedPriority, CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, ExecutionRound,
+    Height, LongExecutionMode, MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time,
+    batch::TotalQueryStats,
 };
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use ic_utils::thread::maybe_parallel_map;
 use ic_wasm_types::{CanisterModule, MemoryMappableWasmFile, WasmHash};
 use prometheus::{Histogram, IntCounterVec, IntGauge};
@@ -35,7 +34,7 @@ use std::fs::OpenOptions;
 use std::io::{Error, Write};
 
 /// Result of marking files readonly, containing counts for monitoring
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct ReadonlyMarkingResult {
     pub files_traversed: usize,
     pub files_made_readonly: usize,
@@ -206,11 +205,12 @@ pub struct CanisterStateBits {
     pub wasm_chunk_store_metadata: WasmChunkStoreMetadata,
     pub total_query_stats: TotalQueryStats,
     pub log_visibility: LogVisibilityV2,
+    pub snapshot_visibility: SnapshotVisibility,
     pub log_memory_limit: NumBytes,
     pub canister_log: CanisterLog,
+    pub next_canister_log_record_idx: u64,
     pub wasm_memory_limit: Option<NumBytes>,
     pub next_snapshot_id: u64,
-    pub snapshots_memory_usage: NumBytes,
     pub task_queue: TaskQueue,
     pub environment_variables: BTreeMap<String, String>,
 }
@@ -221,8 +221,6 @@ pub struct CanisterStateBits {
 pub struct CanisterSnapshotBits {
     /// The ID of the canister snapshot.
     pub snapshot_id: SnapshotId,
-    /// Identifies the canister to which this snapshot belongs.
-    pub canister_id: CanisterId,
     /// The timestamp indicating the moment the snapshot was captured.
     pub taken_at_timestamp: Time,
     /// The canister version at the time of taking the snapshot.
@@ -3034,7 +3032,7 @@ struct CopyAndSyncFile {
     dst: PathBuf,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Eq, PartialEq)]
 enum CopyInstruction {
     /// The file doesn't need to be copied
     Skip,

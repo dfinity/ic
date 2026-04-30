@@ -121,7 +121,7 @@ fn start_bitcoind<T: RpcClientType>(network: T) -> Daemon<T> {
     let name = format!("{}_CORE_PATH", T::NAME.to_uppercase());
     let path = std::env::var(&name).unwrap_or_else(|_| panic!("Failed to get {name} env variable"));
 
-    Daemon::new(&path, network, conf)
+    Daemon::new(&path, network, &conf)
 }
 
 fn start_client<T: RpcClientType>(
@@ -755,6 +755,11 @@ fn test_send_tx<T: RpcClientType + Into<AdapterNetwork>>() {
         logger,
         network,
     );
+
+    // Wait for the adapter to establish a P2P connection with the bitcoind node.
+    // Without this, the adapter may accept the SendTransaction gRPC request but
+    // have no peer to relay the transaction to.
+    wait_for_connection(&bitcoind.rpc_client, 1);
 
     let (alice_client, bob_client) = create_alice_and_bob_wallets(&bitcoind);
 

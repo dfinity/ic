@@ -9,7 +9,7 @@ use ic_system_test_driver::driver::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::*;
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{management, wasm};
 use ic_utils::interfaces::ManagementCanister;
 
@@ -74,7 +74,7 @@ pub fn creating_canisters_fails_if_limit_of_allowed_canisters_is_reached(env: Te
             assert_reject(
                 canister
                     .update(wasm().call(management::create_canister(Cycles::from(
-                        100_000_000_000u64,
+                        100_000_000_000_u64,
                     ))))
                     .await,
                 RejectCode::CanisterReject,

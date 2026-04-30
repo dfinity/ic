@@ -1,6 +1,6 @@
 use crate::CallCanisters;
 use cycles_minting_canister::{
-    CanisterSettingsArgs, CreateCanister, NotifyMintCyclesArg, NotifyMintCyclesResult,
+    CanisterSettings, CreateCanister, NotifyMintCyclesArg, NotifyMintCyclesResult,
     SetAuthorizedSubnetworkListArgs, SubnetSelection,
 };
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
@@ -11,7 +11,7 @@ pub mod requests;
 pub async fn create_canister<C: CallCanisters>(
     agent: &C,
     subnet_selection: Option<SubnetSelection>,
-    settings: Option<CanisterSettingsArgs>,
+    settings: Option<CanisterSettings>,
 ) -> Result<CanisterId, C::Error> {
     let request = CreateCanister {
         subnet_selection,

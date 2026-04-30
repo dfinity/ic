@@ -18,6 +18,10 @@ use ic_system_test_driver::driver::{
 };
 use ic_system_test_driver::nns::set_authorized_subnetwork_list;
 use ic_system_test_driver::sns_client::add_subnet_to_sns_deploy_whitelist;
+use ic_system_test_driver::util::delegations::{
+    DummyAuthConfig, build_dummy_internet_identity_backend_install_arg,
+    build_internet_identity_backend_install_arg,
+};
 use ic_system_test_driver::util::{block_on, create_canister, install_canister, runtime_from_url};
 use icp_ledger::AccountIdentifier;
 use serde::{Deserialize, Serialize};
@@ -108,6 +112,97 @@ pub fn install_sns_aggregator(
     })
 }
 
+/// See https://github.com/dfinity/internet-identity/releases/download/release-2026-03-16/internet_identity_frontend.did
+#[derive(CandidType, Serialize)]
+struct InternetIdentityFrontendInitArgs {
+    backend_canister_id: Principal,
+    backend_origin: String,
+    related_origins: Option<Vec<String>>,
+    fetch_root_key: Option<bool>,
+    dev_csp: Option<bool>,
+    dummy_auth: Option<Option<DummyAuthConfig>>,
+}
+
+pub fn install_ii_canisters(
+    env: &TestEnv,
+    node: &IcNodeSnapshot,
+    ic_gateway_domain: &str,
+) -> (Principal, Principal) {
+    install_ii_canisters_inner(env, node, ic_gateway_domain, false)
+}
+
+pub fn install_dummy_ii_canisters(
+    env: &TestEnv,
+    node: &IcNodeSnapshot,
+    ic_gateway_domain: &str,
+) -> (Principal, Principal) {
+    install_ii_canisters_inner(env, node, ic_gateway_domain, true)
+}
+
+fn install_ii_canisters_inner(
+    env: &TestEnv,
+    node: &IcNodeSnapshot,
+    ic_gateway_domain: &str,
+    dummy_auth: bool,
+) -> (Principal, Principal) {
+    let backend_install_arg = if dummy_auth {
+        build_dummy_internet_identity_backend_install_arg()
+    } else {
+        build_internet_identity_backend_install_arg()
+    };
+    let backend_canister_id = node.create_and_install_canister_with_arg(
+        &env::var("II_BACKEND_WASM_PATH").expect("II_BACKEND_WASM_PATH not set"),
+        Some(backend_install_arg),
+    );
+
+    // Create the II frontend canister first to get its canister ID
+    let agent = node.build_default_agent();
+    let frontend_canister_id =
+        block_on(async { create_canister(&agent, node.effective_canister_id()).await });
+
+    let dummy_auth_config = if dummy_auth {
+        Some(Some(DummyAuthConfig {
+            prompt_for_index: true,
+        }))
+    } else {
+        None
+    };
+
+    // Install code into the II frontend canister.
+    let frontend_wasm =
+        load_wasm(env::var("II_FRONTEND_WASM_PATH").expect("II_FRONTEND_WASM_PATH not set"));
+    let frontend_arg = Encode!(&InternetIdentityFrontendInitArgs {
+        backend_canister_id,
+        backend_origin: format!("https://{backend_canister_id}.{ic_gateway_domain}"),
+        related_origins: Some(vec![format!(
+            "https://{frontend_canister_id}.{ic_gateway_domain}",
+        )]),
+        fetch_root_key: Some(true),
+        dev_csp: Some(true),
+        dummy_auth: dummy_auth_config,
+    })
+    .unwrap();
+    let logger = env.logger();
+    let subnet_id = node.subnet_id().unwrap();
+    block_on(async move {
+        install_canister(
+            &agent,
+            frontend_canister_id,
+            frontend_wasm.as_slice(),
+            frontend_arg,
+        )
+        .await;
+        info!(
+            logger,
+            "II backend canister with id={backend_canister_id} and frontend with \
+             id={frontend_canister_id} installed on subnet with id={}",
+            subnet_id
+        );
+    });
+
+    (backend_canister_id, frontend_canister_id)
+}
+
 /// Installs II, NNS dapp, and Subnet Rental Canister.
 /// The Subnet Rental Canister is installed since otherwise
 /// the canister ID of the ckETH ledger (required by the NNS dapp)
@@ -117,13 +212,40 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
     ic_gateway_url: &Url,
     sns_aggregator_canister_id: Option<Principal>,
 ) -> (Principal, Principal) {
+    install_ii_nns_dapp_and_subnet_rental_impl(
+        env,
+        ic_gateway_url,
+        sns_aggregator_canister_id,
+        false,
+    )
+}
+
+pub fn install_ii_nns_dapp_and_subnet_rental_with_dummy_auth(
+    env: &TestEnv,
+    ic_gateway_url: &Url,
+    sns_aggregator_canister_id: Option<Principal>,
+) -> (Principal, Principal) {
+    install_ii_nns_dapp_and_subnet_rental_impl(
+        env,
+        ic_gateway_url,
+        sns_aggregator_canister_id,
+        true,
+    )
+}
+
+fn install_ii_nns_dapp_and_subnet_rental_impl(
+    env: &TestEnv,
+    ic_gateway_url: &Url,
+    sns_aggregator_canister_id: Option<Principal>,
+    dummy_auth: bool,
+) -> (Principal, Principal) {
     let ic_gateway_domain = ic_gateway_url.domain().unwrap().to_string();
 
     // deploy the II canister
     let topology = env.topology_snapshot();
     let nns_node = topology.root_subnet().nodes().next().unwrap();
-    let ii_canister_id =
-        nns_node.create_and_install_canister_with_arg(&env::var("II_WASM_PATH").unwrap(), None);
+    let (_, ii_canister_id) =
+        install_ii_canisters_inner(env, &nns_node, &ic_gateway_domain, dummy_auth);
 
     // create the NNS dapp canister so that its canister ID is allocated
     // and the Subnet Rental Canister gets its mainnet canister ID in the next step

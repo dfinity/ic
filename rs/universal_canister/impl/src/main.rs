@@ -321,6 +321,8 @@ fn eval(ops_bytes: OpsBytes) {
                 let offset = stack.pop_int();
                 stack.push_blob(api::msg_caller_copy(offset, size));
             }
+            Ops::MsgCallerInfoData => stack.push_blob(api::caller_info_data()),
+            Ops::MsgCallerInfoSigner => stack.push_blob(api::caller_info_signer()),
             Ops::MsgRejectMsgSize => stack.push_int(api::msg_reject_msg_size()),
             Ops::MsgRejectMsgCopy => {
                 let size = stack.pop_int();
@@ -433,7 +435,7 @@ fn eval(ops_bytes: OpsBytes) {
                         break;
                     }
                     // Allocate a megabyte more.
-                    a.push(vec![13u8; 1024 * 1024]);
+                    a.push(vec![13_u8; 1024 * 1024]);
                 }
                 std::hint::black_box(a);
             }

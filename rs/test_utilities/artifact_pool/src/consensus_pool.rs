@@ -33,6 +33,8 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Instant;
 
+const MAX_DEALINGS_PER_BLOCK: usize = 20;
+
 #[allow(clippy::type_complexity)]
 pub struct TestConsensusPool {
     subnet_id: SubnetId,
@@ -160,7 +162,7 @@ fn dkg_payload_builder_fn(
             &*state_manager,
             validation_context,
             no_op_logger(),
-            10, // at most dealings per block
+            MAX_DEALINGS_PER_BLOCK,
         )
         .unwrap_or_else(|err| panic!("Couldn't create the payload: {err:?}"))
     })
@@ -179,21 +181,6 @@ impl TestConsensusPool {
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         dkg_pool: Option<Arc<RwLock<DkgPoolImpl>>>,
     ) -> Self {
-        let dkg_payload_builder = Box::new(dkg_payload_builder_fn(
-            subnet_id,
-            registry_client.clone(),
-            crypto,
-            state_manager.clone(),
-            dkg_pool.unwrap_or_else(|| {
-                Arc::new(std::sync::RwLock::new(
-                    ic_artifact_pool::dkg_pool::DkgPoolImpl::new(
-                        ic_metrics::MetricsRegistry::new(),
-                        no_op_logger(),
-                    ),
-                ))
-            }),
-        ));
-
         let cup_contents = registry_client
             .get_cup_contents(subnet_id, registry_client.get_latest_version())
             .expect("Failed to retreive the DKG transcripts from registry");
@@ -204,6 +191,22 @@ impl TestConsensusPool {
             cup_contents.version,
         )
         .expect("Failed to get DKG summary from CUP contents");
+
+        let dkg_payload_builder = Box::new(dkg_payload_builder_fn(
+            subnet_id,
+            registry_client.clone(),
+            crypto,
+            state_manager.clone(),
+            dkg_pool.unwrap_or_else(|| {
+                Arc::new(std::sync::RwLock::new(
+                    ic_artifact_pool::dkg_pool::DkgPoolImpl::new(
+                        ic_metrics::MetricsRegistry::new(),
+                        no_op_logger(),
+                        summary.height,
+                    ),
+                ))
+            }),
+        ));
 
         let pool = ConsensusPoolImpl::new(
             node_id,

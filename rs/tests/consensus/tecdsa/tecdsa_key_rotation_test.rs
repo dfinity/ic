@@ -4,9 +4,9 @@ use anyhow::Result;
 
 use canister_test::Canister;
 use ic_consensus_threshold_sig_system_test_utils::{
-    await_pre_signature_stash_size, enable_chain_key_signing_with_timeout_and_rotation_period,
-    get_public_key_with_logger, make_key_ids_for_all_idkg_schemes, set_pre_signature_stash_size,
-    setup_without_ecdsa_on_nns,
+    await_pre_signature_stash_size_async,
+    enable_chain_key_signing_with_timeout_and_rotation_period, get_public_key_with_logger,
+    make_key_ids_for_all_idkg_schemes, set_pre_signature_stash_size, setup_without_ecdsa_on_nns,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -19,6 +19,7 @@ use ic_system_test_driver::{
     systest,
     util::{MessageCanister, MetricsFetcher, block_on, runtime_from_url},
 };
+use ic_types::Height;
 use slog::info;
 
 const MASTER_KEY_TRANSCRIPTS_CREATED: &str = "consensus_master_key_transcripts_created";
@@ -54,7 +55,7 @@ fn test(test_env: TestEnv) {
         )
         .await;
         // Stash size should be 5 before the roation
-        await_pre_signature_stash_size(&app_subnet, 5, key_ids.as_slice(), &log);
+        await_pre_signature_stash_size_async(&app_subnet, 5, key_ids.as_slice(), &log).await;
         // Turn off pre-signature creation to verify that the stash is purged correctly
         set_pre_signature_stash_size(
             &governance,
@@ -114,7 +115,7 @@ fn test(test_env: TestEnv) {
         }
 
         // Stash size should be 0 after the roation
-        await_pre_signature_stash_size(&app_subnet, 0, key_ids.as_slice(), &log);
+        await_pre_signature_stash_size_async(&app_subnet, 0, key_ids.as_slice(), &log).await;
 
         // Ensure that public keys are the same after the rotation
         for key_id in &key_ids {
@@ -129,9 +130,13 @@ fn test(test_env: TestEnv) {
     });
 }
 
+fn setup(test_env: TestEnv) {
+    setup_without_ecdsa_on_nns(test_env, Height::from(19));
+}
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(setup_without_ecdsa_on_nns)
+        .with_setup(setup)
         .add_test(systest!(test))
         .execute_from_args()?;
     Ok(())

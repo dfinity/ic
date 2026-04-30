@@ -8,8 +8,7 @@ use crate::{
 };
 use candid::{CandidType, Encode, Principal};
 use canister_test::{
-    Canister, Project, Runtime, Wasm, local_test_with_config_e,
-    local_test_with_config_with_mutations_on_system_subnet,
+    Canister, Project, Runtime, Wasm, local_test_with_config_with_mutations_on_system_subnet,
 };
 use cycles_minting_canister::CyclesCanisterInitPayload;
 use dfn_candid::{CandidOne, candid_one};
@@ -31,7 +30,7 @@ use ic_sns_wasm::{init::SnsWasmCanisterInitPayload, pb::v1::AddWasmRequest};
 use ic_test_utilities::universal_canister::{
     UNIVERSAL_CANISTER_WASM, call_args, wasm as universal_canister_argument_builder,
 };
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use ic_xrc_types::{Asset, AssetClass, ExchangeRateMetadata};
 use icp_ledger as ledger;
 use ledger::LedgerCanisterInitPayload;
@@ -567,6 +566,22 @@ pub async fn create_and_install_mock_exchange_rate_canister(
     install_mock_exchange_rate_canister(&mut mock_exchange_rate_canister, init_payload).await;
 }
 
+/// Warning: This assumes that canisters with ID smaller than that of the
+/// Subnet Rental canister have all already been created.
+pub async fn create_and_install_mock_subnet_rental_canister(runtime: &'_ Runtime) -> Canister<'_> {
+    // Create canisters in a loop until we hit SUBNET_RENTAL_CANISTER_ID.
+    // This is a hack similar to the one in `create_and_install_mock_exchange_rate_canister`.
+    // See the comment there for more details.
+    for _ in 0..100 {
+        let mut canister = runtime.create_canister(Some(0)).await.unwrap();
+        if canister.canister_id() == SUBNET_RENTAL_CANISTER_ID {
+            install_universal_canister(&mut canister).await;
+            return canister;
+        }
+    }
+    panic!("Could not set up mock subnet rental canister");
+}
+
 /// Compiles the governance canister, builds it's initial payload and installs
 /// it
 pub async fn install_governance_canister(canister: &mut Canister<'_>, init_payload: Governance) {
@@ -811,18 +826,7 @@ pub async fn set_up_migration_canister(runtime: &'_ Runtime) -> Canister<'_> {
     canister
 }
 
-/// Runs a local test on the nns subnetwork, so that the canister will be
-/// assigned the same ids as in prod.
-pub fn local_test_on_nns_subnet<Fut, Out, F>(run: F) -> Out
-where
-    Fut: Future<Output = Result<Out, String>>,
-    F: FnOnce(Runtime) -> Fut + 'static,
-{
-    let (config, _tmpdir) = Config::temp_config();
-    local_test_with_config_e(config, run)
-}
-
-/// Runs a test in a StateMachine in a way that is (mostly) compatible with local_test_on_nns_subnet
+/// Runs a test in a StateMachine in a way that is (mostly) compatible with local_test_on_nns_subnet_with_mutations
 pub fn state_machine_test_on_nns_subnet<Fut, Out, F>(run: F) -> Out
 where
     Fut: Future<Output = Result<Out, String>>,

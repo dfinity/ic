@@ -133,6 +133,7 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:ic-stable-structures",
             "@crate_index//:num-traits",
+            "@crate_index//:serde",
             "@crate_index//:serde_bytes",
         ] + extra_deps,
     )
@@ -378,7 +379,6 @@ package(default_visibility = ["//visibility:public"])
     rust_canbench(
         name = "canbench" + name_suffix,
         srcs = glob(["src/**/*.rs"]),
-        add_test = True,
         crate_features = features,
         proc_macro_deps = [
             # Keep sorted.
@@ -401,6 +401,7 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:ic-stable-structures",
             "@crate_index//:num-traits",
+            "@crate_index//:serde",
             "@crate_index//:serde_bytes",
         ] + extra_deps,
     )

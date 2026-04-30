@@ -2602,6 +2602,7 @@ impl From<ManageDappCanisterSettings> for ManageDappCanisterSettingsRequest {
             freezing_threshold,
             reserved_cycles_limit,
             log_visibility,
+            snapshot_visibility,
             wasm_memory_limit,
             wasm_memory_threshold,
         } = manage_dapp_canister_settings;
@@ -2613,6 +2614,7 @@ impl From<ManageDappCanisterSettings> for ManageDappCanisterSettingsRequest {
             freezing_threshold,
             reserved_cycles_limit,
             log_visibility,
+            snapshot_visibility,
             wasm_memory_limit,
             wasm_memory_threshold,
         }

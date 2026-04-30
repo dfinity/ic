@@ -1,6 +1,7 @@
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_config::state_manager::{Config, LsmtConfig, lsmt_config_default};
+use ic_crypto_tree_hash::{Digest, Witness};
 use ic_interfaces::{
     certification::{InvalidCertificationReason, Verifier, VerifierError},
     p2p::state_sync::{Chunk, ChunkId, Chunkable},
@@ -25,12 +26,13 @@ use ic_test_utilities_state::{initial_execution_state, new_canister_state};
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
 use ic_types::{
-    CanisterId, CryptoHashOfState, Cycles, Height, RegistryVersion, SubnetId,
+    CanisterId, CryptoHashOfState, Height, RegistryVersion, SubnetId,
     consensus::certification::{Certification, CertificationContent},
     crypto::Signed,
     signature::ThresholdSignature,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
 };
+use ic_types_cycles::Cycles;
 use ic_wasm_types::CanisterModule;
 use std::{collections::HashSet, sync::Arc};
 use tempfile::TempDir;
@@ -87,6 +89,7 @@ pub fn certify_height(state_manager: &impl StateManager, h: Height) -> Certifica
 
     let certification = Certification {
         height: h,
+        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
         signed: Signed {
             content: CertificationContent::new(hash),
             signature: ThresholdSignature::fake(),
@@ -327,7 +330,7 @@ pub fn modify_encoded_stream_helper<F: FnOnce(StreamSlice) -> Stream>(
 pub fn wait_for_checkpoint(state_manager: &impl StateManager, h: Height) -> CryptoHashOfState {
     use std::time::{Duration, Instant};
 
-    let timeout = Duration::from_secs(100);
+    let timeout = Duration::from_secs(300);
     let started = Instant::now();
     while started.elapsed() < timeout {
         match state_manager.get_state_hash_at(h) {

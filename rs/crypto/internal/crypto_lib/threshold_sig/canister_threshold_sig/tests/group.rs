@@ -101,11 +101,11 @@ fn ed25519_rejects_non_canonical_points_search() {
         }
     }
 
-    let mut pt_00 = [0u8; 32];
-    let mut pt_ff = [0xFFu8; 32];
+    let mut pt_00 = [0_u8; 32];
+    let mut pt_ff = [0xFF_u8; 32];
 
-    for x in 0u8..=255 {
-        for y in 0u8..=255 {
+    for x in 0_u8..=255 {
+        for y in 0_u8..=255 {
             pt_00[0] = x;
             pt_00[31] = y;
 
@@ -296,7 +296,7 @@ fn scalar_deserializaion_errors_if_byte_length_invalid() {
             if num_bytes == curve.scalar_bytes() {
                 continue;
             }
-            let mut bytes = vec![0u8; num_bytes];
+            let mut bytes = vec![0_u8; num_bytes];
             rng.fill_bytes(&mut bytes[..]);
             assert_eq!(
                 EccScalar::deserialize(curve, &bytes[..]),
@@ -311,7 +311,7 @@ fn scalar_deserializaion_errors_if_byte_length_invalid() {
 #[test]
 fn scalar_deserializaion_errors_is_over_the_order() {
     for curve in EccCurveType::all() {
-        let bytes = vec![0xFFu8; curve.scalar_bytes()];
+        let bytes = vec![0xFF_u8; curve.scalar_bytes()];
         assert_eq!(
             EccScalar::deserialize(curve, &bytes[..]),
             Err(CanisterThresholdSerializationError(
@@ -329,7 +329,7 @@ fn scalar_from_bytes_wide_errors_if_byte_length_invalid() {
         let min_bytes = valid_num_bytes + 1;
         let max_bytes: usize = curve.scalar_bytes() * 100;
         for num_bytes in min_bytes..=max_bytes {
-            let mut bytes = vec![0u8; num_bytes];
+            let mut bytes = vec![0_u8; num_bytes];
             rng.fill_bytes(&mut bytes[..]);
             assert_eq!(
                 EccScalar::from_bytes_wide(curve, &bytes[..]),
@@ -348,7 +348,7 @@ fn point_deserialization_errors_if_byte_length_invalid() {
             if num_bytes == curve.point_bytes() {
                 continue;
             }
-            let mut bytes = vec![0u8; num_bytes];
+            let mut bytes = vec![0_u8; num_bytes];
             rng.fill_bytes(&mut bytes[..]);
             assert_eq!(
                 EccPoint::deserialize(curve, &bytes[..]),
@@ -523,8 +523,34 @@ fn test_mul_2_is_correct() -> CanisterThresholdResult<()> {
             let s_0 = EccScalar::random(curve_type, rng);
             let s_1 = EccScalar::random(curve_type, rng);
 
-            let computed_result = EccPoint::mul_2_points(&p_0, &s_0, &p_1, &s_1)?;
+            let computed_result = EccPoint::mul_2_points_vartime(&p_0, &s_0, &p_1, &s_1)?;
             let expected_result = p_0.scalar_mul(&s_0)?.add_points(&p_1.scalar_mul(&s_1)?)?;
+            assert_eq!(computed_result, expected_result);
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_mul_3_is_correct() -> CanisterThresholdResult<()> {
+    let rng = &mut reproducible_rng();
+
+    for curve_type in EccCurveType::all() {
+        let p = EccPoint::hash_to_point(curve_type, &rng.r#gen::<[u8; 32]>(), b"mul3-p")?;
+        let q = EccPoint::hash_to_point(curve_type, &rng.r#gen::<[u8; 32]>(), b"mul3-q")?;
+        let r = EccPoint::hash_to_point(curve_type, &rng.r#gen::<[u8; 32]>(), b"mul3-r")?;
+
+        for _iteration in 0..100 {
+            let s0 = EccScalar::random(curve_type, rng);
+            let s1 = EccScalar::random(curve_type, rng);
+            let s2 = EccScalar::random(curve_type, rng);
+
+            let computed_result = EccPoint::mul_3_points_vartime(&p, &s0, &q, &s1, &r, &s2)?;
+            let expected_result = p
+                .scalar_mul(&s0)?
+                .add_points(&q.scalar_mul(&s1)?)?
+                .add_points(&r.scalar_mul(&s2)?)?;
             assert_eq!(computed_result, expected_result);
         }
     }

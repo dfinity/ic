@@ -33,6 +33,8 @@ pub struct SubnetTopology {
         tag = "7"
     )]
     pub canister_cycles_cost_schedule: i32,
+    #[prost(message, repeated, tag = "8")]
+    pub subnet_admins: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetsEntry {
@@ -69,6 +71,16 @@ pub struct NetworkTopology {
         ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
     #[prost(message, repeated, tag = "8")]
     pub chain_key_enabled_subnets: ::prost::alloc::vec::Vec<ChainKeySubnetEntry>,
+    #[prost(message, optional, tag = "9")]
+    pub full_topology: ::core::option::Option<FullTopology>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FullTopology {
+    #[prost(message, repeated, tag = "1")]
+    pub subnets: ::prost::alloc::vec::Vec<SubnetsEntry>,
+    #[prost(message, optional, tag = "2")]
+    pub routing_table:
+        ::core::option::Option<super::super::super::registry::routing_table::v1::RoutingTable>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetupInitialDkgContext {
@@ -151,13 +163,9 @@ pub struct SignWithThresholdContext {
     #[prost(bytes = "vec", repeated, tag = "3")]
     pub derivation_path_vec: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
     #[prost(bytes = "vec", tag = "4")]
-    pub pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
+    pub deprecated_pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "5")]
     pub batch_time: u64,
-    #[prost(uint64, optional, tag = "6")]
-    pub pre_signature_id: ::core::option::Option<u64>,
-    #[prost(uint64, optional, tag = "7")]
-    pub height: ::core::option::Option<u64>,
     #[prost(bytes = "vec", optional, tag = "8")]
     pub nonce: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
@@ -247,7 +255,7 @@ pub mod pricing_version {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Replication {
-    #[prost(oneof = "replication::ReplicationType", tags = "1, 2")]
+    #[prost(oneof = "replication::ReplicationType", tags = "1, 2, 3")]
     pub replication_type: ::core::option::Option<replication::ReplicationType>,
 }
 /// Nested message and enum types in `Replication`.
@@ -258,7 +266,18 @@ pub mod replication {
         FullyReplicated(()),
         #[prost(message, tag = "2")]
         NonReplicated(super::super::super::super::types::v1::NodeId),
+        #[prost(message, tag = "3")]
+        Flexible(super::FlexibleReplication),
     }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FlexibleReplication {
+    #[prost(message, repeated, tag = "1")]
+    pub committee: ::prost::alloc::vec::Vec<super::super::super::types::v1::NodeId>,
+    #[prost(uint32, tag = "2")]
+    pub min_responses: u32,
+    #[prost(uint32, tag = "3")]
+    pub max_responses: u32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpRequestContextTree {
@@ -567,6 +586,24 @@ pub struct SystemMetadata {
     pub blockmaker_metrics_time_series: ::core::option::Option<BlockmakerMetricsTimeSeries>,
     #[prost(message, repeated, tag = "21")]
     pub api_boundary_nodes: ::prost::alloc::vec::Vec<ApiBoundaryNodeEntry>,
+    #[prost(message, optional, tag = "24")]
+    pub own_resource_limits:
+        ::core::option::Option<super::super::super::registry::subnet::v1::ResourceLimits>,
+    #[prost(message, repeated, tag = "25")]
+    pub subnet_schedule: ::prost::alloc::vec::Vec<CanisterPriority>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterPriority {
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
+    #[prost(int64, tag = "2")]
+    pub accumulated_priority: i64,
+    #[prost(int64, tag = "3")]
+    pub executed_rounds: i64,
+    #[prost(uint64, optional, tag = "4")]
+    pub long_execution_start_round: ::core::option::Option<u64>,
+    #[prost(uint64, tag = "5")]
+    pub last_full_execution_round: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StableMemory {

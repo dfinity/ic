@@ -18,7 +18,10 @@ use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_management_canister_types_private::{
     MasterPublicKeyId, SetupInitialDKGArgs, SetupInitialDKGResponse,
 };
-use ic_protobuf::registry::subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, RegistryStoreUri};
+use ic_protobuf::registry::subnet::v1::catch_up_package_contents::CupType;
+use ic_protobuf::registry::subnet::v1::{
+    ChainKeyConfig as ChainKeyConfigPb, RecoveryArgs, RegistryStoreUri,
+};
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
     make_subnet_record_key,
@@ -95,6 +98,7 @@ impl Registry {
             let request = SetupInitialDKGArgs::new(
                 dkg_nodes.clone(),
                 RegistryVersion::new(pre_call_registry_version),
+                payload.initial_dkg_subnet_id,
             );
 
             let initial_chain_key_config =
@@ -201,7 +205,13 @@ impl Registry {
         // Set the height, time and state hash of the payload
         cup_contents.height = payload.height;
         cup_contents.time = payload.time_ns;
-        cup_contents.state_hash = payload.state_hash;
+        cup_contents.state_hash = payload.state_hash.clone();
+
+        cup_contents.cup_type = Some(CupType::Recovery(RecoveryArgs {
+            height: payload.height,
+            time: payload.time_ns,
+            state_hash: payload.state_hash,
+        }));
 
         mutations.push(RegistryMutation {
             mutation_type: registry_mutation::Type::Update as i32,
@@ -213,13 +223,33 @@ impl Registry {
         self.maybe_apply_mutation_internal(mutations)
     }
 
-    /// Ensures the requested Chain keys exist somewhere.
+    /// Ensures that the initial DKG subnet is different from the subnet being recovered.
+    /// Ensures that the initial DKG subnet exists.
+    /// Ensures that the requested Chain keys exist somewhere.
     /// Ensures that a subnet_id is specified for ChainKeyRequests.
     /// Ensures that the requested key exists outside of the subnet being recovered.
     /// Ensures that the requested key exists on the specified subnet.
     /// This is similar to validation in do_create_subnet except for constraints to avoid requesting
     /// keys from the subnet.
     fn validate_recover_subnet_payload(&self, payload: &RecoverSubnetPayload) {
+        if let Some(initial_dkg_subnet_id) = payload.initial_dkg_subnet_id {
+            if initial_dkg_subnet_id.get() == payload.subnet_id {
+                panic!(
+                    "{LOG_PREFIX}Initial DKG subnet must be different from the subnet being recovered.",
+                );
+            }
+
+            if self
+                .get_subnet(initial_dkg_subnet_id, self.latest_version())
+                .is_err()
+            {
+                panic!(
+                    "{LOG_PREFIX}Initial DKG subnet '{}' does not exist.",
+                    initial_dkg_subnet_id
+                );
+            }
+        }
+
         let Some(initial_chain_key_config) = &payload.chain_key_config else {
             return; // Nothing to do.
         };
@@ -246,6 +276,9 @@ impl Registry {
 pub struct RecoverSubnetPayload {
     /// The subnet ID to add the recovery CUP to
     pub subnet_id: PrincipalId,
+    /// Optional subnet that should handle `setup_initial_dkg`.
+    /// If not set, the request is handled by the NNS subnet.
+    pub initial_dkg_subnet_id: Option<SubnetId>,
     /// The height of the CUP
     pub height: u64,
     /// The block time to start from (nanoseconds from Epoch)
@@ -500,6 +533,7 @@ mod test {
     fn get_default_recover_subnet_payload(subnet_id: SubnetId) -> RecoverSubnetPayload {
         RecoverSubnetPayload {
             subnet_id: subnet_id.get(),
+            initial_dkg_subnet_id: None,
             height: 0,
             time_ns: 0,
             state_hash: vec![],
@@ -837,6 +871,30 @@ mod test {
             }),
             Some(99),
         );
+
+        futures::executor::block_on(registry.do_recover_subnet(payload));
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Initial DKG subnet must be different from the subnet being recovered"
+    )]
+    fn do_recover_subnet_should_panic_if_initial_dkg_subnet_is_same_as_recovered_subnet() {
+        let mut registry = invariant_compliant_registry(0);
+        let subnet_id = subnet_test_id(1000);
+        let mut payload = get_default_recover_subnet_payload(subnet_id);
+        payload.initial_dkg_subnet_id = Some(subnet_id);
+
+        futures::executor::block_on(registry.do_recover_subnet(payload));
+    }
+
+    #[test]
+    #[should_panic(expected = "Initial DKG subnet 'hmpuf-nqpe4-aaaaa-aaaap-yai' does not exist")]
+    fn do_recover_subnet_should_panic_if_initial_dkg_subnet_does_not_exist() {
+        let mut registry = invariant_compliant_registry(0);
+        let subnet_id = subnet_test_id(1000);
+        let mut payload = get_default_recover_subnet_payload(subnet_id);
+        payload.initial_dkg_subnet_id = Some(subnet_test_id(9999));
 
         futures::executor::block_on(registry.do_recover_subnet(payload));
     }

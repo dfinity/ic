@@ -946,7 +946,7 @@ mod idkg_create_dealing {
         let transcript_internal = IDkgTranscriptInternal::new(
             EccCurveType::K256,
             1,
-            &BTreeMap::from([(0, dummy_dealing(rng))]),
+            BTreeMap::from([(0, dummy_dealing(rng))]),
             &IDkgTranscriptOperationInternal::ReshareOfMasked(random_polynomial_commitment(
                 1,
                 PolynomialCommitmentType::Pedersen,
@@ -1400,7 +1400,7 @@ mod idkg_load_transcript {
             let internal_transcript = IDkgTranscriptInternal::new(
                 EccCurveType::K256,
                 self.reconstruction_threshold.get() as usize,
-                &BTreeMap::from([(
+                BTreeMap::from([(
                     DEALER_RECEIVER_INDEX,
                     IDkgDealingInternal::deserialize(dealing_bytes.as_ref())
                         .expect("failed to deserialize internal dealing"),
@@ -1769,7 +1769,7 @@ mod idkg_load_transcript_with_openings {
             let openings = if self.use_empty_openings {
                 BTreeMap::new()
             } else {
-                BTreeMap::from([(0u32, BTreeMap::from([(0u32, opening.clone())]))])
+                BTreeMap::from([(0_u32, BTreeMap::from([(0_u32, opening.clone())]))])
             };
 
             let loader_vault: Box<dyn IDkgProtocolCspVault> =
@@ -1833,7 +1833,7 @@ mod idkg_load_transcript_with_openings {
             let internal_transcript = IDkgTranscriptInternal::new(
                 EccCurveType::K256,
                 reconstruction_threshold_in_transcript.get() as usize,
-                &dealing_map,
+                dealing_map,
                 &IDkgTranscriptOperationInternal::Random,
             )
             .expect("failed to create internal transcript");
@@ -2050,7 +2050,7 @@ mod idkg_open_dealing {
 
             let dealing = match self.additional_operation {
                 Some(IDkgOpenDealingTestAdditionalOperation::UseDealingWithInvalidEncoding) => {
-                    let invalid_internal_dealing_raw = vec![0xFFu8; 100];
+                    let invalid_internal_dealing_raw = vec![0xFF_u8; 100];
                     dummy_batch_signed_dealing_with(invalid_internal_dealing_raw, node_id(456))
                 }
                 None => signed_dealings

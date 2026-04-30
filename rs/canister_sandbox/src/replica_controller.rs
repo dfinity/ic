@@ -1,4 +1,5 @@
 pub mod active_execution_state_registry;
+mod allowed_panics;
 pub mod controller_service_impl;
 pub mod launch_as_process;
 mod process_exe_and_args;

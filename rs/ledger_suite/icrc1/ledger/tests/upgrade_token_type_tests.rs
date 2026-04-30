@@ -28,14 +28,14 @@ fn default_init_args(initial_balances: Vec<(Account, Nat)>) -> Vec<u8> {
         minting_account: PrincipalId::new_user_test_id(0).0.into(),
         fee_collector_account: None,
         initial_balances,
-        transfer_fee: 10_000u64.into(),
+        transfer_fee: 10_000_u64.into(),
         token_name: "Test Token".to_string(),
         decimals: Some(8),
         token_symbol: "XTST".to_string(),
         metadata: vec![],
         archive_options: ArchiveOptions {
-            trigger_threshold: 10usize,
-            num_blocks_to_archive: 5usize,
+            trigger_threshold: 10_usize,
+            num_blocks_to_archive: 5_usize,
             node_max_memory_size_bytes: None,
             max_message_size_bytes: None,
             controller_id: PrincipalId::new_user_test_id(100),
@@ -60,7 +60,7 @@ fn test_mainnet_u64_with_balance_to_master_u256() {
             ledger_mainnet_u64_wasm(),
             default_init_args(vec![(
                 PrincipalId::new_user_test_id(100).0.into(),
-                Nat::from(1u64),
+                Nat::from(1_u64),
             )]),
             None,
         )

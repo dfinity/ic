@@ -111,7 +111,9 @@ mod crypto_hash_stability {
         ThresholdSigShare, ThresholdSigShareOf,
     };
     use crate::crypto::{CryptoHash, CryptoHashOf};
-    use crate::messages::{Blob, CallbackId, HttpCanisterUpdate, MessageId, SignedRequestBytes};
+    use crate::messages::{
+        Blob, CallbackId, HttpCanisterUpdate, MessageId, RawSignedSenderInfo, SignedRequestBytes,
+    };
     use crate::signature::{
         BasicSignature, MultiSignature, MultiSignatureShare, ThresholdSignature,
         ThresholdSignatureShare,
@@ -122,6 +124,7 @@ mod crypto_hash_stability {
     };
     use ic_base_types::PrincipalId;
     use ic_crypto_test_utils_ni_dkg::ni_dkg_csp_dealing;
+    use ic_crypto_tree_hash::{Digest, Witness};
     use ic_protobuf::types::v1 as pb;
     use std::collections::BTreeMap;
     use std::sync::Arc;
@@ -146,7 +149,7 @@ mod crypto_hash_stability {
     /// Test stability of MessageId hash output
     #[test]
     fn message_id_stability() {
-        let data = MessageId::from([0x42u8; 32]);
+        let data = MessageId::from([0x42_u8; 32]);
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
@@ -158,7 +161,7 @@ mod crypto_hash_stability {
     /// Test stability of SignedRequestBytes hash output
     #[test]
     fn signed_request_bytes_stability() {
-        let data = SignedRequestBytes::from(vec![0x42u8; 32]);
+        let data = SignedRequestBytes::from(vec![0x42_u8; 32]);
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
@@ -434,6 +437,7 @@ mod crypto_hash_stability {
         let content = CertificationContent::new(state_hash);
         let data = Certification {
             height: Height::from(42),
+            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
             signed: Signed {
                 content,
                 signature: ThresholdSignature {
@@ -445,7 +449,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "a8833f9cda71c9b857ff4c1a6d83e6a187982fc9187fa184733248c1723163c3",
+            "9fb205560b04ba770f600ebd986b6f398666c726e01168416b1bdc002dc6e494",
             "Hash of Certification changed"
         );
     }
@@ -457,6 +461,7 @@ mod crypto_hash_stability {
         let content = CertificationContent::new(state_hash);
         let data = CertificationShare {
             height: Height::from(42),
+            height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
                 content,
                 signature: ThresholdSignatureShare {
@@ -468,7 +473,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "c860ffa9b824e46ae0fd68f8f7db2568f754c6ce119509c7b1a22db47780f71a",
+            "53da5b1d79ac888f4016ca7a6c97715e97411752268893dfc0f6ade437d88325",
             "Hash of CertificationShare changed"
         );
     }
@@ -618,6 +623,7 @@ mod crypto_hash_stability {
         let content = CertificationContent::new(state_hash);
         let cert = Certification {
             height: Height::from(42),
+            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
             signed: Signed {
                 content,
                 signature: ThresholdSignature {
@@ -630,7 +636,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "e9407ce84f50ba618d3fc6ebd05477e949958619605c5dbebeba3f946debabd5",
+            "af481a7d7ec38af0ed137ce9d12ee787823a9a9707a6c218053d556d864caea4",
             "Hash of CertificationMessage changed"
         );
     }
@@ -1028,11 +1034,16 @@ mod crypto_hash_stability {
             sender: Blob(vec![0x42; 29]),
             ingress_expiry: 1234567890,
             nonce: Some(Blob(vec![0x42; 8])),
+            sender_info: Some(RawSignedSenderInfo {
+                info: Blob(vec![1, 2, 3]),
+                signer: Blob(vec![0xAB; 10]),
+                sig: Blob(vec![4, 5, 6]),
+            }),
         };
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "1fc89a61eb9215d4c379b3ac99c23ff73140ff1ba89a8fbd531c7fc62fc0c762",
+            "b410d43e850c9f8ae12dc397bbcdbd3e8f4a6b7988924cdc4917dd9ab2a860da",
             "Hash of HttpCanisterUpdate changed"
         );
     }
@@ -1042,14 +1053,13 @@ mod crypto_hash_stability {
     fn canister_http_response_stability() {
         let data = CanisterHttpResponse {
             id: CanisterHttpRequestId::from(42),
-            timeout: UNIX_EPOCH,
             canister_id: ic_base_types::CanisterId::from_u64(42),
             content: CanisterHttpResponseContent::Success(vec![0x42; 16]),
         };
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "48f996c026833b51d8e34775ee8ca1354abe0b4fd29d9795290e3747ad477650",
+            "86afd80c0bbb31b1776437bee06ff99329e91b53a5afea4c46003874d3e9bf3d",
             "Hash of CanisterHttpResponse changed"
         );
     }
@@ -1059,15 +1069,16 @@ mod crypto_hash_stability {
     fn canister_http_response_metadata_stability() {
         let data = CanisterHttpResponseMetadata {
             id: CallbackId::from(42),
-            timeout: UNIX_EPOCH,
             content_hash: test_crypto_hash_of(0x42),
+            content_size: 0,
+            is_reject: false,
             registry_version: RegistryVersion::from(1),
             replica_version: ReplicaVersion::default(),
         };
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "5b1f5808c5e36cb70254914aeb76682e158889b6071c2c1c7b2a6667b2d5a699",
+            "ebf5373f06dadd9a3d7d3b59ce457533428ff27d4d588b8434f786d1d8c1a9db",
             "Hash of CanisterHttpResponseMetadata changed"
         );
     }
@@ -1077,8 +1088,9 @@ mod crypto_hash_stability {
     fn canister_http_response_share_stability() {
         let metadata = CanisterHttpResponseMetadata {
             id: CallbackId::from(42),
-            timeout: UNIX_EPOCH,
             content_hash: test_crypto_hash_of(0x42),
+            content_size: 0,
+            is_reject: false,
             registry_version: RegistryVersion::from(1),
             replica_version: ReplicaVersion::default(),
         };
@@ -1092,7 +1104,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "e1f245d7fafe2fc4db847ac67141ebe869dcc1901c6779fe46c876341c797b68",
+            "7bff0af6053ad0f648acffecf0434e299e9ce1d04b6752934935a13e390de986",
             "Hash of CanisterHttpResponseShare changed"
         );
     }

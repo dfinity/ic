@@ -68,7 +68,7 @@ struct MigrateCanisterArgs {
     pub replaced_canister_id: Principal,
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub enum ValidationError {
     MigrationsDisabled(Reserved),
     RateLimited(Reserved),
@@ -86,7 +86,7 @@ pub enum ValidationError {
     CallFailed { reason: String },
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 enum MigrationStatus {
     InProgress { status: String },
     Failed { reason: String, time: u64 },

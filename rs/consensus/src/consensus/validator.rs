@@ -12,7 +12,7 @@ use ic_consensus_utils::{
     MINIMUM_CHAIN_LENGTH, RoundRobin, active_high_threshold_nidkg_id,
     active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
-    get_oldest_idkg_state_registry_version,
+    get_oldest_state_registry_version,
     membership::{Membership, MembershipError},
     pool_reader::{PoolReader, UnexpectedChainLength},
 };
@@ -1712,7 +1712,7 @@ impl Validator {
                 .state_manager
                 .get_state_at(height)
                 .map_err(ValidationFailure::StateManagerError)?;
-            get_oldest_idkg_state_registry_version(state.get_ref())
+            get_oldest_state_registry_version(state.get_ref())
         } else {
             None
         };
@@ -2125,7 +2125,7 @@ pub mod test {
 
             // The state manager is mocked and the `StateHash` is completely arbitrary. It
             // must just be the same as in the `CatchUpPackageShare`.
-            let state_hash = CryptoHashOfState::from(CryptoHash(vec![1u8; 32]));
+            let state_hash = CryptoHashOfState::from(CryptoHash(vec![1_u8; 32]));
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
@@ -2209,7 +2209,7 @@ pub mod test {
 
             // The state manager is mocked and the `StateHash` is completely arbitrary. It
             // must just be the same as in the `CatchUpPackageShare`.
-            let state_hash = CryptoHashOfState::from(CryptoHash(vec![1u8; 32]));
+            let state_hash = CryptoHashOfState::from(CryptoHash(vec![1_u8; 32]));
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()

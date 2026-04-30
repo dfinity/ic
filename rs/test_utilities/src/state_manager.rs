@@ -1,5 +1,5 @@
 use ic_crypto_sha2::Sha256;
-use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
+use ic_crypto_tree_hash::{Digest, LabeledTree, MatchPatternPath, MixedHashTree, Witness};
 use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
@@ -121,6 +121,10 @@ fn initial_state() -> Labeled<Arc<ReplicatedState>> {
 }
 
 impl StateManager for FakeStateManager {
+    fn tip_height(&self) -> Height {
+        self.tip_height()
+    }
+
     fn take_tip(&self) -> (Height, Self::State) {
         (
             self.tip_height(),
@@ -203,8 +207,15 @@ impl StateManager for FakeStateManager {
             .map(|s| StateHashMetadata {
                 height: s.height,
                 hash: s.partial_hash.clone(),
+                height_witness: Witness::new_for_testing(
+                    s.partial_hash.clone().get().0.to_vec().try_into().unwrap(),
+                ),
             })
             .collect()
+    }
+
+    fn list_state_heights_to_certify(&self) -> Vec<Height> {
+        vec![]
     }
 
     fn deliver_state_certification(&self, certification: Certification) {
@@ -650,6 +661,7 @@ pub fn encode_certified_stream_slice(
         merkle_proof: vec![],
         certification: Certification {
             height: state_height,
+            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
             signed: Signed {
                 signature: ThresholdSignature {
                     signer: NiDkgId {
@@ -684,6 +696,10 @@ impl RefMockStateManager {
 }
 
 impl StateManager for RefMockStateManager {
+    fn tip_height(&self) -> Height {
+        self.mock.read().unwrap().tip_height()
+    }
+
     fn take_tip(&self) -> (Height, Self::State) {
         self.mock.read().unwrap().take_tip()
     }
@@ -710,6 +726,10 @@ impl StateManager for RefMockStateManager {
 
     fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata> {
         self.mock.read().unwrap().list_state_hashes_to_certify()
+    }
+
+    fn list_state_heights_to_certify(&self) -> Vec<Height> {
+        self.mock.read().unwrap().list_state_heights_to_certify()
     }
 
     fn deliver_state_certification(&self, certification: Certification) {

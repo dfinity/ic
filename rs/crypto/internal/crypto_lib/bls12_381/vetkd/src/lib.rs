@@ -353,7 +353,7 @@ impl EncryptedKey {
 
     /// Serialize an encrypted key
     pub fn serialize(&self) -> [u8; Self::BYTES] {
-        let mut output = [0u8; Self::BYTES];
+        let mut output = [0_u8; Self::BYTES];
 
         let c2_start = G1Affine::BYTES;
         let c3_start = G1Affine::BYTES + G2Affine::BYTES;
@@ -466,7 +466,7 @@ impl EncryptedKeyShare {
 
     /// Serialize an encrypted key share
     pub fn serialize(&self) -> [u8; Self::BYTES] {
-        let mut output = [0u8; Self::BYTES];
+        let mut output = [0_u8; Self::BYTES];
 
         let c2_start = G1Affine::BYTES;
         let c3_start = G1Affine::BYTES + G2Affine::BYTES;

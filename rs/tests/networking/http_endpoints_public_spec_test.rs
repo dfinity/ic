@@ -61,7 +61,7 @@ use ic_system_test_driver::{
     systest,
     util::{UniversalCanister, block_on},
 };
-use ic_types::{CanisterId, PrincipalId};
+use ic_types::{CanisterId, PrincipalId, SubnetId};
 use ic_universal_canister::wasm;
 use ic_utils::interfaces::ManagementCanister;
 use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
@@ -162,7 +162,7 @@ fn query_calls(env: TestEnv, version: query::Version) {
     });
 }
 
-fn read_state_valid_succeeds(env: TestEnv, version: read_state::canister::Version) {
+fn read_state_valid_succeeds(env: TestEnv, version: read_state::Version) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
     let (primary, _test_ids) = get_canister_test_ids(&snapshot);
@@ -186,7 +186,7 @@ fn read_state_valid_succeeds(env: TestEnv, version: read_state::canister::Versio
     });
 }
 
-fn read_state_malformed_rejected(env: TestEnv, version: read_state::canister::Version) {
+fn read_state_malformed_rejected(env: TestEnv, version: read_state::Version) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
     let (primary, test_ids) = get_canister_test_ids(&snapshot);
@@ -212,7 +212,7 @@ fn read_state_malformed_rejected(env: TestEnv, version: read_state::canister::Ve
     });
 }
 
-fn read_time(env: TestEnv, version: read_state::canister::Version) {
+fn read_time(env: TestEnv, version: read_state::Version) {
     let logger = env.logger();
     let snapshot = env.topology_snapshot();
     let (primary, _) = get_canister_test_ids(&snapshot);
@@ -237,10 +237,10 @@ fn read_time(env: TestEnv, version: read_state::canister::Version) {
         let response = read_state(primary, api_bn_url.clone()).await;
         let status = inspect_response(response, "ReadState", &logger).await;
         match version {
-            read_state::canister::Version::V2 => {
+            read_state::Version::V2 => {
                 assert_2xx(&status);
             }
-            read_state::canister::Version::V3 => {
+            read_state::Version::V3 => {
                 assert_2xx(&status);
             }
         }
@@ -443,7 +443,33 @@ async fn deploy_wasm_to_fresh_canister(
     canister_id
 }
 
+/// Retries a request (update or query) and asserts it fails with the expected error.
+/// Transport errors are retried since the server may close the connection while
+/// the client is still streaming a large request body.
+async fn assert_large_request_rejected<F, Fut>(
+    label: String,
+    logger: &Logger,
+    call: F,
+    is_expected: impl Fn(&AgentError) -> bool,
+) where
+    F: Fn() -> Fut,
+    Fut: std::future::Future<Output = Result<Vec<u8>, AgentError>>,
+{
+    let err =
+        ic_system_test_driver::retry_agent_on_transport_errors!(label.as_str(), logger, call())
+            .await
+            .expect("Retries exhausted")
+            .expect_err(&label);
+
+    assert!(is_expected(&err));
+}
+
+fn is_http_status(err: &AgentError, status: StatusCode) -> bool {
+    matches!(err, AgentError::HttpError(p) if p.status == status.as_u16())
+}
+
 fn method_name_edge_cases(env: TestEnv) {
+    let logger = env.logger();
     let snapshot = env.topology_snapshot();
 
     // We use an application subnet in this test
@@ -458,7 +484,9 @@ fn method_name_edge_cases(env: TestEnv) {
     block_on(async {
         let outer_futs: Vec<_> = [(subnet_replica_url, false), (api_bn_url, true)]
             .into_iter()
-            .map(|(url, is_api_bn)| async move {
+            .map(|(url, is_api_bn)| {
+                let logger = logger.clone();
+                async move {
                 let client = reqwest::Client::builder()
                     .danger_accept_invalid_certs(true)
                     .build()
@@ -599,67 +627,52 @@ fn method_name_edge_cases(env: TestEnv) {
                 }
 
                 let too_long_method_name = 'x'.to_string().repeat(3 << 20);
-                let err = agent
-                    .update(&canister_id, &too_long_method_name)
-                    .call_and_wait()
-                    .await
-                    .unwrap_err();
-
-                let payload_too_large = |err: AgentError| {
-                    match err {
-                        AgentError::HttpError(payload) => {
-                            assert_eq!(payload.status, StatusCode::PAYLOAD_TOO_LARGE.as_u16());
+                // The API BN has more generous limits, so it still responds with HTTP 400 Bad Request.
+                // When bypassing the API BN, the replica responds with PAYLOAD_TOO_LARGE for updates
+                // or an UncertifiedReject for queries.
+                assert_large_request_rejected(
+                    format!("update 'x' * 3*2^20 (is_api_bn={})", is_api_bn),
+                    &logger,
+                    || agent.update(&canister_id, &too_long_method_name).call_and_wait(),
+                    |e: &AgentError| {
+                        if is_api_bn {
+                            is_http_status(e, StatusCode::BAD_REQUEST)
+                        } else {
+                            is_http_status(e, StatusCode::PAYLOAD_TOO_LARGE)
                         }
-                        _ => panic!("Unexpected error: {:?}", err),
-                    };
-                };
-
-                if is_api_bn {
-                    // The API BN has more generous limits, so it still responds with HTTP 400 Bad Request.
-                    assert!(
-                        matches!(err, AgentError::HttpError(ref payload) if payload.status == StatusCode::BAD_REQUEST.as_u16()),
-                        "api bn update for 'x' * 3**20: got error {}",
-                        err
-                    );
-                } else {
-                    payload_too_large(err);
-                }
-
-                let err = agent
-                    .query(&canister_id, &too_long_method_name)
-                    .call()
-                    .await
-                    .unwrap_err();
-
-                if is_api_bn {
-                    // When going through the API BN, the request is rejected with HTTP 400 Bad Request.
-                    assert!(
-                        matches!(err, AgentError::HttpError(ref payload) if payload.status == StatusCode::BAD_REQUEST.as_u16()),
-                        "api bn update for 'x' * 3**20: got error {}",
-                        err
-                    );
-                } else {
-                    // When bypassing the API BN, the replica responds with a reject.
-                    assert!(
-                        matches!(err, AgentError::UncertifiedReject { .. }),
-                        "direct replica update for 'x' * 3**20: got error {}",
-                        err
-                    );
-                }
+                    },
+                )
+                .await;
+                assert_large_request_rejected(
+                    format!("query 'x' * 3*2^20 (is_api_bn={})", is_api_bn),
+                    &logger,
+                    || agent.query(&canister_id, &too_long_method_name).call(),
+                    |e: &AgentError| {
+                        if is_api_bn {
+                            is_http_status(e, StatusCode::BAD_REQUEST)
+                        } else {
+                            matches!(e, AgentError::UncertifiedReject { .. })
+                        }
+                    },
+                )
+                .await;
 
                 let too_long_method_name = 'x'.to_string().repeat(5 << 20);
-                let err = agent
-                    .update(&canister_id, &too_long_method_name)
-                    .call_and_wait()
-                    .await
-                    .unwrap_err();
-                payload_too_large(err);
-                let err = agent
-                    .query(&canister_id, &too_long_method_name)
-                    .call()
-                    .await
-                    .unwrap_err();
-                payload_too_large(err);
+                assert_large_request_rejected(
+                    "update 'x' * 5*2^20".to_string(),
+                    &logger,
+                    || agent.update(&canister_id, &too_long_method_name).call_and_wait(),
+                    |e: &AgentError| is_http_status(e, StatusCode::PAYLOAD_TOO_LARGE),
+                )
+                .await;
+                assert_large_request_rejected(
+                    "query 'x' * 5*2^20".to_string(),
+                    &logger,
+                    || agent.query(&canister_id, &too_long_method_name).call(),
+                    |e: &AgentError| is_http_status(e, StatusCode::PAYLOAD_TOO_LARGE),
+                )
+                .await;
+                }
             })
             .collect();
         futures::future::join_all(outer_futs).await;
@@ -747,6 +760,11 @@ fn get_api_bn_url(snapshot: &TopologySnapshot) -> Url {
     api_bn.get_public_url()
 }
 
+fn get_subnet_ids(snapshot: &TopologySnapshot) -> (SubnetId, SubnetId) {
+    let (sys_subnet, app_subnet) = get_subnets(snapshot);
+    (sys_subnet.subnet_id, app_subnet.subnet_id)
+}
+
 fn get_canister_test_ids(snapshot: &TopologySnapshot) -> (CanisterId, [CanisterId; 5]) {
     let (primary, sys_uc, app_uc) = get_canister_ids(snapshot);
     (
@@ -764,6 +782,96 @@ fn get_canister_test_ids(snapshot: &TopologySnapshot) -> (CanisterId, [CanisterI
             CanisterId::try_from(PrincipalId::new_user_test_id(42)).unwrap(),
         ],
     )
+}
+
+fn query_calls_subnet_v3(env: TestEnv) {
+    let logger = env.logger();
+    let snapshot = env.topology_snapshot();
+    let socket = get_socket_addr(&snapshot);
+    let (sys_subnet_id, app_subnet_id) = get_subnet_ids(&snapshot);
+
+    block_on(async {
+        // Correct subnet ID with ic_00 and list_canisters → accepted
+        let response = Query::new_subnet(sys_subnet_id.get()).query(socket).await;
+        let status = inspect_response(response, "QuerySubnet", &logger).await;
+        assert_2xx(&status);
+
+        // Wrong subnet ID → rejected
+        let response = Query::new_subnet(app_subnet_id.get()).query(socket).await;
+        let status = inspect_response(response, "QuerySubnet", &logger).await;
+        assert_4xx(&status);
+
+        // Non-management canister with "list_canisters" → rejected
+        let (non_mgmt_canister, _) = get_canister_test_ids(&snapshot);
+        let response = Query::new_subnet(sys_subnet_id.get())
+            .with_canister_id(non_mgmt_canister.get())
+            .query(socket)
+            .await;
+        let status = inspect_response(response, "QuerySubnet", &logger).await;
+        assert_4xx(&status);
+
+        // IC_00 with wrong method → rejected
+        let response = Query::new_subnet(sys_subnet_id.get())
+            .with_method_name("install_code".to_string())
+            .query(socket)
+            .await;
+        let status = inspect_response(response, "QuerySubnet", &logger).await;
+        assert_4xx(&status);
+    });
+}
+
+fn update_calls_subnet_v4(env: TestEnv) {
+    let logger = env.logger();
+    let snapshot = env.topology_snapshot();
+    let socket = get_socket_addr(&snapshot);
+    let (sys_subnet_id, app_subnet_id) = get_subnet_ids(&snapshot);
+
+    let mgmt_message = || {
+        IngressMessage::default()
+            .with_canister_id(CanisterId::ic_00().get(), CanisterId::ic_00().get())
+            .with_method_name("create_canister".to_string())
+    };
+
+    block_on(async {
+        // Correct subnet ID → accepted
+        let response = CallSubnet::V4(sys_subnet_id.get())
+            .call(socket, mgmt_message())
+            .await;
+        let status = inspect_response(response, "CallSubnet", &logger).await;
+        assert_2xx(&status);
+
+        // Wrong subnet ID → rejected
+        let response = CallSubnet::V4(app_subnet_id.get())
+            .call(socket, mgmt_message())
+            .await;
+        let status = inspect_response(response, "CallSubnet", &logger).await;
+        assert_4xx(&status);
+
+        // Non-management canister with "create_canister" → rejected
+        let (non_mgmt_canister, _) = get_canister_test_ids(&snapshot);
+        let response = CallSubnet::V4(sys_subnet_id.get())
+            .call(
+                socket,
+                IngressMessage::default()
+                    .with_canister_id(non_mgmt_canister.get(), non_mgmt_canister.get())
+                    .with_method_name("create_canister".to_string()),
+            )
+            .await;
+        let status = inspect_response(response, "CallSubnet", &logger).await;
+        assert_4xx(&status);
+
+        // IC_00 with wrong method → rejected
+        let response = CallSubnet::V4(sys_subnet_id.get())
+            .call(
+                socket,
+                IngressMessage::default()
+                    .with_canister_id(CanisterId::ic_00().get(), CanisterId::ic_00().get())
+                    .with_method_name("install_code".to_string()),
+            )
+            .await;
+        let status = inspect_response(response, "CallSubnet", &logger).await;
+        assert_4xx(&status);
+    });
 }
 
 fn assert_2xx(status: &u16) {
@@ -787,19 +895,17 @@ fn main() -> Result<()> {
             SystemTestSubGroup::new()
                 .add_test(systest!(query_calls; query::Version::V2))
                 .add_test(systest!(query_calls; query::Version::V3))
+                .add_test(systest!(query_calls_subnet_v3))
                 .add_test(systest!(update_calls; Call::V2))
                 .add_test(systest!(update_calls; Call::V3))
                 .add_test(systest!(update_calls; Call::V4))
-                .add_test(systest!(read_state_valid_succeeds; read_state::canister::Version::V2))
-                .add_test(systest!(read_state_valid_succeeds; read_state::canister::Version::V3))
-                .add_test(
-                    systest!(read_state_malformed_rejected; read_state::canister::Version::V2),
-                )
-                .add_test(
-                    systest!(read_state_malformed_rejected; read_state::canister::Version::V3),
-                )
-                .add_test(systest!(read_time; read_state::canister::Version::V2))
-                .add_test(systest!(read_time; read_state::canister::Version::V3))
+                .add_test(systest!(update_calls_subnet_v4))
+                .add_test(systest!(read_state_valid_succeeds; read_state::Version::V2))
+                .add_test(systest!(read_state_valid_succeeds; read_state::Version::V3))
+                .add_test(systest!(read_state_malformed_rejected; read_state::Version::V2))
+                .add_test(systest!(read_state_malformed_rejected; read_state::Version::V3))
+                .add_test(systest!(read_time; read_state::Version::V2))
+                .add_test(systest!(read_time; read_state::Version::V3))
                 .add_test(systest!(malformed_http_request))
                 .add_test(systest!(method_name_edge_cases)),
         )

@@ -2,26 +2,34 @@
 
 use crate::common::frontend_canister;
 use candid::{CandidType, Decode, Deserialize, Encode, Principal, decode_one, encode_one};
-use ic_base_types::{PrincipalId, SubnetId};
+use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_config::crypto::CryptoConfig;
+use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_management_canister_types::{
     HttpRequestResult, NodeMetricsHistoryArgs, NodeMetricsHistoryRecord,
 };
+use ic_protobuf::registry::node::v1::NodeRewardType;
+use ic_registry_canister_api::AddNodePayload;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::node_operator::NodeOperatorRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_transport::pb::v1::RegistryGetLatestVersionResponse;
+use ic_types::ReplicaVersion;
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
+use maplit::btreemap;
 use pocket_ic::common::rest::{
     CreateInstanceResponse, ExtendedSubnetConfigSet, IcpFeatures, IcpFeaturesConfig,
-    IncompleteStateFlag, InstanceConfig, InstanceHttpGatewayConfig,
+    IncompleteStateFlag, InstanceConfig, InstanceHttpGatewayConfig, RawSenderInfo,
 };
 use pocket_ic::nonblocking::PocketIc as PocketIcAsync;
 use pocket_ic::{
     PocketIc, PocketIcBuilder, PocketIcState, StartServerParams, SubnetBlockmakers, TickConfigs,
-    start_server, update_candid_as,
+    Time, start_server, update_candid_as,
 };
 use prost::Message;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
+use registry_canister::mutations::do_create_subnet::{CreateSubnetPayload, NewSubnet};
 use registry_canister::mutations::do_remove_node_operators::{
     NodeOperatorPrincipals, RemoveNodeOperatorsPayload,
 };
@@ -35,7 +43,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
     thread::JoinHandle,
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tempfile::TempDir;
 
@@ -133,6 +141,7 @@ async fn resume_killed_instance_impl(
         incomplete_state,
         initial_time: None,
         mainnet_nns_subnet_id: None,
+        disable_ingress_validation: None,
     };
     let response = client
         .post(server_url.join("instances").unwrap())
@@ -439,6 +448,7 @@ fn payload_too_large() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
@@ -643,4 +653,276 @@ fn test_registry_sync() {
 
     // The latest registry version in both PocketIC and the registry canister should increase by one.
     check_registry_versions(&pocket_ic, initial_registry_version + 3);
+}
+
+fn prepare_add_node_payload(
+    node_sequence_number: u8,
+    node_reward_type: NodeRewardType,
+) -> AddNodePayload {
+    // As the registry canister checks for validity of keys, we need to generate them first
+    let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
+    let node_public_keys =
+        generate_node_keys_once(&config, None).expect("error generating node public keys");
+    // Create payload message
+    let node_signing_pk = node_public_keys.node_signing_key().encode_to_vec();
+    let committee_signing_pk = node_public_keys.committee_signing_key().encode_to_vec();
+    let ni_dkg_dealing_encryption_pk = node_public_keys
+        .dkg_dealing_encryption_key()
+        .encode_to_vec();
+    let transport_tls_cert = node_public_keys.tls_certificate().encode_to_vec();
+    let idkg_dealing_encryption_pk = node_public_keys
+        .idkg_dealing_encryption_key()
+        .encode_to_vec();
+    // Create the payload
+    AddNodePayload {
+        node_signing_pk,
+        committee_signing_pk,
+        ni_dkg_dealing_encryption_pk,
+        transport_tls_cert,
+        idkg_dealing_encryption_pk: Some(idkg_dealing_encryption_pk),
+        xnet_endpoint: format!("128.0.{node_sequence_number}.100:1234"),
+        http_endpoint: format!("128.0.{node_sequence_number}.100:4321"),
+        node_registration_attestation: None,
+        public_ipv4_config: None,
+        domain: Some("api-example.com".to_string()),
+        p2p_flow_endpoints: Default::default(),
+        prometheus_metrics_endpoint: Default::default(),
+        node_reward_type: Some(node_reward_type.to_string()),
+    }
+}
+
+#[test]
+fn create_subnet_in_registry_canister() {
+    let icp_features = IcpFeatures {
+        registry: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    };
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_icp_features(icp_features)
+        .build();
+
+    // TLS certificates for the node record are generated with current time
+    let current_time = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    pic.set_time(Time::from_nanos_since_unix_epoch(current_time as u64));
+
+    let registry_canister_id = Principal::from_text("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
+    let governance_canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
+
+    // Add a node operator (every node must have a node operator)
+    let node_operator = Principal::from_slice(&[42; 29]);
+    let add_node_operator_payload = AddNodeOperatorPayload {
+        node_operator_principal_id: Some(PrincipalId(node_operator)),
+        node_provider_principal_id: Some(PrincipalId(node_operator)),
+        max_rewardable_nodes: Some(btreemap! { "type1".to_string() => 1 }),
+        ..Default::default()
+    };
+    update_candid_as::<_, ()>(
+        &pic,
+        registry_canister_id,
+        governance_canister_id,
+        "add_node_operator",
+        (add_node_operator_payload,),
+    )
+    .unwrap();
+
+    // Add a node (every subnet must have a node)
+    let add_node_payload = prepare_add_node_payload(1, NodeRewardType::Type1);
+    let node_id = update_candid_as::<_, (Principal,)>(
+        &pic,
+        registry_canister_id,
+        node_operator,
+        "add_node",
+        (add_node_payload,),
+    )
+    .unwrap()
+    .0;
+
+    // Add a subnet
+    let node_ids = vec![NodeId::new(PrincipalId(node_id))];
+    let create_subnet_payload = CreateSubnetPayload {
+        node_ids,
+        replica_version_id: ReplicaVersion::default().to_string(),
+        ..Default::default()
+    };
+    update_candid_as::<_, (Result<NewSubnet, String>,)>(
+        &pic,
+        registry_canister_id,
+        governance_canister_id,
+        "create_subnet",
+        (create_subnet_payload,),
+    )
+    .unwrap()
+    .0
+    .unwrap();
+}
+
+fn deploy_universal_canister(pic: &PocketIc) -> Principal {
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None);
+    canister_id
+}
+
+#[test]
+fn test_sender_info_in_update_call() {
+    let pic = PocketIc::new();
+    let canister_id = deploy_universal_canister(&pic);
+
+    let info = vec![1_u8, 2, 3, 4];
+    // Use the canister itself as the signer: sender info signature is not required by PocketIC
+    // when using PocketIC JSON API.
+    let signer = canister_id.as_slice().to_vec();
+    let sender_info = RawSenderInfo {
+        info: info.clone(),
+        signer: signer.clone(),
+    };
+
+    // msg_caller_info_data returns the info blob.
+    let result = pic
+        .update_call_with_sender_info(
+            canister_id,
+            Principal::anonymous(),
+            "update",
+            wasm().msg_caller_info_data().append_and_reply().build(),
+            sender_info.clone(),
+        )
+        .expect("update call failed");
+    assert_eq!(result, info);
+
+    // msg_caller_info_signer returns the signer principal bytes.
+    let result = pic
+        .update_call_with_sender_info(
+            canister_id,
+            Principal::anonymous(),
+            "update",
+            wasm().msg_caller_info_signer().append_and_reply().build(),
+            sender_info,
+        )
+        .expect("update call failed");
+    assert_eq!(result, signer);
+}
+
+#[test]
+fn test_sender_info_in_query_call() {
+    let pic = PocketIc::new();
+    let canister_id = deploy_universal_canister(&pic);
+
+    let info = vec![5_u8, 6, 7, 8];
+    // Use the canister itself as the signer: sender info signature is not required by PocketIC
+    // when using PocketIC JSON API.
+    let signer = canister_id.as_slice().to_vec();
+    let sender_info = RawSenderInfo {
+        info: info.clone(),
+        signer: signer.clone(),
+    };
+
+    // msg_caller_info_data returns the info blob.
+    let result = pic
+        .query_call_with_sender_info(
+            canister_id,
+            Principal::anonymous(),
+            "query",
+            wasm().msg_caller_info_data().append_and_reply().build(),
+            sender_info.clone(),
+        )
+        .expect("query call failed");
+    assert_eq!(result, info);
+
+    // msg_caller_info_signer returns the signer principal bytes.
+    let result = pic
+        .query_call_with_sender_info(
+            canister_id,
+            Principal::anonymous(),
+            "query",
+            wasm().msg_caller_info_signer().append_and_reply().build(),
+            sender_info,
+        )
+        .expect("query call failed");
+    assert_eq!(result, signer);
+}
+
+#[test]
+fn test_cost_threshold_keys() {
+    // We create a PocketIC instance with the II subnet (holding `key_1` with 34 nodes)
+    // and the test threshold keys subnet (holding `test_key_1` and `dfx_test_key` with 13 nodes).
+    let pic = PocketIcBuilder::new()
+        .with_ii_subnet() // this subnet has `key_1`
+        .with_test_threshold_keys_subnet() // this subnet has `test_key_1` and `dfx_test_key`
+        .with_application_subnet()
+        .build();
+
+    let canister = deploy_universal_canister(&pic);
+
+    // `key_1` is on the II subnet (34 nodes): base fee 10B scaled by 34/13.
+    // `test_key_1` and `dfx_test_key` are on the test threshold keys subnet (13 nodes): base fee 10B.
+    let cases = [
+        ("key_1", 26_153_846_153_u128),
+        ("test_key_1", 10_000_000_000_u128),
+        ("dfx_test_key", 10_000_000_000_u128),
+    ];
+
+    for (name, expected_cost) in cases {
+        let name_bytes = name.as_bytes();
+
+        // ic0.cost_sign_with_ecdsa (curve `Secp256k1` = 0)
+        let bytes = pic
+            .update_call(
+                canister,
+                Principal::anonymous(),
+                "update",
+                wasm()
+                    .cost_sign_with_ecdsa(name_bytes, 0)
+                    .reply_data_append()
+                    .reply()
+                    .build(),
+            )
+            .unwrap();
+        assert_eq!(
+            u128::from_le_bytes(bytes.try_into().unwrap()),
+            expected_cost,
+            "`ic0.cost_sign_with_ecdsa` mismatch for key `{name}`"
+        );
+
+        // ic0.cost_sign_with_schnorr (algorithm `Bip340Secp256k1` = 0)
+        let bytes = pic
+            .update_call(
+                canister,
+                Principal::anonymous(),
+                "update",
+                wasm()
+                    .cost_sign_with_schnorr(name_bytes, 0)
+                    .reply_data_append()
+                    .reply()
+                    .build(),
+            )
+            .unwrap();
+        assert_eq!(
+            u128::from_le_bytes(bytes.try_into().unwrap()),
+            expected_cost,
+            "`ic0.cost_sign_with_schnorr` mismatch for key `{name}`"
+        );
+
+        // ic0.cost_vetkd_derive_key (curve `Bls12_381_G2` = 0)
+        let bytes = pic
+            .update_call(
+                canister,
+                Principal::anonymous(),
+                "update",
+                wasm()
+                    .cost_vetkd_derive_key(name_bytes, 0)
+                    .reply_data_append()
+                    .reply()
+                    .build(),
+            )
+            .unwrap();
+        assert_eq!(
+            u128::from_le_bytes(bytes.try_into().unwrap()),
+            expected_cost,
+            "`ic0.cost_vetkd_derive_key` mismatch for key `{name}`"
+        );
+    }
 }

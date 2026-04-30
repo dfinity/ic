@@ -35,6 +35,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
             let initial_subnet_record = SubnetRecord {
                 membership: vec![],
                 max_ingress_bytes_per_message: 60 * 1024 * 1024,
+                max_ingress_bytes_per_block: 4 * 1024 * 1024,
                 max_ingress_messages_per_block: 1000,
                 max_block_payload_size: 4 * 1024 * 1024,
                 unit_delay_millis: 500,
@@ -53,6 +54,8 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 chain_key_config: None,
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                 subnet_admins: vec![],
+                resource_limits: Default::default(),
+                recalled_replica_version_ids: vec![],
             };
 
             let key = make_subnet_record_key(subnet_id);
@@ -78,6 +81,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 subnet_id,
                 max_ingress_bytes_per_message: Some(10 * 1024 * 1024),
                 max_ingress_messages_per_block: None,
+                max_ingress_bytes_per_block: None,
                 max_block_payload_size: None,
                 unit_delay_millis: None,
                 initial_notary_delay_millis: None,
@@ -88,6 +92,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 is_halted: Some(true),
                 halt_at_cup_height: Some(true),
                 features: None,
+                resource_limits: None,
                 max_number_of_canisters: Some(200),
                 ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
                 ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -154,6 +159,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 SubnetRecord {
                     membership: vec![],
                     max_ingress_bytes_per_message: 10 * 1024 * 1024,
+                    max_ingress_bytes_per_block: 4 * 1024 * 1024,
                     max_ingress_messages_per_block: 1000,
                     max_block_payload_size: 4 * 1024 * 1024,
                     unit_delay_millis: 500,
@@ -172,6 +178,8 @@ fn test_submit_and_accept_update_subnet_proposal() {
                     chain_key_config: None,
                     canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                     subnet_admins: vec![],
+                    resource_limits: Default::default(),
+                    recalled_replica_version_ids: vec![],
                 }
             );
             Ok(())

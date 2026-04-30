@@ -10,11 +10,9 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_types::ids::user_test_id;
-use ic_types::Cycles;
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::ingress::IngressState;
 use ic_types::{ComputeAllocation, MemoryAllocation};
-use maplit::btreeset;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 
 ////////////////////////////////////////////////////////////////////////
 // Constants and templates
@@ -244,7 +242,7 @@ fn upgrade_fails_on_not_enough_cycles() {
     );
     let canister_id = test
         .canister_from_cycles_and_binary(
-            Cycles::new(balance_cycles.into()) + freezing_threshold_cycles,
+            balance_cycles.real() + freezing_threshold_cycles,
             old_empty_binary(),
         )
         .unwrap();
@@ -333,7 +331,7 @@ fn upgrade_fails_on_short_pre_upgrade_trap() {
 fn test_install_and_reinstall_with_canister_install_mode_v2() {
     let mut test = execution_test_with_max_rounds(1);
     let old_binary = binary(&[(Function::PreUpgrade, Execution::Short)]);
-    let canister_id = test.create_canister(Cycles::from(1_000_000_000_000u128));
+    let canister_id = test.create_canister(Cycles::from(1_000_000_000_000_u128));
     // test install
     assert_eq!(test.install_canister_v2(canister_id, old_binary), Ok(()));
     // test reinstall
@@ -349,7 +347,7 @@ fn test_pre_upgrade_execution_with_canister_install_mode_v2() {
 
     for skip_pre_upgrade in [None, Some(false), Some(true)] {
         let old_binary = binary(&[(Function::PreUpgrade, Execution::ShortTrap)]);
-        let canister_id = test.create_canister(Cycles::from(1_000_000_000_000u128));
+        let canister_id = test.create_canister(Cycles::from(1_000_000_000_000_u128));
         test.install_canister_v2(canister_id, old_binary).unwrap();
         let canister_state_before = test.canister_state(canister_id).clone();
 
@@ -384,7 +382,7 @@ fn test_upgrade_execution_with_canister_install_mode_v2() {
 
     for skip_pre_upgrade in [None, Some(false), Some(true)] {
         let old_binary = binary(&[(Function::PreUpgrade, Execution::Short)]);
-        let canister_id = test.create_canister(Cycles::from(1_000_000_000_000u128));
+        let canister_id = test.create_canister(Cycles::from(1_000_000_000_000_u128));
         test.install_canister_v2(canister_id, old_binary).unwrap();
         let canister_state_before = test.canister_state(canister_id).clone();
 
@@ -690,23 +688,19 @@ fn upgrade_fails_on_long_post_upgrade_hits_instructions_limit() {
 fn upgrade_fails_on_pre_upgrade_resume_error() {
     // Long execution takes 2 rounds
     let mut test = execution_test_with_max_rounds(2);
-    let old_binary = binary(&[(Function::PreUpgrade, Execution::Long)]);
+    let old_binary = binary(&[(Function::PreUpgrade, Execution::InstructionsLimit)]);
     let canister_id = test.canister_from_binary(old_binary).unwrap();
     let canister_state_before = test.canister_state(canister_id).clone();
 
     // The first round is executed in the `dts_upgrade_canister()`
     let message_id = test.dts_upgrade_canister(canister_id, new_empty_binary());
-    // Change canister controller to make it invalid
-    // The default user id is 1, so changing it to 999 make the paused canister invalid
-    let canister = test.canister_state_mut(canister_id);
-    canister.system_state.controllers = btreeset! {user_test_id(999).get()};
     // Execute one more round
     assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
     test.execute_slice(canister_id);
     let result = check_ingress_status(test.ingress_status(&message_id));
     assert_eq!(
         result.unwrap_err().code(),
-        ErrorCode::CanisterInvalidController
+        ErrorCode::CanisterInstructionLimitExceeded
     );
     assert_canister_state_after_err(&canister_state_before, test.canister_state(canister_id));
 }
@@ -774,20 +768,16 @@ fn upgrade_fails_on_start_resume_error() {
     let canister_id = test.canister_from_binary(old_empty_binary()).unwrap();
     let canister_state_before = test.canister_state(canister_id).clone();
 
-    let new_binary = binary(&[(Function::Start, Execution::Long)]);
+    let new_binary = binary(&[(Function::Start, Execution::InstructionsLimit)]);
     // The first round is executed in the `dts_upgrade_canister()`
     let message_id = test.dts_upgrade_canister(canister_id, new_binary);
-    // Change canister controller to make it invalid
-    // The default user id is 1, so changing it to 999 make the paused canister invalid
-    let canister = test.canister_state_mut(canister_id);
-    canister.system_state.controllers = btreeset! {user_test_id(999).get()};
     // Execute one more round
     assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
     test.execute_slice(canister_id);
     let result = check_ingress_status(test.ingress_status(&message_id));
     assert_eq!(
         result.unwrap_err().code(),
-        ErrorCode::CanisterInvalidController
+        ErrorCode::CanisterInstructionLimitExceeded
     );
     assert_canister_state_after_err(&canister_state_before, test.canister_state(canister_id));
 }
@@ -855,20 +845,16 @@ fn upgrade_fails_on_post_upgrade_resume_error() {
     let canister_id = test.canister_from_binary(old_empty_binary()).unwrap();
     let canister_state_before = test.canister_state(canister_id).clone();
 
-    let new_binary = binary(&[(Function::PostUpgrade, Execution::Long)]);
+    let new_binary = binary(&[(Function::PostUpgrade, Execution::InstructionsLimit)]);
     // The first round is executed in the `dts_upgrade_canister()`
     let message_id = test.dts_upgrade_canister(canister_id, new_binary);
-    // Change canister controller to make it invalid
-    // The default user id is 1, so changing it to 999 make the paused canister invalid
-    let canister = test.canister_state_mut(canister_id);
-    canister.system_state.controllers = btreeset! {user_test_id(999).get()};
     // Execute one more round
     assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
     test.execute_slice(canister_id);
     let result = check_ingress_status(test.ingress_status(&message_id));
     assert_eq!(
         result.unwrap_err().code(),
-        ErrorCode::CanisterInvalidController
+        ErrorCode::CanisterInstructionLimitExceeded
     );
     assert_canister_state_after_err(&canister_state_before, test.canister_state(canister_id));
 }

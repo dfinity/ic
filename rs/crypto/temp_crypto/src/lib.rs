@@ -593,7 +593,7 @@ pub mod internal {
         fn create_transcript(
             &self,
             params: &IDkgTranscriptParams,
-            dealings: &BatchSignedIDkgDealings,
+            dealings: BatchSignedIDkgDealings,
         ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
             IDkgProtocol::create_transcript(&self.crypto_component, params, dealings)
         }
@@ -1012,7 +1012,7 @@ pub mod internal {
         fn create_transcript(
             &self,
             config: &NiDkgConfig,
-            verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
+            verified_dealings: BTreeMap<NodeId, NiDkgDealing>,
         ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
             NiDkgAlgorithm::create_transcript(&self.crypto_component, config, verified_dealings)
         }
@@ -1101,6 +1101,7 @@ impl EcdsaSubnetConfig {
                     vec![]
                 },
                 max_ingress_bytes_per_message: 60 * 1024 * 1024,
+                max_ingress_bytes_per_block: 120 * 1024 * 1024,
                 max_ingress_messages_per_block: 1000,
                 max_block_payload_size: 2 * 1024 * 1024,
                 unit_delay_millis: 500,
@@ -1136,6 +1137,8 @@ impl EcdsaSubnetConfig {
                 }),
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                 subnet_admins: vec![],
+                resource_limits: None,
+                recalled_replica_version_ids: vec![],
             },
         }
     }

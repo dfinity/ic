@@ -1,7 +1,7 @@
 type canister_creation_status = variant {
   idle;
   in_progress : nat64;
-  done : nat64;
+  done : vec principal;
 };
 
 service : {
@@ -9,5 +9,6 @@ service : {
   read_state : (nat64) -> (variant { Ok : nat8; Err : text }) query;
   write_random_data : (nat64, nat64, nat64) -> (variant { Ok : null; Err : text });
   create_many_canisters : (nat64) -> ();
+  update_many_canisters : () -> ();
   canister_creation_status : () -> (canister_creation_status) query;
 }

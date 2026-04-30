@@ -29,14 +29,11 @@ use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_limits::MAX_INGRESS_TTL;
 use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_metrics::MetricsRegistry;
-use ic_registry_client::client::RegistryClientImpl;
+use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{
-    CanisterQueues, RefundPool, ReplicatedState, SystemMetadata,
-    canister_snapshots::CanisterSnapshots,
-};
+use ic_replicated_state::{CanisterQueues, RefundPool, ReplicatedState, SystemMetadata};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_registry::test_subnet_record;
 use ic_test_utilities_state::{MockIngressHistory, ReplicatedStateBuilder};
@@ -194,7 +191,6 @@ where
                         CanisterQueues::default(),
                         RefundPool::default(),
                         RawQueryStats::default(),
-                        CanisterSnapshots::default(),
                     )),
                 )
             });
@@ -226,13 +222,12 @@ where
             )));
 
             let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-            let runtime = tokio::runtime::Runtime::new().unwrap();
             let mut ingress_manager = IngressManager::new(
                 time_source.clone(),
                 Arc::new(consensus_time),
                 Box::new(ingress_hist_reader),
                 ingress_pool,
-                setup_registry(subnet_id, runtime.handle().clone()),
+                setup_registry(subnet_id),
                 ingress_signature_crypto,
                 metrics_registry,
                 subnet_id,
@@ -327,21 +322,29 @@ fn handle_ingress(criterion: &mut Criterion) {
              log: ReplicaLogger,
              history: &SimulatedIngressHistory,
              manager: &mut IngressManager| {
-                let messages = prepare(time_source.as_ref(), expiry_range, total_messages as usize);
-                let (pool, message_ids) = setup(time_source.as_ref(), pool_config, log, messages);
                 group.bench_function(format!("handle_ingress({ingress_rate})"), |bench| {
                     bench.iter_custom(|iters| {
                         let mut elapsed = Duration::from_secs(0);
                         for _ in 0..iters {
-                            let bench_start = Instant::now();
-                            let mut ingress_pool = pool.clone();
+                            let messages = prepare(
+                                time_source.as_ref(),
+                                expiry_range,
+                                total_messages as usize,
+                            );
+                            let (mut ingress_pool, message_ids) = setup(
+                                time_source.as_ref(),
+                                pool_config.clone(),
+                                log.clone(),
+                                messages,
+                            );
                             time_source.reset();
                             // We skip the first MAX_INGRESS_TTL duration in order to save
                             // overall benchmark time. Also by this time, the ingress
                             // history has become fully populated.
                             let start = time_source.get_relative_time() + MAX_INGRESS_TTL;
                             time_source.set_time(start).unwrap();
-                            history.set_history(message_ids.clone());
+                            history.set_history(message_ids);
+                            let bench_start = Instant::now();
                             // Increment time every 200ms until it is over.
                             loop {
                                 on_state_change(&mut ingress_pool, manager);
@@ -363,7 +366,7 @@ fn handle_ingress(criterion: &mut Criterion) {
 }
 
 /// Sets up a registry client.
-fn setup_registry(subnet_id: SubnetId, runtime: tokio::runtime::Handle) -> Arc<dyn RegistryClient> {
+fn setup_registry(subnet_id: SubnetId) -> Arc<dyn RegistryClient> {
     let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
     let subnet_record = test_subnet_record();
     registry_data_provider
@@ -373,11 +376,10 @@ fn setup_registry(subnet_id: SubnetId, runtime: tokio::runtime::Handle) -> Arc<d
             Some(subnet_record),
         )
         .expect("Failed to add subnet record.");
-    let registry = Arc::new(RegistryClientImpl::new(
-        Arc::clone(&registry_data_provider) as Arc<_>,
-        None,
+    let registry = Arc::new(FakeRegistryClient::new(
+        Arc::clone(&registry_data_provider) as Arc<_>
     ));
-    runtime.block_on(async { registry.as_ref().fetch_and_start_polling().unwrap() });
+    registry.update_to_latest_version();
     registry
 }
 

@@ -122,7 +122,7 @@ fn map_signed_transaction(raw_transaction: &str) -> SignedEip1559TransactionRequ
     }
 
     fn ethers_u256_to_be_bytes(num: ethers_core::types::U256) -> [u8; 32] {
-        let mut bytes = [0u8; 32];
+        let mut bytes = [0_u8; 32];
         num.to_big_endian(&mut bytes);
         bytes
     }
@@ -442,7 +442,7 @@ fn convert_events_and_dump_stable_memory(input_file: &str, output_file: &str) {
 
     // Read raw bytes from the VectorMemory
     let size_bytes = memory_ref.size() as usize * 65536;
-    let mut bytes = vec![0u8; size_bytes];
+    let mut bytes = vec![0_u8; size_bytes];
     memory_ref.read(0, &mut bytes);
 
     // Compress and write

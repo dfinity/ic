@@ -863,7 +863,10 @@ async fn install_ledger_suite<R: CanisterRuntime>(
 
     let index_arg = Some(IndexArg::Init(IndexInitArg {
         ledger_id: ledger_canister_id,
+        #[allow(deprecated)]
         retrieve_blocks_from_ledger_interval_seconds: None,
+        min_retrieve_blocks_from_ledger_interval_seconds: None,
+        max_retrieve_blocks_from_ledger_interval_seconds: None,
     }));
     install_canister_once::<Index, _, _>(
         &args.contract,
@@ -915,7 +918,10 @@ fn icrc1_ledger_init_arg(
         0x0f, 0xee,
     ];
     const MAX_MEMO_LENGTH: u16 = 80;
-    const ICRC2_FEATURE: LedgerFeatureFlags = LedgerFeatureFlags { icrc2: true };
+    const ICRC2_FEATURE: LedgerFeatureFlags = LedgerFeatureFlags {
+        icrc2: true,
+        icrc152: false,
+    };
 
     LedgerInitArgs {
         minting_account: LedgerAccount::from(minter_id),

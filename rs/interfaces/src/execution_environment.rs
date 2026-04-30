@@ -8,15 +8,17 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    Cycles, ExecutionRound, Height, NodeId, NumInstructions, Randomness, RegistryVersion,
-    ReplicaVersion, Time,
+    ExecutionRound, Height, NodeId, NumInstructions, Randomness, RegistryVersion, ReplicaVersion,
+    Time,
     batch::ChainKeyData,
     ingress::{IngressStatus, WasmResult},
     messages::{
         CertificateDelegation, CertificateDelegationMetadata, MessageId, Query, SignedIngress,
     },
 };
+use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
+use std::num::NonZeroU64;
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::{Infallible, TryFrom},
@@ -217,6 +219,14 @@ pub enum SystemApiCallId {
     MsgArgDataSize,
     /// Tracker for `ic0.msg_caller_copy()`
     MsgCallerCopy,
+    /// Tracker for `ic0.msg_caller_info_data_copy()`
+    MsgCallerInfoDataCopy,
+    /// Tracker for `ic0.msg_caller_info_data_size()`
+    MsgCallerInfoDataSize,
+    /// Tracker for `ic0.msg_caller_info_signer_copy()`
+    MsgCallerInfoSignerCopy,
+    /// Tracker for `ic0.msg_caller_info_signer_size()`
+    MsgCallerInfoSignerSize,
     /// Tracker for `ic0.msg_caller_size()`
     MsgCallerSize,
     /// Tracker for `ic0.msg_cycles_accept()`
@@ -359,22 +369,27 @@ impl SubnetAvailableMemory {
         guaranteed_response_message_memory: i64,
         wasm_custom_sections_memory: i64,
     ) -> Self {
-        // We do not apply scaling in tests that create `SubnetAvailableMemory` manually.
-        let scaling_factor = 1;
         SubnetAvailableMemory::new_scaled(
             execution_memory,
             guaranteed_response_message_memory,
             wasm_custom_sections_memory,
-            scaling_factor,
+            // We do not apply scaling in tests that create `SubnetAvailableMemory` manually.
+            NonZeroU64::new(1).expect("scaling_factor must be not zero"),
         )
     }
 
+    /// Creates a new `SubnetAvailableMemory` and scales down the provided memory limits
+    /// by dividing them by a given `scaling_factor`.
+    ///
+    /// This is typically used to safely divide the subnet's available memory among
+    /// concurrent execution threads (cores) to prevent overcommitting the total memory budget.
     pub fn new_scaled(
         execution_memory: i64,
         guaranteed_response_message_memory: i64,
         wasm_custom_sections_memory: i64,
-        scaling_factor: i64,
+        scaling_factor: NonZeroU64,
     ) -> Self {
+        let scaling_factor = scaling_factor.get() as i64;
         SubnetAvailableMemory {
             execution_memory: execution_memory / scaling_factor,
             guaranteed_response_message_memory: guaranteed_response_message_memory / scaling_factor,
@@ -641,6 +656,7 @@ pub trait IngressHistoryWriter: Send + Sync {
         state: &mut Self::State,
         message_id: MessageId,
         status: IngressStatus,
+        current_round: ExecutionRound,
     ) -> Arc<IngressStatus>;
 }
 
@@ -813,6 +829,32 @@ pub trait SystemApi {
 
     /// Returns the size of the opaque caller blob.
     fn ic0_msg_caller_size(&self) -> HypervisorResult<usize>;
+
+    /// Returns the size of the caller info data blob.
+    fn ic0_msg_caller_info_data_size(&self) -> HypervisorResult<usize>;
+
+    /// Copies `size` bytes starting from `offset` inside the caller info data blob
+    /// to heap[dst..dst+size].
+    fn ic0_msg_caller_info_data_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// Returns the size of the caller info signer blob.
+    fn ic0_msg_caller_info_signer_size(&self) -> HypervisorResult<usize>;
+
+    /// Copies `size` bytes starting from `offset` inside the caller info signer blob
+    /// to heap[dst..dst+size].
+    fn ic0_msg_caller_info_signer_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
 
     /// Returns the size of msg.payload.
     fn ic0_msg_arg_data_size(&self) -> HypervisorResult<usize>;
@@ -1648,7 +1690,12 @@ mod tests {
         assert_eq!(available.get_guaranteed_response_message_memory(), 10);
         assert_eq!(available.get_wasm_custom_sections_memory(), 4);
 
-        let available = SubnetAvailableMemory::new_scaled(20, 10, 4, 2);
+        let available = SubnetAvailableMemory::new_scaled(
+            20,
+            10,
+            4,
+            NonZeroU64::new(2).expect("scaling_factor must be non zero"),
+        );
         assert_eq!(available.get_execution_memory(), 10);
         assert_eq!(available.get_guaranteed_response_message_memory(), 5);
         assert_eq!(available.get_wasm_custom_sections_memory(), 2);

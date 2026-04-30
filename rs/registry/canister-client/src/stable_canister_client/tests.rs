@@ -302,14 +302,14 @@ fn test_sync_registry_stored() {
     let current_latest = client.get_latest_version();
     assert_eq!(current_latest, RegistryVersion::new(5));
 
-    for version in 1..=4u8 {
+    for version in 1..=4_u8 {
         let value = client.get_value("Foo", v(version as u64)).unwrap().unwrap();
         assert_eq!(value, vec![version]);
     }
 
     assert!(client.get_value("Foo", v(5)).unwrap().is_none());
 
-    assert_eq!(client.get_value("Bar", v(5)).unwrap().unwrap(), vec![50u8]);
+    assert_eq!(client.get_value("Bar", v(5)).unwrap().unwrap(), vec![50_u8]);
 
     let expected_timestamp_to_registry_versions: BTreeMap<u64, HashSet<RegistryVersion>> =
         BTreeMap::from_iter(vec![
