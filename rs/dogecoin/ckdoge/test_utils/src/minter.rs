@@ -141,7 +141,7 @@ impl MinterCanister {
     }
 
     /// Trigger a refresh of the median fee percentiles by advancing time past
-    /// the [`refresh_fee_percentiles_frequency`] (6 minutes for ckDOGE) and
+    /// the `refresh_fee_percentiles_frequency` (6 minutes for ckDOGE) and
     /// ticking. This is useful in tests to ensure that
     /// `last_median_fee_per_vbyte` is updated to a value derived from the
     /// dogecoin canister fee percentiles, rather than the default value of 1
