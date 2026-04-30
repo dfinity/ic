@@ -139,7 +139,7 @@ pub(super) fn fake_signature_request_context(
         ),
         derivation_path: Arc::new(vec![vec![]]),
         batch_time: UNIX_EPOCH,
-        deprecated_pseudo_random_id: Some([0; 32]),
+        deprecated_pseudo_random_id: None,
         nonce,
     }
 }
