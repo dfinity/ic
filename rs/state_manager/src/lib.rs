@@ -2331,6 +2331,11 @@ impl StateManagerImpl {
             .set(latest_certified_height.get() as i64);
 
         let mut certifications = states.certifications.split_off(&last_height_to_keep);
+        for h in inmemory_heights_to_keep.iter() {
+            if let Some(cert) = states.certifications.remove(h) {
+                certifications.insert(*h, cert);
+            }
+        }
         std::mem::swap(&mut certifications, &mut states.certifications);
         self.deallocator_thread.send(Box::new(certifications));
 
