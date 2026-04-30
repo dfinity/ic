@@ -57,8 +57,8 @@ fn upgrade_assigned_nodes(
     target_version: &ReplicaVersion,
 ) {
     block_on(deploy_guestos_to_all_unassigned_nodes(
-        &nns_node,
-        &target_version,
+        nns_node,
+        target_version,
     ));
 
     ic_system_test_driver::retry_with_msg!(
@@ -69,7 +69,7 @@ fn upgrade_assigned_nodes(
         log.clone(),
         secs(600),
         secs(10),
-        || match fetch_unassigned_node_version(&unassigned_node) {
+        || match fetch_unassigned_node_version(unassigned_node) {
             Ok(ver) if (ver == *target_version) => Ok(()),
             Ok(ver) => bail!("Unassigned node replica version: {}", ver),
             Err(_) => bail!("Waiting for the host to boot..."),
