@@ -483,6 +483,13 @@ fn should_estimate_withdrawal_fee() {
         .minter_update_balance()
         .expect_mint();
 
+    // Ensure the fee percentile refresh task runs successfully now that the
+    // dogecoin canister is fully synced. Otherwise `last_median_fee_per_vbyte`
+    // could still be at its default of 1 millikoinu/byte if the initial refresh
+    // (scheduled at minter init) fired before the dogecoin canister was synced
+    // and trapped.
+    minter.refresh_fee_percentiles();
+
     assert_eq!(
         estimate_withdrawal_fee_and_check(&minter, DOGE),
         Err(EstimateWithdrawalFeeError::AmountTooLow {
