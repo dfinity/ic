@@ -719,17 +719,13 @@ fn get_canister_ids(snapshot: &TopologySnapshot) -> (CanisterId, CanisterId, Can
     let (sys_subnet, app_subnet) = get_subnets(snapshot);
 
     let sys_subnet_canister_id_range = sys_subnet.subnet_canister_ranges()[0];
-    let sys_uc1_id = sys_subnet_canister_id_range
-        .generate_canister_id(None)
-        .unwrap();
+    let sys_uc1_id = sys_subnet_canister_id_range.next_canister_id(None).unwrap();
     let sys_uc2_id = sys_subnet_canister_id_range
-        .generate_canister_id(Some(sys_uc1_id))
+        .next_canister_id(Some(sys_uc1_id))
         .unwrap();
 
     let app_subnet_canister_id_range = app_subnet.subnet_canister_ranges()[0];
-    let app_uc_id = app_subnet_canister_id_range
-        .generate_canister_id(None)
-        .unwrap();
+    let app_uc_id = app_subnet_canister_id_range.next_canister_id(None).unwrap();
 
     (sys_uc1_id, sys_uc2_id, app_uc_id)
 }

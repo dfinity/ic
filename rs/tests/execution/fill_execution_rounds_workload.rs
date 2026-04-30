@@ -199,7 +199,7 @@ pub fn fill_execution_rounds(
             &log,
         ));
         canister_id = canister_id_ranges
-            .generate_canister_id(Some(canister_id))
+            .next_canister_id(Some(canister_id))
             .expect("Canister ID can be generated");
 
         currently_installing_canisters += 1;
@@ -219,7 +219,7 @@ pub fn fill_execution_rounds(
                     &log,
                 ));
                 canister_id = canister_id_ranges
-                    .generate_canister_id(Some(canister_id))
+                    .next_canister_id(Some(canister_id))
                     .expect("Canister ID can be generated");
 
                 currently_installing_canisters += 1;

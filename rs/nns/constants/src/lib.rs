@@ -11,7 +11,7 @@ use maplit::btreemap;
 // NOTES (IMPORTANT!)
 // ~~~~~~~~~~~~~~~~~~
 // - This is dependent on the implementation of function
-//   `CanisterManager::generate_new_canister_id`.
+//   `CanisterManager::peek_new_canister_id`.
 // - Unless you only add at the end, be sure to double check with
 //   `rs/nns/canister_ids.json`. TODO: Write a test that enforces
 //   that this file matches the .json file
