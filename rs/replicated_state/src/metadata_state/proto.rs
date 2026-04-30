@@ -389,24 +389,11 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
 
 /// Decodes a `SystemMetadata` proto. The metrics are provided as a side-channel
 /// for recording errors without being forced to return `Err(_)`.
-///
-/// `fallback_subnet_schedule` is used for backward compatibility when loading
-/// old checkpoints that don't have the `subnet_schedule` field in the proto.
-impl
-    TryFrom<(
-        pb_metadata::SystemMetadata,
-        SubnetSchedule,
-        &dyn CheckpointLoadingMetrics,
-    )> for SystemMetadata
-{
+impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for SystemMetadata {
     type Error = ProxyDecodeError;
 
     fn try_from(
-        (item, fallback_subnet_schedule, metrics): (
-            pb_metadata::SystemMetadata,
-            SubnetSchedule,
-            &dyn CheckpointLoadingMetrics,
-        ),
+        (item, metrics): (pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics),
     ) -> Result<Self, Self::Error> {
         let mut streams = BTreeMap::<SubnetId, Stream>::new();
         for entry in item.streams {
@@ -416,7 +403,7 @@ impl
             );
         }
 
-        let subnet_schedule = if !item.subnet_schedule.is_empty() {
+        let subnet_schedule = {
             let mut priorities = BTreeMap::new();
             for entry in &item.subnet_schedule {
                 let canister_id = CanisterId::try_from(entry.canister_id.clone().ok_or(
@@ -437,8 +424,6 @@ impl
                 );
             }
             SubnetSchedule::new(priorities)
-        } else {
-            fallback_subnet_schedule
         };
 
         let canister_allocation_ranges: CanisterIdRanges = match item.canister_allocation_ranges {
