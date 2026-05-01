@@ -130,26 +130,26 @@ impl Config {
     }
 
     pub fn with_call_timeouts(self, timeouts_seconds: &[Option<u32>]) -> Self {
-        let mut config = self.clone();
+        let mut config = self;
         config.call_timeouts_seconds = timeouts_seconds.to_vec();
         config
     }
 
     pub fn with_payload_bytes(self, payload_size_bytes: u64) -> Self {
-        let mut config = self.clone();
+        let mut config = self;
         config.request_payload_size_bytes = payload_size_bytes;
         config.response_payload_size_bytes = payload_size_bytes;
         config
     }
 
     pub fn with_request_payload_size_bytes(self, request_payload_size_bytes: u64) -> Self {
-        let mut config = self.clone();
+        let mut config = self;
         config.request_payload_size_bytes = request_payload_size_bytes;
         config
     }
 
     pub fn with_response_payload_size_bytes(self, response_payload_size_bytes: u64) -> Self {
-        let mut config = self.clone();
+        let mut config = self;
         config.response_payload_size_bytes = response_payload_size_bytes;
         config
     }

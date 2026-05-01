@@ -1439,8 +1439,7 @@ fn try_read_registry_can_skip_missing_or_invalid_node_public_keys() {
             })
             .unwrap();
 
-        let (batch_processor, metrics, _, _) =
-            make_batch_processor(fixture.registry.clone(), log.clone());
+        let (batch_processor, metrics, _, _) = make_batch_processor(fixture.registry.clone(), log);
         let res = batch_processor
             .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id);
         assert_matches!(res, Ok(_));
@@ -1584,8 +1583,7 @@ fn try_read_registry_can_skip_missing_or_invalid_fields_of_api_boundary_nodes() 
             })
             .unwrap();
 
-        let (batch_processor, metrics, _, _) =
-            make_batch_processor(fixture.registry.clone(), log.clone());
+        let (batch_processor, metrics, _, _) = make_batch_processor(fixture.registry.clone(), log);
         let res = batch_processor
             .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id);
         assert_matches!(res, Ok(_));
@@ -1660,8 +1658,7 @@ fn try_read_registry_succeeds_and_populates_subnet_admins() {
         fixture.write_test_records(&minimal_input).unwrap();
 
         // Check that reading the registry returns `Ok(_)`.
-        let (batch_processor, _, _, _) =
-            make_batch_processor(fixture.registry.clone(), log.clone());
+        let (batch_processor, _, _, _) = make_batch_processor(fixture.registry.clone(), log);
         let network_topology = batch_processor
             .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id)
             .unwrap()
@@ -1739,8 +1736,7 @@ fn try_read_registry_succeeds_and_resets_subnet_admins() {
         fixture.write_test_records(&minimal_input).unwrap();
 
         // Check that reading the registry returns `Ok(_)`.
-        let (batch_processor, metrics, _, _) =
-            make_batch_processor(fixture.registry.clone(), log.clone());
+        let (batch_processor, metrics, _, _) = make_batch_processor(fixture.registry.clone(), log);
         let network_topology = batch_processor
             .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id)
             .unwrap()
@@ -2161,8 +2157,8 @@ fn process_batch_updates_subnet_metrics() {
             timestamp: None,
         };
         let node_public_keys = btreemap! {
-            node_test_id(1) => Valid(dummy_node_key_1.clone()),
-            node_test_id(2) => Valid(dummy_node_key_2.clone()),
+            node_test_id(1) => Valid(dummy_node_key_1),
+            node_test_id(2) => Valid(dummy_node_key_2),
         };
 
         let fixture = RegistryFixture::new();

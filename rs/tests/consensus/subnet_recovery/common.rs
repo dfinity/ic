@@ -796,7 +796,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
                 &nns_node,
                 &nns_canister,
                 app_subnet_id,
-                key_ids.clone(),
+                key_ids,
                 &logger,
             );
             assert_eq!(chain_key_pub_keys.clone().unwrap(), app_keys)

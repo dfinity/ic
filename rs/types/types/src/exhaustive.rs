@@ -700,7 +700,7 @@ impl ExhaustiveSet for NiDkgConfig {
                 let mut config_data = valid_dkg_config_data();
                 config_data.dkg_id = id;
                 config_data.resharing_transcript =
-                    resharing.then_some(config_data.resharing_transcript.unwrap().clone());
+                    resharing.then_some(config_data.resharing_transcript.unwrap());
                 NiDkgConfig::new(config_data).unwrap()
             })
             .collect()
@@ -788,7 +788,7 @@ impl ExhaustiveSet for IDkgTranscriptParams {
                 Self::new(
                     id,
                     node_ids.clone(),
-                    node_ids.clone(),
+                    node_ids,
                     version,
                     all_threshold_algs[all_threshold_algs.len() % i],
                     transcript,

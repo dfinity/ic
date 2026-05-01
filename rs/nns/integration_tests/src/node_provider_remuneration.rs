@@ -177,7 +177,7 @@ fn test_list_node_provider_rewards() {
     let expected_node_provider_reward_1 = RewardNodeProvider {
         node_provider: Some(node_info_1.provider.clone()),
         amount_e8s: expected_rewards_e8s_1,
-        reward_mode: reward_mode_1.clone(),
+        reward_mode: reward_mode_1,
     };
 
     assert!(
@@ -239,7 +239,7 @@ fn test_list_node_provider_rewards() {
         expected_node_provider_reward_1.amount_e8s,
     );
 
-    let mut minted_rewards = vec![most_recent_rewards.clone()];
+    let mut minted_rewards = vec![most_recent_rewards];
 
     let average_icp_xdr_conversion_rate_for_automated_rewards = 345_000;
 

@@ -346,7 +346,7 @@ impl Recovery {
             ssh_user,
             node_ip,
             self.ssh_confirmation,
-            key_file.clone(),
+            key_file,
         );
 
         let consensus_pool_path = PathBuf::from(IC_CONSENSUS_POOL_PATH);

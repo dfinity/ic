@@ -728,7 +728,7 @@ impl ApiState {
         ip_addr: Option<String>,
         port: Option<u16>,
     ) -> Result<std::net::TcpListener, String> {
-        let ip_addr = ip_addr.clone().unwrap_or("127.0.0.1".to_string());
+        let ip_addr = ip_addr.unwrap_or("127.0.0.1".to_string());
         let port = port.unwrap_or_default();
         let addr = format!("{ip_addr}:{port}");
         std::net::TcpListener::bind(&addr)
@@ -877,7 +877,7 @@ impl ApiState {
                         "/_",
                         Router::new()
                             .route("/dashboard", get(proxy_handler).layer(cors_get.clone()))
-                            .route("/topology", get(proxy_handler).layer(cors_get.clone()))
+                            .route("/topology", get(proxy_handler).layer(cors_get))
                             .with_state((
                                 format!("{}/_", replica_url.trim_end_matches('/')),
                                 backend_client,

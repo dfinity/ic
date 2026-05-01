@@ -644,11 +644,9 @@ mod tests {
             )),
         };
 
-        let init = inspect_idkg_chain_key_initializations(
-            vec![ecdsa_init.clone(), ecdsa_init_2.clone()],
-            vec![],
-        )
-        .expect("Should successfully inspect initializations");
+        let init =
+            inspect_idkg_chain_key_initializations(vec![ecdsa_init.clone(), ecdsa_init_2], vec![])
+                .expect("Should successfully inspect initializations");
         assert_eq!(
             init,
             BTreeMap::from([
@@ -665,20 +663,14 @@ mod tests {
 
         let init = inspect_idkg_chain_key_initializations(
             vec![],
-            vec![chain_key_init.clone(), chain_key_init_2.clone()],
+            vec![chain_key_init, chain_key_init_2.clone()],
         )
         .expect("Should successfully inspect initializations");
         assert_eq!(
             init,
             BTreeMap::from([
-                (
-                    master_key_id.clone().try_into().unwrap(),
-                    initial_dealings.clone()
-                ),
-                (
-                    master_key_id_2.clone().try_into().unwrap(),
-                    initial_dealings_2.clone()
-                ),
+                (master_key_id.try_into().unwrap(), initial_dealings),
+                (master_key_id_2.try_into().unwrap(), initial_dealings_2),
             ])
         );
 

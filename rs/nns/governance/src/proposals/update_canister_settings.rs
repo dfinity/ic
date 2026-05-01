@@ -268,7 +268,7 @@ mod tests {
         is_invalid_proposal_with_keywords(
             UpdateCanisterSettings {
                 settings: None,
-                ..valid_update_canister_settings.clone()
+                ..valid_update_canister_settings
             },
             vec!["settings", "required"],
         );
@@ -276,7 +276,7 @@ mod tests {
         is_invalid_proposal_with_keywords(
             UpdateCanisterSettings {
                 settings: Some(Default::default()),
-                ..valid_update_canister_settings.clone()
+                ..valid_update_canister_settings
             },
             vec!["at least one setting", "provided"],
         );
@@ -287,7 +287,7 @@ mod tests {
                     log_visibility: Some(4),
                     ..Default::default()
                 }),
-                ..valid_update_canister_settings.clone()
+                ..valid_update_canister_settings
             },
             vec!["invalid log visibility", "4"],
         );
@@ -298,7 +298,7 @@ mod tests {
                     log_visibility: Some(LogVisibility::Unspecified as i32),
                     ..Default::default()
                 }),
-                ..valid_update_canister_settings.clone()
+                ..valid_update_canister_settings
             },
             vec!["invalid log visibility", "0"],
         );

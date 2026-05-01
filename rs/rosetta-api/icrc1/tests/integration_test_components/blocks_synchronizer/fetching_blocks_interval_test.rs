@@ -241,7 +241,7 @@ proptest! {
 
         // Now we install the newer version of the ledger
         let ledger_wasm = icrc_ledger_wasm();
-        pocket_ic.reinstall_canister(icrc_ledger_canister_id, ledger_wasm,Encode!(&(LedgerArgument::Init(init_args.clone()))).unwrap(),None).unwrap();
+        pocket_ic.reinstall_canister(icrc_ledger_canister_id, ledger_wasm,Encode!(&(LedgerArgument::Init(init_args))).unwrap(),None).unwrap();
         rt.block_on(async {
             let agent = Arc::new(Icrc1Agent {
                 agent: local_replica::get_testing_agent(port).await,
@@ -319,7 +319,7 @@ fn test_gaps_handling() {
     let port = endpoint.port().unwrap();
 
     // Wrap async calls in a blocking Block
-    let db_path_clone = db_path.clone();
+    let db_path_clone = db_path;
     rt.block_on(async {
         // Create a testing agent
         let agent = Arc::new(Icrc1Agent {

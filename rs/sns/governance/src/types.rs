@@ -2490,7 +2490,7 @@ impl SwapNeuron {
         claimed_swap_neuron_status: ClaimedSwapNeuronStatus,
     ) -> Self {
         SwapNeuron {
-            id: neuron_recipe.neuron_id.clone(),
+            id: neuron_recipe.neuron_id,
             status: claimed_swap_neuron_status as i32,
         }
     }

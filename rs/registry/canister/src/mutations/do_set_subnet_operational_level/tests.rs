@@ -433,7 +433,7 @@ fn test_recall_replica_versions() {
     let subnet_record = registry.get_subnet_or_panic(*SUBNET_ID);
     assert_eq!(
         subnet_record.recalled_replica_version_ids,
-        vec![version_id_1.clone()]
+        vec![version_id_1]
     );
 
     // Overwrite with version_id_2 and version_id_3, replacing version_id_1

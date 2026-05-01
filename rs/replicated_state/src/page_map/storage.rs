@@ -973,7 +973,7 @@ impl dyn StorageLayout + '_ {
     }
     fn existing_base(&self) -> Option<PathBuf> {
         if self.base().exists() {
-            Some(self.base().to_path_buf())
+            Some(self.base())
         } else {
             None
         }
@@ -1293,7 +1293,7 @@ impl MergeCandidate {
         lsmt_config: &LsmtConfig,
     ) -> StorageResult<Vec<MergeCandidate>> {
         let dst_overlays: Vec<_> = (0..num_shards(num_pages, lsmt_config))
-            .map(|shard| layout.overlay(height, Shard::new(shard)).to_path_buf())
+            .map(|shard| layout.overlay(height, Shard::new(shard)))
             .collect();
         debug_assert!(
             dst_overlays.len()
@@ -1306,7 +1306,7 @@ impl MergeCandidate {
         );
 
         let base = if layout.base().exists() {
-            Some(layout.base().to_path_buf())
+            Some(layout.base())
         } else {
             None
         };

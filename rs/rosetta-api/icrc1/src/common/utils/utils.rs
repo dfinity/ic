@@ -52,7 +52,7 @@ pub fn get_state_from_network_id(
             network_identifier
         )
     }
-    Ok(state.clone())
+    Ok(state)
 }
 
 pub fn convert_timestamp_to_millis(timestamp_nanos: u64) -> anyhow::Result<u64> {
@@ -774,7 +774,7 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                 Some(to.into()),
                 Some(rosetta_core::objects::Amount::new(
                     BigInt::from(amount.0),
-                    currency.clone(),
+                    currency,
                 )),
                 None,
                 Some(
@@ -800,7 +800,7 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                 Some(from.into()),
                 Some(rosetta_core::objects::Amount::new(
                     BigInt::from_biguint(num_bigint::Sign::Minus, amount.0),
-                    currency.clone(),
+                    currency,
                 )),
                 None,
                 Some(
@@ -829,7 +829,7 @@ pub fn icrc1_rosetta_block_to_rosetta_core_operations(
 
     let operations = icrc1_operation_to_rosetta_core_operations(
         icrc1_transaction.operation,
-        currency.clone(),
+        currency,
         rosetta_block.get_fee_paid()?,
     )?;
 

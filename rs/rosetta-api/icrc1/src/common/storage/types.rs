@@ -1109,10 +1109,10 @@ mod tests {
         );
         // Compare hashes of generic transactions
         assert_eq!(
-            generic_transaction_from_generic_block(generic_block_expected.clone())
+            generic_transaction_from_generic_block(generic_block_expected)
                 .unwrap()
                 .hash(),
-            generic_transaction_from_generic_block(generic_block_actual.clone())
+            generic_transaction_from_generic_block(generic_block_actual)
                 .unwrap()
                 .hash(),
             "Generic transaction hash comparison failed."

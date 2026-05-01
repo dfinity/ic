@@ -208,7 +208,7 @@ mod multi_call_results {
                 reduced,
                 Err(MultiCallError::InconsistentResults(
                     MultiCallResults::from_non_empty_iter(vec![
-                        (BLOCK_PI, Ok(fee.clone())),
+                        (BLOCK_PI, Ok(fee)),
                         (PUBLIC_NODE, Ok(inconsistent_fee)),
                     ])
                 ))
@@ -229,9 +229,8 @@ mod multi_call_results {
                 ),
             ]);
 
-            let reduced: Result<FeeHistory, _> = results
-                .clone()
-                .reduce_with_strategy(StrictMajorityByKey::new(oldest_block));
+            let reduced: Result<FeeHistory, _> =
+                results.reduce_with_strategy(StrictMajorityByKey::new(oldest_block));
 
             assert_eq!(
                 reduced,

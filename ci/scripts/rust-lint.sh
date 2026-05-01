@@ -30,6 +30,10 @@ clippy_args=(
     # Require 42_u64, as opposed to 42u64. Because spaces good.
     --deny clippy::unseparated_literal_suffix
 
+    # Avoid unnecessary clones and passes by value.
+    --deny clippy::redundant_clone
+    --deny clippy::needless_pass_by_value
+
     # Allow format!("{}", x) instead of format!("{x}").
     --allow clippy::uninlined_format_args
 )

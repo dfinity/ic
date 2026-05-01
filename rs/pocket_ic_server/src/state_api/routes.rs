@@ -346,7 +346,7 @@ async fn run_operation<T: Serialize + FromOpOut>(
                             StatusCode::ACCEPTED,
                             ApiResponse::Started {
                                 state_label: base64::encode_config(state_label.0, base64::URL_SAFE),
-                                op_id: op_id.0.to_string(),
+                                op_id: op_id.0,
                             },
                         );
                     }
@@ -402,12 +402,9 @@ impl<T: TryFrom<OpOut>> FromOpOut for T {
     async fn from(value: OpOut) -> (StatusCode, ApiResponse<T>) {
         // match errors explicitly to make sure they have a 4xx status code
         match value {
-            OpOut::Error(PocketIcError::Forbidden(msg)) => (
-                StatusCode::FORBIDDEN,
-                ApiResponse::Error {
-                    message: msg.to_string(),
-                },
-            ),
+            OpOut::Error(PocketIcError::Forbidden(msg)) => {
+                (StatusCode::FORBIDDEN, ApiResponse::Error { message: msg })
+            }
             OpOut::Error(e) => (
                 StatusCode::BAD_REQUEST,
                 ApiResponse::Error {
@@ -1169,9 +1166,7 @@ async fn op_out_to_response(op_out: OpOut) -> Response {
             .into_response(),
         OpOut::Error(PocketIcError::Forbidden(msg)) => (
             StatusCode::FORBIDDEN,
-            Json(ApiResponse::<()>::Error {
-                message: msg.to_string(),
-            }),
+            Json(ApiResponse::<()>::Error { message: msg }),
         )
             .into_response(),
         opout @ OpOut::Error(_) => (

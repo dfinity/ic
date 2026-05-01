@@ -1413,7 +1413,7 @@ mod tests {
             curve: VetKdCurve::Bls12_381_G2,
             name: String::from("test_key"),
         });
-        let tag = NiDkgTag::HighThresholdForKey(key_id.clone());
+        let tag = NiDkgTag::HighThresholdForKey(key_id);
 
         let resharing_transcript = dummy_transcript_for_tests_with_params(
             transcript_committee.clone(),
@@ -2459,9 +2459,9 @@ mod tests {
             ),
             BTreeSet::from_iter([
                 (remote_id.clone(), node_test_id(3)),
-                (remote_id.clone(), node_test_id(4)),
+                (remote_id, node_test_id(4)),
                 (local_id.clone(), node_test_id(0)),
-                (local_id.clone(), node_test_id(1))
+                (local_id, node_test_id(1))
             ])
         );
     }
@@ -2545,7 +2545,7 @@ mod tests {
         let pool = TestDkgPool {
             messages: vec![
                 create_dealing(0, remote_active_id.clone()),
-                create_dealing(1, remote_completed_id.clone()),
+                create_dealing(1, remote_completed_id),
                 create_dealing(2, local_id.clone()),
                 create_dealing(3, local_id.clone()),
                 create_dealing(4, local_id.clone()),
@@ -2597,7 +2597,7 @@ mod tests {
 
         let pool = TestDkgPool {
             messages: vec![
-                create_dealing(0, remote_target_1.clone()),
+                create_dealing(0, remote_target_1),
                 create_dealing(1, remote_target_0.clone()),
             ],
         };
@@ -2636,7 +2636,7 @@ mod tests {
         // Both remotes share one target ID, so that target should not count as "completed".
         let dealers_from_chain: HashSet<_> = [
             (remote_low_id.clone(), node_test_id(0)),
-            (remote_low_id.clone(), node_test_id(1)),
+            (remote_low_id, node_test_id(1)),
             (remote_high_id.clone(), node_test_id(0)),
         ]
         .into();
@@ -2681,7 +2681,7 @@ mod tests {
         let pool = TestDkgPool {
             messages: vec![
                 create_dealing(2, local_id.clone()),
-                create_dealing(3, local_id.clone()),
+                create_dealing(3, local_id),
             ],
         };
 

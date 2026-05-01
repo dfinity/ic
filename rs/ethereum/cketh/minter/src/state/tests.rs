@@ -1069,7 +1069,7 @@ fn state_equivalence() {
         Ok(()),
         state.is_equivalent_to(&State {
             log_scrapings: {
-                let mut s = log_scrapings.clone();
+                let mut s = log_scrapings;
                 s.set_last_scraped_block_number(
                     LogScrapingId::EthDepositWithoutSubaccount,
                     BlockNumber::new(100_000_000_000),
@@ -1140,7 +1140,7 @@ fn state_equivalence() {
         state.is_equivalent_to(&State {
             eth_transactions: EthTransactions {
                 pending_withdrawal_requests: vec![
-                    withdrawal_request2.clone().into(),
+                    withdrawal_request2.into(),
                     withdrawal_request1.clone().into()
                 ]
                 .into_iter()
@@ -1241,7 +1241,7 @@ fn state_equivalence() {
         state.is_equivalent_to(&State {
             eth_transactions: EthTransactions {
                 next_nonce: TransactionNonce::new(1000),
-                ..eth_transactions.clone()
+                ..eth_transactions
             },
             ..state.clone()
         }),
@@ -1326,7 +1326,7 @@ mod eth_balance {
         let deposit_event = received_erc20_event();
         apply_state_transition(
             &mut state,
-            &ReceivedEvent::from(deposit_event.clone()).into_deposit(),
+            &ReceivedEvent::from(deposit_event).into_deposit(),
         );
         let balance_after = state.eth_balance.clone();
 
@@ -1483,7 +1483,7 @@ mod eth_balance {
         let effective_gas_price = WeiPerGas::from(0x596cfd9a_u64);
         let effective_gas_used = GasAmount::from(0xb003_u32);
         let withdrawal_flow = WithdrawalFlow {
-            tx_fee: tx_fee.clone(),
+            tx_fee,
             gas_limit,
             effective_gas_price,
             effective_gas_used,
@@ -1608,8 +1608,7 @@ mod eth_balance {
                 r: Default::default(),
                 s: Default::default(),
             };
-            let signed_tx =
-                SignedEip1559TransactionRequest::from((transaction.clone(), dummy_signature));
+            let signed_tx = SignedEip1559TransactionRequest::from((transaction, dummy_signature));
             apply_state_transition(
                 state,
                 &EventType::SignedTransaction {

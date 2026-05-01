@@ -1416,7 +1416,7 @@ pub(crate) mod tests {
             .expiry_time(UNIX_EPOCH + MAX_INGRESS_TTL)
             .build();
         let message_id1 = IngressMessageId::from(&ingress_msg1);
-        let message_id1_cl = message_id1.clone();
+        let message_id1_cl = message_id1;
         let mut ingress_hist_reader = Box::new(MockIngressHistory::new());
         ingress_hist_reader
             .expect_get_status_at_height()
@@ -1988,7 +1988,7 @@ pub(crate) mod tests {
                     time_source,
                     Arc::new(consensus_time),
                     Box::new(ingress_hist_reader),
-                    ingress_pool.clone(),
+                    ingress_pool,
                     registry,
                     ingress_signature_crypto,
                     metrics_registry,

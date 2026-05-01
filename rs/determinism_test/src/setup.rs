@@ -58,7 +58,7 @@ fn get_registry(
         .add(
             &make_canister_ranges_key(CanisterId::from_u64(0)),
             registry_version,
-            Some(pb_routing_table.clone()),
+            Some(pb_routing_table),
         )
         .unwrap();
     let pb_whitelist = PbProvisionalWhitelist::from(ProvisionalWhitelist::All);

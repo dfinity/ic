@@ -84,7 +84,7 @@ impl Registry {
 
         // 2a. Check IP-based rate limiting (1 node addition per day per IP)
         let ip_addr = http_endpoint.ip_addr.clone();
-        let ip_reservation = try_reserve_add_node_capacity(now, ip_addr.clone())
+        let ip_reservation = try_reserve_add_node_capacity(now, ip_addr)
             .map_err(|e| format!("{LOG_PREFIX}do_add_node: {e}"))?;
 
         let nodes_with_same_ip = scan_for_nodes_by_ip(self, &http_endpoint.ip_addr);
@@ -649,7 +649,7 @@ mod tests {
         // Set an invalid domain name
         payload.domain = Some("invalid_domain_name".to_string());
         // Act
-        let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
+        let result = registry.do_add_node_(payload, node_operator_id, now_system_time());
         // Assert
         assert_eq!(
             result.unwrap_err(),
@@ -664,7 +664,7 @@ mod tests {
         let node_operator_id = PrincipalId::new_user_test_id(0);
         let (payload, _) = prepare_add_node_payload(1, NodeRewardType::Type1);
         // Act
-        let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
+        let result = registry.do_add_node_(payload, node_operator_id, now_system_time());
         // Assert
         assert_eq!(
             result.unwrap_err(),
@@ -903,7 +903,7 @@ mod tests {
         // Act
         let _ = registry.do_add_node_(payload_1.clone(), node_operator_id, now_system_time());
         let e = registry
-            .do_add_node_(payload_2.clone(), node_operator_id, now_system_time())
+            .do_add_node_(payload_2, node_operator_id, now_system_time())
             .unwrap_err();
         assert!(
             e.contains("do_add_node: There is already another node with the same IPv4 address")
@@ -953,7 +953,7 @@ mod tests {
 
         // Verify the subnet record is updated with the new node
         let subnet_record = registry.get_subnet_or_panic(subnet_id);
-        let mut expected_membership = subnet_membership.clone();
+        let mut expected_membership = subnet_membership;
         expected_membership[1] = new_node_id;
         expected_membership.sort();
         let actual_membership: Vec<NodeId> = subnet_record
@@ -994,7 +994,7 @@ mod tests {
 
         // Add the new node
         let new_node_id = registry
-            .do_add_node_(payload.clone(), node_operator_id, now_system_time())
+            .do_add_node_(payload, node_operator_id, now_system_time())
             .expect("failed to add a node");
 
         // Verify the new node is present in the registry
@@ -1092,7 +1092,7 @@ mod tests {
 
         // Attempt to add the new node, which should panic due to exhausted max rewardable nodes
         registry
-            .do_add_node_(payload.clone(), node_operator_id, now_system_time())
+            .do_add_node_(payload, node_operator_id, now_system_time())
             .unwrap();
     }
 
@@ -1118,7 +1118,7 @@ mod tests {
 
         // Attempt to add the new node, which should panic due to exhausted max rewardable nodes
         registry
-            .do_add_node_(payload.clone(), node_operator_id, now_system_time())
+            .do_add_node_(payload, node_operator_id, now_system_time())
             .unwrap();
     }
 
@@ -1144,7 +1144,7 @@ mod tests {
         let (mut payload, _) = prepare_add_node_payload(1, NodeRewardType::Type1);
         payload.node_reward_type = None;
         // Code under test
-        let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
+        let result = registry.do_add_node_(payload, node_operator_id, now_system_time());
 
         // Assert
         assert_eq!(
@@ -1173,7 +1173,7 @@ mod tests {
         let (mut payload, _) = prepare_add_node_payload(1, NodeRewardType::Type1);
         payload.node_reward_type = None;
         // Code under test
-        let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
+        let result = registry.do_add_node_(payload, node_operator_id, now_system_time());
 
         // Assert
         assert!(
@@ -1199,7 +1199,7 @@ mod tests {
         let (mut payload, _) = prepare_add_node_payload(1, NodeRewardType::Type1);
         payload.node_reward_type = Some("invalid_type".to_string());
         // Code under test
-        let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
+        let result = registry.do_add_node_(payload, node_operator_id, now_system_time());
 
         // Assert
         assert_eq!(
@@ -1325,7 +1325,7 @@ mod tests {
 
         // Act: Try again after 24 hours - should succeed
         let one_day_later = now + std::time::Duration::from_secs(86401);
-        let after_day_capacity = get_available_add_node_capacity(test_ip.clone(), one_day_later);
+        let after_day_capacity = get_available_add_node_capacity(test_ip, one_day_later);
         assert_eq!(
             after_day_capacity, 1,
             "Capacity should be restored after 24 hours"
@@ -1443,7 +1443,7 @@ mod tests {
 
         // Act
         let node_id = registry
-            .do_add_node_(payload.clone(), node_operator_id, now_system_time())
+            .do_add_node_(payload, node_operator_id, now_system_time())
             .expect("failed to add node with SEV attestation");
 
         // Assert: the node record should contain the chip_id
@@ -1481,7 +1481,7 @@ mod tests {
         ));
 
         // Act
-        let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
+        let result = registry.do_add_node_(payload, node_operator_id, now_system_time());
 
         // Assert
         let err = result.expect_err("should fail with unblessed measurement");
@@ -1517,7 +1517,7 @@ mod tests {
         ));
 
         // Act
-        let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
+        let result = registry.do_add_node_(payload, node_operator_id, now_system_time());
 
         // Assert
         let err = result.expect_err("should fail with wrong custom data");

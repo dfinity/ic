@@ -3420,7 +3420,7 @@ fn test_motion_has_normal_voting_thresholds() {
     let (mut canister_fixture, user_principal, neuron_id) = GovernanceCanisterFixtureBuilder::new()
         .add_neuron(
             NeuronBuilder::new(
-                neuron_id_2.clone(),
+                neuron_id_2,
                 E8 * 1000,
                 NeuronPermission::new(&user_principal, vec![]),
             )
@@ -3461,7 +3461,7 @@ fn test_deregister_dapp_has_higher_voting_thresholds() {
     let (mut canister_fixture, user_principal, neuron_id) = GovernanceCanisterFixtureBuilder::new()
         .add_neuron(
             NeuronBuilder::new(
-                neuron_id_2.clone(),
+                neuron_id_2,
                 E8 * 1000,
                 NeuronPermission::new(&user_principal, vec![]),
             )
@@ -3848,7 +3848,7 @@ fn test_set_following() {
             Some(TopicFollowees {
                 topic_id_to_followees: btreemap! {
                     Topic::CriticalDappOperations as i32 => FolloweesForTopic {
-                        followees: vec![expected_followee.clone()],
+                        followees: vec![expected_followee],
                         topic: Some(Topic::CriticalDappOperations as i32),
                     }
                 },
@@ -3859,7 +3859,7 @@ fn test_set_following() {
             },
             btreemap! {
                 Topic::CriticalDappOperations => btreemap! {
-                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set
                 },
                 Topic::Governance => btreemap! {},
             },

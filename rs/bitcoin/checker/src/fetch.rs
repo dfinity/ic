@@ -122,7 +122,7 @@ pub trait FetchEnv {
         match self.http_get_tx(&provider, txid, max_response_bytes).await {
             Ok(tx) => {
                 let input_addresses = tx.input.iter().map(|_| None).collect();
-                match TransactionCheckData::from_transaction(provider.btc_network(), tx.clone()) {
+                match TransactionCheckData::from_transaction(provider.btc_network(), tx) {
                     Ok(tx) => {
                         let fetched = FetchedTx {
                             tx,

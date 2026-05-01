@@ -223,7 +223,7 @@ pub fn create_summary_payload(
             "Start to create Chain keys {:?} on subnet {} at height {}", key_ids, subnet_id, height
         );
 
-        return Ok(make_bootstrap_summary(subnet_id, key_ids.clone(), height));
+        return Ok(make_bootstrap_summary(subnet_id, key_ids, height));
     };
 
     let block_reader = block_chain_reader(
@@ -943,7 +943,7 @@ mod tests {
                 summary_height,
                 (key_transcript_ref, key_transcript),
                 vec![
-                    inputs_1.idkg_transcripts.clone(),
+                    inputs_1.idkg_transcripts,
                     inputs_2.idkg_transcripts.clone(),
                     reshare_refs,
                 ],
@@ -964,7 +964,7 @@ mod tests {
                 subnet_id,
                 summary_height,
                 vec![
-                    inputs_1.idkg_transcripts.clone(),
+                    inputs_1.idkg_transcripts,
                     inputs_2.idkg_transcripts.clone(),
                     reshare_refs,
                 ],
@@ -985,10 +985,10 @@ mod tests {
             );
             idkg_payload
                 .available_pre_signatures
-                .insert(pre_sig_id_1, presig_1.clone());
+                .insert(pre_sig_id_1, presig_1);
             idkg_payload
                 .available_pre_signatures
-                .insert(pre_sig_id_2, presig_2.clone());
+                .insert(pre_sig_id_2, presig_2);
 
             let req_1 = create_reshare_request(key_id.clone(), 1, 1);
             idkg_payload
@@ -1197,7 +1197,7 @@ mod tests {
                 summary_height,
                 (key_transcript_ref, key_transcript),
                 vec![
-                    inputs_1.idkg_transcripts.clone(),
+                    inputs_1.idkg_transcripts,
                     inputs_2.idkg_transcripts.clone(),
                     reshare_refs,
                 ],
@@ -1220,7 +1220,7 @@ mod tests {
                 subnet_id,
                 summary_height,
                 vec![
-                    inputs_1.idkg_transcripts.clone(),
+                    inputs_1.idkg_transcripts,
                     inputs_2.idkg_transcripts.clone(),
                     reshare_refs,
                 ],
@@ -1515,7 +1515,7 @@ mod tests {
                 master_key_id: key_id.clone(),
             };
 
-            let mut payload_2 = payload_1.clone();
+            let mut payload_2 = payload_1;
             *payload_2.single_key_transcript_mut() = key_transcript;
 
             block_reader
@@ -1777,8 +1777,8 @@ mod tests {
             // Simulate successful key trancript creation
             let mut key_transcript = payload_2.single_key_transcript().clone();
             key_transcript.next_in_creation = idkg::KeyTranscriptCreation::Created(transcript_ref);
-            let mut payload_3 = payload_2.clone();
-            *payload_3.single_key_transcript_mut() = key_transcript.clone();
+            let mut payload_3 = payload_2;
+            *payload_3.single_key_transcript_mut() = key_transcript;
 
             let payload_4 = create_summary_payload_helper(
                 subnet_id,
@@ -2047,7 +2047,7 @@ mod tests {
         };
         let validation_context_registry_version = RegistryVersion::from(10);
         let reached_request = create_reshare_request(key_id.clone(), 1, 10);
-        let future_request = create_reshare_request(key_id.clone(), 2, 11);
+        let future_request = create_reshare_request(key_id, 2, 11);
         let contexts = BTreeMap::from([
             (
                 ic_types::messages::CallbackId::from(1),

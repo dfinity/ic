@@ -4957,11 +4957,7 @@ fn refresh_neuron_by_id_or_subaccount(
     );
 
     // stake shouldn't have changed.
-    let neuron = gov
-        .neuron_store
-        .with_neuron(&nid, |n| n.clone())
-        .unwrap()
-        .clone();
+    let neuron = gov.neuron_store.with_neuron(&nid, |n| n.clone()).unwrap();
     assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s());
 
     let neuron_id_or_subaccount = match refresh_by {
@@ -5410,7 +5406,7 @@ fn test_neuron_split_fails() {
         NeuronState::NotDissolving as i32
     );
 
-    let neuron_before = neuron.clone();
+    let neuron_before = neuron;
 
     // 1. Attempt to split a neuron that does not exist
 
@@ -8719,11 +8715,7 @@ fn test_stop_dissolving_panics() {
 fn test_update_node_provider() {
     let (_, mut gov, neuron) = create_mature_neuron(false);
     let id = neuron.id.unwrap();
-    let neuron = gov
-        .neuron_store
-        .with_neuron(&id, |n| n.clone())
-        .unwrap()
-        .clone();
+    let neuron = gov.neuron_store.with_neuron(&id, |n| n.clone()).unwrap();
     let controller = neuron.controller();
     let account = AccountIdentifier::new(
         ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
@@ -9680,9 +9672,9 @@ fn test_include_public_neurons_in_full_neurons() {
     let governance_init = api::Governance {
         economics: Some(api::NetworkEconomics::default()),
         neurons: btreemap! {
-            1 => legacy_neuron.clone(),
+            1 => legacy_neuron,
             2 => known_neuron.clone(),
-            3 => explicitly_private_neuron.clone(),
+            3 => explicitly_private_neuron,
             4 => explicitly_public_neuron.clone(),
             5 => caller_controlled_neuron.clone(),
         },

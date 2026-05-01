@@ -24,7 +24,7 @@ where
     enum_variants.into_iter().for_each(|variant| {
         let display = format!("{}", &variant);
         let value: &'static str = variant.into();
-        let expected = value.to_case(Case::Snake).to_string();
+        let expected = value.to_case(Case::Snake);
         assert_eq!(display, expected);
     });
 }

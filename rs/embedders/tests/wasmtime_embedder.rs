@@ -2703,7 +2703,7 @@ fn wasm64_canister_self_copy() {
     let payload: Vec<u8> = vec![1, 3, 5, 7];
     let api = ApiType::update(
         UNIX_EPOCH,
-        payload.clone(),
+        payload,
         Cycles::zero(),
         caller,
         call_context_test_id(13),
@@ -2774,7 +2774,7 @@ fn wasm64_subnet_self_size() {
     let payload: Vec<u8> = vec![1, 3, 5, 7];
     let api = ApiType::update(
         UNIX_EPOCH,
-        payload.clone(),
+        payload,
         Cycles::zero(),
         caller,
         call_context_test_id(13),
@@ -2828,7 +2828,7 @@ fn wasm64_subnet_self_copy() {
     let payload: Vec<u8> = vec![1, 3, 5, 7];
     let api = ApiType::update(
         UNIX_EPOCH,
-        payload.clone(),
+        payload,
         Cycles::zero(),
         caller,
         call_context_test_id(13),
@@ -3081,10 +3081,7 @@ fn wasm64_msg_cycles_refunded128() {
     let api = ApiType::reject_callback(
         UNIX_EPOCH,
         caller,
-        RejectContext::new(
-            ic_error_types::RejectCode::CanisterReject,
-            reject_msg.clone(),
-        ),
+        RejectContext::new(ic_error_types::RejectCode::CanisterReject, reject_msg),
         Cycles::new(777),
         call_context_test_id(13),
         false,

@@ -328,7 +328,7 @@ pub fn add_transport_to_sim<F>(
     F: Fn(NodeId, Arc<dyn Transport>) -> BoxFuture<'static, ()> + Clone + 'static,
 {
     let node_addr: SocketAddr = (Ipv4Addr::UNSPECIFIED, 4100).into();
-    let consensus_manager = consensus_manager.map(|m| Arc::new(RwLock::new(m.clone())));
+    let consensus_manager = consensus_manager.map(|m| Arc::new(RwLock::new(m)));
 
     let node_crypto =
         crypto.unwrap_or_else(|| temp_crypto_component_with_tls_keys(&registry_handler, peer));
@@ -372,7 +372,7 @@ pub fn add_transport_to_sim<F>(
             };
 
             let con = if let Some(consensus) = consensus_manager_clone {
-                let bouncer_factory = Arc::new(consensus.clone().read().unwrap().clone());
+                let bouncer_factory = Arc::new(consensus.read().unwrap().clone());
                 let downloader = FetchArtifact::new(
                     log.clone(),
                     tokio::runtime::Handle::current(),
@@ -385,7 +385,7 @@ pub fn add_transport_to_sim<F>(
                 let artifact_processor_jh = start_test_processor(
                     channel,
                     consensus.clone(),
-                    consensus.clone().read().unwrap().clone(),
+                    consensus.read().unwrap().clone(),
                 );
 
                 let consensus_router = consensus_builder.router();

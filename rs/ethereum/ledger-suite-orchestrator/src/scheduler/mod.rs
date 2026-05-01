@@ -271,7 +271,7 @@ impl UpgradeLedgerSuite {
                 token_id: token_id.clone(),
             });
             subtasks.push(UpgradeLedgerSuiteSubtask::UpgradeArchives {
-                token_id: token_id.clone(),
+                token_id,
                 compressed_wasm_hash: archive_compressed_wasm_hash,
             });
         }
@@ -548,7 +548,7 @@ impl InstallLedgerSuiteArgs {
         args: AddErc20Arg,
     ) -> Result<InstallLedgerSuiteArgs, InvalidAddErc20ArgError> {
         let contract = Erc20Token::try_from(args.contract.clone())
-            .map_err(|e| InvalidAddErc20ArgError::InvalidErc20Contract(e.to_string()))?;
+            .map_err(InvalidAddErc20ArgError::InvalidErc20Contract)?;
         let token_id = TokenId::from(contract.clone());
         let minter_id =
             state

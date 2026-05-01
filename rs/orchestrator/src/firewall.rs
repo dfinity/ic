@@ -335,8 +335,8 @@ impl Firewall {
         };
 
         let udp_node_whitelisting_rule = FirewallRule {
-            ipv4_prefixes: whitelisted_ipv4s.clone(),
-            ipv6_prefixes: whitelisted_ipv6s.clone(),
+            ipv4_prefixes: whitelisted_ipv4s,
+            ipv6_prefixes: whitelisted_ipv6s,
             ports: self.replica_config.udp_ports_for_node_whitelist.clone(),
             action: FirewallAction::Allow as i32,
             comment: "Automatic node whitelisting".to_string(),
@@ -1201,11 +1201,7 @@ mod tests {
     ) -> Firewall {
         let registry = set_up_registry(role, node_id, reward_type);
 
-        let registry_helper = Arc::new(RegistryHelper::new(
-            node_id,
-            registry.clone(),
-            no_op_logger(),
-        ));
+        let registry_helper = Arc::new(RegistryHelper::new(node_id, registry, no_op_logger()));
 
         let cup_reader = LocalCUPReader::new(tmp_dir.join("cups"), no_op_logger());
 

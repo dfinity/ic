@@ -430,11 +430,9 @@ mod tests {
             state_manager
                 .get_mut()
                 .expect_get_state_at()
-                .return_const(Ok(fake_state_with_signature_requests(
-                    height,
-                    contexts.clone(),
-                )
-                .get_labeled_state()));
+                .return_const(Ok(
+                    fake_state_with_signature_requests(height, contexts).get_labeled_state()
+                ));
 
             let message_routing = FakeMessageRouting::new();
             *message_routing.next_batch_height.write().unwrap() = Height::from(2);

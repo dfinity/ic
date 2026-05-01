@@ -98,8 +98,7 @@ impl Registry {
 
             // Validate that any new keys do not exist in another subnet, as that would trigger
             // creating another key with the same MasterPublicKeyId, which would break chain key signing.
-            let new_keys =
-                self.get_keys_that_will_be_added_to_subnet(subnet_id, payload_key_ids.clone());
+            let new_keys = self.get_keys_that_will_be_added_to_subnet(subnet_id, payload_key_ids);
 
             let keys_to_subnet_map = self.get_master_public_keys_to_subnets_map();
             new_keys.iter().for_each(|key_id| {
@@ -1366,7 +1365,7 @@ mod tests {
         });
 
         payload.chain_key_signing_enable = Some(vec![MasterPublicKeyId::Ecdsa(key.clone())]);
-        payload.chain_key_signing_disable = Some(vec![MasterPublicKeyId::Ecdsa(key.clone())]);
+        payload.chain_key_signing_disable = Some(vec![MasterPublicKeyId::Ecdsa(key)]);
 
         // Should panic because we are trying to enable/disable same key
         registry.do_update_subnet(payload);

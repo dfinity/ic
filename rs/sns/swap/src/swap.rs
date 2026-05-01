@@ -595,7 +595,7 @@ impl Swap {
                             "Cannot compute neurons_fund_participation_icp_e8s for \
                         direct_participation_icp_e8s={}: {}",
                             direct_participation_icp_e8s,
-                            err.to_string(),
+                            err,
                         );
                         return;
                     }
@@ -3574,7 +3574,7 @@ impl SnsNeuronRecipe {
             .cloned()
             .map(NeuronId::from)
             .collect::<Vec<_>>();
-        let followees = Some(NeuronIds::from(followees.clone()));
+        let followees = Some(NeuronIds::from(followees));
 
         // Since claim_swap_neurons is a permission-ed API on governance, account for
         // the transfer_fee that is applied with the sns ledger transfer.

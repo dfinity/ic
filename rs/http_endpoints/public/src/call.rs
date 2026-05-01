@@ -100,7 +100,7 @@ impl IngressValidatorBuilder {
     pub fn build(self) -> IngressValidator {
         let log = self.log;
         IngressValidator {
-            log: log.clone(),
+            log,
             node_id: self.node_id,
             subnet_id: self.subnet_id,
             registry_client: self.registry_client.clone(),

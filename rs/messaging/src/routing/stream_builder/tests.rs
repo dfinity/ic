@@ -322,7 +322,7 @@ fn build_streams_local_canisters() {
         expected_state
             .metadata
             .network_topology
-            .set_routing_table(routing_table.clone());
+            .set_routing_table(routing_table);
 
         let result_state = stream_builder.build_streams(provided_state);
 
@@ -742,7 +742,7 @@ fn build_streams_with_best_effort_messages_impl(
         ).unwrap());
 
         // Set up a canister with `msgs` in its output queues.
-        let provided_canister_states = canister_states_with_outputs(msgs.clone());
+        let provided_canister_states = canister_states_with_outputs(msgs);
         provided_state.put_canister_states(provided_canister_states);
 
         let result_state = stream_builder.build_streams(provided_state);

@@ -2372,7 +2372,7 @@ fn http_request_bound_holds() {
     let transform_method_name = "transform".to_string();
     let transform_context = vec![0, 1, 2];
     let args = CanisterHttpRequestArgs {
-        url: url.clone(),
+        url,
         max_response_bytes: Some(response_size_limit),
         headers: BoundedHttpHeaders::new(vec![]),
         body: None,
@@ -2380,16 +2380,16 @@ fn http_request_bound_holds() {
         transform: Some(TransformContext {
             function: TransformFunc(candid::Func {
                 principal: caller_canister.get().0,
-                method: transform_method_name.clone(),
+                method: transform_method_name,
             }),
-            context: transform_context.clone(),
+            context: transform_context,
         }),
         is_replicated: None,
         pricing_version: None,
     };
 
     // Create request to HTTP_REQUEST method.
-    let payload = args.clone().encode();
+    let payload = args.encode();
     test.inject_call_to_ic00(Method::HttpRequest, payload, Cycles::new(1_000_000_000));
     test.execute_all();
     // Check that the SubnetCallContextManager contains the request.

@@ -1125,7 +1125,7 @@ fn pool_put_invalid_slice(
 
         // `put()` should fail.
         assert_matches!(
-            pool.put(SRC_SUBNET, slice.clone(), REGISTRY_VERSION, log.clone()),
+            pool.put(SRC_SUBNET, slice, REGISTRY_VERSION, log),
             Err(CertifiedSliceError::DecodeStreamError(
                 DecodeStreamError::InvalidSignature(_)
             ))
@@ -1202,7 +1202,7 @@ fn pool_append_invalid_slice(
 
         // `append()` should fail.
         assert_matches!(
-            pool.append(SRC_SUBNET, slice.clone(), REGISTRY_VERSION, log.clone()),
+            pool.append(SRC_SUBNET, slice, REGISTRY_VERSION, log),
             Err(CertifiedSliceError::DecodeStreamError(
                 DecodeStreamError::InvalidSignature(_)
             ))
@@ -1217,7 +1217,7 @@ fn pool_append_invalid_slice(
                     && byte_size > 0
         );
         assert_opt_slices_eq(
-            Some(prefix.clone()),
+            Some(prefix),
             pool.take_slice(SRC_SUBNET, Some(&stream_position), None, None)
                 .unwrap()
                 .map(|(slice, _)| slice),
@@ -1269,7 +1269,7 @@ fn pool_append_invalid_slice_to_empty(
 
         // `append()` should fail.
         assert_matches!(
-            pool.append(SRC_SUBNET, slice.clone(), REGISTRY_VERSION, log.clone()),
+            pool.append(SRC_SUBNET, slice, REGISTRY_VERSION, log),
             Err(CertifiedSliceError::DecodeStreamError(
                 DecodeStreamError::InvalidSignature(_)
             ))
@@ -1324,8 +1324,7 @@ fn pool_take_slice_respects_signal_limit(
         let mut pool =
             CertifiedSlicePool::new(Arc::clone(&certified_stream_store), &fixture.metrics);
 
-        pool.put(SRC_SUBNET, slice, REGISTRY_VERSION, log.clone())
-            .unwrap();
+        pool.put(SRC_SUBNET, slice, REGISTRY_VERSION, log).unwrap();
         let _ = pool
             .take_slice(SRC_SUBNET, Some(&begin), None, None)
             .unwrap()

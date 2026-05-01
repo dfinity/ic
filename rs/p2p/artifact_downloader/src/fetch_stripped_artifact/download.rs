@@ -513,7 +513,7 @@ mod tests {
                             &ingress_message,
                         )))
                         .once()
-                        .return_const(ingress_message.clone());
+                        .return_const(ingress_message);
                 } else {
                     ingress_pool.expect_get().once().return_const(None);
                 }
@@ -544,7 +544,7 @@ mod tests {
                     &consensus_message,
                 )))
                 .once()
-                .return_const(consensus_message.clone());
+                .return_const(consensus_message);
         } else if expect_consensus_pool_access {
             consensus_pool.expect_get().once().return_const(None);
         } else {

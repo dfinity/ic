@@ -935,7 +935,7 @@ pub(crate) mod tests {
             tmp_dir.path().to_path_buf(),
             node_test_id(2),
             Duration::from_secs(5),
-            registry.clone(),
+            registry,
         );
 
         // If there is only one node on the subnet, it should always be used to fetch the CUP
@@ -961,7 +961,7 @@ pub(crate) mod tests {
             tmp_dir.path().to_path_buf(),
             node_id,
             Duration::from_secs(5),
-            registry.clone(),
+            registry,
         );
 
         // If there is a cup, two nodes should be selected, and this node should be the first one
@@ -993,7 +993,7 @@ pub(crate) mod tests {
             tmp_dir.path().to_path_buf(),
             node_id,
             Duration::from_secs(5),
-            registry.clone(),
+            registry,
         );
 
         // If there is a cup, only one node should be selected

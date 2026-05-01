@@ -174,8 +174,7 @@ fn run_apalache(
             } else {
                 Err(ApalacheError::CheckFailed(
                     e.code(),
-                    format!("When checking file\n{tla_module:?}\nApalache returned the error: {e}")
-                        .to_string(),
+                    format!("When checking file\n{tla_module:?}\nApalache returned the error: {e}"),
                 ))
             }
         })

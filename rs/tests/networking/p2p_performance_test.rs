@@ -205,7 +205,7 @@ pub fn test(
             let requests = vec![GenericRequest::new(
                 app_canister,
                 CANISTER_METHOD.to_string(),
-                payload.clone(),
+                payload,
                 CallMode::UpdateNoPolling,
             )];
             spawn_round_robin_workload_engine(

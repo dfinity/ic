@@ -228,7 +228,7 @@ fn get_inconsistent_aliases(followees: &BTreeSet<ValidatedFollowee>) -> Followee
 
             // If there's more than one unique alias, report inconsistency.
             if unique_aliases.len() > 1 {
-                Some((neuron_id.clone(), followees_with_aliases))
+                Some((neuron_id, followees_with_aliases))
             } else {
                 None
             }

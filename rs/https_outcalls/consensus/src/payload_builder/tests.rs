@@ -393,7 +393,7 @@ fn timeouts_bypass_max_responses_per_block() {
         |mut payload_builder, _canister_http_pool| {
             let callback_ids = 0..num_contexts as u64;
 
-            let contexts = fully_replicated_contexts(callback_ids.clone());
+            let contexts = fully_replicated_contexts(callback_ids);
             inject_request_contexts(&mut payload_builder, contexts);
 
             // The contexts created above use the default time = UNIX_EPOCH, so any
@@ -2049,7 +2049,7 @@ fn flexible_invalid_already_delivered_callback_id() {
             callback_id,
             responses: vec![flexible_response(42, 0, b"a")],
         };
-        let past_payload = flexible_payload(vec![group.clone()]);
+        let past_payload = flexible_payload(vec![group]);
         let past_payload_bytes = payload_to_bytes_max_4mb(past_payload);
         let past_payloads = vec![PastPayload {
             height: Height::new(1),
@@ -3752,7 +3752,7 @@ fn flexible_error_responses_too_large_invalid_when_small() {
         let payload = CanisterHttpPayload {
             flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
                 callback_id,
-                all_seen_shares: vec![entry_a.proof.clone(), entry_b.proof.clone()],
+                all_seen_shares: vec![entry_a.proof, entry_b.proof],
                 total_requests: 4,
                 min_responses: 2,
             }],

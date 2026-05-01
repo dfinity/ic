@@ -28,7 +28,7 @@ fn test_ssh_node_state_write_access_not_too_long() {
         NodeRecord {
             // This is ok
             ssh_node_state_write_access: vec![],
-            http: Some(http_1.clone()),
+            http: Some(http_1),
             ..Default::default()
         }
         .encode_to_vec(),
@@ -41,7 +41,7 @@ fn test_ssh_node_state_write_access_not_too_long() {
         NodeRecord {
             // This is ok
             ssh_node_state_write_access: vec!["too many".to_string(); 51],
-            http: Some(http_2.clone()),
+            http: Some(http_2),
             ..Default::default()
         }
         .encode_to_vec(),

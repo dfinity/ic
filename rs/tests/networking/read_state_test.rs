@@ -791,7 +791,7 @@ fn test_request_path_access(env: TestEnv, endpoint: Endpoint) {
         vec!["request_status".into(), (*request_id1).into()],
         vec!["request_status".into(), (*request_id2).into()],
     ];
-    let result = read_state_with_identity(&env, paths.clone(), endpoint, get_identity());
+    let result = read_state_with_identity(&env, paths, endpoint, get_identity());
     assert_matches!(result, Err(AgentError::HttpError(payload)) if payload.status == 400);
 
     // Reading both requests (to different canisters) at the same time should fail
@@ -804,7 +804,7 @@ fn test_request_path_access(env: TestEnv, endpoint: Endpoint) {
         vec!["request_status".into(), (*request_id1).into()],
         vec!["request_status".into(), (*request_id2).into()],
     ];
-    let result = read_state_with_identity(&env, paths.clone(), endpoint, get_identity());
+    let result = read_state_with_identity(&env, paths, endpoint, get_identity());
     assert_matches!(result, Err(AgentError::HttpError(payload)) if payload.status == 400);
 }
 
@@ -819,7 +819,7 @@ fn test_canister_canister_ranges_paths(env: TestEnv, version: read_state::Versio
         subnet.subnet_id.get_ref().as_slice().into(),
     ];
 
-    let err = read_state(&env, vec![path.clone()], endpoint).expect_err(
+    let err = read_state(&env, vec![path], endpoint).expect_err(
         "/canister_ranges path should not be fetchable from \
         the /api/v2/canister/<canister_id>/read_state endpoint",
     );

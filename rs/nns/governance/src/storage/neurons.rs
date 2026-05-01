@@ -356,7 +356,7 @@ where
             // clone is done here, because we might later use neuron in an error
             // message. This should be not a big performance hit, because this
             // is an abridged neuron.
-            neuron.clone(),
+            neuron,
         );
 
         // Make sure that we changed an existing entry, not created a new entry.

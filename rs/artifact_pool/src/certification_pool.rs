@@ -611,7 +611,7 @@ mod tests {
                 .get_by_height(Height::from(1))
                 .next()
                 .unwrap();
-            assert_eq!(cert_from_pool, msg_to_cert(cert_msg.clone()));
+            assert_eq!(cert_from_pool, msg_to_cert(cert_msg));
         })
     }
 
@@ -774,8 +774,8 @@ mod tests {
             ]);
             let share_msg = fake_share(10, 30);
             let cert_msg = fake_cert(10);
-            pool.insert(to_unvalidated(share_msg.clone()));
-            pool.insert(to_unvalidated(cert_msg.clone()));
+            pool.insert(to_unvalidated(share_msg));
+            pool.insert(to_unvalidated(cert_msg));
 
             assert_eq!(pool.all_heights_with_artifacts().len(), 1);
             assert_eq!(pool.shares_at_height(Height::from(10)).count(), 1);

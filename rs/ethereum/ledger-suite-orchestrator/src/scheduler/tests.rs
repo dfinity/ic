@@ -872,18 +872,18 @@ mod upgrade_ledger_suite {
             vec![
                 UpgradeIndex {
                     token_id: usdc_token_id(),
-                    compressed_wasm_hash: index_wasm_hash.clone()
+                    compressed_wasm_hash: index_wasm_hash
                 },
                 UpgradeLedger {
                     token_id: usdc_token_id(),
-                    compressed_wasm_hash: ledger_wasm_hash.clone()
+                    compressed_wasm_hash: ledger_wasm_hash
                 },
                 DiscoverArchives {
                     token_id: usdc_token_id()
                 },
                 UpgradeArchives {
                     token_id: usdc_token_id(),
-                    compressed_wasm_hash: archive_wasm_hash.clone()
+                    compressed_wasm_hash: archive_wasm_hash
                 }
             ]
         );
@@ -1432,7 +1432,7 @@ mod run_task {
         AddCkErc20Token {
             chain_id: Nat::from(1_u8),
             address: usdc().address().to_string(),
-            ckerc20_token_symbol: usdc_metadata().token_symbol.clone(),
+            ckerc20_token_symbol: usdc_metadata().token_symbol,
             ckerc20_ledger_id: LEDGER_PRINCIPAL,
         }
     }
@@ -1443,13 +1443,7 @@ fn task_deadline_from_state(task: &Task) -> Option<u64> {
 }
 
 fn task_queue_from_state() -> Vec<TaskExecution> {
-    TASKS.with(|t| {
-        t.borrow()
-            .queue
-            .iter()
-            .map(|(task, _)| task.clone())
-            .collect()
-    })
+    TASKS.with(|t| t.borrow().queue.iter().map(|(task, _)| task).collect())
 }
 
 fn init_state() {

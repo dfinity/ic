@@ -713,22 +713,22 @@ fn nested_vec_enum_struct_string() {
         E::One,
         E::Two(Some((
             S {
-                v: vec!["!".to_string(), "!".repeat(3).to_string()],
-                m: BTreeMap::from([("!".repeat(5).to_string(), "!".repeat(7).to_string())]),
+                v: vec!["!".to_string(), "!".repeat(3)],
+                m: BTreeMap::from([("!".repeat(5), "!".repeat(7))]),
             },
             S {
-                v: vec!["!".repeat(11).to_string(), "!".repeat(13).to_string()],
-                m: BTreeMap::from([("!".repeat(17).to_string(), "!".repeat(19).to_string())]),
+                v: vec!["!".repeat(11), "!".repeat(13)],
+                m: BTreeMap::from([("!".repeat(17), "!".repeat(19))]),
             },
         ))),
         E::Three(vec![
             Ok(S {
-                v: vec!["!".repeat(23).to_string(), "!".repeat(29).to_string()],
-                m: BTreeMap::from([("!".repeat(31).to_string(), "!".repeat(37).to_string())]),
+                v: vec!["!".repeat(23), "!".repeat(29)],
+                m: BTreeMap::from([("!".repeat(31), "!".repeat(37))]),
             }),
             Err(S {
-                v: vec!["!".repeat(41).to_string(), "!".repeat(43).to_string()],
-                m: BTreeMap::from([("!".repeat(47).to_string(), "!".repeat(53).to_string())]),
+                v: vec!["!".repeat(41), "!".repeat(43)],
+                m: BTreeMap::from([("!".repeat(47), "!".repeat(53))]),
             }),
         ]),
     ];
@@ -779,22 +779,22 @@ fn with_vec_enum_struct_string() {
         E::One,
         E::Two(Some((
             S {
-                v: vec!["!".to_string(), "!".repeat(3).to_string()],
-                m: BTreeMap::from([("!".repeat(5).to_string(), "!".repeat(7).to_string())]),
+                v: vec!["!".to_string(), "!".repeat(3)],
+                m: BTreeMap::from([("!".repeat(5), "!".repeat(7))]),
             },
             S {
-                v: vec!["!".repeat(11).to_string(), "!".repeat(13).to_string()],
-                m: BTreeMap::from([("!".repeat(17).to_string(), "!".repeat(19).to_string())]),
+                v: vec!["!".repeat(11), "!".repeat(13)],
+                m: BTreeMap::from([("!".repeat(17), "!".repeat(19))]),
             },
         ))),
         E::Three(vec![
             Ok(S {
-                v: vec!["!".repeat(23).to_string(), "!".repeat(29).to_string()],
-                m: BTreeMap::from([("!".repeat(31).to_string(), "!".repeat(37).to_string())]),
+                v: vec!["!".repeat(23), "!".repeat(29)],
+                m: BTreeMap::from([("!".repeat(31), "!".repeat(37))]),
             }),
             Err(S {
-                v: vec!["!".repeat(41).to_string(), "!".repeat(43).to_string()],
-                m: BTreeMap::from([("!".repeat(47).to_string(), "!".repeat(53).to_string())]),
+                v: vec!["!".repeat(41), "!".repeat(43)],
+                m: BTreeMap::from([("!".repeat(47), "!".repeat(53))]),
             }),
         ]),
     ];

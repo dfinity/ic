@@ -83,7 +83,7 @@ fn parse_mac_address_from_ipmitool_output(output: &str) -> Result<MacAddr6> {
     let error_msg = format!("Could not parse MAC address line: {mac_line}");
     let re = Regex::new(r"MAC Address\s+:\s+(([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2}))")?;
     let captures = re.captures(mac_line).context(error_msg.clone())?;
-    let mac = captures.get(1).context(error_msg.clone())?;
+    let mac = captures.get(1).context(error_msg)?;
 
     Ok(mac.as_str().parse()?)
 }

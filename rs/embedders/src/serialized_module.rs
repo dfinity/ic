@@ -409,7 +409,7 @@ mod test {
             bytes_path.push("bytes");
             data_path.push("data");
 
-            let on_disk = OnDiskSerializedModule::from_serialized_module(module.clone(), &bytes_path, &data_path);
+            let on_disk = OnDiskSerializedModule::from_serialized_module(module, &bytes_path, &data_path);
 
             std::thread::scope(|s| {
                 let mut threads = vec![];

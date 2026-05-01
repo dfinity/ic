@@ -266,9 +266,7 @@ fn test_swap_periodic_tasks_disabled_eventually() {
     // Install the swap canister.
     let wasm = ic_test_utilities_load_wasm::load_wasm("../swap", "sns-swap-canister", &[]);
     let args = Encode!(&swap_init(state_machine.time())).unwrap();
-    let canister_id = state_machine
-        .install_canister(wasm.clone(), args, None)
-        .unwrap();
+    let canister_id = state_machine.install_canister(wasm, args, None).unwrap();
 
     // Helpers.
     let get_relevant_state_components = || {
@@ -338,9 +336,7 @@ fn test_swap_reset_timers() {
     let canister_id = {
         let wasm = ic_test_utilities_load_wasm::load_wasm("../swap", "sns-swap-canister", &[]);
         let args = Encode!(&swap_init(state_machine.time())).unwrap();
-        state_machine
-            .install_canister(wasm.clone(), args, None)
-            .unwrap()
+        state_machine.install_canister(wasm, args, None).unwrap()
     };
 
     run_canister_reset_timers_test(&state_machine, canister_id, 600, 60);
@@ -354,9 +350,7 @@ fn test_governance_reset_timers() {
     let canister_id = {
         let wasm = build_governance_sns_wasm().wasm;
         let args = Encode!(&governance_init()).unwrap();
-        state_machine
-            .install_canister(wasm.clone(), args, None)
-            .unwrap()
+        state_machine.install_canister(wasm, args, None).unwrap()
     };
 
     run_canister_reset_timers_test(&state_machine, canister_id, 600, 60);
@@ -369,9 +363,7 @@ fn test_root_reset_timers() {
     let canister_id = {
         let wasm = build_root_sns_wasm().wasm;
         let args = Encode!(&root_init()).unwrap();
-        state_machine
-            .install_canister(wasm.clone(), args, None)
-            .unwrap()
+        state_machine.install_canister(wasm, args, None).unwrap()
     };
 
     run_canister_reset_timers_test(
@@ -390,9 +382,7 @@ fn test_swap_reset_timers_cannot_be_spammed() {
     let canister_id = {
         let wasm = ic_test_utilities_load_wasm::load_wasm("../swap", "sns-swap-canister", &[]);
         let args = Encode!(&swap_init(state_machine.time())).unwrap();
-        state_machine
-            .install_canister(wasm.clone(), args, None)
-            .unwrap()
+        state_machine.install_canister(wasm, args, None).unwrap()
     };
 
     run_canister_reset_timers_cannot_be_spammed_test(&state_machine, canister_id, 600);
@@ -405,9 +395,7 @@ fn test_governance_reset_timers_cannot_be_spammed() {
     let canister_id = {
         let wasm = build_governance_sns_wasm().wasm;
         let args = Encode!(&governance_init()).unwrap();
-        state_machine
-            .install_canister(wasm.clone(), args, None)
-            .unwrap()
+        state_machine.install_canister(wasm, args, None).unwrap()
     };
 
     run_canister_reset_timers_cannot_be_spammed_test(&state_machine, canister_id, 600);
@@ -420,9 +408,7 @@ fn test_root_reset_timers_cannot_be_spammed() {
     let canister_id = {
         let wasm = build_root_sns_wasm().wasm;
         let args = Encode!(&root_init()).unwrap();
-        state_machine
-            .install_canister(wasm.clone(), args, None)
-            .unwrap()
+        state_machine.install_canister(wasm, args, None).unwrap()
     };
 
     run_canister_reset_timers_cannot_be_spammed_test(&state_machine, canister_id, ONE_WEEK_SECONDS);

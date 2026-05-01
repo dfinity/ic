@@ -509,7 +509,7 @@ mod tests {
                 callback_1,
                 &InitialIDkgDealings::new(
                     reshare_params_1.translate(&block_reader).unwrap(),
-                    dealings_1.clone()
+                    dealings_1
                 )
                 .unwrap()
             )),
@@ -550,7 +550,7 @@ mod tests {
                 callback_2,
                 &InitialIDkgDealings::new(
                     reshare_params_2.translate(&block_reader).unwrap(),
-                    dealings_2.clone()
+                    dealings_2
                 )
                 .unwrap()
             )),

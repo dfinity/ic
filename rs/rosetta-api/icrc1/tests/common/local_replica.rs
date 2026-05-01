@@ -107,7 +107,7 @@ pub fn create_and_install_custom_icrc_ledger(
     wasm_module: Vec<u8>,
     custom_canister_id: Option<Principal>,
 ) -> Principal {
-    let custom_encoded_init_args = Encode!(&(LedgerArgument::Init(init_args.clone()))).unwrap();
+    let custom_encoded_init_args = Encode!(&(LedgerArgument::Init(init_args))).unwrap();
     let canister_id =
         custom_canister_id.or(Principal::from_str("2ouva-viaaa-aaaaq-aaamq-cai").ok());
     let canister_id = canister_id.unwrap();

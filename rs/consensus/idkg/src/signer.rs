@@ -236,7 +236,7 @@ impl ThresholdSignerImpl {
                         state_snapshot.get_height(),
                     ) {
                         Action::Process(sig_inputs) => {
-                            self.validate_signature_share(idkg_pool, id.clone(), share, sig_inputs)
+                            self.validate_signature_share(idkg_pool, id, share, sig_inputs)
                         }
                         Action::Drop => Some(IDkgChangeAction::RemoveUnvalidated(id)),
                         Action::Defer => None,
@@ -1028,11 +1028,7 @@ mod tests {
                 // One completed context
                 fake_signature_request_context_from_id(key_id.clone().into(), pids[2], ids[2]),
                 // One malformed context
-                fake_malformed_signature_request_context_from_id(
-                    key_id.clone().into(),
-                    pids[3],
-                    ids[3],
-                ),
+                fake_malformed_signature_request_context_from_id(key_id.into(), pids[3], ids[3]),
             ],
         );
 

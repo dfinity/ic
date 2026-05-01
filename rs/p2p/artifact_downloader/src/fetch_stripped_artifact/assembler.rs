@@ -743,9 +743,8 @@ mod tests {
     fn strip_assemble_fails_when_still_missing_ingress_test() {
         let (ingress_1, ingress_id_1) = fake_ingress_message_with_arg_size("fake_1", 1024);
         let (ingress_2, _ingress_id_2) = fake_ingress_message_with_arg_size("fake_2", 1024);
-        let block_proposal =
-            fake_block_proposal_with_ingresses(vec![ingress_1.clone(), ingress_2.clone()]);
-        let consensus_message = ConsensusMessage::BlockProposal(block_proposal.clone());
+        let block_proposal = fake_block_proposal_with_ingresses(vec![ingress_1.clone(), ingress_2]);
+        let consensus_message = ConsensusMessage::BlockProposal(block_proposal);
 
         // strip the block
         let MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped_block_proposal) =
@@ -775,7 +774,7 @@ mod tests {
         let idkg =
             fake_idkg_payload_with_dealings(vec![(dealing_1.clone(), 1), (dealing_2.clone(), 2)]);
         let block_proposal = fake_block_proposal_with_ingresses_and_idkg(vec![], Some(idkg), false);
-        let consensus_message = ConsensusMessage::BlockProposal(block_proposal.clone());
+        let consensus_message = ConsensusMessage::BlockProposal(block_proposal);
 
         // strip the block
         let MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped_block_proposal) =
@@ -807,7 +806,7 @@ mod tests {
         let idkg =
             fake_idkg_payload_with_dealings(vec![(dealing_1.clone(), 1), (dealing_2.clone(), 2)]);
         let block_proposal = fake_block_proposal_with_ingresses_and_idkg(vec![], Some(idkg), false);
-        let consensus_message = ConsensusMessage::BlockProposal(block_proposal.clone());
+        let consensus_message = ConsensusMessage::BlockProposal(block_proposal);
 
         // strip the block
         let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut stripped_block_proposal) =
@@ -859,7 +858,7 @@ mod tests {
             (dealing_2.clone(), node_index),
         ]);
         let block_proposal = fake_block_proposal_with_ingresses_and_idkg(vec![], Some(idkg), false);
-        let consensus_message = ConsensusMessage::BlockProposal(block_proposal.clone());
+        let consensus_message = ConsensusMessage::BlockProposal(block_proposal);
 
         // strip the block
         let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut stripped_block_proposal) =

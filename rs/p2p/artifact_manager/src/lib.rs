@@ -40,7 +40,7 @@ struct ArtifactProcessorMetrics {
 impl ArtifactProcessorMetrics {
     /// The constructor creates a `ArtifactProcessorMetrics` instance.
     fn new(metrics_registry: MetricsRegistry, client: String) -> Self {
-        let const_labels = labels! {"client".to_string() => client.to_string()};
+        let const_labels = labels! {"client".to_string() => client};
         let processing_time = metrics_registry.register(
             Histogram::with_opts(histogram_opts!(
                 "artifact_manager_client_processing_time_seconds",
@@ -61,7 +61,7 @@ impl ArtifactProcessorMetrics {
                     0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0, 1.2, 1.5, 2.0, 2.2, 2.5, 5.0, 8.0,
                     10.0, 15.0, 20.0, 50.0,
                 ],
-                const_labels.clone()
+                const_labels
             ))
             .unwrap(),
         );
@@ -241,7 +241,7 @@ pub fn create_ingress_handlers<
     >,
     metrics_registry: MetricsRegistry,
 ) -> Box<dyn JoinGuard> {
-    let client = IngressProcessor::new(ingress_pool.clone(), ingress_handler);
+    let client = IngressProcessor::new(ingress_pool, ingress_handler);
     run_artifact_processor(
         time_source.clone(),
         metrics_registry,

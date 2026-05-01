@@ -381,7 +381,7 @@ fn get_value() {
                 None => HighCapacityRegistryGetValueResponse {
                     error: Some(RegistryError {
                         code: Code::KeyNotPresent as i32,
-                        key: key.clone(),
+                        key,
                         reason: String::default(),
                     }),
                     // If we get None, that means that either the key was never present

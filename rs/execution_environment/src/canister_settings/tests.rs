@@ -8,13 +8,13 @@ fn test_environment_variables_hash_is_deterministic() {
         ("NODE_ENV".to_string(), "production".to_string()),
         ("LOG_LEVEL".to_string(), "info".to_string()),
     ]);
-    let env_vars_hash_1 = EnvironmentVariables::new(env_vars.clone()).hash();
+    let env_vars_hash_1 = EnvironmentVariables::new(env_vars).hash();
 
     let env_vars = BTreeMap::from([
         ("LOG_LEVEL".to_string(), "info".to_string()),
         ("NODE_ENV".to_string(), "production".to_string()),
     ]);
-    let env_vars_hash_2 = EnvironmentVariables::new(env_vars.clone()).hash();
+    let env_vars_hash_2 = EnvironmentVariables::new(env_vars).hash();
     assert_eq!(env_vars_hash_1, env_vars_hash_2);
 }
 

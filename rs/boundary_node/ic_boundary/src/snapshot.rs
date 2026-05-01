@@ -525,7 +525,7 @@ impl Snapshot for Snapshotter {
         };
 
         // Publish the new snapshot
-        let snapshot_arc = Arc::new(snapshot.clone());
+        let snapshot_arc = Arc::new(snapshot);
         self.published_registry_snapshot
             .store(Some(snapshot_arc.clone()));
         *registry_version_published = Some(version);

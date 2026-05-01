@@ -89,12 +89,9 @@ impl ConsentMessage {
             ConsentMessage::GenericDisplayMessage(message) => {
                 message.push_str(&format!("\n\n**{name}:**\n`{account}`"))
             }
-            ConsentMessage::FieldsDisplayMessage(fields_display) => fields_display.fields.push((
-                name.to_string(),
-                Value::Text {
-                    content: account.to_string(),
-                },
-            )),
+            ConsentMessage::FieldsDisplayMessage(fields_display) => fields_display
+                .fields
+                .push((name.to_string(), Value::Text { content: account })),
         }
     }
 

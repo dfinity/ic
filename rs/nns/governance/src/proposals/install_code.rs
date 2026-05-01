@@ -333,7 +333,7 @@ mod tests {
             InstallCode {
                 canister_id: Some(ROOT_CANISTER_ID.get()),
                 install_mode: Some(CanisterInstallMode::Reinstall as i32),
-                ..valid_install_code.clone()
+                ..valid_install_code
             },
             vec![
                 "installcode mode reinstall",

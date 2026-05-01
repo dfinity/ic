@@ -849,7 +849,7 @@ fn insert_bitcoin_get_successor_reject_response() {
 
     state
         .push_response_bitcoin(BitcoinAdapterResponse {
-            response: BitcoinAdapterResponseWrapper::GetSuccessorsReject(response.clone()),
+            response: BitcoinAdapterResponseWrapper::GetSuccessorsReject(response),
             callback_id: 0,
         })
         .unwrap();
@@ -882,7 +882,7 @@ fn insert_bitcoin_send_transaction_reject_response() {
 
     state
         .push_response_bitcoin(BitcoinAdapterResponse {
-            response: BitcoinAdapterResponseWrapper::SendTransactionReject(response.clone()),
+            response: BitcoinAdapterResponseWrapper::SendTransactionReject(response),
             callback_id: 0,
         })
         .unwrap();
@@ -1277,7 +1277,7 @@ fn online_split() {
         .state
         .metadata
         .network_topology
-        .set_routing_table(routing_table.clone());
+        .set_routing_table(routing_table);
 
     // Stream with a couple of requests. The details don't matter, should be
     // retained unmodified on subnet A' only.

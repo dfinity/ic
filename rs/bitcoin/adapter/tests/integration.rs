@@ -1008,7 +1008,7 @@ fn test_bfs_order<T: RpcClientType + Into<AdapterNetwork>>() {
         &fork_test_data1,
         &fork_test_data2,
         &adapter_client,
-        anchor.clone(),
+        anchor,
     );
     assert!(bfs_order1 == block_hashes || bfs_order2 == block_hashes);
 }

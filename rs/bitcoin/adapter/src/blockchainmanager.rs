@@ -1197,7 +1197,7 @@ pub mod test {
     async fn test_ensure_sync_blocks_retries_timed_out_getdata_requests() {
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
         let sockets = vec![addr];
-        let mut channel = TestChannel::new(sockets.clone());
+        let mut channel = TestChannel::new(sockets);
         let test_state = TestState::setup();
         let block_1_hash = test_state.block_1.block_hash();
         let (_, mut blockchain_manager) = create_blockchain_manager(Network::Bitcoin);
@@ -1245,7 +1245,7 @@ pub mod test {
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
         let addr2 = SocketAddr::from_str("127.0.0.1:3338").expect("bad address format");
         let sockets = vec![addr];
-        let mut channel = TestChannel::new(sockets.clone());
+        let mut channel = TestChannel::new(sockets);
         let test_state = TestState::setup();
         let block_1_hash = test_state.block_1.block_hash();
         let (_, mut blockchain_manager) = create_blockchain_manager(Network::Bitcoin);

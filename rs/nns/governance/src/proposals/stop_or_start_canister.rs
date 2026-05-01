@@ -156,7 +156,7 @@ mod tests {
         is_invalid_proposal_with_keywords(
             StopOrStartCanister {
                 canister_id: None,
-                ..valid_stop_or_start_canister.clone()
+                ..valid_stop_or_start_canister
             },
             vec!["canister id", "required"],
         );
@@ -164,7 +164,7 @@ mod tests {
         is_invalid_proposal_with_keywords(
             StopOrStartCanister {
                 action: None,
-                ..valid_stop_or_start_canister.clone()
+                ..valid_stop_or_start_canister
             },
             vec!["action", "required"],
         );
@@ -172,7 +172,7 @@ mod tests {
         is_invalid_proposal_with_keywords(
             StopOrStartCanister {
                 action: Some(CanisterAction::Unspecified as i32),
-                ..valid_stop_or_start_canister.clone()
+                ..valid_stop_or_start_canister
             },
             vec!["unspecified or unrecognized", "action"],
         );
@@ -180,7 +180,7 @@ mod tests {
         is_invalid_proposal_with_keywords(
             StopOrStartCanister {
                 action: Some(1000),
-                ..valid_stop_or_start_canister.clone()
+                ..valid_stop_or_start_canister
             },
             vec!["unspecified or unrecognized", "action"],
         );

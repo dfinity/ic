@@ -476,7 +476,7 @@ mod tests {
         let original = pb::v1::HighCapacityRegistryGetValueResponse {
             version,
             content: Some(high_capacity_registry_get_value_response::Content::Value(
-                value.clone(),
+                value,
             )),
             timestamp_nanoseconds: 42,
             error: None,

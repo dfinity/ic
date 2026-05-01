@@ -605,7 +605,7 @@ mod test {
 
         // spsu4 should have a dummy mutation - record should remain unchanged
         let record_spsu4_got = registry.get_node_operator_or_panic(node_operator_spsu4);
-        let expected_record_spsu4 = record_spsu4.clone();
+        let expected_record_spsu4 = record_spsu4;
         assert_eq!(
             record_spsu4_got, expected_record_spsu4,
             "Assertion for NodeOperator {node_operator_spsu4} failed - dummy mutation should not change record"
@@ -613,7 +613,7 @@ mod test {
 
         // ujq4k should have a dummy mutation - record should remain unchanged
         let record_ujq4k_got = registry.get_node_operator_or_panic(node_operator_ujq4k);
-        let expected_record_ujq4k = record_ujq4k.clone();
+        let expected_record_ujq4k = record_ujq4k;
         assert_eq!(
             record_ujq4k_got, expected_record_ujq4k,
             "Assertion for NodeOperator {node_operator_ujq4k} failed - dummy mutation should not change record"
@@ -820,7 +820,7 @@ mod test {
             .unwrap();
         let subnet_record_1_after = SubnetRecordPb::decode(&registry_value_1.value[..]).unwrap();
         let expected_subnet_record_1 = {
-            let mut subnet_record_1_clone = subnet_record_1.clone();
+            let mut subnet_record_1_clone = subnet_record_1;
             subnet_record_1_clone
                 .chain_key_config
                 .as_mut()

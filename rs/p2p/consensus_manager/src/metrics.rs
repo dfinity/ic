@@ -74,7 +74,7 @@ impl ConsensusManagerMetrics {
                     "ic_consensus_manager_assemble_task_duration",
                     "Duration for which the assemble task was alive. This includes assembleing and waiting for close.",
                     decimal_buckets(0, 2),
-                    const_labels_string.clone(),
+                    const_labels_string,
                 ))
                 .unwrap(),
             ),

@@ -781,7 +781,7 @@ mod tests {
             add_neuron_followees(
                 &mut index,
                 &follower_id,
-                btreeset![(Topic::Topic1, followee_id.clone())],
+                btreeset![(Topic::Topic1, followee_id)],
             ),
             vec![]
         );

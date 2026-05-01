@@ -44,7 +44,7 @@ fn test_canister_snapshot_download_upload(pic: &mut PocketIc, canister_id: Princ
     pic.canister_snapshot_download(
         canister_id,
         Principal::anonymous(),
-        uploaded_snapshot_id.clone(),
+        uploaded_snapshot_id,
         uploaded_snapshot_dir.clone(),
     );
 
@@ -138,14 +138,14 @@ fn test_canister_snapshot_download_upload(pic: &mut PocketIc, canister_id: Princ
         .arg("--identity")
         .arg("anonymous")
         .current_dir(dfx_home_dir.clone())
-        .env("HOME", dfx_home_dir.clone())
+        .env("HOME", dfx_home_dir)
         .output()
         .unwrap();
 
     // Check that the snapshots downloaded using PocketIC and dfx are equal.
     let diff = Command::new("diff")
         .arg("-r")
-        .arg(downloaded_snapshot_dir.clone())
+        .arg(downloaded_snapshot_dir)
         .arg(dfx_snapshot_dir.clone())
         .output()
         .expect("Failed to execute diff");

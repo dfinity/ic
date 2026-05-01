@@ -244,7 +244,7 @@ impl<'a> QueryContext<'a> {
                 MeasurementScope::nested(&metrics.query_initial_call, measurement_scope);
             self.execute_query(
                 old_canister.clone(),
-                method.clone(),
+                method,
                 &query.method_payload,
                 query_kind,
                 &measurement_scope,

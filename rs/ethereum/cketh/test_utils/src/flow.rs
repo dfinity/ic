@@ -704,7 +704,7 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> ProcessWithdrawal<T, Req> {
             .expect_finalized_transaction()
             .retrieve_transaction_receipt(identity)
             .expect_finalized_status(TxFinalizedStatus::Success {
-                transaction_hash: transaction.transaction_hash.clone(),
+                transaction_hash: transaction.transaction_hash,
                 effective_transaction_fee: Some((GAS_USED * EFFECTIVE_GAS_PRICE).into()),
             })
     }
@@ -720,7 +720,7 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> ProcessWithdrawal<T, Req> {
         resubmitted_tx_sig: ethers_core::types::Signature,
     ) -> T {
         let first_sent_tx = encode_transaction(first_tx.clone(), first_tx_sig);
-        let first_tx_hash = hash_transaction(first_tx.clone(), first_tx_sig);
+        let first_tx_hash = hash_transaction(first_tx, first_tx_sig);
         let transaction = EthTransaction {
             transaction_hash: format!("{first_tx_hash:?}"),
         };
@@ -772,7 +772,7 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> ProcessWithdrawal<T, Req> {
                     .respond_for_all_with(transaction_receipt(format!("{resubmitted_tx_hash:?}")))
             })
             .expect_finalized_status(TxFinalizedStatus::Success {
-                transaction_hash: resubmitted_transaction.transaction_hash.clone(),
+                transaction_hash: resubmitted_transaction.transaction_hash,
                 effective_transaction_fee: Some((GAS_USED * EFFECTIVE_GAS_PRICE).into()),
             })
     }

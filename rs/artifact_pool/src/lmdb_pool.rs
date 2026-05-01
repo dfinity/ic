@@ -2650,9 +2650,7 @@ mod tests {
         run_persistent_pool_test("test_purge_below_maximum_element", |config, log| {
             const MAX_HEIGHT: Height = Height::new(10);
             let mut pool = PersistentHeightIndexedPool::new_consensus_pool(
-                config.clone(),
-                /*read_only=*/ false,
-                log.clone(),
+                config, /*read_only=*/ false, log,
             );
             let rb_ops = random_beacon_ops(1..=MAX_HEIGHT.get());
             pool.mutate(rb_ops.clone());

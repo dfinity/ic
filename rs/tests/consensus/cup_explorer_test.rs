@@ -203,12 +203,8 @@ fn test(env: TestEnv) {
         recover_subnet_payload,
         &log,
     ));
-    let status = verify(
-        nns_node.get_public_url(),
-        Some(nns_public_key.clone()),
-        cup_path,
-    )
-    .expect("Failed to verify CUP after recovery");
+    let status = verify(nns_node.get_public_url(), Some(nns_public_key), cup_path)
+        .expect("Failed to verify CUP after recovery");
     assert_eq!(status, SubnetStatus::Recovered);
 }
 

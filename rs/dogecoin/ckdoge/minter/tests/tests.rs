@@ -69,7 +69,7 @@ fn should_fail_withdrawal() {
             USER_PRINCIPAL,
             &RetrieveDogeWithApprovalArgs {
                 amount: RETRIEVE_DOGE_MIN_AMOUNT,
-                ..correct_withdrawal_args.clone()
+                ..correct_withdrawal_args
             },
         ),
         Err(RetrieveDogeWithApprovalError::InsufficientFunds {

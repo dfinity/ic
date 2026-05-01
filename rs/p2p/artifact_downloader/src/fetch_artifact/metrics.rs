@@ -31,7 +31,7 @@ impl FetchArtifactMetrics {
                     "ic_artifact_downloader_download_task_artifact_download_duration",
                     "Download time for artifact.",
                     decimal_buckets(-2, 1),
-                    const_labels_string.clone(),
+                    const_labels_string,
                 ))
                 .unwrap(),
             ),

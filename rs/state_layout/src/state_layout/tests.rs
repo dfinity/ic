@@ -867,7 +867,7 @@ fn wasm_file_can_hold_checkpoint_for_lazy_loading() {
         let tempdir = tmpdir("state_layout");
         let root_path = tempdir.path().to_path_buf();
         let metrics_registry = ic_metrics::MetricsRegistry::new();
-        let state_layout = StateLayout::try_new(log, root_path.clone(), &metrics_registry).unwrap();
+        let state_layout = StateLayout::try_new(log, root_path, &metrics_registry).unwrap();
         let scratchpad_dir = tmpdir("scratchpad");
 
         let scratchpad = CheckpointLayout::<RwPolicy<()>>::new_untracked(
@@ -1291,7 +1291,7 @@ mod mainnet_compatibility_tests {
 
             // Retain callback 3.
             let callback3 = make_callback(canister_test_id(3));
-            call_context_manager.with_callback(callback3.clone());
+            call_context_manager.with_callback(callback3);
 
             // A task queue with a `Response` aborted execution bundling `response1` and
             // `callback1`.

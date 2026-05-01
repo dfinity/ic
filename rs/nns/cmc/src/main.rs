@@ -372,7 +372,7 @@ impl Default for State {
             authorized_subnets: BTreeMap::new(),
             default_subnets: vec![],
             icp_xdr_conversion_rate: Some(initial_icp_xdr_conversion_rate.clone()),
-            average_icp_xdr_conversion_rate: Some(initial_icp_xdr_conversion_rate.clone()),
+            average_icp_xdr_conversion_rate: Some(initial_icp_xdr_conversion_rate),
             recent_icp_xdr_rates: Some(vec![
                 IcpXdrConversionRate::default();
                 ICP_XDR_CONVERSION_RATE_CACHE_SIZE
@@ -3210,7 +3210,7 @@ mod tests {
             icrc1_memo: Some(ByteBuf::from(43_u64.to_le_bytes().to_vec())),
 
             // Irrelevant to this test.
-            operation: operation.clone(),
+            operation,
             created_at_time: None,
         };
 
@@ -3318,7 +3318,7 @@ mod tests {
                 icrc1_memo: None,
 
                 // Irrelevant to this test.
-                operation: operation.clone(),
+                operation,
                 created_at_time: None,
             };
 

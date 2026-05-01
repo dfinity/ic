@@ -494,14 +494,11 @@ impl ArgWithCaller {
                 let operation = Operation::<T>::Approve {
                     amount: T::try_from(approve_arg.amount.clone()).unwrap(),
                     expires_at: approve_arg.expires_at,
-                    fee: approve_arg
-                        .fee
-                        .clone()
-                        .map(|f| T::try_from(f.clone()).unwrap()),
+                    fee: approve_arg.fee.clone().map(|f| T::try_from(f).unwrap()),
                     expected_allowance: approve_arg
                         .expected_allowance
                         .clone()
-                        .map(|a| T::try_from(a.clone()).unwrap()),
+                        .map(|a| T::try_from(a).unwrap()),
                     spender: approve_arg.spender,
                     from: caller,
                 };
@@ -1367,7 +1364,7 @@ pub fn valid_transactions_strategy_with_options(
         let arb_tx = if balances.is_empty() {
             mint_strategy
         } else {
-            let account_balance = Rc::new(select(balances.clone()));
+            let account_balance = Rc::new(select(balances));
             let approve_strategy = approve_strategy(
                 account_balance.clone(),
                 minter_identity.clone(),
@@ -1392,7 +1389,7 @@ pub fn valid_transactions_strategy_with_options(
             )
             .boxed();
             let transfer_strategy = transfer_strategy(
-                account_balance.clone(),
+                account_balance,
                 minter_identity.clone(),
                 default_fee,
                 now,
@@ -1425,9 +1422,9 @@ pub fn valid_transactions_strategy_with_options(
                         minter_identity.clone(),
                         default_fee,
                         now,
-                        tx_hashes_pointer.clone(),
-                        account_to_basic_identity_pointer.clone(),
-                        allowance_map_pointer.clone(),
+                        tx_hashes_pointer,
+                        account_to_basic_identity_pointer,
+                        allowance_map_pointer,
                         Arc::new(state.balances.clone()),
                         require_created_at_time,
                         require_memo,
@@ -1465,7 +1462,7 @@ pub fn valid_transactions_strategy_with_options(
 
     generate_strategy(
         TransactionsAndBalances::default(),
-        minter_identity.clone(),
+        minter_identity,
         default_fee,
         length,
         now,
@@ -1473,7 +1470,7 @@ pub fn valid_transactions_strategy_with_options(
         require_created_at_time,
         require_memo,
     )
-    .prop_map(|res| res.transactions.clone())
+    .prop_map(|res| res.transactions)
 }
 
 pub fn decimals_strategy() -> impl Strategy<Value = u8> {

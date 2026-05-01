@@ -291,7 +291,7 @@ pub fn setup(
 ) {
     setup_ic(env);
 
-    install_nns(env, sale_participants, nf_neurons.clone());
+    install_nns(env, sale_participants, nf_neurons);
 
     // get the first application node from the second subnet, which should be the dapp subnet
     let dapp_node = env.get_first_healthy_node_snapshot_from_nth_subnet_where(
@@ -310,7 +310,7 @@ pub fn setup(
     };
 
     // Install the SNS with an "OC-ish" CreateServiceNervousSystem proposal
-    install_sns(env, create_service_nervous_system_proposal.clone());
+    install_sns(env, create_service_nervous_system_proposal);
 
     block_on(dapp_canister.check_exclusively_owned_by_sns_root(env));
 }

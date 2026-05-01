@@ -313,7 +313,7 @@ mod tests {
 
         if ssh_assigned_readonly_access.is_some() || ssh_backup_access.is_some() {
             let subnet_record = SubnetRecord {
-                ssh_readonly_access: ssh_assigned_readonly_access.clone().unwrap_or_default(),
+                ssh_readonly_access: ssh_assigned_readonly_access.unwrap_or_default(),
                 ssh_backup_access: ssh_backup_access.unwrap_or_default(),
                 membership: vec![ASSIGNED_NODE.get().to_vec()],
                 ..test_subnet_record()

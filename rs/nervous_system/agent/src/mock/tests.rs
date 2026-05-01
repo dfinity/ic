@@ -81,7 +81,7 @@ async fn test_mock_left_over_expected_call() {
     };
 
     let call_canisters = MockCallCanisters::new();
-    call_canisters.expect_call(callee, request.clone(), Ok(Ok(response.clone())));
+    call_canisters.expect_call(callee, request, Ok(Ok(response)));
 
     // Step 2: Do not call call_canisters. This is supposed to trigger a panic.
 

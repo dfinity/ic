@@ -138,12 +138,7 @@ fn node_is_not_created_with_invalid_type() {
             )
             .await;
         assert!(response.is_err());
-        assert!(
-            response
-                .unwrap_err()
-                .to_string()
-                .contains("Invalid node type")
-        );
+        assert!(response.unwrap_err().contains("Invalid node type"));
 
         // The record should still not be there
         let node_record = get_node_record(&registry, node_id).await;

@@ -58,7 +58,7 @@ mod database_access {
         hb: &HashedBlock,
     ) -> Result<(), BlockStoreError> {
         let tx = Block::decode(hb.block.clone())
-            .map_err(|e| BlockStoreError::Other(e.to_string()))?
+            .map_err(BlockStoreError::Other)?
             .transaction;
         let operation_type = tx.operation.clone();
         let mut from_account = None;
@@ -2155,12 +2155,12 @@ VALUES (:idx, :block_idx)"#,
             };
             let block0 = Block {
                 parent_hash: None,
-                transaction: transaction0.clone(),
+                transaction: transaction0,
                 timestamp: TimeStamp::from_nanos_since_unix_epoch(1),
             };
             let encoded_block0 = block0.clone().encode();
             let hashed_block0 = crate::blocks::HashedBlock::hash_block(
-                encoded_block0.clone(),
+                encoded_block0,
                 block0.parent_hash,
                 0,
                 block0.timestamp,

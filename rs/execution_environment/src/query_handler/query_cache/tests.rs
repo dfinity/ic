@@ -512,7 +512,7 @@ fn query_cache_returns_different_results_for_different_certificate_delegation_fo
     let res_3 = test.non_replicated_query_with_certificate_delegation_metadata(
         id,
         method_name,
-        method_payload.clone(),
+        method_payload,
         Some(CertificateDelegationMetadata {
             format: CertificateDelegationFormat::Tree,
         }),
@@ -1277,7 +1277,7 @@ fn query_cache_returns_different_results_on_canister_stop() {
 
         // Run the same query for the second time.
         // The query returns a user error, while the composite query returns result with a reject.
-        let _res_2 = test.non_replicated_query(a_id, method, q.clone());
+        let _res_2 = test.non_replicated_query(a_id, method, q);
         // Assert it's a miss.
         let m = query_cache_metrics(&test);
         assert_eq!(0, m.hits.get());
@@ -1308,7 +1308,7 @@ fn query_cache_returns_different_results_on_canister_start() {
             .expect("The canister should successfully start.");
 
         // Run the same query for the second time.
-        let res_2 = test.non_replicated_query(a_id, method, q.clone());
+        let res_2 = test.non_replicated_query(a_id, method, q);
         // Assert it's a miss again.
         let m = query_cache_metrics(&test);
         assert_eq!(0, m.hits.get());
@@ -1337,7 +1337,7 @@ fn query_cache_returns_different_results_on_canister_stop_start() {
             .expect("The canister should successfully start.");
 
         // Run the same query for the second time.
-        let res_2 = test.non_replicated_query(a_id, method, q.clone());
+        let res_2 = test.non_replicated_query(a_id, method, q);
         // Assert it's a miss again.
         let m = query_cache_metrics(&test);
         assert_eq!(2, m.misses.get());
@@ -1368,7 +1368,7 @@ fn query_cache_returns_different_results_on_canister_create() {
     assert_eq!(expected_id, a_id);
 
     // Run the same query for the second time.
-    let res_2 = test.non_replicated_query(a_id, "query", q.clone());
+    let res_2 = test.non_replicated_query(a_id, "query", q);
     // Assert it's a miss now.
     let m = query_cache_metrics(&test);
     assert_eq!(2, m.misses.get());
@@ -1402,7 +1402,7 @@ fn composite_query_cache_returns_different_results_on_canister_create() {
     assert_eq!(expected_b_id, b_id);
 
     // Run the same query for the second time.
-    let res_2 = test.non_replicated_query(a_id, "composite_query", a.clone());
+    let res_2 = test.non_replicated_query(a_id, "composite_query", a);
     // Assert it's a miss now.
     let m = query_cache_metrics(&test);
     assert_eq!(2, m.misses.get());
@@ -1430,7 +1430,7 @@ fn query_cache_returns_different_results_on_canister_delete() {
 
         // Run the same query for the second time.
         // The query returns a user error, while the composite query returns result with a reject.
-        let _res_2 = test.non_replicated_query(a_id, method, q.clone());
+        let _res_2 = test.non_replicated_query(a_id, method, q);
         // Assert it's a miss.
         let m = query_cache_metrics(&test);
         assert_eq!(0, m.hits.get());
@@ -1518,9 +1518,7 @@ fn query_cache_never_caches_calls_to_management_canister() {
     );
     res_1.assert_contains(ErrorCode::CanisterContractViolation, &description);
 
-    let res_2 = test
-        .non_replicated_query(a_id, "query", q.clone())
-        .unwrap_err();
+    let res_2 = test.non_replicated_query(a_id, "query", q).unwrap_err();
     assert_eq!(query_cache_metrics(&test).hits.get(), 1);
     assert_eq!(query_cache_metrics(&test).misses.get(), 1);
     assert_eq!(res_1, res_2);
@@ -1545,7 +1543,7 @@ fn composite_query_cache_never_caches_calls_to_management_canister() {
     let message = format!("Canister {} not found", subnet_test_id(1));
     assert_eq!(Ok(WasmResult::Reply(message.as_bytes().to_owned())), res_1);
 
-    let res_2 = test.non_replicated_query(a_id, "composite_query", q.clone());
+    let res_2 = test.non_replicated_query(a_id, "composite_query", q);
     assert_eq!(query_cache_metrics(&test).hits.get(), 0);
     assert_eq!(query_cache_metrics(&test).misses.get(), 2);
     assert_eq!(res_1, res_2);

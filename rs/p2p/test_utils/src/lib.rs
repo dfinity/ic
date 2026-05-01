@@ -437,7 +437,7 @@ pub fn start_consensus_manager(
 ) {
     let _enter = rt_handle.enter();
     let pool = Arc::new(RwLock::new(processor));
-    let bouncer_factory = Arc::new(pool.clone().read().unwrap().clone());
+    let bouncer_factory = Arc::new(pool.read().unwrap().clone());
     let downloader = FetchArtifact::new(
         log.clone(),
         rt_handle.clone(),
@@ -447,14 +447,14 @@ pub fn start_consensus_manager(
     );
 
     let mut cm1 = ic_consensus_manager::AbortableBroadcastChannelBuilder::new(
-        log.clone(),
+        log,
         rt_handle.clone(),
         MetricsRegistry::default(),
     );
     let channel = cm1.abortable_broadcast_channel(downloader, usize::MAX);
 
     let artifact_processor_jh =
-        start_test_processor(channel, pool.clone(), pool.clone().read().unwrap().clone());
+        start_test_processor(channel, pool.clone(), pool.read().unwrap().clone());
     (artifact_processor_jh, cm1)
 }
 

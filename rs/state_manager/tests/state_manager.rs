@@ -2789,7 +2789,7 @@ fn state_sync_message_returns_none_for_invalid_chunk_requests() {
 
         let src = Box::new(msg);
 
-        assert!(src.clone().get_chunk(META_MANIFEST_CHUNK).is_some());
+        assert!(src.get_chunk(META_MANIFEST_CHUNK).is_some());
 
         for i in 1..normal_chunk_id_end_exclusive {
             assert!(src.clone().get_chunk(ChunkId::new(i)).is_some());
@@ -7393,7 +7393,7 @@ fn can_create_and_delete_canister_snapshot() {
             .canister(&canister_test_id(100))
             .unwrap()
             .raw_path();
-        assert!(std::fs::metadata(canister_path.clone()).unwrap().is_dir());
+        assert!(std::fs::metadata(canister_path).unwrap().is_dir());
 
         // Check the checkpoint has the snapshot.
         let snapshot_path = state_manager
@@ -8145,7 +8145,7 @@ fn can_split_with_inflight_restore_snapshot() {
             state
                 .metadata
                 .network_topology
-                .set_routing_table(routing_table.clone());
+                .set_routing_table(routing_table);
 
             // Expected state after splitting.
             let mut expected = state.clone();

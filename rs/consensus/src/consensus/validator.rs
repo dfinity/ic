@@ -2251,11 +2251,9 @@ pub mod test {
             state_manager
                 .get_mut()
                 .expect_get_state_at()
-                .return_const(Ok(fake_state_with_signature_requests(
-                    height,
-                    contexts.clone(),
-                )
-                .get_labeled_state()));
+                .return_const(Ok(
+                    fake_state_with_signature_requests(height, contexts).get_labeled_state()
+                ));
 
             // Manually construct a cup share
             let make_next_cup_share = |proposal: BlockProposal,
@@ -2742,7 +2740,7 @@ pub mod test {
             test_block.context.certified_height = Height::from(1);
             test_block.version = ReplicaVersion::try_from("old_version").unwrap();
 
-            let block_proposal = BlockProposal::fake(test_block.clone(), node_id);
+            let block_proposal = BlockProposal::fake(test_block, node_id);
             pool.insert_unvalidated(block_proposal.clone());
 
             // Finalize some blocks to ensure that:
@@ -2900,7 +2898,7 @@ pub mod test {
                     None,
                 ),
                 signature: ThresholdSignature {
-                    signer: summary_beacon.signature.signer.clone(),
+                    signer: summary_beacon.signature.signer,
                     signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
                 },
             };
@@ -3665,7 +3663,7 @@ pub mod test {
                 registry_client.as_ref(),
                 replica_config.subnet_id,
                 &pool_reader,
-                parent.clone(),
+                parent,
                 pool_reader.registry_version(test_block.height()).unwrap(),
                 rank,
                 /*metrics=*/ None,
@@ -3777,7 +3775,7 @@ pub mod test {
         pool.insert_validated(pool.make_next_beacon());
 
         let original = pool.make_next_block();
-        let mut block = original.clone();
+        let mut block = original;
         let correct_signer = pool.get_block_maker_by_rank(block.height(), Some(Rank(0)));
 
         // Create two different blocks from the same block maker
@@ -3835,7 +3833,7 @@ pub mod test {
             let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
             // Invalidate proof with identical hashes
             proof.hash2 = proof.hash1.clone();
-            pool.insert_unvalidated(proof.clone());
+            pool.insert_unvalidated(proof);
             assert_matches!(
                 &validator.on_state_change(&PoolReader::new(&pool))[..],
                 [ChangeAction::HandleInvalid(
@@ -3852,7 +3850,7 @@ pub mod test {
             let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
             // Invalidate proof with incorrect subnet ID
             proof.subnet_id = subnet_test_id(1337);
-            pool.insert_unvalidated(proof.clone());
+            pool.insert_unvalidated(proof);
             assert_matches!(
                 &validator.on_state_change(&PoolReader::new(&pool))[..],
                 [ChangeAction::HandleInvalid(
@@ -3869,7 +3867,7 @@ pub mod test {
             let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
             // Don't validate if signer is not part of subnet
             proof.signer = node_test_id(10);
-            pool.insert_unvalidated(proof.clone());
+            pool.insert_unvalidated(proof);
             assert_matches!(
                 &validator.on_state_change(&PoolReader::new(&pool))[..],
                 [ChangeAction::HandleInvalid(
@@ -3889,7 +3887,7 @@ pub mod test {
             assert!(non_blockmaker_node != proof.signer);
 
             proof.signer = non_blockmaker_node;
-            pool.insert_unvalidated(proof.clone());
+            pool.insert_unvalidated(proof);
             assert_matches!(
                 &validator.on_state_change(&PoolReader::new(&pool))[..],
                 [ChangeAction::HandleInvalid(
@@ -3905,7 +3903,7 @@ pub mod test {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let (mut pool, validator, proof) = setup_equivocation_proof_test(pool_config);
             // Validate a well-formed equivocation proof, with the correct subnet ID
-            pool.insert_unvalidated(proof.clone());
+            pool.insert_unvalidated(proof);
             assert_matches!(
                 validator.on_state_change(&PoolReader::new(&pool))[..],
                 [ChangeAction::MoveToValidated(
@@ -3936,7 +3934,7 @@ pub mod test {
             let mut hash = proof.hash1.clone().get();
             hash.0[0] = !hash.0[0];
             proof.hash2 = CryptoHashOf::new(hash);
-            pool.insert_unvalidated(proof.clone());
+            pool.insert_unvalidated(proof);
 
             // We should validate only a single equivocation proof, the other
             // one is expected to be removed from the unvalidated pool.
@@ -4077,7 +4075,7 @@ pub mod test {
             block_with_malicious_signer.signature.signer =
                 pool.get_block_maker_by_rank(block.height(), Some(Rank(1)));
 
-            pool.insert_validated(block.clone());
+            pool.insert_validated(block);
             pool.insert_unvalidated(block_with_malicious_signer.clone());
 
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
@@ -4185,7 +4183,7 @@ pub mod test {
                 .set_time(third_block.content.as_ref().context.time)
                 .unwrap();
 
-            pool.insert_validated(block.clone());
+            pool.insert_validated(block);
             pool.insert_unvalidated(second_block.clone());
             pool.insert_unvalidated(third_block.clone());
 

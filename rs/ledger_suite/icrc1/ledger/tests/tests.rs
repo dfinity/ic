@@ -1483,7 +1483,7 @@ fn test_icrc3_certificate() {
     let ledger_id = env
         .install_canister(
             ledger_mainnet_wasm(),
-            Encode!(&(LedgerArgument::Init(init_args.clone()))).unwrap(),
+            Encode!(&(LedgerArgument::Init(init_args))).unwrap(),
             None,
         )
         .expect("Unable to install the ledger");
@@ -1517,8 +1517,7 @@ fn test_icrc3_certificate() {
             },
             _ => Err(format!(
                 "Expected to find a leaf node: Hash tree: {hash_tree:?}, leaf_name: {leaf_name}"
-            )
-            .to_string()),
+            )),
         }
     }
 
@@ -1542,7 +1541,7 @@ fn test_icrc3_certificate() {
     .unwrap()
     .unwrap();
     assert_eq!(
-        new_legacy_certificate.certificate.clone().unwrap(),
+        new_legacy_certificate.certificate.unwrap(),
         new_icrc3_certificate.certificate
     );
 

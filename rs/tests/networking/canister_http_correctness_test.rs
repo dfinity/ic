@@ -258,7 +258,7 @@ fn test_transform_function_is_executed(env: TestEnv) {
                         principal: get_proxy_canister_id(&env).into(),
                         method: "test_transform".to_string(),
                     }),
-                    context: transform_context.clone(),
+                    context: transform_context,
                 }),
                 max_response_bytes: None,
                 is_replicated: None,
@@ -338,7 +338,7 @@ fn test_non_existent_transform_function(env: TestEnv) {
                         principal: get_proxy_canister_id(&env).into(),
                         method: "non_existent_transform_function".to_string(),
                     }),
-                    context: transform_context.clone(),
+                    context: transform_context,
                 }),
                 max_response_bytes: None,
                 is_replicated: None,
@@ -1135,7 +1135,7 @@ fn test_http_calls_to_ic_fails(env: TestEnv) {
     ));
 
     let expected_error_message = "Error(Connect, ConnectError(\"tcp connect error\", Os { code: 111, kind: ConnectionRefused, message: \"Connection refused\" }))";
-    let err_response = response.clone().unwrap_err();
+    let err_response = response.unwrap_err();
 
     assert_matches!(err_response.reject_code, RejectCode::SysTransient);
 
@@ -1251,7 +1251,7 @@ fn test_get_hello_world_call(env: TestEnv) {
     let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: request.clone(),
+            request,
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
@@ -1295,7 +1295,7 @@ fn test_request_header_total_size_within_the_48_kib_limit(env: TestEnv) {
     let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: request.clone(),
+            request,
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
@@ -1343,7 +1343,7 @@ fn test_request_header_total_size_over_the_48_kib_limit(env: TestEnv) {
     let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: request.clone(),
+            request,
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
@@ -1477,7 +1477,7 @@ fn test_request_header_name_and_value_within_limits(env: TestEnv) {
     let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: request.clone(),
+            request,
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
@@ -1509,7 +1509,7 @@ fn test_request_header_name_too_long(env: TestEnv) {
     let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: request.clone(),
+            request,
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
@@ -1550,7 +1550,7 @@ fn test_request_header_value_too_long(env: TestEnv) {
     let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: request.clone(),
+            request,
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
@@ -1657,7 +1657,7 @@ fn test_response_header_value_within_limit(env: TestEnv) {
     let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: request.clone(),
+            request,
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
@@ -1689,7 +1689,7 @@ fn test_response_header_value_over_limit(env: TestEnv) {
     let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: request.clone(),
+            request,
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
@@ -1790,7 +1790,7 @@ fn test_head_call(env: TestEnv) {
     let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: request.clone(),
+            request,
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
@@ -2051,7 +2051,7 @@ fn test_non_ascii_url_is_accepted(env: TestEnv) {
     let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: request.clone(),
+            request,
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
@@ -2089,7 +2089,7 @@ fn test_max_url_length(env: TestEnv) {
     let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: request.clone(),
+            request,
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
@@ -2124,7 +2124,7 @@ fn test_max_url_length_exceeded(env: TestEnv) {
     let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: request.clone(),
+            request,
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
@@ -2181,7 +2181,7 @@ fn reference_transform_function_exposed_by_different_canister(env: TestEnv) {
     let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: request.clone(),
+            request,
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));
@@ -2380,7 +2380,7 @@ fn check_caller_id_on_transform_function(env: TestEnv) {
     let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
-            request: request.clone(),
+            request,
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
     ));

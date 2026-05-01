@@ -79,7 +79,7 @@ fn proptest_round(
 ) {
     let subnet_records = SubnetRecords {
         membership_version: subnet_record.clone(),
-        context_version: subnet_record.clone(),
+        context_version: subnet_record,
     };
     let validation_context = ValidationContext {
         certified_height: Height::from(height),

@@ -201,7 +201,7 @@ impl SnsInitializationFlowTestSetup {
         };
 
         // Setup the NNS canisters
-        setup_nns_canisters(&state_machine, nns_init_payloads.clone());
+        setup_nns_canisters(&state_machine, nns_init_payloads);
 
         // Populate the SNS-W canister with SNS canister WASMs
         add_real_wasms_to_sns_wasms(&state_machine);

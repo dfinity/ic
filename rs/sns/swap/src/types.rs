@@ -786,7 +786,7 @@ impl CfNeuron {
             nns_neuron_id,
             amount_icp_e8s,
             has_created_neuron_recipes: Some(false),
-            hotkeys: Some(Principals::from(hotkeys.clone())),
+            hotkeys: Some(Principals::from(hotkeys)),
         };
 
         cf_neuron.validate()?;

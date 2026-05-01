@@ -2032,7 +2032,7 @@ fn failing_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(
                 signals_end: 22,
                 ..StreamConfig::default()
             });
-            expected_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream.clone()]);
+            expected_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
             prepare_expected_state(&mut expected_state, response.cycles());
 
             let inducted_state = stream_handler.induct_loopback_stream(state, &mut (i64::MAX / 2));
@@ -3282,7 +3282,7 @@ fn with_test_setup_and_config(
             Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
                 &metrics_registry,
             ))),
-            log.clone(),
+            log,
         );
 
         // Ensure the routing table maps `LOCAL_CANISTER` to `LOCAL_SUBNET`,

@@ -608,7 +608,7 @@ fn update_mainnet_canisters_bzl_file(
 
     // The map containing canister data
     let mut m = match orig {
-        serde_json::Value::Object(m) => m.clone(),
+        serde_json::Value::Object(m) => m,
         _ => panic!("Expected canister data to be a JSON map"),
     };
 

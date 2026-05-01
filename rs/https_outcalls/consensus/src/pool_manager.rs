@@ -818,7 +818,7 @@ pub mod test {
                         .unwrap();
 
                     let share = Signed {
-                        content: response_metadata.clone(),
+                        content: response_metadata,
                         signature,
                     };
 
@@ -918,7 +918,7 @@ pub mod test {
                     .unwrap();
 
                 let mut share = Signed {
-                    content: response_metadata.clone(),
+                    content: response_metadata,
                     signature,
                 };
 
@@ -1047,7 +1047,7 @@ pub mod test {
                         .unwrap();
 
                     let share = Signed {
-                        content: response_metadata.clone(),
+                        content: response_metadata,
                         signature,
                     };
 
@@ -1149,7 +1149,7 @@ pub mod test {
                     .unwrap();
 
                 let share = Signed {
-                    content: response_metadata.clone(),
+                    content: response_metadata,
                     signature,
                 };
 
@@ -1157,15 +1157,15 @@ pub mod test {
                     Arc::new(Mutex::new(Box::new(shim_mock)));
 
                 let pool_manager = CanisterHttpPoolManagerImpl::new(
-                    state_manager.clone(),
+                    state_manager,
                     shim.clone(),
-                    crypto.clone(),
+                    crypto,
                     pool.get_cache(),
-                    replica_config.clone(),
+                    replica_config,
                     SubnetType::Application,
                     Arc::clone(&registry) as Arc<_>,
                     MetricsRegistry::new(),
-                    log.clone(),
+                    log,
                 );
 
                 // TEST 1: Non-replicated request artifact is missing the response.
@@ -1262,7 +1262,7 @@ pub mod test {
                     let mut canister_http_pool =
                         CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
 
-                    let mut bad_share = share.clone();
+                    let mut bad_share = share;
                     bad_share.content.is_reject = !bad_share.content.is_reject;
 
                     let artifact_with_mismatched_is_reject = CanisterHttpResponseArtifact {
@@ -1444,7 +1444,7 @@ pub mod test {
                     .unwrap();
 
                 let share = Signed {
-                    content: response_metadata.clone(),
+                    content: response_metadata,
                     signature,
                 };
 
@@ -1536,11 +1536,11 @@ pub mod test {
                     Arc::new(Mutex::new(Box::new(shim_mock)));
 
                 let pool_manager = CanisterHttpPoolManagerImpl::new(
-                    state_manager.clone(),
+                    state_manager,
                     shim,
                     crypto.clone(),
                     pool.get_cache(),
-                    replica_config.clone(),
+                    replica_config,
                     SubnetType::Application,
                     Arc::clone(&registry) as Arc<_>,
                     MetricsRegistry::new(),
@@ -1708,11 +1708,11 @@ pub mod test {
                     ));
 
                 let pool_manager = CanisterHttpPoolManagerImpl::new(
-                    state_manager.clone(),
+                    state_manager,
                     Arc::new(Mutex::new(Box::new(shim_mock))),
                     crypto.clone(),
                     pool.get_cache(),
-                    replica_config.clone(),
+                    replica_config,
                     SubnetType::Application,
                     Arc::clone(&registry) as Arc<_>,
                     MetricsRegistry::new(),
@@ -1954,7 +1954,7 @@ pub mod test {
                 shim_mock
                     .expect_try_receive()
                     .times(1)
-                    .return_once(move || Ok(oversized_response.clone()));
+                    .return_once(move || Ok(oversized_response));
                 shim_mock
                     .expect_try_receive()
                     .return_const(Err(TryReceiveError::Empty));
@@ -2090,7 +2090,7 @@ pub mod test {
                 canister_http_pool.insert(UnvalidatedArtifact {
                     message: CanisterHttpResponseArtifact {
                         share,
-                        response: Some(dishonest_response.clone()),
+                        response: Some(dishonest_response),
                     },
                     peer_id: delegated_node_id,
                     timestamp: UNIX_EPOCH,
@@ -2173,11 +2173,11 @@ pub mod test {
                     ));
 
                 let pool_manager = CanisterHttpPoolManagerImpl::new(
-                    state_manager.clone(),
+                    state_manager,
                     Arc::new(Mutex::new(Box::new(shim_mock))),
                     crypto.clone(),
                     pool.get_cache(),
-                    replica_config.clone(),
+                    replica_config,
                     SubnetType::Application,
                     Arc::clone(&registry) as Arc<_>,
                     MetricsRegistry::new(),
@@ -2829,7 +2829,7 @@ pub mod test {
                     .unwrap();
 
                 let share = Signed {
-                    content: response_metadata.clone(),
+                    content: response_metadata,
                     signature,
                 };
 
@@ -2841,15 +2841,15 @@ pub mod test {
                     Arc::new(Mutex::new(Box::new(shim_mock)));
 
                 let pool_manager = CanisterHttpPoolManagerImpl::new(
-                    state_manager.clone(),
+                    state_manager,
                     shim.clone(),
-                    crypto.clone(),
+                    crypto,
                     pool.get_cache(),
-                    replica_config.clone(),
+                    replica_config,
                     SubnetType::Application,
                     Arc::clone(&registry) as Arc<_>,
                     MetricsRegistry::new(),
-                    log.clone(),
+                    log,
                 );
 
                 // TEST 1: Flexible artifact is missing the response -- should be invalid.
@@ -2945,7 +2945,7 @@ pub mod test {
                     let mut canister_http_pool =
                         CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
 
-                    let mut bad_share = share.clone();
+                    let mut bad_share = share;
                     bad_share.content.is_reject = !bad_share.content.is_reject;
 
                     canister_http_pool.insert(UnvalidatedArtifact {
@@ -3019,11 +3019,11 @@ pub mod test {
                     Arc::new(Mutex::new(Box::new(shim_mock)));
 
                 let pool_manager = CanisterHttpPoolManagerImpl::new(
-                    state_manager.clone(),
+                    state_manager,
                     shim,
                     crypto.clone(),
                     pool.get_cache(),
-                    replica_config.clone(),
+                    replica_config,
                     SubnetType::Application,
                     Arc::clone(&registry) as Arc<_>,
                     MetricsRegistry::new(),

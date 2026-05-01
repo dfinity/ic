@@ -219,7 +219,7 @@ impl From<(Erc20Token, Canisters)> for ManagedCanisters {
             ckerc20_token_symbol: canisters.metadata.token_symbol.to_string(),
             ledger: canisters.ledger.as_ref().map(ManagedCanisterStatus::from),
             index: canisters.index.as_ref().map(ManagedCanisterStatus::from),
-            archives: canisters.archives.clone(),
+            archives: canisters.archives,
         }
     }
 }
@@ -238,7 +238,7 @@ impl From<Canisters> for ManagedLedgerSuite {
             token_symbol: value.metadata.token_symbol.to_string(),
             ledger: value.ledger.as_ref().map(ManagedCanisterStatus::from),
             index: value.index.as_ref().map(ManagedCanisterStatus::from),
-            archives: value.archives.clone(),
+            archives: value.archives,
         }
     }
 }

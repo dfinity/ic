@@ -62,7 +62,7 @@ pub fn run_fuzzer(module: ICWasmModule) {
     let fd_factory = Arc::new(TestPageAllocatorFileDescriptorImpl::new());
 
     let wasm_executor = Arc::new(WasmExecutorImpl::new(
-        WasmtimeEmbedder::new(embedder_config.clone(), log.clone()),
+        WasmtimeEmbedder::new(embedder_config, log.clone()),
         &metrics_registry,
         log,
         fd_factory,

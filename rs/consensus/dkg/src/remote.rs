@@ -687,7 +687,7 @@ mod tests {
         let config_results: BTreeMap<_, _> = [
             (
                 CallbackId::from(1),
-                Ok(vec![overlap_config.clone(), context_only_config.clone()]),
+                Ok(vec![overlap_config, context_only_config]),
             ),
             (
                 CallbackId::from(2),

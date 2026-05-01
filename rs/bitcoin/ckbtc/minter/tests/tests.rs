@@ -1012,7 +1012,7 @@ impl CkBtcSetup {
         let account = account.into();
         let deposit_address = self.get_btc_address(account);
 
-        self.push_utxos(utxos.clone(), deposit_address.clone());
+        self.push_utxos(utxos.clone(), deposit_address);
 
         let utxo_status = Decode!(
             &assert_reply(
@@ -2527,7 +2527,7 @@ fn test_ledger_memo() {
     let btc_address = "bc1q34aq5drpuwy3wgl9lhup9892qp6svr8ldzyy7c".to_string();
 
     let RetrieveBtcOk { block_index } = ckbtc
-        .retrieve_btc(btc_address.clone(), withdrawal_amount)
+        .retrieve_btc(btc_address, withdrawal_amount)
         .expect("retrieve_btc failed");
 
     let get_transaction_request = GetTransactionsRequest {
@@ -3054,6 +3054,6 @@ fn should_cancel_and_reimburse_large_withdrawal() {
     ckbtc.assert_ledger_transaction_reimbursement_correct(block_index, reimbursement_block_index);
     assert_eq!(
         ckbtc.balance_of(user_account),
-        balance_before_withdrawal.clone() - BitcoinFeeEstimator::COST_OF_ONE_BILLION_CYCLES
+        balance_before_withdrawal - BitcoinFeeEstimator::COST_OF_ONE_BILLION_CYCLES
     );
 }

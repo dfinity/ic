@@ -783,7 +783,7 @@ fn can_retrieve_subnet_metrics(
         .build();
 
     let mock_certified_state = |certificate: TestCertificate| {
-        let hash_tree = certificate.clone().tree();
+        let hash_tree = certificate.tree();
 
         let state: Arc<ReplicatedState> = Arc::new(ReplicatedStateBuilder::new().build());
         let certification = Certification {
@@ -824,7 +824,7 @@ fn can_retrieve_subnet_metrics(
         .expect_read_certified_state()
         .returning(move |_| Some(mock_certified_state(cloned_certificate.clone())));
 
-    let state_clone = state.clone();
+    let state_clone = state;
     mock_state_manager
         .expect_latest_certified_height()
         .returning(move || state_clone.height());
@@ -1236,7 +1236,7 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
             default_read_certified_state(labeled_tree, (*state_clone).clone())
         });
 
-    let state_clone = state.clone();
+    let state_clone = state;
     mock_state_manager
         .expect_latest_certified_height()
         .returning(move || state_clone.height());
@@ -1738,7 +1738,7 @@ fn test_call_v3_response_when_state_reader_fails(
             default_read_certified_state(labeled_tree, (*state_clone).clone())
         });
 
-    let state_clone = state.clone();
+    let state_clone = state;
     mock_state_manager
         .expect_latest_certified_height()
         .returning(move || state_clone.height());

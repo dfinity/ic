@@ -378,10 +378,10 @@ mod tests {
 
         // Perform multiple add config operations
         adder
-            .add_config(config_2.clone(), current_time)
+            .add_config(config_2, current_time)
             .expect("failed to add config");
         adder
-            .add_config(config_3.clone(), current_time + 1)
+            .add_config(config_3, current_time + 1)
             .expect("failed to add config");
         adder
             .add_config(config_4, current_time + 2)

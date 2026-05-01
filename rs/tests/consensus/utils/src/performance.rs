@@ -127,7 +127,7 @@ pub fn test_with_rt_handle(
     info!(log, "Step 2: Instantiate and start the workload..");
     let payload: Vec<u8> = vec![0; message_size];
     let generator = {
-        let (agents, canisters, payload) = (agents.clone(), canisters.clone(), payload.clone());
+        let (agents, canisters, payload) = (agents, canisters.clone(), payload.clone());
         move |idx: usize| {
             let (agents, canisters, payload) = (agents.clone(), canisters.clone(), payload.clone());
             async move {

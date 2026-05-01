@@ -507,7 +507,7 @@ impl<Tokens: TokensType> FeeCollectorBuilder<Tokens> {
             tx_fields.insert("ts".to_string(), ICRC3Value::Nat(Nat::from(ts)));
         }
         if let Some(mthd) = self.mthd {
-            tx_fields.insert("mthd".to_string(), ICRC3Value::Text(mthd.to_string()));
+            tx_fields.insert("mthd".to_string(), ICRC3Value::Text(mthd));
         }
         self.builder.build_with_operation(None, tx_fields)
     }

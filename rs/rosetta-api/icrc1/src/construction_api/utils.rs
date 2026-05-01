@@ -241,7 +241,7 @@ pub fn build_icrc1_ledger_canister_method_args(
             expected_allowance,
             expires_at,
             fee,
-            memo: memo.clone(),
+            memo,
             created_at_time: Some(created_at_time),
         }),
         crate::common::storage::types::IcrcOperation::Transfer {
@@ -505,7 +505,7 @@ pub fn handle_construction_parse(
             // For the response object we need to convert the icrc1 transaction to a rosetta core operation
             let rosetta_core_operations = icrc1_operation_to_rosetta_core_operations(
                 icrc1_transaction.operation,
-                currency.clone(),
+                currency,
                 fee,
             )?;
 

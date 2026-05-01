@@ -2459,8 +2459,8 @@ fn test_env_var_name_operations() {
     let var_value_2 = "TEST_VALUE_2".to_string();
     let non_existing_var = "does_not_exist".to_string();
 
-    env_vars.insert(var_name_1.clone(), var_value_1.clone());
-    env_vars.insert(var_name_2.clone(), var_value_2.clone());
+    env_vars.insert(var_name_1.clone(), var_value_1);
+    env_vars.insert(var_name_2.clone(), var_value_2);
 
     let api = get_system_api(
         ApiTypeBuilder::build_update_api(),
@@ -2609,9 +2609,7 @@ fn test_env_var_value_operations() {
     );
     assert_eq!(
         api.ic0_env_var_value_copy(0, non_existent.len(), 0, 0, 0, &mut heap),
-        Err(HypervisorError::EnvironmentVariableNotFound {
-            name: non_existent.clone()
-        })
+        Err(HypervisorError::EnvironmentVariableNotFound { name: non_existent })
     );
 
     // Test invalid UTF-8 in variable name

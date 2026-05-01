@@ -10,11 +10,7 @@ use ic_registry_keys::make_subnet_list_record_key;
 use std::sync::Arc;
 
 fn add_subnet_list(fake_registry: Arc<FakeRegistry>, subnets: Vec<SubnetId>) {
-    let subnets_encoded: Vec<Vec<u8>> = subnets
-        .clone()
-        .into_iter()
-        .map(|s| s.get().to_vec())
-        .collect();
+    let subnets_encoded: Vec<Vec<u8>> = subnets.into_iter().map(|s| s.get().to_vec()).collect();
 
     let entry_version = fake_registry
         .get_latest_version()
@@ -95,7 +91,7 @@ fn test_sync_non_zero_registry_version() {
         subnet_id(8),
         subnet_id(9),
     ];
-    add_subnet_list(fake_registry.clone(), subnets_second_sync.clone());
+    add_subnet_list(fake_registry, subnets_second_sync.clone());
     sync_all();
 
     let registry_client = CANISTER_TEST.with_borrow(|canister| canister.get_registry_client());

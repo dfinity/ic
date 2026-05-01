@@ -648,7 +648,7 @@ mod tests {
             // Insert new block. Must not get notarized, because no additional
             // time has passed.
             let block = pool.make_next_block();
-            pool.insert_validated(block.clone());
+            pool.insert_validated(block);
             assert!(run_notary(&pool).is_empty());
 
             // Stall the relative clock, and only advance monotonic clock past
@@ -885,7 +885,7 @@ mod tests {
             *certified_height.write().unwrap() =
                 Height::from(ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP + 2);
             let notary_delay = get_adjusted_notary_delay_from_settings(
-                settings.clone(),
+                settings,
                 &PoolReader::new(&pool),
                 state_manager.as_ref(),
                 membership.as_ref(),
@@ -973,7 +973,7 @@ mod tests {
 
             // Notary delay should not be increased during pending upgrade
             let notary_delay = get_adjusted_notary_delay_from_settings(
-                settings.clone(),
+                settings,
                 &PoolReader::new(&pool),
                 state_manager.as_ref(),
                 membership.as_ref(),

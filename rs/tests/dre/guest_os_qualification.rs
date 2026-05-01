@@ -218,7 +218,7 @@ pub fn main() -> anyhow::Result<()> {
                         Box::new(ApiBoundaryNodeWorkload {}),
                         // Downgrade the API Boundary Nodes to the inital version
                         Box::new(UpdateApiBoundaryNodes {
-                            version: initial_version.clone(),
+                            version: initial_version,
                         }),
                         // Run workload tests again
                         // Maps to `rs/tests/consensus/consensus_performance.rs` small

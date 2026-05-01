@@ -233,10 +233,7 @@ mod tests {
         let id_2 = "not_a_uuid".to_string();
         let arg_1 =
             rate_limits_api::DiscloseRulesArg::RuleIds(vec![id_1.to_string(), id_2.to_string()]);
-        let arg_2 = rate_limits_api::DiscloseRulesArg::IncidentIds(vec![
-            id_1.to_string(),
-            id_2.to_string(),
-        ]);
+        let arg_2 = rate_limits_api::DiscloseRulesArg::IncidentIds(vec![id_1.to_string(), id_2]);
         let mock_canister_api = MockCanisterApi::new();
         let discloser = RulesDiscloser::new(mock_canister_api);
         // Act

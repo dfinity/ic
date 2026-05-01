@@ -292,7 +292,7 @@ impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S>
             reservations.insert((key.clone(), index), reservation_data);
 
             let reservation = Reservation {
-                key: key.clone(),
+                key,
                 index,
                 reservations_map: Arc::downgrade(&self.reservations),
             };
@@ -339,7 +339,7 @@ impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S>
 
         // Get all reservations for this key to calculate current usage
         let reserved_capacity: u64 = reservations
-            .range((key.clone(), 0)..=(key.clone(), u64::MAX))
+            .range((key.clone(), 0)..=(key, u64::MAX))
             .map(|(_, data)| data.capacity)
             .sum();
 

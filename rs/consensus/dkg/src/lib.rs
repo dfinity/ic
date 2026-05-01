@@ -1439,7 +1439,7 @@ mod tests {
                         node_test_id(1),
                         crypto_1,
                         pool_1.get_cache(),
-                        dgk_key_manager_1.clone(),
+                        dgk_key_manager_1,
                         MetricsRegistry::new(),
                         logger.clone(),
                     );

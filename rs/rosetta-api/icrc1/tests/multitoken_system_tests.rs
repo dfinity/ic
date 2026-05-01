@@ -157,7 +157,7 @@ impl Icrc1LedgerBuilder {
             canister_id: self.canister_id,
             init_args: self.init_args_builder.build(),
             infinite_freezing_threshold: self.infinite_freezing_threshold,
-            agent: agent.clone(),
+            agent,
         }
     }
 }
@@ -563,7 +563,7 @@ fn test_multi_tokens_mode() {
                     &setup.icrc1_ledgers[1],
                     setup.port,
                 )
-                .with_args_with_caller(args_with_caller.clone())
+                .with_args_with_caller(args_with_caller)
                 .with_icrc1_symbol("SYM2".to_string());
 
                 let rosetta_env = rt.block_on(
@@ -573,7 +573,7 @@ fn test_multi_tokens_mode() {
                         .build(),
                 );
 
-                let rosetta_client = rosetta_env.rosetta_client.clone();
+                let rosetta_client = rosetta_env.rosetta_client;
 
                 // Call /network/list endpoint.
                 let network_list = rt
@@ -649,7 +649,7 @@ fn test_multi_tokens_mode_with_one_ledger_out_of_cycles() {
                     &setup.icrc1_ledgers[0],
                     setup.port,
                 )
-                .with_args_with_caller(args_with_caller.clone())
+                .with_args_with_caller(args_with_caller)
                 .with_icrc1_symbol("SYM1".to_string());
 
                 let rosetta_ledger_setup_2_builder = RosettaLedgerTestingEnvironmentBuilder::new(
@@ -666,7 +666,7 @@ fn test_multi_tokens_mode_with_one_ledger_out_of_cycles() {
                         .build(),
                 );
 
-                let rosetta_client = rosetta_env.rosetta_client.clone();
+                let rosetta_client = rosetta_env.rosetta_client;
 
                 // Call /network/list endpoint.
                 let network_list = rt
@@ -800,7 +800,7 @@ fn test_blocks() {
                         .build(),
                 );
 
-                let rosetta_client = rosetta_env.rosetta_client.clone();
+                let rosetta_client = rosetta_env.rosetta_client;
                 rt.block_on(async move {
                     if !args_with_caller.is_empty() {
                         for block in get_rosetta_blocks_from_icrc1_ledger(
@@ -960,7 +960,7 @@ fn test_block_transaction() {
                         .build(),
                 );
 
-                let rosetta_client = rosetta_env.rosetta_client.clone();
+                let rosetta_client = rosetta_env.rosetta_client;
 
                 // Wrap async calls in a blocking Block
                 rt.block_on(async {
@@ -1262,38 +1262,17 @@ fn test_network_status() {
                         );
 
                         assert_eq!(
-                            hex::encode(
-                                rosetta_blocks
-                                    .first()
-                                    .unwrap()
-                                    .clone()
-                                    .get_block_hash()
-                                    .clone()
-                            ),
+                            hex::encode(rosetta_blocks.first().unwrap().clone().get_block_hash()),
                             rosetta_response.genesis_block_identifier.hash,
                             "Genesis block hashes do not match"
                         );
                         assert_eq!(
-                            hex::encode(
-                                rosetta_blocks
-                                    .last()
-                                    .unwrap()
-                                    .clone()
-                                    .get_block_hash()
-                                    .clone()
-                            ),
+                            hex::encode(rosetta_blocks.last().unwrap().clone().get_block_hash()),
                             rosetta_response.current_block_identifier.hash,
                             "Current block hashes do not match"
                         );
                         assert_eq!(
-                            hex::encode(
-                                rosetta_blocks
-                                    .first()
-                                    .unwrap()
-                                    .clone()
-                                    .get_block_hash()
-                                    .clone()
-                            ),
+                            hex::encode(rosetta_blocks.first().unwrap().clone().get_block_hash()),
                             rosetta_response.oldest_block_identifier.unwrap().hash,
                             "Genesis block hashes do not match"
                         );
@@ -2433,7 +2412,7 @@ fn test_cli_data() {
                     &setup.icrc1_ledgers[0],
                     setup.port,
                 )
-                .with_args_with_caller(args_with_caller.clone())
+                .with_args_with_caller(args_with_caller)
                 .with_icrc1_symbol("SYM1".to_string());
                 rt.block_on(async {
                     let env = RosettaTestingEnvironmentBuilder::new(false, setup.port)

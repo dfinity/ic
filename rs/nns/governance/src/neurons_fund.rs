@@ -162,16 +162,12 @@ impl TryFrom<&NeuronsFundEconomicsPb> for NeuronsFundEconomics {
         } = neurons_fund_matched_funding_curve_coefficients;
 
         let contribution_threshold_xdr = contribution_threshold_xdr
-            .clone()
             .ok_or_else(|| Self::missing_field("contribution_threshold_xdr"))?;
 
-        let one_third_participation_milestone_xdr =
-            one_third_participation_milestone_xdr
-                .clone()
-                .ok_or_else(|| Self::missing_field("one_third_participation_milestone_xdr"))?;
+        let one_third_participation_milestone_xdr = one_third_participation_milestone_xdr
+            .ok_or_else(|| Self::missing_field("one_third_participation_milestone_xdr"))?;
 
         let full_participation_milestone_xdr = full_participation_milestone_xdr
-            .clone()
             .ok_or_else(|| Self::missing_field("full_participation_milestone_xdr"))?;
 
         // Second, convert all serialized Decimals into internal Rust types.

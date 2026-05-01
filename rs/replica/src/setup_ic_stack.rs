@@ -193,7 +193,7 @@ pub fn construct_ic_stack(
         subnet_id,
         subnet_type,
         config.hypervisor.clone(),
-        subnet_config.clone(),
+        subnet_config,
         state_manager.clone(),
         state_manager.get_fd_factory(),
         completed_execution_messages_tx,

@@ -2128,7 +2128,7 @@ mod test {
             account: Some(to_account_identifier),
             amount: Some(Amount::new(
                 BigInt::from(100000000_i64), // +1 ICP
-                currency.clone(),
+                currency,
             )),
             coin_change: None,
             metadata: None,

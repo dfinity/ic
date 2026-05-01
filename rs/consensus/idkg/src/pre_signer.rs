@@ -498,7 +498,7 @@ impl IDkgPreSignerImpl {
                                 "validate_dealing_support",
                             ) else {
                                 return Some(IDkgChangeAction::HandleInvalid(
-                                    id.clone(),
+                                    id,
                                     format!("Failed to translate transcript_params_ref: {support}"),
                                 ));
                             };
@@ -3030,7 +3030,7 @@ mod tests {
                         .or_default()
                         .insert(support_1.sig_share.signer);
                     valid_dealing_supports
-                        .entry(validated_id_2.clone())
+                        .entry(validated_id_2)
                         .or_default()
                         .insert(support_2.sig_share.signer);
                     valid_dealing_supports
@@ -3152,7 +3152,7 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) = create_pre_signer_dependencies_with_crypto(
                     pool_config,
-                    logger.clone(),
+                    logger,
                     Some(crypto.clone()),
                 );
 

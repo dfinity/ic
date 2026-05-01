@@ -526,7 +526,7 @@ fn induct_messages_to_self_guaranteed_response_callback_gone() {
 
     // Pop and execute it, producing a response.
     assert_eq!(Some(CanisterMessage::Request(request)), fixture.pop_input());
-    fixture.push_output_response(response.clone());
+    fixture.push_output_response(response);
 
     // Pretend that a duplicate response has consumed the callback.
     assert_matches!(
@@ -613,7 +613,7 @@ fn time_out_callbacks() {
     // Pop `rep2`.
     assert_eq!(
         Some(CanisterMessage::Response {
-            response: rep2.clone(),
+            response: rep2,
             callback: c2
         }),
         fixture.pop_input()

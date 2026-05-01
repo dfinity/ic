@@ -51,7 +51,7 @@ fn test_manage_ledger_parameters_change_transfer_fee() {
         &state_machine,
         sns_canisters.governance_canister_id,
         user,
-        neuron.clone(),
+        neuron,
         Proposal {
             title: "Change ledger transfer fee".to_string(),
             action: Some(Action::ManageLedgerParameters(ManageLedgerParameters {
@@ -165,7 +165,7 @@ fn test_manage_ledger_parameters_change_name_and_symbol_and_logo() {
         &state_machine,
         sns_canisters.governance_canister_id,
         user,
-        neuron.clone(),
+        neuron,
         Proposal {
             title: "Change ledger transfer fee".to_string(),
             action: Some(Action::ManageLedgerParameters(ManageLedgerParameters {

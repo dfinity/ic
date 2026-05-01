@@ -200,7 +200,7 @@ fn test_add_neurons() {
     assert!(is_neuron_in_stable(active_neuron.id()));
     let active_neuron_read_result =
         neuron_store.with_neuron(&active_neuron.id(), |neuron| neuron.clone());
-    assert_eq!(active_neuron_read_result, Ok(active_neuron.clone()));
+    assert_eq!(active_neuron_read_result, Ok(active_neuron));
 
     // Step 3.2: verify that inactive neuron is in the stable neuron store, not in the heap, and can
     // be read.
@@ -212,7 +212,7 @@ fn test_add_neurons() {
     // Step 3.3: verify that the inactive neuron can also be read from neuron store.
     let inactive_neuron_in_neuron_store =
         neuron_store.with_neuron(&inactive_neuron.id(), |neuron| neuron.clone());
-    assert_eq!(inactive_neuron_in_neuron_store, Ok(inactive_neuron.clone()));
+    assert_eq!(inactive_neuron_in_neuron_store, Ok(inactive_neuron));
 }
 
 #[test]
@@ -618,9 +618,7 @@ fn test_prune_some_following_super_strict_voting_power_refresh() {
 
     // Similar to fresh_neuron, except voting power was refrshed a "long" time
     // ago.
-    let mut stale_neuron = simple_neuron_builder(3)
-        .with_followees(followees.clone())
-        .build();
+    let mut stale_neuron = simple_neuron_builder(3).with_followees(followees).build();
     stale_neuron.refresh_voting_power(CREATED_TIMESTAMP_SECONDS - 7 * ONE_MONTH_SECONDS - 1);
 
     let mut neuron_store = NeuronStore::new(btreemap! {

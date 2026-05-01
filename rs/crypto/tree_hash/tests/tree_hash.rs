@@ -3445,10 +3445,10 @@ fn pruned_mixed_hash_tree() {
         label_b_4_3 => LabeledTree::Leaf(Vec::from("contents_b_4_3")));
     let subtree_b_map = flatmap!(
         label_b_2.clone() => LabeledTree::SubTree(FlatMap::new()),
-        label_b_4 => LabeledTree::SubTree(subtree_b_4_map.clone()),
+        label_b_4 => LabeledTree::SubTree(subtree_b_4_map),
     );
     let root_map = flatmap!(
-        label_a.clone() => LabeledTree::SubTree(subtree_a_map.clone()),
+        label_a.clone() => LabeledTree::SubTree(subtree_a_map),
         label_b.clone() => LabeledTree::SubTree(subtree_b_map),
         label_c => LabeledTree::Leaf(Vec::from("contents_c")),
     );

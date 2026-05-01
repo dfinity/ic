@@ -85,7 +85,7 @@ impl Step for RetireElectedVersions {
 
         let proposal_id = rt.block_on(submit_update_elected_replica_versions_proposal(
             &governance_canister,
-            proposal_sender.clone(),
+            proposal_sender,
             test_neuron_id,
             None,
             None,

@@ -313,20 +313,19 @@ fn test_search_transactions_by_account() {
                                 result.clone().into_iter().all(|block_transaction| {
                                     block_transaction.transaction.operations.into_iter().any(
                                         |operation| {
-                                            let involved_accounts =
-                                                if operation.type_.as_str() == "APPROVE" {
-                                                    vec![
-                                                        operation.account.unwrap(),
-                                                        ApproveMetadata::try_from(
-                                                            operation.metadata.clone(),
-                                                        )
+                                            let involved_accounts = if operation.type_.as_str()
+                                                == "APPROVE"
+                                            {
+                                                vec![
+                                                    operation.account.unwrap(),
+                                                    ApproveMetadata::try_from(operation.metadata)
                                                         .unwrap()
                                                         .spender
                                                         .into(),
-                                                    ]
-                                                } else {
-                                                    vec![operation.account.unwrap()]
-                                                };
+                                                ]
+                                            } else {
+                                                vec![operation.account.unwrap()]
+                                            };
                                             involved_accounts.contains(&search_account)
                                         },
                                     )

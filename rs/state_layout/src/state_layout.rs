@@ -2023,7 +2023,7 @@ impl CheckpointLayout<ReadOnly> {
         match std::fs::remove_file(&marker) {
             Err(err) if err.kind() != std::io::ErrorKind::NotFound => {
                 return Err(LayoutError::IoError {
-                    path: marker.to_path_buf(),
+                    path: marker,
                     message: "failed to remove file from disk".to_string(),
                     io_err: err,
                 });
@@ -2065,7 +2065,7 @@ impl CheckpointLayout<ReadOnly> {
         match std::fs::remove_file(&marker) {
             Err(err) if err.kind() != std::io::ErrorKind::NotFound => {
                 return Err(LayoutError::IoError {
-                    path: marker.to_path_buf(),
+                    path: marker,
                     message: "failed to remove file from disk".to_string(),
                     io_err: err,
                 });

@@ -329,7 +329,7 @@ fn should_correctly_serialize_and_deserialize_nidkg_config() {
 
     // Serialization/deserialization with protobuf
     let config_proto = pb::NiDkgConfig::from(&config);
-    assert_eq!(config.clone(), NiDkgConfig::try_from(config_proto).unwrap());
+    assert_eq!(config, NiDkgConfig::try_from(config_proto).unwrap());
 
     // Serialization/deserialization with serde
     let config_cbor = serde_cbor::to_vec(&config).unwrap();

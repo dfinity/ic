@@ -19,7 +19,7 @@ pub trait Step: Sync + Send {
         let logger = env.logger();
         info!(logger, "Running step: {}", self.name());
 
-        self.execute(env.clone(), rt.clone()).map_err(|e| {
+        self.execute(env.clone(), rt).map_err(|e| {
             let formatted = format!("Step `{}` failed with error: {:?}", self.name(), e);
             env.emit_report(formatted);
             e

@@ -151,7 +151,7 @@ async fn upgrade_sns_controlled_canister_with_large_wasm() {
     let cli_arg = UpgradeSnsControlledCanisterArgs {
         sns_neuron_id: Some(ParsedSnsNeuron(sns_neuron_id)),
         target_canister_id,
-        wasm_path: very_large_wasm_path().clone(),
+        wasm_path: very_large_wasm_path(),
         candid_arg: None,
         proposal_url: Url::try_from(
             "https://github.com/dfinity/examples/tree/master/rust/image-classification",

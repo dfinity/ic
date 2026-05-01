@@ -31,7 +31,7 @@ impl<'a> Arbitrary<'a> for MaybeInvalidModule {
         config.allow_invalid_funcs = true;
         config.memory_offset_choices = MemoryOffsetChoices(40, 20, 40);
         Ok(MaybeInvalidModule {
-            module: Module::new(config.clone(), u)?,
+            module: Module::new(config, u)?,
         })
     }
 }

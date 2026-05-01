@@ -300,12 +300,12 @@ where
     let state_manager = Arc::new(FakeStateManager::new());
 
     let execution_services = ExecutionServicesForTesting::setup_execution(
-        log.clone(),
+        log,
         &metrics_registry,
         own_subnet_id,
         own_subnet_type,
-        config.clone(),
-        subnet_configs.clone(),
+        config,
+        subnet_configs,
         state_manager.clone(),
         state_manager.get_fd_factory(),
         completed_execution_messages_tx,

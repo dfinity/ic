@@ -792,8 +792,8 @@ mod withdraw_erc20 {
                         chain_id: Nat::from(1_u8),
                         nonce: Nat::from(0_u8),
                         max_priority_fee_per_gas: 1_500_000_000_u64.into(),
-                        max_fee_per_gas: estimated_max_fee_per_gas.clone(),
-                        gas_limit: estimated_gas_limit.clone(),
+                        max_fee_per_gas: estimated_max_fee_per_gas,
+                        gas_limit: estimated_gas_limit,
                         destination: deposit_params.token().erc20_contract_address.clone(),
                         value: 0_u8.into(),
                         data: ByteBuf::from(erc20_transfer_data(
@@ -846,7 +846,7 @@ mod withdraw_erc20 {
                 ckerc20
                     .check_events()
                     .assert_has_unique_events_in_order(&[EventPayload::ReimbursedErc20Withdrawal {
-                        withdrawal_id: cketh_block_index.clone(),
+                        withdrawal_id: cketh_block_index,
                         burn_in_block: ckerc20_block_index.clone(),
                         reimbursed_in_block: Nat::from(3_u8),
                         ledger_id: deposit_params.token().ledger_canister_id,
@@ -1391,7 +1391,7 @@ fn should_deposit_cketh_and_ckerc20() {
             })),
             ..DepositCkErc20WithSubaccountParams::new(
                 ONE_USDC,
-                ckusdc.clone(),
+                ckusdc,
                 Account {
                     owner: caller,
                     subaccount: ckusdc_subaccount,
@@ -1418,7 +1418,7 @@ fn should_deposit_cketh_and_ckerc20() {
             })),
             ..DepositCkErc20WithSubaccountParams::new(
                 ONE_USDC,
-                ckusdc.clone(),
+                ckusdc,
                 Account {
                     owner: caller,
                     subaccount: ckusdc_subaccount,
@@ -1628,7 +1628,7 @@ fn should_fail_to_mint_from_unsupported_erc20_contract_address() {
             ONE_USDC,
             CkErc20Token {
                 erc20_contract_address: unsupported_erc20_address.to_string(),
-                ..ckusdc.clone()
+                ..ckusdc
             },
         ))
         .expect_no_mint()
@@ -1790,7 +1790,7 @@ fn should_scrape_from_last_scraped_after_upgrade() {
             "fromBlock": first_from_block,
             "toBlock": first_to_block,
             "address": [ERC20_HELPER_CONTRACT_ADDRESS],
-            "topics": [ckerc20.received_erc20_event_topic(), erc20_topics.clone()]
+            "topics": [ckerc20.received_erc20_event_topic(), erc20_topics]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -1801,7 +1801,7 @@ fn should_scrape_from_last_scraped_after_upgrade() {
             "fromBlock": second_from_block,
             "toBlock": second_to_block,
             "address": [ERC20_HELPER_CONTRACT_ADDRESS],
-            "topics": [ckerc20.received_erc20_event_topic(), erc20_topics.clone()]
+            "topics": [ckerc20.received_erc20_event_topic(), erc20_topics]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -1851,7 +1851,7 @@ fn should_scrape_from_last_scraped_after_upgrade() {
             "fromBlock": first_from_block,
             "toBlock": first_to_block,
             "address": [ERC20_HELPER_CONTRACT_ADDRESS],
-            "topics": [ckerc20.received_erc20_event_topic(), erc20_topics.clone()]
+            "topics": [ckerc20.received_erc20_event_topic(), erc20_topics]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -1947,7 +1947,7 @@ fn should_skip_single_block_containing_too_many_events() {
     let deposit = DepositCkErc20Params::new(ONE_USDC, ckusdc).to_log_entry();
     // around 680 bytes per log
     // we need at least 3085 logs to reach the 2MB limit
-    let large_amount_of_logs = multi_logs_for_single_transaction(deposit.clone(), 3_100);
+    let large_amount_of_logs = multi_logs_for_single_transaction(deposit, 3_100);
     assert!(serde_json::to_vec(&large_amount_of_logs).unwrap().len() > 2_000_000);
 
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
@@ -2013,7 +2013,7 @@ fn should_skip_single_block_containing_too_many_events() {
             "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 2),
             "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3),
             "address": [ERC20_HELPER_CONTRACT_ADDRESS],
-            "topics": [ckerc20.received_erc20_event_topic(), erc20_topics.clone()]
+            "topics": [ckerc20.received_erc20_event_topic(), erc20_topics]
         }]))
         .with_max_response_bytes(ckerc20.as_ref().all_eth_get_logs_response_size_estimates()[0])
         .respond_for_all_with(empty_logs())

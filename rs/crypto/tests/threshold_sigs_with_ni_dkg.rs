@@ -1075,7 +1075,7 @@ mod verification_failures {
 
         // Corrupt the first byte which contains BLS curve point encoding flags.
         // This creates an invalid point encoding that can't be parsed.
-        let mut corrupted_bytes = sig_share.get().0.clone();
+        let mut corrupted_bytes = sig_share.get().0;
         corrupted_bytes[0] ^= 0xFF;
         let corrupted_sig_share: ThresholdSigShareOf<SignableMock> =
             ThresholdSigShareOf::new(ThresholdSigShare(corrupted_bytes));

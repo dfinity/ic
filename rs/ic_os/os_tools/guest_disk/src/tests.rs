@@ -541,7 +541,7 @@ fn assert_verification_result_with_tampered_luks_parameters(
     expected_error: &str,
 ) {
     let mut fixture = TestFixture::new(enable_trusted_execution_environment);
-    let device_path = fixture.device.path().unwrap().to_path_buf();
+    let device_path = fixture.device.path().unwrap();
     // Reuse the same key material the implementation would use to open the device.
     // In the TEE case the key is derived from the SEV measurement and never persisted,
     // while in the non-TEE case we first let the implementation format the device so it

@@ -450,7 +450,7 @@ mod tests {
         let content = HttpCallContent::Call { update };
         let envelope = HttpRequestEnvelope::<HttpCallContent> {
             content,
-            sender_pubkey: Some(Blob(sender_pubkey.clone())),
+            sender_pubkey: Some(Blob(sender_pubkey)),
             sender_sig: Some(Blob(sender_sig)),
             sender_delegation: Some(vec![SignedDelegation::new(
                 Delegation::new(

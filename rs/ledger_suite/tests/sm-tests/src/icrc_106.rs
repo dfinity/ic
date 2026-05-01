@@ -22,12 +22,8 @@ pub fn test_icrc106_supported_even_if_index_not_set<T, U>(
 
     let args = encode_upgrade_args(None);
     let encoded_upgrade_args = Encode!(&args).unwrap();
-    env.upgrade_canister(
-        ledger_canister_id,
-        ledger_wasm,
-        encoded_upgrade_args.clone(),
-    )
-    .expect("should successfully upgrade ledger canister");
+    env.upgrade_canister(ledger_canister_id, ledger_wasm, encoded_upgrade_args)
+        .expect("should successfully upgrade ledger canister");
 
     assert_index_not_set(&env, ledger_canister_id, true);
 }
@@ -48,7 +44,7 @@ pub fn test_icrc106_set_index_in_install<T>(
     });
     env.install_existing_canister(
         ledger_canister_id,
-        ledger_wasm.clone(),
+        ledger_wasm,
         Encode!(&ledger_init_args).unwrap(),
     )
     .expect("should successfully install ledger canister");
@@ -72,7 +68,7 @@ pub fn test_icrc106_set_index_in_install_with_mainnet_ledger_wasm<T>(
     });
     env.install_existing_canister(
         ledger_canister_id,
-        ledger_wasm.clone(),
+        ledger_wasm,
         Encode!(&ledger_init_args).unwrap(),
     )
     .expect("should successfully install ledger canister");
@@ -123,12 +119,8 @@ pub fn test_upgrade_downgrade_with_mainnet_ledger<T, U>(
 
     // Upgrade to a ledger version that supports ICRC-106, but does not set the index principal
     let encoded_empty_upgrade_args = Encode!(&encode_empty_upgrade_args()).unwrap();
-    env.upgrade_canister(
-        canister_id,
-        ledger_wasm.clone(),
-        encoded_empty_upgrade_args.clone(),
-    )
-    .expect("should successfully upgrade ledger canister");
+    env.upgrade_canister(canister_id, ledger_wasm.clone(), encoded_empty_upgrade_args)
+        .expect("should successfully upgrade ledger canister");
     assert_index_not_set(&env, canister_id, true);
 
     // Self-upgrade to a ledger version and set the index principal

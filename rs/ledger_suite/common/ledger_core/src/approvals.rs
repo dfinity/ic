@@ -223,7 +223,7 @@ where
             .get_allowance(&(account.clone(), spender.clone()))
         {
             Some(allowance) if allowance.expires_at.unwrap_or_else(remote_future) > now => {
-                allowance.clone()
+                allowance
             }
             _ => Allowance::default(),
         }

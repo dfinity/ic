@@ -139,7 +139,7 @@ fn add_dummy_data() {
     add_record_helper(&node_3_k, 39667, Some(node_3_v.clone()), "2025-07-11");
     add_record_helper(&node_3_k, 39670, None::<NodeRecord>, "2025-07-13");
     add_record_helper(&node_3_k, 39675, Some(node_3_v.clone()), "2025-07-15");
-    add_record_helper(&node_4_k, 39676, Some(node_4_v.clone()), "2025-07-16");
+    add_record_helper(&node_4_k, 39676, Some(node_4_v), "2025-07-16");
     add_record_helper(&node_3_k, 39676, None::<NodeRecord>, "2025-07-16");
     add_record_helper(&node_3_k, 39677, Some(node_3_v), "2025-07-16");
 }

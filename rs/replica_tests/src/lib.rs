@@ -348,7 +348,7 @@ where
                 config.clone(),
                 temp_node,
                 subnet_id,
-                registry.clone(),
+                registry,
                 crypto,
                 None,
                 ic_tracing::ReloadHandles::new(tracing_subscriber::reload::Layer::new(vec![]).1),

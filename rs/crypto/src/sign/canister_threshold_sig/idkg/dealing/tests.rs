@@ -147,7 +147,7 @@ mod verify_dealing_public {
             let mut registry_client = MockRegistryClient::new();
             registry_client
                 .expect_get_value()
-                .return_const(Err(registry_client_error.clone()));
+                .return_const(Err(registry_client_error));
             let mut csp = MockAllCryptoServiceProvider::new();
             csp.expect_verify().never();
             Setup {

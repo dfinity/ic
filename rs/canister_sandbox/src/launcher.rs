@@ -223,7 +223,7 @@ impl LauncherService for LauncherServer {
             socket,
         }: LaunchCompilerRequest,
     ) -> rpc::Call<LaunchCompilerReply> {
-        let mut args = argv.clone();
+        let mut args = argv;
         args.push("--embedder-config".to_string());
         args.push(self.embedder_config_arg.clone());
 

@@ -430,7 +430,7 @@ pub fn test_ledger_http_request_decoding_quota<T>(
 ) where
     T: CandidType,
 {
-    let (env, canister_id) = setup(ledger_wasm.clone(), encode_init_args, vec![]);
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
 
     test_http_request_decoding_quota(&env, canister_id);
 }
@@ -1432,10 +1432,7 @@ where
         block_range_start: NUM_BLOCKS_TO_ARCHIVE.into(),
         block_range_end: (2 * NUM_BLOCKS_TO_ARCHIVE - 1).into(),
     };
-    assert_eq!(
-        archive_info,
-        vec![first_archive.clone(), second_archive.clone()]
-    );
+    assert_eq!(archive_info, vec![first_archive, second_archive.clone()]);
 
     assert_eq!(
         env.canister_status_as(
@@ -1754,7 +1751,7 @@ pub fn block_encoding_agreed_with_the_icrc107_schema<Tokens: TokensType>() {
     });
     runner
         .run(&arb_fee_collector_block::<Tokens>(), |block| {
-            let encoded_block = generic_block_to_encoded_block(block.clone().into()).expect("");
+            let encoded_block = generic_block_to_encoded_block(block.into()).expect("");
             let generic_block = encoded_block_to_generic_block(&encoded_block);
             if let Err(errors) = icrc107::schema::validate(&generic_block) {
                 panic!("generic_block: {generic_block:?}, errors:\n{errors}");
@@ -2292,7 +2289,7 @@ pub fn test_downgrade_from_incompatible_version<T>(
     // Downgrade to current not possible.
     match env.upgrade_canister(
         canister_id,
-        ledger_wasm.clone(),
+        ledger_wasm,
         Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
     ) {
         Ok(_) => {
@@ -2939,7 +2936,7 @@ where
 
     args.take = Some(Nat::from(1_u64));
 
-    let allowances_take = list_allowances(&env, canister_id, approver.owner, args.clone())
+    let allowances_take = list_allowances(&env, canister_id, approver.owner, args)
         .expect("failed to list allowances");
     assert_eq!(allowances_take.len(), 1);
     assert_eq!(allowances_take[0], allowances[0]);
@@ -3017,7 +3014,7 @@ pub fn test_allowance_listing_subaccount<T>(
         prev_spender: None,
         take: None,
     };
-    let allowances = list_allowances(&env, canister_id, approver_none.owner, args.clone())
+    let allowances = list_allowances(&env, canister_id, approver_none.owner, args)
         .expect("failed to list allowances");
     assert_eq!(allowances.len(), 1);
 
@@ -3029,7 +3026,7 @@ pub fn test_allowance_listing_subaccount<T>(
         prev_spender: None,
         take: None,
     };
-    let allowances = list_allowances(&env, canister_id, approver_none.owner, args.clone())
+    let allowances = list_allowances(&env, canister_id, approver_none.owner, args)
         .expect("failed to list allowances");
     assert_eq!(allowances.len(), 1);
 
@@ -3039,7 +3036,7 @@ pub fn test_allowance_listing_subaccount<T>(
         prev_spender: Some(spender_none),
         take: None,
     };
-    let allowances = list_allowances(&env, canister_id, approver_none.owner, args.clone())
+    let allowances = list_allowances(&env, canister_id, approver_none.owner, args)
         .expect("failed to list allowances");
     assert_eq!(allowances.len(), 0);
 
@@ -3049,7 +3046,7 @@ pub fn test_allowance_listing_subaccount<T>(
         prev_spender: Some(spender_default),
         take: None,
     };
-    let allowances = list_allowances(&env, canister_id, approver_none.owner, args.clone())
+    let allowances = list_allowances(&env, canister_id, approver_none.owner, args)
         .expect("failed to list allowances");
     assert_eq!(allowances.len(), 0);
 
@@ -3059,7 +3056,7 @@ pub fn test_allowance_listing_subaccount<T>(
         prev_spender: None,
         take: None,
     };
-    let allowances = list_allowances(&env, canister_id, approver_default.owner, args.clone())
+    let allowances = list_allowances(&env, canister_id, approver_default.owner, args)
         .expect("failed to list allowances");
     assert_eq!(allowances.len(), 1);
 
@@ -3800,7 +3797,7 @@ Charged for processing the transfer.
     );
 
     // If the from account is anonymous, the message should not include the account information.
-    args.arg = Encode!(&transfer_args.clone()).unwrap();
+    args.arg = Encode!(&transfer_args).unwrap();
     let message = extract_icrc21_message_string(
         &icrc21_consent_message(env, canister_id, Principal::anonymous(), args.clone())
             .unwrap()
@@ -4022,7 +4019,7 @@ Charged for processing the approval.
     );
 
     // If the approver is anonymous, the message should not include the approver information.
-    args.arg = Encode!(&approve_args.clone()).unwrap();
+    args.arg = Encode!(&approve_args).unwrap();
     let message = extract_icrc21_message_string(
         &icrc21_consent_message(env, canister_id, Principal::anonymous(), args.clone())
             .unwrap()
@@ -4083,7 +4080,7 @@ Charged for processing the approval.
     // If memo is not specified it should not be included.
     args.arg = Encode!(&ApproveArgs {
         memo: None,
-        ..approve_args.clone()
+        ..approve_args
     })
     .unwrap();
 
@@ -4197,7 +4194,7 @@ Charged for processing the transfer.
     );
 
     // If the spender is anonymous, the message should not include the spender account information.
-    args.arg = Encode!(&transfer_from_args.clone()).unwrap();
+    args.arg = Encode!(&transfer_from_args).unwrap();
     let message = extract_icrc21_message_string(
         &icrc21_consent_message(env, canister_id, Principal::anonymous(), args.clone())
             .unwrap()
@@ -4229,7 +4226,7 @@ Charged for processing the transfer.
     // If memo is not specified it should not be included.
     args.arg = Encode!(&TransferFromArgs {
         memo: None,
-        ..transfer_from_args.clone()
+        ..transfer_from_args
     })
     .unwrap();
 
@@ -4366,8 +4363,8 @@ where
     };
     args.arg = Encode!(&transfer_from_args).unwrap();
     args.method = "icrc2_transfer_from".to_owned();
-    let error = icrc21_consent_message(&env, canister_id, Principal::anonymous(), args.clone())
-        .unwrap_err();
+    let error =
+        icrc21_consent_message(&env, canister_id, Principal::anonymous(), args).unwrap_err();
     errors.push(error);
 
     for error in errors {
@@ -4393,7 +4390,7 @@ pub fn test_cycles_for_archive_creation_default_spawns_archive<T>(
 
     let subnet_config = SubnetConfig::new(SubnetType::Application);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
-        subnet_config.clone(),
+        subnet_config,
         HypervisorConfig::default(),
     ));
 
@@ -4579,7 +4576,7 @@ pub mod metadata {
         let ledger_upgrade_arg = LedgerArgument::Upgrade(Some(UpgradeArgs::default()));
         env.upgrade_canister(
             canister_id,
-            ledger_wasm.clone(),
+            ledger_wasm,
             Encode!(&ledger_upgrade_arg).unwrap(),
         )
         .expect("should successfully upgrade the ledger");
@@ -4728,7 +4725,7 @@ pub mod archiving {
         let args = Encode!(&args).unwrap();
         let ledger_id = env
             .install_canister_with_cycles(
-                ledger_wasm.clone(),
+                ledger_wasm,
                 args,
                 None,
                 Cycles::new((0.9 * DEFAULT_CYCLES_FOR_ARCHIVE_CREATION as f64) as u128),
@@ -4810,9 +4807,7 @@ pub mod archiving {
             ..init_args(initial_balances)
         });
         let args = Encode!(&args).unwrap();
-        let ledger_id = env
-            .install_canister(ledger_wasm.clone(), args, None)
-            .unwrap();
+        let ledger_id = env.install_canister(ledger_wasm, args, None).unwrap();
 
         // Assert no archives exist.
         assert!(get_archives(&env, ledger_id).is_empty());
@@ -4894,7 +4889,7 @@ pub mod archiving {
         let args = Encode!(&args).unwrap();
         let ledger_id = env
             .install_canister_with_cycles(
-                ledger_wasm.clone(),
+                ledger_wasm,
                 args,
                 None,
                 Cycles::new(
@@ -5000,9 +4995,7 @@ pub mod archiving {
             ..init_args(initial_balances)
         });
         let args = Encode!(&args).unwrap();
-        let ledger_id = env
-            .install_canister(ledger_wasm.clone(), args, None)
-            .unwrap();
+        let ledger_id = env.install_canister(ledger_wasm, args, None).unwrap();
         env.add_cycles(
             ledger_id,
             DEFAULT_CYCLES_FOR_ARCHIVE_CREATION.checked_mul(10).unwrap() as u128,
@@ -5092,9 +5085,7 @@ pub mod archiving {
             ..init_args(initial_balances)
         });
         let args = Encode!(&args).unwrap();
-        let ledger_id = env
-            .install_canister(ledger_wasm.clone(), args, None)
-            .unwrap();
+        let ledger_id = env.install_canister(ledger_wasm, args, None).unwrap();
 
         // Assert no archives exist.
         assert!(get_archives(&env, ledger_id).is_empty());
@@ -5223,9 +5214,7 @@ pub mod archiving {
             ..init_args(initial_balances)
         });
         let args = Encode!(&args).unwrap();
-        let ledger_id = env
-            .install_canister(ledger_wasm.clone(), args, None)
-            .unwrap();
+        let ledger_id = env.install_canister(ledger_wasm, args, None).unwrap();
 
         // Assert no archives exist.
         assert!(get_archives(&env, ledger_id).is_empty());
@@ -5352,9 +5341,7 @@ pub mod archiving {
             ..init_args(initial_balances)
         });
         let args = Encode!(&args).unwrap();
-        let ledger_id = env
-            .install_canister(ledger_wasm.clone(), args, None)
-            .unwrap();
+        let ledger_id = env.install_canister(ledger_wasm, args, None).unwrap();
 
         // Assert no archives exist.
         assert!(get_archive_count(&env, ledger_id).is_empty());
@@ -5464,9 +5451,7 @@ pub mod archiving {
             ..init_args(initial_balances)
         });
         let args = Encode!(&args).unwrap();
-        let ledger_id = env
-            .install_canister(ledger_wasm.clone(), args, None)
-            .unwrap();
+        let ledger_id = env.install_canister(ledger_wasm, args, None).unwrap();
 
         let get_blocks_res = get_blocks_fn(&env, ledger_id, (MAX_BLOCKS_TO_ARCHIVE - 1) as u64, 1);
         let initial_chain_length = get_blocks_res.chain_length;

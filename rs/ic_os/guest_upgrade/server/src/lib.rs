@@ -128,7 +128,7 @@ impl DiskEncryptionKeyExchangeServerAgent {
         // Tell the host to start the Upgrade VM.
         self.vsock_client
             .send_command(Command::StartUpgradeGuestVM)
-            .map_err(|err| DiskEncryptionKeyExchangeError::UpgradeVmError(err.to_string()))?;
+            .map_err(DiskEncryptionKeyExchangeError::UpgradeVmError)?;
 
         // Wait for status.
         match tokio::time::timeout(self.success_timeout, status_receiver.changed()).await {

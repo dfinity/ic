@@ -2129,7 +2129,7 @@ fn test_malicious_input() {
                   )"#,
         ).unwrap();
 
-    let canister_id = create_canister_with_cycles(&env, wasm.clone(), None, INITIAL_CYCLES_BALANCE);
+    let canister_id = create_canister_with_cycles(&env, wasm, None, INITIAL_CYCLES_BALANCE);
 
     helper_tests_for_illegal_wasm_memory_access(&env, &canister_id);
 

@@ -52,7 +52,7 @@ fn get_delegation_bench(
         let certificate: Certificate = serde_cbor::from_slice(&delegation.certificate).unwrap();
         let builder = NNSDelegationBuilder::new(
             certificate.clone(),
-            LabeledTree::try_from(certificate.tree.clone()).unwrap(),
+            LabeledTree::try_from(certificate.tree).unwrap(),
             Blob(vec![]),
             SUBNET_0,
             &no_op_logger(),

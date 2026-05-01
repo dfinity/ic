@@ -441,7 +441,7 @@ mod eth_transactions {
                 let mut rng = reproducible_rng();
                 let [withdrawal_request] = create_and_record_ck_withdrawal_requests(&mut transactions, &mut rng);
                 let tx_with_wrong_nonce = create_transaction(
-                    &withdrawal_request.clone(),
+                    &withdrawal_request,
                     wrong_nonce,
                     gas_fee_estimate(),
                     CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
@@ -925,7 +925,7 @@ mod eth_transactions {
             };
 
             let resubmitted_txs = transactions
-                .create_resubmit_transactions(TransactionCount::from(30_u8), higher_price.clone());
+                .create_resubmit_transactions(TransactionCount::from(30_u8), higher_price);
             assert_eq!(resubmitted_txs.len(), 70);
             for (i, (withdrawal_id, resubmitted_tx)) in resubmitted_txs
                 .into_iter()
@@ -977,7 +977,7 @@ mod eth_transactions {
             };
             let resubmitted_txs = transactions.create_resubmit_transactions(
                 TransactionCount::from(30_u8),
-                higher_base_fee_per_gas_price.clone(),
+                higher_base_fee_per_gas_price,
             );
             assert_eq!(resubmitted_txs, vec![]);
 
@@ -990,7 +990,7 @@ mod eth_transactions {
             };
             let resubmitted_txs = transactions.create_resubmit_transactions(
                 TransactionCount::from(30_u8),
-                higher_max_priority_fee_per_gas_price.clone(),
+                higher_max_priority_fee_per_gas_price,
             );
             assert_eq!(resubmitted_txs.len(), 70);
             for (i, (withdrawal_id, resubmitted_tx)) in resubmitted_txs
@@ -1015,10 +1015,8 @@ mod eth_transactions {
                 base_fee_per_gas: DEFAULT_CKERC20_MAX_FEE_PER_GAS,
                 max_priority_fee_per_gas: WeiPerGas::ONE,
             };
-            let resubmitted_txs = transactions.create_resubmit_transactions(
-                TransactionCount::from(30_u8),
-                too_high_price.clone(),
-            );
+            let resubmitted_txs = transactions
+                .create_resubmit_transactions(TransactionCount::from(30_u8), too_high_price);
             assert_eq!(
                 resubmitted_txs,
                 vec![Err(ResubmitTransactionError::InsufficientTransactionFee {
@@ -1204,8 +1202,8 @@ mod eth_transactions {
                 transactions.record_withdrawal_request(withdrawal_request.clone());
                 let created_tx = create_and_record_transaction(
                     &mut transactions,
-                    withdrawal_request.clone(),
-                    initial_price.clone(),
+                    withdrawal_request,
+                    initial_price,
                 );
                 let _signed_tx =
                     create_and_record_signed_transaction(&mut transactions, created_tx.clone());
@@ -1321,7 +1319,7 @@ mod eth_transactions {
             let first_tx =
                 create_and_record_signed_transaction(&mut transactions, first_created_tx.clone());
             let last_first_tx =
-                resubmit_transaction_with_bumped_price(&mut transactions, first_created_tx.clone());
+                resubmit_transaction_with_bumped_price(&mut transactions, first_created_tx);
 
             let second_created_tx = create_and_record_transaction(
                 &mut transactions,
@@ -1329,7 +1327,7 @@ mod eth_transactions {
                 gas_fee_estimate(),
             );
             let second_tx =
-                create_and_record_signed_transaction(&mut transactions, second_created_tx.clone());
+                create_and_record_signed_transaction(&mut transactions, second_created_tx);
             assert_eq!(
                 vec![
                     (
@@ -1427,7 +1425,7 @@ mod eth_transactions {
                     withdrawal_request,
                     gas_fee_estimate(),
                 );
-                create_and_record_signed_transaction(transactions, created_tx.clone())
+                create_and_record_signed_transaction(transactions, created_tx)
             }
 
             let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
@@ -1565,7 +1563,7 @@ mod eth_transactions {
             assert!(!transactions.maybe_reimburse.is_empty());
 
             let receipt = transaction_receipt(&signed_tx, TransactionStatus::Success);
-            transactions.record_finalized_transaction(cketh_ledger_burn_index, receipt.clone());
+            transactions.record_finalized_transaction(cketh_ledger_burn_index, receipt);
 
             assert!(transactions.maybe_reimburse.is_empty());
             assert!(transactions.reimbursement_requests.is_empty());
@@ -1583,7 +1581,7 @@ mod eth_transactions {
             transactions.record_withdrawal_request(withdrawal_request.clone());
             let created_tx = create_and_record_transaction(
                 &mut transactions,
-                withdrawal_request.clone(),
+                withdrawal_request,
                 gas_fee_estimate(),
             );
             let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
@@ -1596,7 +1594,7 @@ mod eth_transactions {
                 receipt.effective_transaction_fee(),
                 Wei::from(4_000_000_u32)
             );
-            transactions.record_finalized_transaction(cketh_ledger_burn_index, receipt.clone());
+            transactions.record_finalized_transaction(cketh_ledger_burn_index, receipt);
 
             assert_eq!(transactions.maybe_reimburse, btreeset! {});
             assert_eq!(transactions.reimbursement_requests, btreemap! {});
@@ -1633,7 +1631,7 @@ mod eth_transactions {
                 receipt.effective_transaction_fee(),
                 withdrawal_request.max_transaction_fee
             );
-            transactions.record_finalized_transaction(cketh_ledger_burn_index, receipt.clone());
+            transactions.record_finalized_transaction(cketh_ledger_burn_index, receipt);
 
             assert_eq!(transactions.maybe_reimburse, btreeset! {});
             assert_eq!(transactions.reimbursement_requests, btreemap! {});
@@ -1782,7 +1780,7 @@ mod eth_transactions {
             );
             let signed_tx =
                 create_and_record_signed_transaction(&mut transactions, created_tx.clone());
-            transactions.record_resubmit_transaction(created_tx.clone());
+            transactions.record_resubmit_transaction(created_tx);
             assert!(
                 transactions
                     .created_tx
@@ -1979,7 +1977,7 @@ mod eth_transactions {
             );
             assert_withdrawal_status(
                 &transactions,
-                &withdrawal_request.clone().into(),
+                &withdrawal_request.into(),
                 vec![WithdrawalStatus::TxFinalized(reimbursed)],
             );
         }
@@ -2030,7 +2028,7 @@ mod eth_transactions {
             );
             assert_withdrawal_status(
                 &transactions,
-                &withdrawal_request.clone().into(),
+                &withdrawal_request.into(),
                 vec![WithdrawalStatus::TxFinalized(reimbursed)],
             );
         }
@@ -2072,7 +2070,7 @@ mod eth_transactions {
             transactions.transaction_status(&cketh_ledger_burn_index),
             RetrieveEthStatus::NotFound
         );
-        assert_withdrawal_status(transactions, &withdrawal_request.clone(), vec![]);
+        assert_withdrawal_status(transactions, &withdrawal_request, vec![]);
         transactions.record_withdrawal_request(withdrawal_request.clone());
         assert_eq!(
             transactions.transaction_status(&cketh_ledger_burn_index),
@@ -2080,7 +2078,7 @@ mod eth_transactions {
         );
         assert_withdrawal_status(
             transactions,
-            &withdrawal_request.clone(),
+            &withdrawal_request,
             vec![WithdrawalStatus::Pending],
         );
 
@@ -2095,7 +2093,7 @@ mod eth_transactions {
         );
         assert_withdrawal_status(
             transactions,
-            &withdrawal_request.clone(),
+            &withdrawal_request,
             vec![WithdrawalStatus::TxCreated],
         );
 
@@ -2110,8 +2108,8 @@ mod eth_transactions {
         );
         assert_withdrawal_status(
             transactions,
-            &withdrawal_request.clone(),
-            vec![WithdrawalStatus::TxSent(eth_transaction.clone())],
+            &withdrawal_request,
+            vec![WithdrawalStatus::TxSent(eth_transaction)],
         );
 
         let receipt = transaction_receipt(&signed_tx, status);

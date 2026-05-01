@@ -82,7 +82,7 @@ fn make_bootstrap_options(
 ) -> Result<BootstrapOptions> {
     #[allow(unused_mut)]
     let mut bootstrap_options = BootstrapOptions {
-        guestos_config: Some(guestos_config.clone()),
+        guestos_config: Some(guestos_config),
         ..Default::default()
     };
 

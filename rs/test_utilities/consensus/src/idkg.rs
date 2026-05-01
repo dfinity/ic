@@ -461,7 +461,7 @@ pub fn empty_idkg_payload_with_key_ids(
         subnet_id,
         key_ids
             .into_iter()
-            .map(|key_id| MasterKeyTranscript::new(key_id.clone(), KeyTranscriptCreation::Begin))
+            .map(|key_id| MasterKeyTranscript::new(key_id, KeyTranscriptCreation::Begin))
             .collect(),
     )
 }

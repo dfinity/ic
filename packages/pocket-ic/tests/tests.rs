@@ -147,7 +147,7 @@ fn test_install_canister_with_no_cycles() {
     let pic = PocketIc::new();
     let canister_id = pic.create_canister();
     let wasm = b"\x00\x61\x73\x6d\x01\x00\x00\x00".to_vec();
-    pic.install_canister(canister_id, wasm.clone(), vec![], None);
+    pic.install_canister(canister_id, wasm, vec![], None);
 }
 
 #[test]
@@ -1249,7 +1249,7 @@ fn test_ecdsa_disabled() {
             &pic,
             canister,
             "sign_with_ecdsa",
-            (message_hash.clone(), derivation_path, key_id),
+            (message_hash, derivation_path, key_id),
         )
         .unwrap()
         .0
@@ -1452,7 +1452,7 @@ fn test_canister_http_with_transform() {
         response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
             status: 200,
             headers: vec![],
-            body: body.clone(),
+            body,
         }),
         additional_responses: vec![],
     };
@@ -1578,7 +1578,7 @@ fn test_canister_http_with_one_additional_response() {
         additional_responses: vec![CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
             status: 200,
             headers: vec![],
-            body: body.clone(),
+            body,
         })],
     };
     pic.mock_canister_http_response(mock_canister_http_response);
@@ -2229,7 +2229,7 @@ fn read_state_request_status(
     msg_id: &[u8],
 ) -> reqwest::blocking::Response {
     let path = vec!["request_status".into(), Label::from_bytes(msg_id)];
-    let paths = vec![path.clone()];
+    let paths = vec![path];
     let content = ReadState {
         ingress_expiry: pic.get_time().as_nanos_since_unix_epoch() + 240_000_000_000,
         sender: Principal::anonymous(),

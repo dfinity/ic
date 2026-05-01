@@ -1290,7 +1290,7 @@ fn canister_only_accept_calls_if_running() {
         let res = test.ingress(canister_id, "query", wasm().reply().build());
         check_res(res, canister_status.clone());
         let res = test.non_replicated_query(canister_id, "query", wasm().reply().build());
-        check_res(res, canister_status.clone());
+        check_res(res, canister_status);
     };
     check_accept_calls(&mut test, CanisterStatusType::Running);
 
@@ -1794,7 +1794,7 @@ fn too_many_controllers() {
         .map(|i| user_test_id(i as u64).get())
         .collect();
     let err = test
-        .canister_update_controller(canister_id, controllers.clone())
+        .canister_update_controller(canister_id, controllers)
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidManagementPayload);
     assert!(err.description().contains(&format!(
@@ -3434,7 +3434,7 @@ fn instructions_for_compilation_of_enhanced_orthogonal_persistence() {
     let original_execution_cost = test.canister_execution_cost(canister_id);
     test.upgrade_canister_v2(
         canister_id,
-        orthogonal_persistence_wasm.clone(),
+        orthogonal_persistence_wasm,
         CanisterUpgradeOptions {
             skip_pre_upgrade: None,
             wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
@@ -4272,7 +4272,7 @@ fn cycles_correct_if_install_fails_at_validation() {
         .scheduler_state
         .install_code_debit = NumInstructions::from(u64::MAX);
 
-    test.install_canister(id, wasm.clone()).unwrap_err();
+    test.install_canister(id, wasm).unwrap_err();
     assert_eq!(
         test.canister_state(id).system_state.balance(),
         initial_cycles - test.canister_execution_cost(id).real(),
@@ -6287,7 +6287,7 @@ fn test_environment_variables_are_not_set_when_key_is_too_long() {
         .create_canister_with_settings(
             Cycles::new(1_000_000_000_000_000),
             CanisterSettingsArgsBuilder::new()
-                .with_environment_variables(env_vars.clone())
+                .with_environment_variables(env_vars)
                 .build(),
         )
         .unwrap_err();
@@ -6323,7 +6323,7 @@ fn test_environment_variables_are_not_set_when_value_is_too_long() {
         .create_canister_with_settings(
             Cycles::new(1_000_000_000_000_000),
             CanisterSettingsArgsBuilder::new()
-                .with_environment_variables(env_vars.clone())
+                .with_environment_variables(env_vars)
                 .build(),
         )
         .unwrap_err();
@@ -6358,7 +6358,7 @@ fn test_environment_variables_are_not_set_duplicate_keys() {
         .create_canister_with_settings(
             Cycles::new(1_000_000_000_000_000),
             CanisterSettingsArgsBuilder::new()
-                .with_environment_variables(env_vars.clone())
+                .with_environment_variables(env_vars)
                 .build(),
         )
         .unwrap_err();

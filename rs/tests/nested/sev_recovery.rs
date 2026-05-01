@@ -129,7 +129,7 @@ pub fn test_alternative_guestos_recovery(env: TestEnv) {
     }
 
     assert!(
-        JournalStreamer::new(session.clone())
+        JournalStreamer::new(session)
             .contains("Successfully opened root device with recovery root hash")
             .expect("Failed to query journald"),
         "Failed to find 'Successfully opened root device with recovery root hash' in guestos logs"

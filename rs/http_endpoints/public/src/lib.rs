@@ -295,7 +295,7 @@ pub fn start_server(
         subnet_id,
         registry_client.clone(),
         ingress_verifier.clone(),
-        ingress_filter.clone(),
+        ingress_filter,
         ingress_throttler.clone(),
         ingress_tx,
     )
@@ -677,7 +677,7 @@ fn make_router(
         ServiceBuilder::new()
             .layer(TraceLayer::new_for_http())
             .layer(HandleErrorLayer::new(map_box_error_to_response))
-            .layer(health_status_refresher.clone())
+            .layer(health_status_refresher)
             .load_shed()
             .timeout(Duration::from_secs(config.request_timeout_seconds))
             .layer(axum::middleware::from_fn_with_state(

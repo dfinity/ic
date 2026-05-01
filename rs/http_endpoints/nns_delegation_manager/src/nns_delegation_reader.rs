@@ -350,7 +350,7 @@ mod tests {
         let parsed_delegation: Certificate =
             serde_cbor::from_slice(&delegation.certificate).unwrap();
 
-        let labeled_tree = LabeledTree::try_from(parsed_delegation.tree.clone()).unwrap();
+        let labeled_tree = LabeledTree::try_from(parsed_delegation.tree).unwrap();
         lookup_path(&labeled_tree, path).is_some()
     }
 

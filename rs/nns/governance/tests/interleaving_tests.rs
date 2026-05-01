@@ -384,7 +384,7 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
     // the ultimate NF participants are still being computed by the previous call.
     let settle_nf_result = unsafe { &mut *raw_ptr }
         .governance
-        .settle_neurons_fund_participation(swap_canister_id, settle_nf_request.clone())
+        .settle_neurons_fund_participation(swap_canister_id, settle_nf_request)
         .now_or_never()
         .unwrap();
     assert!(
