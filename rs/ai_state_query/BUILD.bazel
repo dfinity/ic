@@ -1,0 +1,26 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/registry/subnet_type",
+    "//rs/replicated_state",
+    "//rs/state_layout",
+    "//rs/state_manager",
+    "//rs/types/types",
+    "//rs/types/cycles",
+    "@crate_index//:clap",
+    "@crate_index//:hex",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+]
+
+rust_binary(
+    name = "ic-ai-state-query",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ic_ai_state_query",
+    version = "0.1.0",
+    visibility = ["//visibility:public"],
+    deps = DEPENDENCIES,
+)

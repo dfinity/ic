@@ -43,6 +43,7 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:ic-consensus-pool-util": "/opt/ic/bin/ic-consensus-pool-util:0755",  # May be used during recoveries to export/import consensus pool artifacts.
             "//publish/binaries:ic-recovery": "/opt/ic/bin/ic-recovery:0755",  # Required for performing subnet recoveries on the node directly.
             "//publish/binaries:state-tool": "/opt/ic/bin/state-tool:0755",  # May be used during recoveries for calculating the state hash and inspecting the state more generally.
+            "//publish/binaries:ic-ai-state-query": "/opt/ic/bin/ic-ai-state-query:0755",  # AI-node read-only checkpoint introspection. Invoked by ollama as a tool.
             "//publish/binaries:ic-regedit": "/opt/ic/bin/ic-regedit:0755",  # May be used for inspecting and recovering the registry.
             # Required by the GuestOS
             "//rs/ic_os/release:fstrim_tool": "/opt/ic/bin/fstrim_tool:0755",  # The GuestOS periodically calls fstrim to trigger the host os to free the memory that stored old version of the secret key store, so that it can be garbage collected more quickly.

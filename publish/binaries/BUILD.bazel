@@ -13,6 +13,7 @@ ALL_BINARIES = {
     "replica": "//rs/replica:replica",
     "rate-limiting-canister-client": "//rs/boundary_node/rate_limits/canister_client:rate-limiting-canister-client",
     "ic-admin": "//rs/registry/admin:ic-admin",
+    "ic-ai-state-query": "//rs/ai_state_query:ic-ai-state-query",
     "ic-backup": "//rs/backup:ic-backup",
     "ic-boundary": "//rs/boundary_node/ic_boundary:ic-boundary",
     "ic-https-outcalls-adapter": "//rs/https_outcalls/adapter:ic-outcalls-adapter-with-http",

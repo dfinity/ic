@@ -1,0 +1,25 @@
+[package]
+name = "ic-ai-state-query"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "Read-only introspection of an IC subnet state checkpoint, structured as JSON for LLM tool calls."
+documentation.workspace = true
+
+[[bin]]
+name = "ic-ai-state-query"
+path = "src/main.rs"
+
+[dependencies]
+clap = { workspace = true }
+hex = { workspace = true }
+ic-logger = { path = "../monitoring/logger" }
+ic-metrics = { path = "../monitoring/metrics" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-replicated-state = { path = "../replicated_state" }
+ic-state-layout = { path = "../state_layout" }
+ic-state-manager = { path = "../state_manager" }
+ic-types = { path = "../types/types" }
+ic-types-cycles = { path = "../types/cycles" }
+serde = { workspace = true }
+serde_json = { workspace = true }

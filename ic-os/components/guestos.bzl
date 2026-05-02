@@ -57,6 +57,10 @@ def component_files(mode):
         #   systemctl enable --now ollama.service
         Label("guestos/ollama/ollama.service"): "/etc/systemd/system/ollama.service",
         Label("guestos/ollama/manage-ollama.sh"): "/opt/ic/bin/manage-ollama.sh",
+        # Convenience CLI: pipe a natural-language question through the
+        # local ollama, with the synced subnet's checkpoint introspected
+        # via `ic-ai-state-query` and embedded in the prompt.
+        Label("guestos/ollama/ic-ask.sh"): "/opt/ic/bin/ic-ask",
         # TLS reverse proxy in front of the local ollama backend.
         # generate-ollama-tls-cert.service runs once at boot and writes a
         # self-signed cert into /var/lib/ollama-tls/, then ollama-tls.service
