@@ -26,7 +26,6 @@ members = [
     "packages/icrc-ledger-types",
     "packages/pocket-ic",
     "packages/pocket-ic/test_canister",
-    "rs/ai_state_query",
     "rs/artifact_pool",
     "rs/backup",
     "rs/bitcoin/adapter",
