@@ -48,5 +48,6 @@ mod registration;
 mod registry_helper;
 mod signer;
 mod ssh_access_manager;
+mod state_cleanup;
 mod upgrade;
 mod utils;
