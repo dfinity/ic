@@ -26,6 +26,7 @@ pub(crate) struct OrchestratorDashboard {
     last_applied_ipv4_config_version: Arc<RwLock<RegistryVersion>>,
     last_poll_certified_time: Arc<RwLock<Time>>,
     replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
+    ai_replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     ai_node_status: Arc<RwLock<AiNodeStatus>>,
     replica_version: ReplicaVersion,
@@ -96,6 +97,7 @@ impl OrchestratorDashboard {
         last_applied_ipv4_config_version: Arc<RwLock<RegistryVersion>>,
         last_poll_certified_time: Arc<RwLock<Time>>,
         replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
+        ai_replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
         ai_node_status: Arc<RwLock<AiNodeStatus>>,
         replica_version: ReplicaVersion,
@@ -111,6 +113,7 @@ impl OrchestratorDashboard {
             last_applied_ipv4_config_version,
             last_poll_certified_time,
             replica_process,
+            ai_replica_process,
             subnet_assignment,
             ai_node_status,
             replica_version,
@@ -150,10 +153,16 @@ impl OrchestratorDashboard {
     }
 
     fn get_pid(&self) -> String {
-        match self.replica_process.lock().unwrap().get_pid() {
-            Some(pid) => pid.to_string(),
-            None => "None".to_string(),
+        // For AI nodes the regular `Upgrade` task does not run a replica;
+        // the state-sync-only replica is owned by `AiNodeManager`. Show
+        // whichever is currently running so the dashboard reflects reality.
+        if let Some(pid) = self.replica_process.lock().unwrap().get_pid() {
+            return pid.to_string();
         }
+        if let Some(pid) = self.ai_replica_process.lock().unwrap().get_pid() {
+            return format!("{} (state-sync-only)", pid);
+        }
+        "None".to_string()
     }
 
     fn get_subnet_id(&self) -> String {

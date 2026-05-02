@@ -273,6 +273,10 @@ fn main() -> io::Result<()> {
     );
 
     let state_sync_only = matches!(&replica_args, Ok(args) if args.state_sync_only);
+    let cup_path = match &replica_args {
+        Ok(args) => args.catch_up_package.clone(),
+        Err(_) => None,
+    };
     let _xnet_endpoint_holder;
     let _p2p_thread_joiner_holder;
     if state_sync_only {
@@ -288,6 +292,7 @@ fn main() -> io::Result<()> {
             registry,
             crypto,
             cup_proto,
+            cup_path,
         )?;
         info!(logger, "Constructed AI state-sync-only stack");
         // Tracing handle is unused in this mode; explicitly drop to avoid

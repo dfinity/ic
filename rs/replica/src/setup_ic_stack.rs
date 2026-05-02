@@ -403,6 +403,7 @@ pub fn construct_state_sync_only_stack(
     registry: Arc<impl RegistryClient + 'static>,
     crypto: Arc<CryptoComponent>,
     catch_up_package: Option<pb::CatchUpPackage>,
+    cup_path: Option<std::path::PathBuf>,
 ) -> std::io::Result<()> {
     info!(
         log,
@@ -498,8 +499,9 @@ pub fn construct_state_sync_only_stack(
 
     // ---------- CUP-DRIVEN FETCH LOOP ------------------------------------
     // Without consensus running, nobody calls `state_manager.fetch_state`.
-    // We do it ourselves: every 10s, look at the highest CUP in the pool and
-    // ask the state manager to fetch it if we don't yet have that height.
+    // We do it ourselves: every 10s, re-read the on-disk CUP file (the
+    // orchestrator's `AiNodeManager` keeps it up-to-date by polling subnet
+    // peers) and ask the state manager to fetch the corresponding state.
     let cup_state_manager: Arc<dyn StateManager<State = ReplicatedState>> = state_manager.clone();
     let cup_pool_cache = consensus_pool_cache.clone();
     let cup_logger = log.clone();
@@ -507,7 +509,17 @@ pub fn construct_state_sync_only_stack(
         let mut interval = tokio::time::interval(Duration::from_secs(10));
         loop {
             interval.tick().await;
-            let cup = cup_pool_cache.catch_up_package();
+
+            // Prefer the latest CUP found on disk (managed by the
+            // orchestrator). Fall back to the in-memory pool's CUP, which is
+            // the bootstrap CUP loaded at startup.
+            let cup = match cup_path
+                .as_ref()
+                .and_then(|p| read_cup_from_disk(p, &cup_logger))
+            {
+                Some(disk_cup) => disk_cup,
+                None => cup_pool_cache.catch_up_package(),
+            };
             let cup_height = cup.height();
             let latest = cup_state_manager.latest_state_height();
             if cup_height > latest {
@@ -522,9 +534,10 @@ pub fn construct_state_sync_only_stack(
                     .interval_length;
                 info!(
                     cup_logger,
-                    "AI state-sync: requesting fetch_state(target = {}, current = {})",
+                    "AI state-sync: requesting fetch_state(target = {}, current = {}, signed = {})",
                     cup_height,
-                    latest
+                    latest,
+                    cup.is_signed(),
                 );
                 cup_state_manager.fetch_state(
                     cup_height,
@@ -543,4 +556,48 @@ pub fn construct_state_sync_only_stack(
     });
 
     Ok(())
+}
+
+/// Best-effort: read the CUP protobuf the orchestrator persists at `path`
+/// and deserialize it. Returns `None` on any IO/parse error (caller falls
+/// back to the in-memory bootstrap CUP).
+fn read_cup_from_disk(path: &std::path::Path, logger: &ReplicaLogger) -> Option<CatchUpPackage> {
+    use std::fs::File;
+    if !path.exists() {
+        return None;
+    }
+    let file = match File::open(path) {
+        Ok(f) => f,
+        Err(e) => {
+            info!(
+                logger,
+                "AI state-sync: cannot open CUP file at {}: {}",
+                path.display(),
+                e
+            );
+            return None;
+        }
+    };
+    let proto = match pb::CatchUpPackage::read_from_reader(file) {
+        Ok(p) => p,
+        Err(e) => {
+            info!(
+                logger,
+                "AI state-sync: cannot parse CUP file at {}: {}",
+                path.display(),
+                e
+            );
+            return None;
+        }
+    };
+    CatchUpPackage::try_from(&proto)
+        .inspect_err(|e| {
+            info!(
+                logger,
+                "AI state-sync: cannot deserialize CUP file at {}: {}",
+                path.display(),
+                e
+            );
+        })
+        .ok()
 }

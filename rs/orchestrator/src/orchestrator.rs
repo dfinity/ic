@@ -392,6 +392,7 @@ impl Orchestrator {
             ipv4_configurator.get_last_applied_version(),
             registry_replicator.get_latest_certified_time(),
             replica_process,
+            ai_node_manager.get_replica_process_handle(),
             Arc::clone(&subnet_assignment),
             ai_node_manager.get_status_handle(),
             replica_version,

@@ -135,6 +135,14 @@ impl AiNodeManager {
         Arc::clone(&self.status)
     }
 
+    /// Returns a handle to the state-sync-only replica process manager so
+    /// the dashboard can display its pid alongside the regular replica's.
+    pub(crate) fn get_replica_process_handle(
+        &self,
+    ) -> Arc<Mutex<dyn ProcessManager<ReplicaProcess>>> {
+        Arc::clone(&self.replica_process)
+    }
+
     #[allow(dead_code)]
     pub(crate) fn get_last_applied_version(&self) -> Arc<RwLock<RegistryVersion>> {
         Arc::clone(&self.last_applied_version)
@@ -172,24 +180,53 @@ impl AiNodeManager {
         *self.status.write().unwrap() = desired;
 
         let prev = self.last_status;
-        if prev == Some(desired) {
-            *self.last_applied_version.write().unwrap() = registry_version;
-            return;
+        if prev != Some(desired) {
+            info!(
+                self.logger,
+                "AiNodeManager: status transition {:?} -> {:?}", prev, desired
+            );
+
+            if let Err(e) = self.apply_transition(prev, desired).await {
+                warn!(self.logger, "AiNodeManager: transition failed: {}", e);
+                // Don't update last_status: we'll retry next tick.
+                return;
+            }
+            self.last_status = Some(desired);
         }
 
-        info!(
-            self.logger,
-            "AiNodeManager: status transition {:?} -> {:?}", prev, desired
-        );
-
-        if let Err(e) = self.apply_transition(prev, desired).await {
-            warn!(self.logger, "AiNodeManager: transition failed: {}", e);
-            // Don't update last_status: we'll retry next tick.
-            return;
+        // On every tick, if we are in SyncingFor mode, refresh the local CUP
+        // (fetching newer signed CUPs from subnet peers as they become
+        // available) and ensure the state-sync replica is running. The CUP
+        // file on disk drives `should_download` for the running replica.
+        if let AiNodeStatus::SyncingFor(subnet_id) = desired {
+            if let Err(e) = self.refresh_cup_and_replica(subnet_id).await {
+                warn!(
+                    self.logger,
+                    "AiNodeManager: refresh_cup_and_replica failed: {}", e
+                );
+                return;
+            }
         }
 
-        self.last_status = Some(desired);
         *self.last_applied_version.write().unwrap() = registry_version;
+    }
+
+    /// Re-fetch the latest CUP for the syncing subnet (best-effort) and make
+    /// sure the state-sync replica is running. Called on every tick while in
+    /// `SyncingFor` mode so newly produced peer CUPs reach disk and the
+    /// replica can advance its `fetch_state` target.
+    async fn refresh_cup_and_replica(&mut self, subnet_id: SubnetId) -> OrchestratorResult<()> {
+        let local_cup_proto = self.cup_provider.get_local_cup_proto();
+        let _ = self
+            .cup_provider
+            .get_latest_cup(local_cup_proto, subnet_id)
+            .await
+            .map_err(|e| {
+                OrchestratorError::UpgradeError(format!(
+                    "AiNodeManager: failed to fetch CUP for subnet {subnet_id}: {e:?}"
+                ))
+            })?;
+        self.ensure_state_sync_replica_running(subnet_id)
     }
 
     async fn apply_transition(
@@ -223,10 +260,10 @@ impl AiNodeManager {
             );
         }
 
-        // 3. Start replica if we now want one.
-        if let Some(subnet_id) = new_subnet {
-            self.ensure_state_sync_replica_running(subnet_id).await?;
-        }
+        // Replica startup is handled by `refresh_cup_and_replica` on every
+        // tick (called by `check_and_update`), so we don't need to do
+        // anything here for the SyncingFor case beyond the cleanup above.
+        let _ = new_subnet;
 
         Ok(())
     }
@@ -261,24 +298,8 @@ impl AiNodeManager {
     }
 
     /// Ensures a state-sync-only replica is running for the given subnet.
-    /// Fetches a fresh CUP for that subnet and (re)starts the replica process.
-    async fn ensure_state_sync_replica_running(
-        &mut self,
-        subnet_id: SubnetId,
-    ) -> OrchestratorResult<()> {
-        // Fetch the latest CUP from peers / registry and persist it; the
-        // replica reads the file via its `--catch-up-package` arg.
-        let local_cup_proto = self.cup_provider.get_local_cup_proto();
-        let _cup = self
-            .cup_provider
-            .get_latest_cup(local_cup_proto, subnet_id)
-            .await
-            .map_err(|e| {
-                OrchestratorError::UpgradeError(format!(
-                    "AiNodeManager: failed to fetch CUP for subnet {subnet_id}: {e:?}"
-                ))
-            })?;
-
+    /// Idempotent — does nothing if the process is already up.
+    fn ensure_state_sync_replica_running(&mut self, subnet_id: SubnetId) -> OrchestratorResult<()> {
         if self.replica_process.lock().unwrap().is_running() {
             return Ok(());
         }
