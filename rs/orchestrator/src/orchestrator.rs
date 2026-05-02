@@ -393,6 +393,7 @@ impl Orchestrator {
             registry_replicator.get_latest_certified_time(),
             replica_process,
             Arc::clone(&subnet_assignment),
+            ai_node_manager.get_status_handle(),
             replica_version,
             hostos_version.ok(),
             local_cup_reader,

@@ -1,7 +1,8 @@
 use crate::{
-    catch_up_package_provider::LocalCUPReader, orchestrator::SubnetAssignment,
-    process_manager::ProcessManager, registry_helper::RegistryHelper,
-    ssh_access_manager::SshAccessParameters, upgrade::ReplicaProcess,
+    ai_node::AiNodeStatus, catch_up_package_provider::LocalCUPReader,
+    orchestrator::SubnetAssignment, process_manager::ProcessManager,
+    registry_helper::RegistryHelper, ssh_access_manager::SshAccessParameters,
+    upgrade::ReplicaProcess,
 };
 pub use ic_dashboard::Dashboard;
 use ic_logger::{ReplicaLogger, info, warn};
@@ -26,6 +27,7 @@ pub(crate) struct OrchestratorDashboard {
     last_poll_certified_time: Arc<RwLock<Time>>,
     replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
+    ai_node_status: Arc<RwLock<AiNodeStatus>>,
     replica_version: ReplicaVersion,
     hostos_version: Option<HostosVersion>,
     local_cup_reader: LocalCUPReader,
@@ -44,6 +46,7 @@ impl Dashboard for OrchestratorDashboard {
              last registry version: {}\n\
              last poll's certified time: {}\n\
              subnet id: {}\n\
+             is_ai_node_for: {}\n\
              replica process id: {}\n\
              replica version: {}\n\
              host os version: {}\n\
@@ -60,6 +63,7 @@ impl Dashboard for OrchestratorDashboard {
             self.registry.get_latest_version().get(),
             self.get_last_poll_certified_time(),
             self.get_subnet_id(),
+            self.get_ai_node_for(),
             self.get_pid(),
             self.replica_version,
             self.hostos_version
@@ -83,6 +87,7 @@ impl Dashboard for OrchestratorDashboard {
 }
 
 impl OrchestratorDashboard {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         registry: Arc<RegistryHelper>,
         node_id: NodeId,
@@ -92,6 +97,7 @@ impl OrchestratorDashboard {
         last_poll_certified_time: Arc<RwLock<Time>>,
         replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
+        ai_node_status: Arc<RwLock<AiNodeStatus>>,
         replica_version: ReplicaVersion,
         hostos_version: Option<HostosVersion>,
         local_cup_reader: LocalCUPReader,
@@ -106,10 +112,19 @@ impl OrchestratorDashboard {
             last_poll_certified_time,
             replica_process,
             subnet_assignment,
+            ai_node_status,
             replica_version,
             hostos_version,
             local_cup_reader,
             logger,
+        }
+    }
+
+    fn get_ai_node_for(&self) -> String {
+        match *self.ai_node_status.read().unwrap() {
+            AiNodeStatus::Idle => "no".to_string(),
+            AiNodeStatus::AiOnly => "yes (no subnet)".to_string(),
+            AiNodeStatus::SyncingFor(s) => s.to_string(),
         }
     }
 

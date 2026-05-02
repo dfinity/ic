@@ -39,9 +39,10 @@ use std::{
 use tokio::process::Command;
 
 /// Desired AI-node state, derived solely from the local node's `AiNodeRecord`.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum AiNodeStatus {
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
+pub(crate) enum AiNodeStatus {
     /// No `AiNodeRecord` for this node — the node is not an AI node.
+    #[default]
     Idle,
     /// AI flag is set but no subnet is associated → run ollama only.
     AiOnly,
@@ -87,8 +88,11 @@ pub(crate) struct AiNodeManager {
     logger: ReplicaLogger,
     ic_binary_dir: PathBuf,
     last_applied_version: Arc<RwLock<RegistryVersion>>,
-    /// Last reconciled status. `None` until the first successful reconcile,
-    /// which forces an explicit transition regardless of cached state.
+    /// Last reconciled status. Shared with the dashboard so it can render
+    /// the current AI-node mode.
+    status: Arc<RwLock<AiNodeStatus>>,
+    /// `None` until the first successful reconcile, which forces an
+    /// explicit transition regardless of cached state.
     last_status: Option<AiNodeStatus>,
 }
 
@@ -120,8 +124,15 @@ impl AiNodeManager {
             logger,
             ic_binary_dir,
             last_applied_version: Default::default(),
+            status: Arc::new(RwLock::new(AiNodeStatus::Idle)),
             last_status: None,
         }
+    }
+
+    /// Returns a handle the dashboard can read to render the current
+    /// AI-node status (Idle, AiOnly, or SyncingFor(subnet_id)).
+    pub(crate) fn get_status_handle(&self) -> Arc<RwLock<AiNodeStatus>> {
+        Arc::clone(&self.status)
     }
 
     #[allow(dead_code)]
@@ -156,6 +167,10 @@ impl AiNodeManager {
         };
 
         let desired = AiNodeStatus::from_record(record.as_ref());
+        // Publish desired status to the shared handle so the dashboard can
+        // render it.
+        *self.status.write().unwrap() = desired;
+
         let prev = self.last_status;
         if prev == Some(desired) {
             *self.last_applied_version.write().unwrap() = registry_version;
