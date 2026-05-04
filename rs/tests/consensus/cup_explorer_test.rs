@@ -183,6 +183,7 @@ fn test(env: TestEnv) {
     info!(log, "Recover subnet with unchanged state hash");
     let recover_subnet_payload = RecoverSubnetPayload {
         subnet_id: app_subnet.subnet_id.get(),
+        initial_dkg_subnet_id: None,
         height: cup.height().get() + 1000,
         time_ns: cup
             .content
@@ -214,8 +215,12 @@ fn test(env: TestEnv) {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .without_assert_no_replica_restarts()
         .add_test(systest!(test))
+        // The replica is restarted when the orchestrator observes the recovery CUP in the registry
+        .update_orchestrator_metrics_to_check(
+            "orchestrator_replica_process_start_attempts_total",
+            2,
+        )
         .execute_from_args()?;
     Ok(())
 }

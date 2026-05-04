@@ -65,7 +65,10 @@ fn state_sync_clears_paused_execution_registry() {
     // state with the clean copy. The registry still holds the orphaned paused
     // execution entry.
     test.state_mut().put_canister_state(clean_canister);
-    assert!(!test.canister_state(canister).has_paused_execution());
+    let canister_priority = test.state_mut().canister_priority_mut(canister);
+    canister_priority.long_execution_start_round = None;
+    canister_priority.executed_rounds = 0;
+    assert!(!test.canister_state(canister).has_long_execution());
 
     // Execute another round. The scheduler detects that no canister has a paused
     // execution and calls `abandon_paused_executions()` to clear the paused
@@ -172,7 +175,7 @@ fn consensus_queue_is_emptied() {
         test.inject_call_to_ic00(
             Method::SignWithECDSA,
             ecdsa_payload.clone(),
-            test.ecdsa_signature_fee(),
+            test.ecdsa_signature_fee().real(),
             canister_id,
             InputQueueType::RemoteSubnet,
         );
@@ -465,6 +468,7 @@ fn test_maybe_add_heartbeat_or_global_timer_tasks() {
                 method_payload: vec![1_u8],
                 message_id: message_test_id(555),
                 expiry_time: expiry_time_from_now(),
+                sender_info: None,
             });
         }
         while canister.get_next_scheduled_method() != next_scheduled_method {
@@ -708,70 +712,6 @@ fn online_split_cleans_in_progress_raw_rand_requests() {
         0
     );
     assert!(test.state().subnet_queues().has_output());
-}
-
-#[test]
-fn finalization_clears_scheduled_canister_log_delta_sizes() {
-    let mut test = SchedulerTestBuilder::new().build();
-    let mut next_idx = 0;
-    let canister_a = test.create_canister();
-    let canister_b = test.create_canister();
-
-    // Populate delta_log_sizes on canister_a's canister_log by appending two
-    // non-empty delta logs.
-    fn append_delta_log(next_idx: u64, canister: &mut CanisterState, content: &str) -> usize {
-        let mut delta = ic_types::CanisterLog::new_delta_with_next_index(next_idx, 4096);
-        delta.add_record(next_idx, content.as_bytes().to_vec());
-        let size = delta.bytes_used();
-        if LOG_MEMORY_STORE_FEATURE_ENABLED {
-            canister
-                .system_state
-                .log_memory_store
-                .append_delta_log(&mut delta);
-        } else {
-            canister
-                .system_state
-                .canister_log
-                .append_delta_log(&mut delta);
-        };
-        size
-    }
-    let size1 = append_delta_log(next_idx, test.canister_state_mut(canister_a), "hello");
-    next_idx += 1;
-    let size2 = append_delta_log(next_idx, test.canister_state_mut(canister_a), "world!");
-    next_idx += 1;
-
-    // Also append a delta log to canister_b's canister_log.
-    let size3 = append_delta_log(next_idx, test.canister_state_mut(canister_b), "oops");
-
-    // Both canisters have delta log sizes.
-    fn has_delta_log_sizes(canister: &CanisterState) -> bool {
-        if LOG_MEMORY_STORE_FEATURE_ENABLED {
-            canister.system_state.log_memory_store.has_delta_log_sizes()
-        } else {
-            canister.system_state.canister_log.has_delta_log_sizes()
-        }
-    }
-    assert!(has_delta_log_sizes(test.canister_state(canister_a)));
-    assert!(has_delta_log_sizes(test.canister_state(canister_b)));
-
-    // Only schedule canister_a. This is not realistic behavior (canister_b would
-    // not have produced logs if it had not been scheduled), but it's useful for
-    // testing.
-    test.send_ingress(canister_a, ingress(1));
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
-
-    // After the round, delta_log_sizes have been cleared for both canisters.
-    assert!(!has_delta_log_sizes(test.canister_state(canister_a)));
-    assert!(!has_delta_log_sizes(test.canister_state(canister_b)));
-
-    // The metric must have recorded all delta sizes we appended.
-    let canister_log_delta_memory_usage = &test.scheduler().metrics.canister_log_delta_memory_usage;
-    assert_eq!(canister_log_delta_memory_usage.get_sample_count(), 3);
-    assert_eq!(
-        canister_log_delta_memory_usage.get_sample_sum() as usize,
-        size1 + size2 + size3
-    );
 }
 
 #[test]

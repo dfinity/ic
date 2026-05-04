@@ -55,6 +55,7 @@ LIB_DEPENDENCIES = [
     "//rs/types/cycles",
     "//rs/types/management_canister_types",
     "//rs/types/types",
+    "//rs/validator/http_request_test_utils",
     "//rs/validator/ingress_message",
     "@crate_index//:aide",
     "@crate_index//:askama",

@@ -422,7 +422,7 @@ mod test {
         // Make memory with 1 page of memory.
         memory
             .borrow_mut()
-            .append(&mut vec![0u8; STABLE_STRUCTURES_WASM_PAGE_SIZE as usize]);
+            .append(&mut vec![0_u8; STABLE_STRUCTURES_WASM_PAGE_SIZE as usize]);
 
         // Make a writer that will allocate a large buffer so we can fill up the memory.
         let mut writer = SizeAwareWriter::new(

@@ -1234,6 +1234,10 @@ mod test {
                                             caller: _,
                                             mthd: _,
                                         } => None,
+                                        IcrcOperation::AuthorizedMint { to, .. } => Some(to.into()),
+                                        IcrcOperation::AuthorizedBurn { from, .. } => {
+                                            Some(from.into())
+                                        }
                                     };
                                 if search_transactions_request.account_identifier.is_some() {
                                     break;
@@ -1292,6 +1296,22 @@ mod test {
                                         caller: _,
                                         mthd: _,
                                     } => false,
+                                    IcrcOperation::AuthorizedMint { to, .. } => {
+                                        to == search_transactions_request
+                                            .account_identifier
+                                            .clone()
+                                            .unwrap()
+                                            .try_into()
+                                            .unwrap()
+                                    }
+                                    IcrcOperation::AuthorizedBurn { from, .. } => {
+                                        from == search_transactions_request
+                                            .account_identifier
+                                            .clone()
+                                            .unwrap()
+                                            .try_into()
+                                            .unwrap()
+                                    }
                                 })
                                 .count();
 
@@ -1628,7 +1648,7 @@ mod test {
                 transaction: IcrcTransaction {
                     operation: IcrcOperation::Mint {
                         to: main_account,
-                        amount: Nat::from(1000u64),
+                        amount: Nat::from(1000_u64),
                         fee: None,
                     },
                     created_at_time: Some(1000),
@@ -1698,7 +1718,7 @@ mod test {
                     transaction: IcrcTransaction {
                         operation: IcrcOperation::Mint {
                             to: main_account,
-                            amount: Nat::from(500u64),
+                            amount: Nat::from(500_u64),
                             fee: None,
                         },
                         created_at_time: Some(1000),
@@ -1718,7 +1738,7 @@ mod test {
                     transaction: IcrcTransaction {
                         operation: IcrcOperation::Mint {
                             to: account1,
-                            amount: Nat::from(1000u64),
+                            amount: Nat::from(1000_u64),
                             fee: None,
                         },
                         created_at_time: Some(2000),
@@ -1873,7 +1893,7 @@ mod test {
                     transaction: IcrcTransaction {
                         operation: IcrcOperation::Mint {
                             to: main_account,
-                            amount: Nat::from(1000u64),
+                            amount: Nat::from(1000_u64),
                             fee: None,
                         },
                         created_at_time: Some(1000),
@@ -1896,8 +1916,8 @@ mod test {
                             from: main_account,
                             to: account1,
                             spender: None,
-                            amount: Nat::from(300u64),
-                            fee: Some(Nat::from(10u64)),
+                            amount: Nat::from(300_u64),
+                            fee: Some(Nat::from(10_u64)),
                         },
                         created_at_time: Some(2000),
                         memo: None,
@@ -1919,8 +1939,8 @@ mod test {
                             from: main_account,
                             to: account2,
                             spender: None,
-                            amount: Nat::from(200u64),
-                            fee: Some(Nat::from(10u64)),
+                            amount: Nat::from(200_u64),
+                            fee: Some(Nat::from(10_u64)),
                         },
                         created_at_time: Some(3000),
                         memo: None,
@@ -1942,8 +1962,8 @@ mod test {
                             from: account1,
                             to: other_account,
                             spender: None,
-                            amount: Nat::from(150u64),
-                            fee: Some(Nat::from(10u64)),
+                            amount: Nat::from(150_u64),
+                            fee: Some(Nat::from(10_u64)),
                         },
                         created_at_time: Some(4000),
                         memo: None,
@@ -2137,7 +2157,7 @@ mod test {
                 );
                 assert_eq!(
                     amount,
-                    Nat::from(100000000u64),
+                    Nat::from(100000000_u64),
                     "Amount should be preserved"
                 );
             }
@@ -2238,7 +2258,7 @@ mod test {
                     transaction: IcrcTransaction {
                         operation: IcrcOperation::Mint {
                             to: main_account,
-                            amount: Nat::from(6000000u64), // 0.06 tokens
+                            amount: Nat::from(6000000_u64), // 0.06 tokens
                             fee: None,
                         },
                         created_at_time: Some(1),
@@ -2259,7 +2279,7 @@ mod test {
                     transaction: IcrcTransaction {
                         operation: IcrcOperation::Mint {
                             to: explicit_zero_account,
-                            amount: Nat::from(1000000u64), // 0.01 tokens
+                            amount: Nat::from(1000000_u64), // 0.01 tokens
                             fee: None,
                         },
                         created_at_time: Some(2),
@@ -2280,7 +2300,7 @@ mod test {
                     transaction: IcrcTransaction {
                         operation: IcrcOperation::Mint {
                             to: account1,
-                            amount: Nat::from(1000000u64), // 0.01 tokens
+                            amount: Nat::from(1000000_u64), // 0.01 tokens
                             fee: None,
                         },
                         created_at_time: Some(3),

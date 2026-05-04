@@ -1,9 +1,9 @@
 pub mod common;
 
 use crate::common::{
-    HttpEndpointBuilder, MockIngressPoolThrottler, default_certified_state_reader,
-    default_get_latest_state, default_latest_certified_height, default_read_certified_state,
-    get_free_localhost_socket_addr,
+    HttpEndpointBuilder, MockIngressPoolThrottler, UpdateEndpoint, default_certified_state_reader,
+    default_get_latest_state, default_read_certified_state, get_free_localhost_socket_addr,
+    query_endpoint,
 };
 use async_trait::async_trait;
 use axum::body::Body;
@@ -11,11 +11,12 @@ use hyper::{Method, Request, StatusCode};
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_config::http_handler::Config;
 use ic_crypto_tree_hash::{Label, Path};
-use ic_http_endpoints_public::query;
-use ic_http_endpoints_public::read_state;
+use ic_http_endpoints_public::{query, read_state};
 use ic_http_endpoints_test_agent::{
-    self, Call, CanisterReadState, IngressMessage, Query, wait_for_status_healthy,
+    self, Call, CallSubnet, CanisterReadState, IngressMessage, wait_for_status_healthy,
 };
+use ic_test_utilities_types::ids::subnet_test_id;
+
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_pprof::{Error, PprofCollector};
 use ic_types::PrincipalId;
@@ -34,7 +35,8 @@ use tokio::{runtime::Runtime, sync::Notify};
 /// we return 429.
 #[rstest]
 fn test_load_shedding_query(
-    #[values(query::Version::V2, query::Version::V3)] version: query::Version,
+    #[values(query::Version::V2, query::Version::V3, query::Version::SubnetV3)]
+    version: query::Version,
 ) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
@@ -57,9 +59,7 @@ fn test_load_shedding_query(
     let load_shedded_request = rt.spawn(async move {
         query_exec_running_clone.notified().await;
 
-        let response = Query::new(PrincipalId::default(), PrincipalId::default(), version)
-            .query(addr)
-            .await;
+        let response = query_endpoint(version, addr).await;
 
         load_shedder_returned_clone.notify_one();
 
@@ -81,9 +81,7 @@ fn test_load_shedding_query(
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
 
-        let response = Query::new(PrincipalId::default(), PrincipalId::default(), version)
-            .query(addr)
-            .await;
+        let response = query_endpoint(version, addr).await;
 
         assert_eq!(
             StatusCode::OK,
@@ -108,8 +106,7 @@ fn test_load_shedding_query(
 /// 2. We make two concurrent polls. We expect the last poll request to hit the load shedder.
 #[rstest]
 fn test_load_shedding_read_state(
-    #[values(read_state::canister::Version::V2, read_state::canister::Version::V3)]
-    version: read_state::canister::Version,
+    #[values(read_state::Version::V2, read_state::Version::V3)] version: read_state::Version,
 ) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
@@ -131,15 +128,20 @@ fn test_load_shedding_read_state(
 
     let mut mock_state_manager = MockStateManager::new();
 
+    let state = Arc::new(default_get_latest_state());
+
+    let state_clone = state.clone();
     mock_state_manager
         .expect_get_latest_state()
-        .returning(default_get_latest_state);
+        .returning(move || (*state_clone).clone());
 
+    let state_clone = state.clone();
     mock_state_manager
         .expect_latest_certified_height()
-        .returning(default_latest_certified_height);
+        .returning(move || state_clone.height());
 
     let rt_clone: tokio::runtime::Handle = rt.handle().clone();
+    let state_clone = state.clone();
     mock_state_manager
         .expect_read_certified_state()
         .returning(move |labeled_tree| {
@@ -151,13 +153,14 @@ fn test_load_shedding_read_state(
                     load_shedder_returned_clone.notified().await;
                 })
             }
-            default_read_certified_state(labeled_tree)
+            default_read_certified_state(labeled_tree, (*state_clone).clone())
         });
 
     let service_is_healthy_clone = service_is_healthy.clone();
     let read_state_running_clone = read_state_running.clone();
     let load_shedder_returned_clone = load_shedder_returned.clone();
     let rt_clone: tokio::runtime::Handle = rt.handle().clone();
+    let state_clone = state.clone();
     mock_state_manager
         .expect_get_certified_state_snapshot()
         .returning(move || {
@@ -169,7 +172,7 @@ fn test_load_shedding_read_state(
                     load_shedder_returned_clone.notified().await;
                 })
             }
-            default_certified_state_reader()
+            default_certified_state_reader((*state_clone).clone())
         });
 
     let _ = HttpEndpointBuilder::new(rt.handle().clone(), config)
@@ -402,10 +405,11 @@ fn test_load_shedding_update_call() {
 
 /// Test that the call endpoints load shed requests when the ingress pool is full.
 #[rstest]
-#[case::v2_endpoint(Call::V2)]
-#[case::v3_endpoint(Call::V3)]
-#[case::v4_endpoint(Call::V4)]
-fn test_load_shedding_update_call_when_ingress_pool_is_full(#[case] endpoint: Call) {
+#[case::v2_endpoint(UpdateEndpoint::Canister(Call::V2))]
+#[case::v3_endpoint(UpdateEndpoint::Canister(Call::V3))]
+#[case::v4_endpoint(UpdateEndpoint::Canister(Call::V4))]
+#[case::v4_subnet_endpoint(UpdateEndpoint::Subnet(CallSubnet::V4(subnet_test_id(1).get())))]
+fn test_load_shedding_update_call_when_ingress_pool_is_full(#[case] endpoint: UpdateEndpoint) {
     use std::sync::RwLock;
 
     let rt = Runtime::new().unwrap();
@@ -440,10 +444,11 @@ fn test_load_shedding_update_call_when_ingress_pool_is_full(#[case] endpoint: Ca
 
 /// Test that the call endpoints load shed requests when the ingress channel is full.
 #[rstest]
-#[case::v2_endpoint(Call::V2)]
-#[case::v3_endpoint(Call::V3)]
-#[case::v4_endpoint(Call::V4)]
-fn test_load_shedding_update_call_when_ingress_channel_is_full(#[case] endpoint: Call) {
+#[case::v2_endpoint(UpdateEndpoint::Canister(Call::V2))]
+#[case::v3_endpoint(UpdateEndpoint::Canister(Call::V3))]
+#[case::v4_endpoint(UpdateEndpoint::Canister(Call::V4))]
+#[case::v4_subnet_endpoint(UpdateEndpoint::Subnet(CallSubnet::V4(subnet_test_id(1).get())))]
+fn test_load_shedding_update_call_when_ingress_channel_is_full(#[case] endpoint: UpdateEndpoint) {
     let rt = Runtime::new().unwrap();
 
     let addr = get_free_localhost_socket_addr();
@@ -468,7 +473,7 @@ fn test_load_shedding_update_call_when_ingress_channel_is_full(#[case] endpoint:
     rt.block_on(async move {
         wait_for_status_healthy(&addr).await.unwrap();
         for _ in 0..capacity {
-            let message = Default::default();
+            let message = endpoint.default_ingress_message();
             let call_response = endpoint.call(addr, message).await;
             assert_eq!(
                 call_response.status(),
@@ -477,7 +482,7 @@ fn test_load_shedding_update_call_when_ingress_channel_is_full(#[case] endpoint:
                 call_response.text().await.unwrap()
             );
         }
-        let message = Default::default();
+        let message = endpoint.default_ingress_message();
         let call_response = endpoint.call(addr, message).await;
         assert_eq!(
             call_response.status(),

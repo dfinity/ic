@@ -100,7 +100,7 @@ pub fn test_controller(env: TestEnv) {
                     )
                     .await
                     .unwrap(),
-                vec![1u8, 0u8, 0u8, 0u8]
+                vec![1_u8, 0_u8, 0_u8, 0_u8]
             );
 
             // Passed Principal ID is not the controller canister_a, hence we
@@ -114,7 +114,7 @@ pub fn test_controller(env: TestEnv) {
                     )
                     .await
                     .unwrap(),
-                vec![0u8; 4]
+                vec![0_u8; 4]
             );
 
             // The passed argument is not Principal ID, hence we

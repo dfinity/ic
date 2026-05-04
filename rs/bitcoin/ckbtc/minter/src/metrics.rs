@@ -327,6 +327,12 @@ pub fn encode_metrics(
     )?;
 
     metrics.encode_gauge(
+        "ckbtc_minter_duplicated_outpoint_count",
+        state::read_state(|s| s.duplicated_outpoints.len()) as f64,
+        "Total number of outpoints found to be duplicated during update_balance.",
+    )?;
+
+    metrics.encode_gauge(
         "ckbtc_minter_concurrent_update_balance_count",
         state::read_state(|s| s.update_balance_accounts.len()) as f64,
         "Total number of concurrent update_balance requests.",

@@ -13,13 +13,19 @@ use nix::{
 use std::{
     cell::Cell,
     ops::Range,
-    sync::atomic::{AtomicU64, AtomicUsize, Ordering},
+    sync::{
+        Arc,
+        atomic::{AtomicU64, AtomicUsize, Ordering},
+    },
     time::Duration,
 };
+
+use signal_mutex::SignalMutex;
 
 mod conversions;
 mod deterministic;
 mod prefetching;
+pub mod signal_mutex;
 #[cfg(test)]
 mod tests;
 
@@ -80,7 +86,6 @@ pub use prefetching::basic_signal_handler;
 #[derive(Clone, Copy, Default)]
 pub struct MemoryLimits {
     pub max_memory_size: NumBytes,
-    pub max_accessed_pages: NumOsPages,
     pub max_dirty_pages: NumOsPages,
 }
 
@@ -379,6 +384,7 @@ pub trait MemoryTracker {
         dirty_page_tracking: DirtyPageTracking,
         page_map: PageMap,
         memory_limits: MemoryLimits,
+        subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
     ) -> nix::Result<Self>
     where
         Self: Sized;
@@ -434,6 +440,7 @@ pub fn new(
     page_map: PageMap,
     missing_page_handler_kind: Option<MissingPageHandlerKind>,
     memory_limits: MemoryLimits,
+    subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
 ) -> nix::Result<SigsegvMemoryTracker> {
     match missing_page_handler_kind {
         Some(MissingPageHandlerKind::Deterministic) => {
@@ -444,6 +451,7 @@ pub fn new(
                 dirty_page_tracking,
                 page_map,
                 memory_limits,
+                subtract_instruction_counter,
             )?))
         }
         _ => Ok(Box::new(PrefetchingMemoryTracker::new(
@@ -453,6 +461,7 @@ pub fn new(
             dirty_page_tracking,
             page_map,
             memory_limits,
+            subtract_instruction_counter,
         )?)),
     }
 }

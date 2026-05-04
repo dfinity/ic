@@ -239,6 +239,7 @@ impl ValidFulfillSubnetRentalRequest {
 
             subnet_type: SubnetType::Application,
             subnet_id_override: None,
+            initial_dkg_subnet_id: None,
             start_as_nns: false,
             is_halted: false,
             chain_key_config: None,

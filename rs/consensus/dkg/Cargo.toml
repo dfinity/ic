@@ -25,6 +25,8 @@ rayon = { workspace = true }
 
 [dev-dependencies]
 
+ic-config = { path = "../../config" }
+ic-interfaces-mocks = { path = "../../interfaces/mocks" }
 ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
 ic-test-artifact-pool = { path = "../../test_utilities/artifact_pool" }
 prost = { workspace = true }

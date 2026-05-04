@@ -43,7 +43,7 @@ fn test(env: TestEnv) {
 
         // Cycles are only required for application subnets.
         let msg_can = MessageCanister::new(&app_agent, app_node.effective_canister_id()).await;
-        let message_hash = vec![0xabu8; 32];
+        let message_hash = vec![0xab_u8; 32];
         for key_id in key_ids {
             info!(
                 log,
@@ -57,7 +57,7 @@ fn test(env: TestEnv) {
             info!(log, "Checking that signature request fails");
             let error = get_signature_with_logger(
                 message_hash.clone(),
-                scale_cycles(ECDSA_SIGNATURE_FEE) - Cycles::from(1u64),
+                scale_cycles(ECDSA_SIGNATURE_FEE) - Cycles::from(1_u64),
                 &key_id,
                 &msg_can,
                 &log,
@@ -74,7 +74,7 @@ fn test(env: TestEnv) {
                 reject_message: format!(
                     "{} request sent with {} cycles, but {} cycles are required.",
                     method_name,
-                    scale_cycles(ECDSA_SIGNATURE_FEE) - Cycles::from(1u64),
+                    scale_cycles(ECDSA_SIGNATURE_FEE) - Cycles::from(1_u64),
                     scale_cycles(ECDSA_SIGNATURE_FEE),
                 ),
                 error_code: Some("IC0406".to_string()),

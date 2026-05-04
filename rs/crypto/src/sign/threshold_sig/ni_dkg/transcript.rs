@@ -23,12 +23,12 @@ mod creation {
     pub fn create_transcript<C: NiDkgCspClient>(
         ni_dkg_csp_client: &C,
         config: &NiDkgConfig,
-        verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
+        verified_dealings: BTreeMap<NodeId, NiDkgDealing>,
     ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
-        let verified_dealings = NiDkgDealings::new(verified_dealings.clone())?;
+        let verified_dealings = NiDkgDealings::new(verified_dealings)?;
         ensure_sufficiently_many_dealings(config, &verified_dealings)?;
         ensure_dealing_node_ids_in_dealers(config.dealers(), &verified_dealings);
-        let csp_transcript = create_csp_transcript(ni_dkg_csp_client, config, &verified_dealings)?;
+        let csp_transcript = create_csp_transcript(ni_dkg_csp_client, config, verified_dealings)?;
         Ok(NiDkgTranscript {
             dkg_id: config.dkg_id().clone(),
             threshold: config.threshold(),
@@ -75,7 +75,7 @@ mod creation {
     fn create_csp_transcript<C: NiDkgCspClient>(
         ni_dkg_csp_client: &C,
         config: &NiDkgConfig,
-        verified_dealings: &NiDkgDealings,
+        verified_dealings: NiDkgDealings,
     ) -> Result<CspNiDkgTranscript, DkgCreateTranscriptError> {
         if let Some(resharing_transcript) = &config.resharing_transcript() {
             return convert_dealings_and_call_create_resharing_transcript(
@@ -91,7 +91,7 @@ mod creation {
     fn convert_dealings_and_call_create_resharing_transcript<C: NiDkgCspClient>(
         ni_dkg_csp_client: &C,
         config: &NiDkgConfig,
-        verified_dealings: &NiDkgDealings,
+        verified_dealings: NiDkgDealings,
         resharing_transcript: &NiDkgTranscript,
     ) -> Result<CspNiDkgTranscript, DkgCreateTranscriptError> {
         let csp_dealings = csp_dealings(verified_dealings, |dealer| {
@@ -124,7 +124,7 @@ mod creation {
     fn convert_dealings_and_call_create_transcript<C: NiDkgCspClient>(
         ni_dkg_csp_client: &C,
         config: &NiDkgConfig,
-        verified_dealings: &NiDkgDealings,
+        verified_dealings: NiDkgDealings,
     ) -> Result<CspNiDkgTranscript, DkgCreateTranscriptError> {
         let csp_dealings = csp_dealings(verified_dealings, |dealer| {
             dealer_index_in_dealers_or_panic(config.dealers(), dealer)
@@ -139,16 +139,14 @@ mod creation {
     }
 
     fn csp_dealings(
-        verified_dealings: &NiDkgDealings,
+        verified_dealings: NiDkgDealings,
         index_provider: impl Fn(NodeId) -> NodeIndex,
     ) -> BTreeMap<NodeIndex, CspNiDkgDealing> {
-        let mut csp_dealings = BTreeMap::new();
-        for (dealer, dealing) in verified_dealings.iter() {
-            let csp_dealing = CspNiDkgDealing::from(dealing.clone());
-            let dealer_index = index_provider(*dealer);
-            csp_dealings.insert(dealer_index, csp_dealing);
-        }
-        csp_dealings
+        verified_dealings
+            .dealings
+            .into_iter()
+            .map(|(dealer, dealing)| (index_provider(dealer), CspNiDkgDealing::from(dealing)))
+            .collect()
     }
 
     struct NiDkgDealings {

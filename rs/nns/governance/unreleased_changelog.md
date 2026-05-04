@@ -11,11 +11,6 @@ on the process that this file is part of, see
 
 ## Changed
 
-- `CreateServiceNervousSystem` proposals no longer reject SNS configurations
-  where the sum of developer-allocated tokens exceeds
-  `swap_distribution.total_e8s`. With the Neurons' Fund discontinued, this
-  validation is no longer needed.
-
 ## Deprecated
 
 ## Removed

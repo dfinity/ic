@@ -618,7 +618,7 @@ fn test_ledger_index_icrc1_mint_parity() {
         None,
         Some(setup.memo.clone()),
     );
-    assert_eq!(mint_block_index, Nat::from(1u8));
+    assert_eq!(mint_block_index, Nat::from(1_u8));
     // Create the expected ledger block for the ICRC1 Mint transaction
     let expected_ledger_block = icp_ledger::Block {
         parent_hash: None,
@@ -662,7 +662,7 @@ fn test_ledger_index_icrc1_transfer_parity() {
         None,
         Some(setup.memo.clone()),
     );
-    assert_eq!(tx_block_index, Nat::from(1u8));
+    assert_eq!(tx_block_index, Nat::from(1_u8));
     // Create the expected ledger block for the ICRC1 Transfer transaction
     let expected_ledger_block = icp_ledger::Block {
         parent_hash: None,
@@ -709,7 +709,7 @@ fn test_ledger_index_icrc1_transfer_without_created_at_time_parity() {
         None,
         Some(setup.memo.clone()),
     );
-    assert_eq!(tx_block_index, Nat::from(1u8));
+    assert_eq!(tx_block_index, Nat::from(1_u8));
     // Create the expected ledger block for the ICRC1 Transfer transaction
     let expected_ledger_block = icp_ledger::Block {
         parent_hash: None,
@@ -762,7 +762,7 @@ fn test_ledger_index_icrc1_approve_parity() {
         .expected_allowance(Some(Nat::from(0_u8)))
         .expires_at(Some(expires_at)),
     );
-    assert_eq!(tx_block_index, Nat::from(1u8));
+    assert_eq!(tx_block_index, Nat::from(1_u8));
     // Create the expected ledger block for the ICRC1 Approve transaction
     let expected_ledger_block = icp_ledger::Block {
         parent_hash: None,
@@ -816,7 +816,7 @@ fn test_ledger_index_icrc1_transfer_from_parity() {
         .expected_allowance(Some(Nat::from(0_u8)))
         .expires_at(Some(expires_at)),
     );
-    assert_eq!(tx_block_index, Nat::from(1u8));
+    assert_eq!(tx_block_index, Nat::from(1_u8));
     // advance time so that time does not grow implicitly when executing a round
     setup.env.advance_time(Duration::from_secs(1));
     // Create an ICRC2 TransferFrom transaction with all fields set, based on the previously
@@ -833,7 +833,7 @@ fn test_ledger_index_icrc1_transfer_from_parity() {
         Some(setup.fee),
         Some(setup.memo.clone()),
     );
-    assert_eq!(tx_block_index, Nat::from(2u8));
+    assert_eq!(tx_block_index, Nat::from(2_u8));
     // Create the expected ledger block for the ICRC2 TransferFrom transaction
     let expected_ledger_block = icp_ledger::Block {
         parent_hash: None,
@@ -902,7 +902,7 @@ impl ParitySetup {
             from_account_identifier,
             spender_account,
             spender_account_identifier: AccountIdentifier::from(spender_account),
-            memo: vec![1u8, 1u8, 1u8],
+            memo: vec![1_u8, 1_u8, 1_u8],
             mint_amount,
             approve_amount: 1_000_000,
             transfer_amount: 1_000,
@@ -1856,7 +1856,7 @@ fn test_index_sync_with_incorrect_parent_hash() {
     // Create transfer block (block 1) with INCORRECT parent hash
     let transfer_timestamp = TimeStamp::from_nanos_since_unix_epoch(2_000_000_000);
     // Create an incorrect parent hash by hashing dummy data instead of the actual mint block
-    let dummy_encoded = ic_ledger_core::block::EncodedBlock::from_vec(vec![0u8; 100]);
+    let dummy_encoded = ic_ledger_core::block::EncodedBlock::from_vec(vec![0_u8; 100]);
     let incorrect_parent_hash = Some(icp_ledger::Block::block_hash(&dummy_encoded));
     let transfer_block = icp_ledger::Block {
         parent_hash: incorrect_parent_hash,
@@ -1973,7 +1973,7 @@ fn test_index_sync_with_invalid_block() {
     add_block_to_test_ledger(env, test_ledger_id, &mint_block);
 
     // Add invalid block via add_raw_block with all zero bytes
-    let invalid_encoded = ic_ledger_core::block::EncodedBlock::from_vec(vec![0u8; 100]);
+    let invalid_encoded = ic_ledger_core::block::EncodedBlock::from_vec(vec![0_u8; 100]);
     add_raw_block_to_test_ledger(env, test_ledger_id, &invalid_encoded);
 
     // Add a second mint block (block 2) after the invalid block
@@ -2009,7 +2009,7 @@ fn test_index_sync_with_invalid_block() {
     let index_get_block = |block_index: u64| {
         let req = Encode!(&GetBlocksRequest {
             start: block_index.into(),
-            length: 1u64.into(),
+            length: 1_u64.into(),
         })
         .expect("Failed to encode GetBlocksRequest");
         let res = env

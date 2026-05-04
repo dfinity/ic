@@ -1,7 +1,7 @@
 use arbitrary::{Arbitrary, Result, Unstructured};
 use num_traits::{Bounded, Signed};
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct SpecialInt<T>(pub T);
 
 pub trait SpecialArbitrary: Sized + Bounded + Signed + Copy {

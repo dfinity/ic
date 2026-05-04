@@ -95,7 +95,7 @@ fn install_code_works() {
 
     // Install code.
     let wasm_module = wat::parse_str(HELLO_WORLD_WAT).expect("Failed to parse WAT into bytecode");
-    let arg: Vec<u8> = vec![0u8; 10];
+    let arg: Vec<u8> = vec![0_u8; 10];
     let result = env
         .execute_ingress(
             canister_creator_canister_id,

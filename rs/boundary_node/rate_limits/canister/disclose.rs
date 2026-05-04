@@ -191,11 +191,11 @@ mod tests {
             let rule = state.get_rule(&rule_id_1).unwrap();
             assert_eq!(rule.disclosed_at, Some(current_time_1));
             let rule = state.get_rule(&rule_id_2).unwrap();
-            assert_eq!(rule.disclosed_at, Some(25u64));
+            assert_eq!(rule.disclosed_at, Some(25_u64));
             let rule = state.get_rule(&rule_id_3).unwrap();
             assert_eq!(rule.disclosed_at, Some(current_time_1));
             let rule = state.get_rule(&rule_id_4).unwrap();
-            assert_eq!(rule.disclosed_at, Some(30u64));
+            assert_eq!(rule.disclosed_at, Some(30_u64));
             let rule = state.get_rule(&rule_id_5).unwrap();
             assert_eq!(rule.disclosed_at, None);
             let incident = state.get_incident(&incident_id_1).unwrap();

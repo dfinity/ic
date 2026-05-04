@@ -44,7 +44,8 @@ use ic_system_test_driver::util::{
 use ic_types::crypto::SignedBytesWithoutDomainSeparator;
 use ic_types::malicious_behavior::MaliciousBehavior;
 use ic_types::messages::{
-    Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedDelegation,
+    Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope,
+    RawSignedSenderInfo, SignedDelegation,
 };
 use ic_types::{CanisterId, Time};
 use ic_universal_canister::wasm;
@@ -219,6 +220,8 @@ async fn play_malicious_requests<T: Identity + 'static>(
 
     test_request_with_expired_ingress(&identity, malicious_node, canister_id).await;
 
+    test_request_with_sender_info(&identity, malicious_node, canister_id).await;
+
     test_request_with_delegation(
         &identity,
         &malicious_node.get_public_url(),
@@ -238,6 +241,55 @@ async fn play_malicious_requests<T: Identity + 'static>(
     .await;
 }
 
+async fn test_request_with_sender_info<T: Identity + 'static>(
+    identity: &T,
+    malicious_node: &IcNodeSnapshot,
+    canister_id: Principal,
+) {
+    // An update call to set the global data to [4, 5, 6], but with sender_info set.
+    let content = HttpCallContent::Call {
+        update: HttpCanisterUpdate {
+            canister_id: Blob(canister_id.as_slice().to_vec()),
+            method_name: "update".to_string(),
+            arg: Blob(wasm().set_global_data(&[4, 5, 6]).reply().build()),
+            sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
+            ingress_expiry: expiry_time().as_nanos() as u64,
+            nonce: None,
+            sender_info: Some(RawSignedSenderInfo {
+                info: Blob(vec![1, 2, 3]),
+                signer: Blob(canister_id.as_slice().to_vec()),
+                sig: Blob(vec![4, 5, 6]),
+            }),
+        },
+    };
+
+    let signature = sign_update(&content, identity);
+
+    // Create an envelope with a correct signature.
+    let envelope = HttpRequestEnvelope {
+        content,
+        sender_delegation: None,
+        sender_sig: Some(Blob(signature.signature.unwrap())),
+        sender_pubkey: Some(Blob(signature.public_key.clone().unwrap())),
+    };
+    let body = serde_cbor::ser::to_vec(&envelope).unwrap();
+    let client = reqwest::Client::new();
+    let res = client
+        .post(format!(
+            "{}api/v2/canister/{}/call",
+            malicious_node.get_public_url(),
+            canister_id.to_text()
+        ))
+        .header("Content-Type", "application/cbor")
+        .body(body)
+        .send()
+        .await
+        .unwrap();
+
+    // Even though the request is invalid, the malicious node accepts it.
+    assert_eq!(res.status(), 202);
+}
+
 async fn test_request_with_no_signature_and_no_pubkey<T: Identity + 'static>(
     identity: &T,
     malicious_node: &IcNodeSnapshot,
@@ -252,6 +304,7 @@ async fn test_request_with_no_signature_and_no_pubkey<T: Identity + 'static>(
             sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
+            sender_info: None,
         },
     };
 
@@ -297,6 +350,7 @@ async fn test_request_with_correct_signature_and_incorrect_pubkey<T: Identity + 
             sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
+            sender_info: None,
         },
     };
 
@@ -344,6 +398,7 @@ async fn test_request_with_incorrect_signature_and_correct_pubkey<T: Identity + 
             sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
+            sender_info: None,
         },
     };
 
@@ -391,6 +446,7 @@ async fn test_request_with_incorrect_sender<T: Identity + 'static>(
             sender: Blob(wrong_identity.sender().unwrap().as_slice().to_vec()), // wrong sender
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
+            sender_info: None,
         },
     };
 
@@ -435,6 +491,7 @@ async fn test_request_with_expired_ingress<T: Identity + 'static>(
             sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
             ingress_expiry: 0,
             nonce: None,
+            sender_info: None,
         },
     };
 
@@ -483,6 +540,7 @@ async fn test_request_with_delegation<T: Identity + 'static>(
             sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
+            sender_info: None,
         },
     };
 
