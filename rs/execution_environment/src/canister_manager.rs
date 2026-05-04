@@ -504,16 +504,6 @@ impl CanisterManager {
                 required: threshold,
             });
         }
-        let allocated_bytes = new_memory_bytes.saturating_sub(&old_memory_bytes);
-        let reservation_cycles = self
-            .cycles_account_manager
-            .storage_reservation_cycles(
-                allocated_bytes,
-                subnet_memory_saturation,
-                subnet_size,
-                cost_schedule,
-            )
-            .real();
         if let Some(memory_allocation) = settings.memory_allocation() {
             canister.system_state.memory_allocation = memory_allocation;
         }
@@ -652,6 +642,16 @@ impl CanisterManager {
 
         // Memory allocation: reserve storage cycles now that all checks have
         // passed, so that `threshold` above remained valid throughout.
+        let allocated_bytes = new_memory_bytes.saturating_sub(&old_memory_bytes);
+        let reservation_cycles = self
+            .cycles_account_manager
+            .storage_reservation_cycles(
+                allocated_bytes,
+                subnet_memory_saturation,
+                subnet_size,
+                cost_schedule,
+            )
+            .real();
         canister
             .system_state
             .reserve_cycles(reservation_cycles)
