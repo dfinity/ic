@@ -9644,8 +9644,13 @@ fn certification_not_pruned() {
         sm.update_fast_forward_height(Height::new(5));
 
         // consensus delivers a certification so the optimization triggers
-        let certification = fake_certification_for_height(Height::new(1));
-        sm.deliver_state_certification(certification.clone());
+        sm.deliver_state_certification(fake_certification_for_height_with_hash(
+            Height::new(1),
+            CryptoHash(
+                hex::decode("38e2d3769adae3b19e69c586c7bb20cd63d0e070a3bc59e6b8d17c31983b6556")
+                    .unwrap(),
+            ),
+        ));
 
         // all conditions are satisfied => optimization triggers
         let state = sm.take_tip().1;
@@ -9653,12 +9658,19 @@ fn certification_not_pruned() {
         assert_eq!(no_state_clone_count(metrics), 1);
 
         let state = sm.take_tip().1;
-        sm.push_state_and_cert_metadata(Height::new(2), state.clone());
+        let mut new_state = state.clone();
+        new_state.metadata.prev_state_hash = Some(
+            CryptoHash(
+                hex::decode("38e2d3769adae3b19e69c586c7bb20cd63d0e070a3bc59e6b8d17c31983b6556")
+                    .unwrap(),
+            )
+            .into(),
+        );
+        sm.push_state_and_cert_metadata(Height::new(2), new_state);
         sm.remove_states_below(Height::new(2));
 
         // certification @ height 1 should still be present, because it is at tip_height
         assert!(sm.certifications().contains_key(&Height::new(1)));
-
         sm.commit_and_certify_at_height(state, Height::new(2), CertificationScope::Metadata, None);
     });
 }
