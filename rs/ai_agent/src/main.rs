@@ -29,6 +29,20 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let log = make_logger();
 
+    // Install the process-wide rustls crypto provider exactly once.
+    //
+    // rig 0.36 transitively pulls reqwest 0.13, which we configure with
+    // `rustls-no-provider` to avoid linking aws-lc-rs alongside the
+    // workspace's existing ring provider (mixing the two crashes rustls
+    // 0.23 at startup with `no process-level CryptoProvider available`).
+    // The flip side of `rustls-no-provider` is that *no* provider is
+    // auto-installed -- so we have to do it ourselves before the first
+    // `reqwest::Client::builder().build()` call inside rig. Without
+    // this, every Gemini request fails synchronously with the opaque
+    // `error sending request for url (...)` you see wrapped by rig as
+    // `CompletionError::HttpError`.
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     let config = AppConfig::default();
     let state = Arc::new(AppState::new(config, log.clone()));
     let app = build_router(state);

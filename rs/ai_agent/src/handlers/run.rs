@@ -11,6 +11,17 @@ use crate::{
     tools::validate_tool_names,
 };
 
+/// Render the full `Error::source()` chain of `e` as " -> "-separated text.
+fn error_chain(e: &dyn std::error::Error) -> String {
+    let mut parts = Vec::new();
+    let mut cur: Option<&dyn std::error::Error> = e.source();
+    while let Some(s) = cur {
+        parts.push(s.to_string());
+        cur = s.source();
+    }
+    parts.join(" -> ")
+}
+
 /// `POST /v1/agent/run` — single-turn agent invocation.
 pub async fn run(
     State(state): State<Arc<AppState>>,
@@ -79,8 +90,14 @@ pub async fn run(
             (StatusCode::OK, Json(body)).into_response()
         }
         Err(e) => {
-            warn!(state.log, "agent run failed"; "error" => %e);
-            let msg = format!("Agent failed: {e}");
+            // rig wraps the underlying reqwest/rustls error in
+            // `CompletionError::HttpError`, whose Display impl drops the
+            // source chain. Walk `Error::source()` ourselves so the
+            // failing transport-level cause makes it into the log /
+            // response body where it can actually be debugged.
+            let chain = error_chain(&e);
+            warn!(state.log, "agent run failed"; "error" => %e, "chain" => &chain);
+            let msg = format!("Agent failed: {e}: {chain}");
             (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody::new(msg))).into_response()
         }
     }

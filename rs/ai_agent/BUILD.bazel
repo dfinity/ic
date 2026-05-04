@@ -40,5 +40,6 @@ rust_binary(
     deps = DEPENDENCIES + [
         ":ai_agent",
         "@crate_index//:clap",
+        "@crate_index//:rustls",
     ],
 )

@@ -7,7 +7,11 @@
 use serde::{Deserialize, Serialize};
 
 /// Default Gemini model used if `/v1/config` doesn't override it.
-pub const DEFAULT_GEMINI_MODEL: &str = "gemini-2.0-flash";
+///
+/// `gemini-2.0-flash` was retired for new users; switching to `flash-latest`
+/// keeps the agent working without pinning to a specific (and deprecatable)
+/// version. Callers can still override per-config via the `model` field.
+pub const DEFAULT_GEMINI_MODEL: &str = "gemini-flash-latest";
 
 /// Default agent system prompt.
 pub const DEFAULT_PREAMBLE: &str = "You are a concise, helpful assistant. \
