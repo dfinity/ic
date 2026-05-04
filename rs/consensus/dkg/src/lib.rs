@@ -1989,7 +1989,6 @@ mod tests {
                     &no_op_logger(),
                 )
                 .unwrap();
-                println!("callback_id_map: {:?}", callback_id_map);
                 let early_transcripts = payload_builder::create_early_remote_transcripts(
                     &pool_reader,
                     &mock_crypto,

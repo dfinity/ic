@@ -202,6 +202,8 @@ pub(crate) fn create_early_remote_transcripts(
             Err(errs) => {
                 // Reject contexts for which we failed to create configs.
                 for (dkg_id, err) in errs {
+                    // Skip requests for which we already have a transcript on chain.
+                    // TODO
                     if completed_dkgs.contains(&dkg_id) {
                         break;
                     }
