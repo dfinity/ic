@@ -45,8 +45,9 @@ use ic_replicated_state::canister_state::system_state::ReservationError;
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::{
     self, CHUNK_SIZE, ChunkValidationResult, WasmChunkHash, WasmChunkStore,
 };
-use ic_replicated_state::metadata_state::UnflushedCheckpointOp;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
+use ic_replicated_state::metadata_state::{
+    UnflushedCheckpointOp, subnet_call_context_manager::InstallCodeCallId,
+};
 use ic_replicated_state::page_map::{Buffer, PageAllocatorFileDescriptor};
 use ic_replicated_state::{
     CallOrigin, CanisterState, NetworkTopology, ReplicatedState, SchedulerState, SystemState,
@@ -70,11 +71,9 @@ use more_asserts::{debug_assert_ge, debug_assert_le};
 use num_traits::{SaturatingAdd, SaturatingSub};
 use prometheus::IntCounter;
 use std::collections::BTreeSet;
-use std::convert::TryFrom;
 use std::iter::zip;
 use std::path::PathBuf;
-use std::str::FromStr;
-use std::sync::Arc;
+use std::{convert::TryFrom, str::FromStr, sync::Arc};
 
 use types::*;
 pub(crate) mod types;
