@@ -116,7 +116,10 @@ RUN systemctl disable \
     fstrim.timer \
     ollama.service \
     ollama-tls.service \
-    generate-ollama-tls-cert.service
+    generate-ollama-tls-cert.service \
+    ic-ai-agent.service \
+    ic-ai-agent-tls.service \
+    generate-ic-ai-agent-tls-cert.service
 
 # ------ GUESTOS WORK --------------------------------------------
 

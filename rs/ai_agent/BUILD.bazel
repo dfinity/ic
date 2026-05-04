@@ -1,0 +1,44 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:anyhow",
+    "@crate_index//:axum",
+    "@crate_index//:chrono",
+    "@crate_index//:meval",
+    "@crate_index//:rig_core",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:slog",
+    "@crate_index//:slog-async",
+    "@crate_index//:slog-term",
+    "@crate_index//:thiserror",
+    "@crate_index//:tokio",
+    "@crate_index//:tower",
+    "@crate_index//:tower-http",
+]
+
+rust_library(
+    name = "ai_agent",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    crate_name = "ic_ai_agent",
+    deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "ic-ai-agent",
+    srcs = ["src/main.rs"],
+    visibility = [
+        "//ic-os/guestos:__subpackages__",
+        "//rs:release-pkg",
+    ],
+    deps = DEPENDENCIES + [
+        ":ai_agent",
+        "@crate_index//:clap",
+    ],
+)

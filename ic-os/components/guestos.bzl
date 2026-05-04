@@ -69,6 +69,16 @@ def component_files(mode):
         Label("guestos/ollama/generate-ollama-tls-cert.service"): "/etc/systemd/system/generate-ollama-tls-cert.service",
         Label("guestos/ollama/ollama-tls.conf"): "/etc/stunnel/ollama-tls.conf",
         Label("guestos/ollama/ollama-tls.service"): "/etc/systemd/system/ollama-tls.service",
+        # IC AI agent orchestration HTTP API (started on AI nodes only,
+        # alongside ollama). Same TLS-via-stunnel pattern: the agent
+        # listens on 127.0.0.1:11501 and stunnel terminates TLS on
+        # :::11500. All three units are explicitly disabled in the
+        # GuestOS Dockerfile so non-AI nodes never run them.
+        Label("guestos/ai-agent/ic-ai-agent.service"): "/etc/systemd/system/ic-ai-agent.service",
+        Label("guestos/ai-agent/ic-ai-agent-tls.service"): "/etc/systemd/system/ic-ai-agent-tls.service",
+        Label("guestos/ai-agent/ic-ai-agent-tls.conf"): "/etc/stunnel/ic-ai-agent-tls.conf",
+        Label("guestos/ai-agent/generate-ic-ai-agent-tls-cert.sh"): "/opt/ic/bin/generate-ic-ai-agent-tls-cert.sh",
+        Label("guestos/ai-agent/generate-ic-ai-agent-tls-cert.service"): "/etc/systemd/system/generate-ic-ai-agent-tls-cert.service",
         Label("guestos/remote-attestation-server.service"): "/etc/systemd/system/remote-attestation-server.service",
         Label("guestos/generate-ic-config/generate-ic-config.service"): "/etc/systemd/system/generate-ic-config.service",
         Label("guestos/share/ic-boundary.env"): "/opt/ic/share/ic-boundary.env",
