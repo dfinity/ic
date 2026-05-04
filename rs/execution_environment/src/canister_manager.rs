@@ -20,7 +20,6 @@ use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::wasm_utils::decoding::decode_wasm;
 use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use ic_logger::{ReplicaLogger, error, fatal, info};
 use ic_management_canister_types_private::{
@@ -343,9 +342,8 @@ impl CanisterManager {
         &self,
         settings: &CanisterSettings,
         canister: &mut CanisterState,
-        subnet_available_memory: &mut SubnetAvailableMemory,
+        round_limits: &mut RoundLimits,
         subnet_memory_saturation: &ResourceSaturation,
-        subnet_compute_allocation_usage: u64,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
         log_resize_needed: bool,
@@ -434,10 +432,14 @@ impl CanisterManager {
         let new_memory_bytes = new_memory_allocation.allocated_bytes(canister_memory_usage);
         if new_memory_bytes >= old_memory_bytes {
             let available = NumBytes::from(
-                (subnet_available_memory.get_execution_memory().max(0) as u64)
+                (round_limits
+                    .subnet_available_memory
+                    .get_execution_memory()
+                    .max(0) as u64)
                     .saturating_add(old_memory_bytes.get()),
             );
-            subnet_available_memory
+            round_limits
+                .subnet_available_memory
                 .try_decrement(
                     new_memory_bytes - old_memory_bytes,
                     NumBytes::from(0),
@@ -450,7 +452,7 @@ impl CanisterManager {
                     },
                 )?;
         } else {
-            subnet_available_memory.increment(
+            round_limits.subnet_available_memory.increment(
                 old_memory_bytes - new_memory_bytes,
                 NumBytes::from(0),
                 NumBytes::from(0),
@@ -490,7 +492,7 @@ impl CanisterManager {
             let available_compute_allocation = self
                 .config
                 .compute_capacity
-                .saturating_sub(subnet_compute_allocation_usage)
+                .saturating_sub(round_limits.compute_allocation_used)
                 // Minus 1 below guarantees there is always at least 1% of free compute
                 // if the subnet was not already oversubscribed.
                 .saturating_sub(1)
@@ -561,6 +563,7 @@ impl CanisterManager {
                         threshold: err.threshold,
                         requested: err.requested,
                     })?;
+                round_limits.instructions -= as_round_instructions(log_resize_instructions);
             }
             Some(requested_limit)
         } else {
@@ -656,14 +659,12 @@ impl CanisterManager {
             })
             .unwrap_or(false);
         let old_compute_allocation = canister.compute_allocation().as_percent();
-        let old_log_bytes_used = canister.system_state.log_memory_store.bytes_used() as u64;
 
         self.validate_and_update_canister_settings(
             &settings,
             canister,
-            &mut round_limits.subnet_available_memory,
+            round_limits,
             &subnet_memory_saturation,
-            round_limits.compute_allocation_used,
             subnet_size,
             cost_schedule,
             log_resize_needed,
@@ -679,16 +680,6 @@ impl CanisterManager {
             round_limits.compute_allocation_used = round_limits
                 .compute_allocation_used
                 .saturating_sub(old_compute_allocation - new_compute_allocation);
-        }
-
-        // Account instructions for log resize.
-        // Use pre-mutation bytes_used so that downsize operations (which drop
-        // old records) are charged for the actual work of reading/rewriting
-        // the original buffer, matching what validation checked.
-        if log_resize_needed {
-            let log_resize_instructions =
-                NumInstructions::new(old_log_bytes_used * LOG_RESIZE_COST_PER_BYTE);
-            round_limits.instructions -= as_round_instructions(log_resize_instructions);
         }
 
         canister.system_state.bump_canister_version();
@@ -1479,9 +1470,8 @@ impl CanisterManager {
         if let Err(err) = self.validate_and_update_canister_settings(
             &settings,
             &mut new_canister,
-            &mut round_limits.subnet_available_memory,
+            round_limits,
             &subnet_memory_saturation,
-            round_limits.compute_allocation_used,
             subnet_size,
             state.get_own_cost_schedule(),
             true, // New canister: resize always needed.
