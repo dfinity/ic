@@ -1516,10 +1516,6 @@ impl CanisterManager {
             .subnet_available_memory
             .update_execution_memory_unchecked(available_execution_memory_change);
 
-        // Commit the canister ID now that settings validation has succeeded.
-        // For specified IDs the allocation counter is not involved.  For
-        // auto-generated IDs, `peek_new_canister_id` did not mutate state, so
-        // we advance `last_generated_canister_id` only here.
         if specified_id.is_none() {
             state.metadata.commit_new_canister_id(new_canister_id);
         }
