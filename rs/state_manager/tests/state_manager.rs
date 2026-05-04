@@ -9385,6 +9385,15 @@ fn remove_inmemory_states_below_prunes_certification() {
         sm.commit_and_certify_at_height(state, Height::new(2), CertificationScope::Metadata, None);
         // flusing the hash channel guarantees that the `latest_state_height` is incremented, which we rely on below.
         sm.flush_hash_channel();
+        // also move `latest_certified_height`, because that is protected from pruning.
+        sm.deliver_state_certification(fake_certification_for_height_with_hash(
+            Height::new(2),
+            CryptoHash(
+                hex::decode("cea29292fecbadde1cd534ce411b829ba9d8db4971794f827eddda5c5dbfcee4")
+                    .unwrap(),
+            ),
+        ));
+
         assert_eq!(no_state_clone_count(metrics), 0);
 
         // certification at height 1 is pruned now that `latest_state_height` advanced to 2
@@ -9393,6 +9402,8 @@ fn remove_inmemory_states_below_prunes_certification() {
             sm.certifications().keys().cloned().collect::<Vec<_>>(),
             vec![]
         );
+        // still present here because `latest_certified_height` is 2 and because the previous round was normal, not optimized.
+        assert_eq!(sm.certifications_metadata_heights(), vec![Height::new(2)]);
     });
 }
 
