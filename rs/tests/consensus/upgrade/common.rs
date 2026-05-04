@@ -21,7 +21,9 @@ use ic_consensus_system_test_utils::subnet::enable_chain_key_signing_on_subnet;
 use ic_consensus_system_test_utils::upgrade::{
     assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
 };
-use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
+use ic_consensus_threshold_sig_system_test_utils::{
+    get_public_key_with_retries, run_chain_key_signature_test,
+};
 use ic_management_canister_types::{CanisterId, TakeCanisterSnapshotArgs};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_type::SubnetType;
@@ -101,6 +103,7 @@ pub fn upgrade(
     nns_node: &IcNodeSnapshot,
     upgrade_version: &ReplicaVersion,
     subnet_type: SubnetType,
+    ecdsa_canister_key: Option<&(MessageCanister, BTreeMap<MasterPublicKeyId, Vec<u8>>)>,
 ) -> (IcNodeSnapshot, Principal, String) {
     let logger = env.logger();
     let (subnet_id, subnet_nodes, healthy_node, faulty_node, redundant_nodes) =
@@ -249,6 +252,14 @@ pub fn upgrade(
         msg_2
     ));
     info!(logger, "Could store and read message '{}'", msg_2);
+
+    if let Some((canister, public_keys)) = ecdsa_canister_key {
+        for (key_id, old_public_key) in public_keys {
+            let new_public_key =
+                block_on(get_public_key_with_retries(key_id, canister, &logger, 100)).unwrap();
+            assert_eq!(old_public_key, &new_public_key);
+        }
+    }
 
     info!(logger, "Starting redundant nodes ...");
     for redundant_node in &redundant_nodes {
