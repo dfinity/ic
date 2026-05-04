@@ -61,7 +61,7 @@ fn obtain_crypt_device_handle(
 
     match header_location {
         LuksHeaderLocation::Detached(header_path) => {
-            obtain_crypt_device_handle_with_detached_header(device_path, &header_path)
+            obtain_crypt_device_handle_with_detached_header(device_path, header_path)
                 .with_context(|| format!("Detached header {} failed", header_path.display()))
         }
         LuksHeaderLocation::Attached => {

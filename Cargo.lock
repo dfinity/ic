@@ -5590,6 +5590,7 @@ dependencies = [
  "attestation",
  "config_types",
  "futures",
+ "guest_disk",
  "guest_upgrade_client",
  "guest_upgrade_server",
  "guest_upgrade_shared",
