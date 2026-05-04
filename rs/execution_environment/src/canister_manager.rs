@@ -1482,7 +1482,6 @@ impl CanisterManager {
             .iter()
             .copied()
             .collect();
-
         let environment_variables_hash = settings
             .environment_variables()
             .map(|env_vars| env_vars.hash());
