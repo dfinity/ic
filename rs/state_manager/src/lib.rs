@@ -3336,15 +3336,26 @@ impl StateManager for StateManagerImpl {
                     .expect("Failed to send `Wait` to hash channel");
                 recv.recv().expect("Failed to wait for hash channel");
                 // After awaiting the hashing thread, snapshot and certification_metadata
-                // must have an entry at height-1, so we can unwrap.
+                // must have an entry at prev_height, so we can unwrap.
                 let states = self.states.read();
                 if let Some(cert_md) = states.certifications_metadata.get(&prev_height) {
                     cert_md.certified_state_hash.clone()
                 } else {
-                    fatal!(
+                    error!(
                         self.log,
                         "Previous state hash was not available after awaiting the hash thread. This is a bug."
                     );
+                    debug_assert!(false);
+                    let certification = StateManagerImpl::compute_certification_metadata(
+                        &state,
+                        prev_height,
+                        &self.metrics,
+                        &self.log,
+                    )
+                    .unwrap_or_else(|err| {
+                        fatal!(self.log, "Failed to compute hash tree: {:?}", err)
+                    });
+                    certification.certified_state_hash.clone()
                 }
             }
         };
@@ -3693,7 +3704,7 @@ fn spawn_hash_thread(
                                 // Only update the certified height and notify the channel if the
                                 // certification is actually being stored. We must not fire the channel
                                 // when the snapshot already existed (e.g., due to state sync), because
-                                // in that case `certification_metadata` is never inserted and the
+                                // in that case `certification_metadata` is not updated and the
                                 // certified state at this height would not be available.
                                 if has_certification {
                                     update_latest_certified_height(
@@ -3719,7 +3730,7 @@ fn spawn_hash_thread(
 impl StateManagerImpl {
     /// After this method terminates, both `SharedState.snapshots` and `SharedState.certification_metadata`
     /// at the height from the previous `commit_and_certify` are populated. It also updates `latest_state_height`
-    /// to the maximum of the value before and the committed height.
+    /// to the maximum of the value before and the committed height. It may also update `latest_certified_state_height`.
     ///
     /// This used to happen synchronously inside `commit_and_certify`, but now happens in the hash thread
     /// at an unpredictable time.
