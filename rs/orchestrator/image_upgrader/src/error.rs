@@ -15,8 +15,7 @@ pub enum UpgradeError {
     /// Generic upgrade error
     GenericError(String),
 
-    /// An error occurred when querying the registry that prevents the orchestrator from making
-    /// progress
+    /// An error occurred when querying the registry that prevents the upgrade from making progress
     RegistryError(String),
 
     /// An error occurred when trying to determine the node's subnet ID
