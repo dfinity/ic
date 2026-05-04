@@ -839,11 +839,11 @@ fn protobuf_to_vec<M: Message>(entry: M) -> Vec<u8> {
 
 /// Generates an SEV-SNP attestation package for node registration.
 ///
-/// This function checks if SEV is active and if so, generates an attestation package
+/// This function checks if TEE is enabled and if so, generates an attestation package
 /// with the NodeRegistration custom data namespace. The attestation report can be
 /// verified by the registry canister to extract and store the chip_id.
 ///
-/// Returns `None` if SEV is not active or if attestation package generation fails.
+/// Returns `None` if TEE is not enabled or if attestation package generation fails.
 #[cfg(target_os = "linux")]
 fn generate_node_registration_attestation(
     log: &ReplicaLogger,
