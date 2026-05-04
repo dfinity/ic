@@ -104,6 +104,9 @@ impl Node {
             RequestType::QueryV3 => Url::from_str(&format!(
                 "https://{node_id}:{node_port}/api/v3/canister/{principal}/query",
             )),
+            RequestType::QuerySubnetV3 => Url::from_str(&format!(
+                "https://{node_id}:{node_port}/api/v3/subnet/{principal}/query",
+            )),
             RequestType::CallV2 => Url::from_str(&format!(
                 "https://{node_id}:{node_port}/api/v2/canister/{principal}/call",
             )),
@@ -112,6 +115,9 @@ impl Node {
             )),
             RequestType::CallV4 => Url::from_str(&format!(
                 "https://{node_id}:{node_port}/api/v4/canister/{principal}/call",
+            )),
+            RequestType::CallSubnetV4 => Url::from_str(&format!(
+                "https://{node_id}:{node_port}/api/v4/subnet/{principal}/call",
             )),
             RequestType::ReadStateV2 => Url::from_str(&format!(
                 "https://{node_id}:{node_port}/api/v2/canister/{principal}/read_state",

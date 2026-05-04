@@ -26,17 +26,16 @@ Success::
 end::catalog[] */
 
 use ic_base_types::SubnetId;
+use ic_consensus_system_test_utils::get_cup_from_node;
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
     store_message,
 };
 use ic_consensus_system_test_utils::subnet::assert_subnet_is_healthy;
-use ic_protobuf::types::v1 as pb;
 use ic_recovery::{RecoveryArgs, file_sync_helper, get_node_metrics};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_splitting::subnet_splitting::{StepType, SubnetSplitting, SubnetSplittingArgs};
-use ic_system_test_driver::retry_with_msg_async;
 use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use ic_system_test_driver::{
     driver::{
@@ -48,12 +47,11 @@ use ic_system_test_driver::{
     },
     util::*,
 };
-use ic_types::consensus::{CatchUpPackage, HasHeight};
+use ic_types::consensus::HasHeight;
 use ic_types::{CanisterId, Height, PrincipalId, ReplicaVersion};
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use candid::Principal;
-use prost::Message;
 use slog::{Logger, info};
 use std::{thread, time::Duration};
 
@@ -371,7 +369,7 @@ fn wait_until_halting_cup_reached(env: &TestEnv, source_subnet: &SubnetSnapshot,
         );
 
         loop {
-            let cup = block_on(get_cup(&node, logger)).expect("Failed to download a CUP");
+            let cup = block_on(get_cup_from_node(&node, logger)).expect("Failed to download a CUP");
             let cup_registry_version = cup
                 .content
                 .block
@@ -426,47 +424,6 @@ fn wait_until_halting_cup_reached(env: &TestEnv, source_subnet: &SubnetSnapshot,
 
     // verify that all the heights are equal.
     assert_eq!(heights.iter().min(), heights.iter().max());
-}
-
-async fn get_cup(node: &IcNodeSnapshot, logger: &Logger) -> anyhow::Result<CatchUpPackage> {
-    let url = node.get_public_url();
-    let cup_url = format!("{url}_/catch_up_package");
-
-    let send_request = || async {
-        let response = reqwest::ClientBuilder::new()
-            .timeout(Duration::from_secs(30))
-            .build()
-            .unwrap()
-            .post(cup_url.clone())
-            .header("Content-Type", "application/cbor")
-            .send()
-            .await
-            .with_context(|| format!("Failed to send request to {cup_url}"))?;
-
-        if response.status() != reqwest::StatusCode::OK {
-            anyhow::bail!(
-                "Failed to send request to {cup_url}. Status: {}",
-                response.status()
-            );
-        }
-
-        response
-            .bytes()
-            .await
-            .context("Failed to collect response body")
-    };
-
-    let response =
-        retry_with_msg_async!("Fetching a CUP", logger, secs(120), secs(5), send_request)
-            .await
-            .context("Failed to fetch CUP")?;
-
-    let proto = pb::CatchUpPackage::decode(response).context("Failed to decode the response")?;
-
-    let cup =
-        CatchUpPackage::try_from(&proto).context("Failed to convert proto to CatchUpPackage")?;
-
-    Ok(cup)
 }
 
 fn get_subnets(env: &TestEnv) -> (SubnetSnapshot, SubnetSnapshot) {

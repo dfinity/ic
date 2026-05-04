@@ -11,6 +11,42 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-04-25: Proposal 141566
+
+http://dashboard.internetcomputer.org/proposal/141566
+
+## Added
+
+* Added an optional field `initial_dkg_subnet_id` to `CreateSubnetPayload` and `RecoverSubnetPayload`
+  which, when present, determines the subnet to which the resulting `SetupInitialDKG` management
+  canister call should be routed.
+* Added type4.1 through type4.5 node reward types for cloud-engine sub-variants.
+
+
+# 2026-04-06: Proposal 141243
+
+http://dashboard.internetcomputer.org/proposal/141243
+
+## Added
+
+* New invariant ensuring that cloud engines contain only nodes with `type4` reward type and that
+  non-cloud engines do not contain any nodes with `type4` reward type.
+
+
+# 2026-03-27: Proposal 141091
+
+http://dashboard.internetcomputer.org/proposal/141091
+
+## Added
+
+* Subnet deletion endpoint. Limited to CloudEngine subnets. 
+* Implemented the `do_split_subnet` method
+* Added an optional field `maximum_state_delta` to `ResourceLimits` in `CreateSubnetPayload` which, when present,
+  sets a soft limit on the maximum (replicated) state *delta* (kept in main memory) in bytes.
+* Added an optional field `resource_limits` to `UpdateSubnetPayload` which, when present,
+  sets all subnet resource limits to the provided values.
+
+
 # 2026-03-20: Proposal 140960
 
 http://dashboard.internetcomputer.org/proposal/140960

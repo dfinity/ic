@@ -2,7 +2,7 @@ use crate::{
     MAX_IDKG_THREADS,
     complaints::{IDkgComplaintHandlerImpl, IDkgTranscriptLoader, TranscriptLoadStatus},
     pre_signer::{IDkgPreSignerImpl, IDkgTranscriptBuilder},
-    signer::{ThresholdSignatureBuilder, ThresholdSignerImpl},
+    signer::ThresholdSignerImpl,
     utils::build_thread_pool,
 };
 use ic_artifact_pool::idkg_pool::IDkgPoolImpl;
@@ -19,9 +19,6 @@ use ic_interfaces::idkg::{IDkgChangeAction, IDkgPool};
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_metrics::MetricsRegistry;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-    IDkgSignWithThresholdContext, SignWithThresholdContext,
-};
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_consensus::{IDkgStatsNoOp, fake::*, idkg::*};
@@ -36,7 +33,7 @@ use ic_types::{
         MaskedTranscript, MasterKeyTranscript, PreSigId, RequestId, ReshareOfMaskedParams,
         SchnorrSigShare, SignedIDkgComplaint, SignedIDkgOpening, TranscriptAttributes,
         TranscriptLookupError, TranscriptRef, UnmaskedTranscript, VetKdKeyShare,
-        common::{CombinedSignature, PreSignatureRef},
+        common::PreSignatureRef,
     },
     crypto::{
         AlgorithmId,
@@ -51,7 +48,6 @@ use ic_types::{
         },
         vetkd::{VetKdEncryptedKeyShare, VetKdEncryptedKeyShareContent},
     },
-    messages::CallbackId,
     signature::*,
 };
 use rand::{CryptoRng, Rng};
@@ -60,15 +56,6 @@ use std::{
     convert::TryFrom,
     sync::{Arc, Mutex},
 };
-
-pub fn into_idkg_contexts(
-    contexts: &BTreeMap<CallbackId, SignWithThresholdContext>,
-) -> BTreeMap<CallbackId, IDkgSignWithThresholdContext<'_>> {
-    contexts
-        .iter()
-        .flat_map(|(id, ctxt)| IDkgSignWithThresholdContext::try_from(ctxt).map(|ctxt| (*id, ctxt)))
-        .collect()
-}
 
 #[derive(Clone)]
 pub(crate) struct TestTranscriptParams {
@@ -375,34 +362,6 @@ impl IDkgTranscriptBuilder for TestIDkgTranscriptBuilder {
     }
 }
 
-pub(crate) struct TestThresholdSignatureBuilder {
-    pub(crate) signatures: BTreeMap<RequestId, CombinedSignature>,
-}
-
-impl TestThresholdSignatureBuilder {
-    pub(crate) fn new() -> Self {
-        Self {
-            signatures: BTreeMap::new(),
-        }
-    }
-}
-
-impl ThresholdSignatureBuilder for TestThresholdSignatureBuilder {
-    fn get_completed_signature(
-        &self,
-        callback_id: CallbackId,
-        context: &SignWithThresholdContext,
-    ) -> Option<CombinedSignature> {
-        let height = context.height()?;
-        self.signatures
-            .get(&RequestId {
-                callback_id,
-                height,
-            })
-            .cloned()
-    }
-}
-
 pub(crate) fn create_idkg_pool(
     config: ArtifactPoolConfig,
     log: ReplicaLogger,
@@ -494,10 +453,11 @@ pub(crate) fn create_pre_signer_dependencies_with_threads(
 }
 
 // Sets up the dependencies and creates the signer
-pub(crate) fn create_signer_dependencies_with_crypto(
+pub(crate) fn create_signer_dependencies_with_crypto_and_threads(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
     consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
+    threads: usize,
 ) -> (IDkgPoolImpl, ThresholdSignerImpl) {
     let metrics_registry = MetricsRegistry::new();
     let Dependencies {
@@ -509,7 +469,7 @@ pub(crate) fn create_signer_dependencies_with_crypto(
     let signer = ThresholdSignerImpl::new(
         NODE_1,
         consensus_crypto.unwrap_or(crypto),
-        build_thread_pool(MAX_IDKG_THREADS),
+        build_thread_pool(threads),
         state_manager as Arc<_>,
         metrics_registry.clone(),
         logger.clone(),
@@ -519,12 +479,33 @@ pub(crate) fn create_signer_dependencies_with_crypto(
     (idkg_pool, signer)
 }
 
+pub(crate) fn create_signer_dependencies_with_crypto(
+    pool_config: ArtifactPoolConfig,
+    logger: ReplicaLogger,
+    consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
+) -> (IDkgPoolImpl, ThresholdSignerImpl) {
+    create_signer_dependencies_with_crypto_and_threads(
+        pool_config,
+        logger,
+        consensus_crypto,
+        MAX_IDKG_THREADS,
+    )
+}
+
 // Sets up the dependencies and creates the signer
 pub(crate) fn create_signer_dependencies(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
 ) -> (IDkgPoolImpl, ThresholdSignerImpl) {
     create_signer_dependencies_with_crypto(pool_config, logger, None)
+}
+
+pub(crate) fn create_signer_dependencies_with_threads(
+    pool_config: ArtifactPoolConfig,
+    logger: ReplicaLogger,
+    threads: usize,
+) -> (IDkgPoolImpl, ThresholdSignerImpl) {
+    create_signer_dependencies_with_crypto_and_threads(pool_config, logger, None, threads)
 }
 
 pub(crate) fn create_signer_dependencies_and_state_manager(
@@ -752,7 +733,7 @@ pub(crate) fn create_valid_transcript<R: Rng + CryptoRng>(
         .filter_by_dealers(&params)
         .next()
         .expect("Empty dealers");
-    let idkg_transcript = dealer.create_transcript_or_panic(&params, &dealings);
+    let idkg_transcript = dealer.create_transcript_or_panic(&params, dealings);
     (dealer.id(), params, idkg_transcript)
 }
 

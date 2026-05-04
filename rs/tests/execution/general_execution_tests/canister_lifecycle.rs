@@ -232,6 +232,7 @@ pub fn update_settings_of_frozen_canister(env: TestEnv) {
                                 1,
                                 CanisterCyclesCostSchedule::Normal
                             )
+                            .real()
                             .get()
             );
         }

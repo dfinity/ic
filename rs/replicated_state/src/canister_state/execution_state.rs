@@ -501,7 +501,7 @@ impl ExecutionState {
 
 /// An enum that represents the possible visibility levels a custom section
 /// defined in the wasm module can have.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, EnumIter, serde::Deserialize, serde::Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, serde::Deserialize, EnumIter, serde::Serialize)]
 pub enum CustomSectionType {
     Public = 1,
     Private = 2,
@@ -617,7 +617,7 @@ impl FromIterator<(std::string::String, CustomSection)> for WasmMetadata {
 }
 
 /// Keeps track of how a canister is executing.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub enum WasmExecutionMode {
     Wasm32,
     Wasm64,

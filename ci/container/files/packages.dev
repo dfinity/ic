@@ -1,3 +1,6 @@
 # Dev-only packages (not installed in the build container)
+gh
 htop
 ripgrep
+wget
+zsh

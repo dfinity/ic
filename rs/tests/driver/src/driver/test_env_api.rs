@@ -207,7 +207,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::{runtime::Runtime as Rt, sync::Mutex as TokioMutex};
+use tokio::sync::Mutex as TokioMutex;
 use url::Url;
 
 pub use super::ic_images::*;
@@ -1046,6 +1046,24 @@ impl IcNodeSnapshot {
         }
     }
 
+    pub fn canister_installer<'a>(&'a self, wasm_name: &str) -> CanisterInstaller<'a> {
+        CanisterInstaller::new(self, wasm_name)
+    }
+
+    pub fn canister_installer_from_env<'a>(&'a self, env_name: &str) -> CanisterInstaller<'a> {
+        CanisterInstaller::new(
+            self,
+            std::env::var(env_name).unwrap_or_else(|err| panic!("{env_name} not set: {err}")),
+        )
+    }
+
+    pub fn canister_installer_with_raw_wasm<'a>(
+        &'a self,
+        raw_wasm: Vec<u8>,
+    ) -> CanisterInstaller<'a> {
+        CanisterInstaller::new_with_raw_wasm(self, raw_wasm)
+    }
+
     /// Load wasm binary from the artifacts directory (see [HasArtifacts]) and
     /// install it on the target node.
     ///
@@ -1058,80 +1076,10 @@ impl IcNodeSnapshot {
         name: &str,
         arg: Option<Vec<u8>>,
     ) -> Principal {
-        self.create_and_install_canister_with_arg_and_cycles(name, arg, None)
-    }
-
-    pub fn install_canister_with_arg(
-        &self,
-        canister_id: Principal,
-        name: &str,
-        arg: Option<Vec<u8>>,
-    ) {
-        let canister_bytes = load_wasm(name);
-        self.with_default_agent(move |agent| async move {
-            // Create a canister.
-            let mgr = ManagementCanister::create(&agent);
-
-            let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
-            if let Some(arg) = arg {
-                install_code = install_code.with_raw_arg(arg)
-            }
-            install_code
-                .call_and_wait()
-                .await
-                .map_err(|err| format!("Couldn't install canister: {err}"))?;
-            Ok::<_, String>(canister_id)
-        })
-        .expect("Could not install canister");
-    }
-
-    pub fn create_and_install_canister_with_effetive_id_with_arg_and_cycles(
-        &self,
-        name: &str,
-        arg: Option<Vec<u8>>,
-        cycles_amount: Option<u128>,
-        effective_canister_id: Principal,
-    ) -> Principal {
-        let canister_bytes = load_wasm(name);
-
-        self.with_default_agent(move |agent| async move {
-            // Create a canister.
-            let mgr = ManagementCanister::create(&agent);
-            let canister_id = mgr
-                .create_canister()
-                .as_provisional_create_with_amount(cycles_amount)
-                .with_effective_canister_id(effective_canister_id)
-                .call_and_wait()
-                .await
-                .map_err(|err| format!("Couldn't create canister with provisional API: {err}"))?
-                .0;
-
-            let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
-            if let Some(arg) = arg {
-                install_code = install_code.with_raw_arg(arg)
-            }
-            install_code
-                .call_and_wait()
-                .await
-                .map_err(|err| format!("Couldn't install canister: {err}"))?;
-            Ok::<_, String>(canister_id)
-        })
-        .expect("Could not install canister")
-    }
-
-    pub fn create_and_install_canister_with_arg_and_cycles(
-        &self,
-        name: &str,
-        arg: Option<Vec<u8>>,
-        cycles_amount: Option<u128>,
-    ) -> Principal {
-        let effective_canister_id = self.effective_canister_id();
-        self.create_and_install_canister_with_effetive_id_with_arg_and_cycles(
-            name,
-            arg,
-            cycles_amount,
-            effective_canister_id.0,
-        )
+        self.canister_installer(name)
+            .with_optional_arg(arg)
+            .block_on_install()
+            .expect("Could not install install the canister")
     }
 
     pub fn wait_for_orchestrator_fw_rule(&self, logger: &Logger) -> Result<()> {
@@ -1254,6 +1202,80 @@ impl IcNodeSnapshot {
                 );
             }
         });
+    }
+}
+
+pub struct CanisterInstaller<'a> {
+    node: &'a IcNodeSnapshot,
+    wasm: Vec<u8>,
+    arg: Option<Vec<u8>>,
+    cycles_amount: Option<u128>,
+    effective_canister_id: PrincipalId,
+}
+
+impl<'a> CanisterInstaller<'a> {
+    pub fn new<P>(node: &'a IcNodeSnapshot, wasm_name: P) -> Self
+    where
+        P: AsRef<Path>,
+    {
+        Self::new_with_raw_wasm(node, load_wasm(wasm_name))
+    }
+
+    pub fn new_with_raw_wasm(node: &'a IcNodeSnapshot, wasm: Vec<u8>) -> Self {
+        Self {
+            wasm,
+            arg: None,
+            cycles_amount: None,
+            effective_canister_id: node.effective_canister_id(),
+            node,
+        }
+    }
+
+    pub fn with_optional_arg(mut self, arg: Option<Vec<u8>>) -> Self {
+        self.arg = arg;
+
+        self
+    }
+
+    pub fn with_cycles_amount(mut self, cycles_amount: u128) -> Self {
+        self.cycles_amount = Some(cycles_amount);
+
+        self
+    }
+
+    pub fn with_effective_canister_id(mut self, effective_canister_id: PrincipalId) -> Self {
+        self.effective_canister_id = effective_canister_id;
+
+        self
+    }
+
+    pub fn block_on_install(self) -> Result<Principal> {
+        block_on(self.install())
+    }
+
+    pub async fn install(self) -> Result<Principal> {
+        let agent = self.node.build_default_agent_async().await;
+        // Create a canister.
+        let mgr = ManagementCanister::create(&agent);
+        let canister_id = mgr
+            .create_canister()
+            .as_provisional_create_with_amount(self.cycles_amount)
+            .with_effective_canister_id(self.effective_canister_id)
+            .call_and_wait()
+            .await
+            .map_err(|err| anyhow!("Couldn't create canister with provisional API: {err}"))?
+            .0;
+
+        let mut install_code = mgr.install_code(&canister_id, &self.wasm);
+        if let Some(arg) = self.arg {
+            install_code = install_code.with_raw_arg(arg)
+        }
+        install_code
+            .call_and_wait()
+            .await
+            .map_err(|err| anyhow!("Couldn't install canister: {err}"))?;
+
+        Ok(canister_id)
     }
 }
 
@@ -1618,7 +1640,7 @@ pub fn load_wasm<P: AsRef<Path>>(p: P) -> Vec<u8> {
     wasm_bytes
 }
 
-fn execute_bash_script_from_session(session: &Session, script: &str) -> Result<String> {
+pub fn execute_bash_script_from_session(session: &Session, script: &str) -> Result<String> {
     let mut channel = session.channel_session()?;
     channel.exec("bash").map_err(|e| {
         anyhow::anyhow!("Failed to execute bash on SSH channel: {:?}. This may occur during system reboot or network instability.", e)
@@ -1729,6 +1751,9 @@ pub trait SshSession: HasTestEnv {
 }
 
 pub trait RetrieveIpv4Addr {
+    /// Try a number of times to retrieve the IPv4 address from the machine referenced from self.
+    fn block_on_ipv4_from_session(&self, session: &Session) -> Result<Ipv4Addr>;
+
     /// Try a number of times to retrieve the IPv4 address from the machine referenced from self.
     fn block_on_ipv4(&self) -> Result<Ipv4Addr>;
 }
@@ -1856,11 +1881,20 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     }
 
     async fn await_status_is_healthy_async(&self) -> Result<()> {
+        self.await_status_is_healthy_with_retries_async(READY_WAIT_TIMEOUT, RETRY_BACKOFF)
+            .await
+    }
+
+    async fn await_status_is_healthy_with_retries_async(
+        &self,
+        timeout: Duration,
+        backoff: Duration,
+    ) -> Result<()> {
         retry_with_msg_async!(
             &format!("await_status_is_healthy of {}", self.get_public_url()),
             &self.test_env().logger(),
-            READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
+            timeout,
+            backoff,
             || async {
                 self.status_is_healthy_async()
                     .await
@@ -1952,8 +1986,7 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     }
 
     fn build_default_agent(&self) -> Agent {
-        let rt = Rt::new().expect("Could not create runtime");
-        rt.block_on(async move { self.build_default_agent_async().await })
+        block_on(self.build_default_agent_async())
     }
 
     fn with_default_agent<F, Fut, R>(&self, op: F) -> R
@@ -1961,8 +1994,7 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
         F: FnOnce(Agent) -> Fut + 'static,
         Fut: Future<Output = R>,
     {
-        let rt = Rt::new().expect("Could not create runtime");
-        rt.block_on(async move {
+        block_on(async move {
             let agent = self.build_default_agent_async().await;
             op(agent).await
         })
@@ -2819,7 +2851,21 @@ pub fn scp_send_to(
     to_remote: &std::path::Path,
     mode: i32,
 ) {
-    let size = fs::metadata(from_local).unwrap().len();
+    try_scp_send_to(log, session, from_local, to_remote, mode).unwrap_or_else(|e| panic!("{e:#}"));
+}
+
+/// Copy a local file via SSH to a remote host, returning an `Err` on failure
+/// instead of panicking like [`scp_send_to`].
+pub fn try_scp_send_to(
+    log: Logger,
+    session: &Session,
+    from_local: &std::path::Path,
+    to_remote: &std::path::Path,
+    mode: i32,
+) -> Result<()> {
+    let size = fs::metadata(from_local)
+        .with_context(|| format!("Failed to read metadata for local path {from_local:?}"))?
+        .len();
     retry_with_msg!(
         format!("scp-ing local {from_local:?} of {size:?} B to remote {to_remote:?}"),
         log.clone(),
@@ -2842,9 +2888,7 @@ pub fn scp_send_to(
             Ok(())
         }
     )
-    .unwrap_or_else(|e| {
-        panic!("Failed to scp local {from_local:?} to remote {to_remote:?} because: {e}")
-    });
+    .with_context(|| format!("Failed to scp local {from_local:?} to remote {to_remote:?}"))
 }
 
 /// Copy a file from a remote host to a local file.

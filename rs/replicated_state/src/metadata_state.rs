@@ -183,7 +183,26 @@ pub struct SystemMetadata {
     pub unflushed_checkpoint_ops: UnflushedCheckpointOps,
 }
 
+/// Unfiltered topology, including all subnets and the full routing table.
+///
+/// Only populated on the NNS subnet, where the certified state tree must
+/// contain entries for every subnet in the network (including cloud engines).
+/// On all other subnets this is `None` and the state tree falls back to the
+/// (filtered) data in [`NetworkTopology`].
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub struct FullTopology {
+    pub subnets: BTreeMap<SubnetId, SubnetTopology>,
+    #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
+    pub routing_table: Arc<RoutingTable>,
+}
+
 /// Full description of the IC network toplogy.
+///
+/// The `subnets` and `routing_table` fields contain the **filtered** view:
+/// only the subnets this subnet may interact with. For the NNS subnet an
+/// optional [`FullTopology`] stores the unfiltered data so that the certified
+/// state tree can cover every subnet.
 ///
 /// Contains [`Arc`] references, so it is only safe to serialize for read-only
 /// use.
@@ -207,6 +226,10 @@ pub struct NetworkTopology {
 
     /// The ID of the canister to forward bitcoin mainnet requests to.
     pub bitcoin_mainnet_canister_id: Option<CanisterId>,
+
+    /// Unfiltered topology for the certified state tree.
+    /// Only set on the NNS subnet; `None` everywhere else.
+    full_topology: Option<FullTopology>,
 }
 
 /// Full description of the API Boundary Node, which is saved in the metadata.
@@ -234,6 +257,7 @@ impl Default for NetworkTopology {
             chain_key_enabled_subnets: Default::default(),
             bitcoin_testnet_canister_id: None,
             bitcoin_mainnet_canister_id: None,
+            full_topology: None,
         }
     }
 }
@@ -248,6 +272,7 @@ impl NetworkTopology {
         chain_key_enabled_subnets: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
         bitcoin_testnet_canister_id: Option<CanisterId>,
         bitcoin_mainnet_canister_id: Option<CanisterId>,
+        full_topology: Option<FullTopology>,
     ) -> Self {
         Self {
             subnets,
@@ -257,6 +282,7 @@ impl NetworkTopology {
             chain_key_enabled_subnets,
             bitcoin_testnet_canister_id,
             bitcoin_mainnet_canister_id,
+            full_topology,
         }
     }
 
@@ -282,6 +308,36 @@ impl NetworkTopology {
         self.subnets
             .get(subnet_id)
             .map(|subnet_topology| subnet_topology.nodes.len())
+    }
+
+    /// Returns the cycles cost schedule of the given subnet.
+    pub fn get_cost_schedule(&self, subnet_id: &SubnetId) -> Option<CanisterCyclesCostSchedule> {
+        self.subnets
+            .get(subnet_id)
+            .map(|subnet_topology| subnet_topology.cost_schedule)
+    }
+
+    /// Returns the subnets map used for the certified state tree.
+    ///
+    /// On the NNS subnet this returns the full, unfiltered map (including cloud
+    /// engines); on every other subnet it falls back to `subnets()`.
+    pub fn subnets_for_certification(&self) -> &BTreeMap<SubnetId, SubnetTopology> {
+        self.full_topology
+            .as_ref()
+            .map(|ft| &ft.subnets)
+            .unwrap_or(&self.subnets)
+    }
+
+    /// Returns the routing table used for the certified state tree.
+    ///
+    /// On the NNS subnet this returns the full, unfiltered table (including
+    /// cloud engine ranges); on every other subnet it falls back to
+    /// `routing_table()`.
+    pub fn routing_table_for_certification(&self) -> &Arc<RoutingTable> {
+        self.full_topology
+            .as_ref()
+            .map(|ft| &ft.routing_table)
+            .unwrap_or(&self.routing_table)
     }
 
     /// Find the subnet for `principal_id`. The input can either be a canister id, or a subnet id.
@@ -475,6 +531,18 @@ impl SystemMetadata {
         &self.streams
     }
 
+    /// Returns the size of this subnet, `None` if `network_topology` is not
+    /// populated.
+    pub fn own_subnet_size(&self) -> Option<usize> {
+        self.network_topology.get_subnet_size(&self.own_subnet_id)
+    }
+
+    /// Returns the cost schedule of this subnet, `None` if `network_topology` is
+    /// not populated.
+    pub fn own_cost_schedule(&self) -> Option<CanisterCyclesCostSchedule> {
+        self.network_topology.get_cost_schedule(&self.own_subnet_id)
+    }
+
     /// One-off initialization: populate `canister_allocation_ranges` with the only
     /// `[N * 2^20, (N+1) * 2^20 - 1]` range fully hosted by the subnet as per the
     /// routing table; and initialize `last_generated_canister_id` based on
@@ -522,13 +590,10 @@ impl SystemMetadata {
         Ok(())
     }
 
-    /// Generates a new canister ID.
+    /// Computes a new canister ID for canister creation.
     ///
-    /// If a canister ID from a second canister allocation range is generated, the
-    /// first range is dropped. The last canister allocation range is never dropped.
-    ///
-    /// Returns `Err` iff no more canister IDs can be generated.
-    pub fn generate_new_canister_id(&mut self) -> Result<CanisterId, String> {
+    /// Returns `Err` iff no more canister IDs are available.
+    pub fn peek_new_canister_id(&self) -> Result<CanisterId, String> {
         // Start off with
         //     (canister_allocation_ranges
         //          ∩ routing_table.ranges(own_subnet_id))
@@ -558,26 +623,34 @@ impl SystemMetadata {
             )
         })?;
 
-        let res = canister_allocation_ranges.generate_canister_id(self.last_generated_canister_id);
+        canister_allocation_ranges
+            .next_canister_id(self.last_generated_canister_id)
+            .ok_or_else(|| "Canister ID allocation was consumed".into())
+    }
 
-        if let Some(res) = &res {
-            self.last_generated_canister_id = Some(*res);
+    /// Records `canister_id` as the last generated canister ID and drops any
+    /// exhausted allocation ranges. Must be called with the canister ID returned
+    /// by the immediately preceding `peek_new_canister_id` call, once canister
+    /// creation succeeded and the canister ID should be permanently consumed.
+    ///
+    /// Note. The last canister allocation range is never dropped.
+    pub fn commit_new_canister_id(&mut self, canister_id: CanisterId) {
+        debug_assert_eq!(canister_id, self.peek_new_canister_id().unwrap());
 
-            while self.canister_allocation_ranges.len() > 1
-                && !self
-                    .canister_allocation_ranges
-                    .iter()
-                    .next()
-                    .unwrap()
-                    .contains(res)
-            {
-                // Drop the first canister allocation range iff consumed and more allocation
-                // ranges are available.
-                self.canister_allocation_ranges.drop_first();
-            }
+        self.last_generated_canister_id = Some(canister_id);
+
+        while self.canister_allocation_ranges.len() > 1
+            && !self
+                .canister_allocation_ranges
+                .iter()
+                .next()
+                .unwrap()
+                .contains(&canister_id)
+        {
+            // Drop the first canister allocation range iff consumed and more allocation
+            // ranges are available.
+            self.canister_allocation_ranges.drop_first();
         }
-
-        res.ok_or_else(|| "Canister ID allocation was consumed".into())
     }
 
     /// Returns the number of canister IDs that can still be generated.
@@ -652,11 +725,6 @@ impl SystemMetadata {
 
         // Preserve ingress history.
         res.ingress_history = self.ingress_history;
-
-        // "Preserve" the subnet schedule. This is actually persisted per-canister, as
-        // part of the respective canister state, so will only actually be retained for
-        // local canisters.
-        res.subnet_schedule = self.subnet_schedule;
 
         // Ensure monotonic time for migrated canisters: apply `new_subnet_batch_time`
         // if specified and not smaller than `self.batch_time`; else, default to
@@ -1912,6 +1980,10 @@ impl UnflushedCheckpointOps {
         self.operations.len()
     }
 
+    pub fn push(&mut self, op: UnflushedCheckpointOp) {
+        self.operations.push(op);
+    }
+
     pub fn take_snapshot(&mut self, canister_id: CanisterId, snapshot_id: SnapshotId) {
         self.operations.push(UnflushedCheckpointOp::TakeSnapshot(
             canister_id,
@@ -1947,6 +2019,8 @@ pub mod testing {
         fn routing_table_mut(&mut self) -> &mut RoutingTable;
         /// Sets the routing table.
         fn set_routing_table(&mut self, routing_table: RoutingTable);
+        /// Sets the full (unfiltered) topology for the state tree.
+        fn set_full_topology(&mut self, full_topology: Option<FullTopology>);
     }
 
     impl NetworkTopologyTesting for NetworkTopology {
@@ -1961,6 +2035,9 @@ pub mod testing {
         }
         fn set_routing_table(&mut self, routing_table: RoutingTable) {
             self.routing_table = Arc::new(routing_table);
+        }
+        fn set_full_topology(&mut self, full_topology: Option<FullTopology>) {
+            self.full_topology = full_topology;
         }
     }
 

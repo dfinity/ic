@@ -25,6 +25,7 @@ use ic_nervous_system_common::{
     DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS,
     ledger::{compute_neuron_staking_subaccount, compute_neuron_staking_subaccount_bytes},
 };
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_common::init::LifelineCanisterInitPayload;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
@@ -909,6 +910,31 @@ pub fn nns_governance_get_proposal_info(
     Decode!(&result, Option<ProposalInfo>).unwrap().unwrap()
 }
 
+/// Like `nns_governance_get_proposal_info_as_anonymous`, but returns `None`
+/// when the proposal does not exist, rather than panicking.
+pub fn nns_get_proposal_info(
+    state_machine: &StateMachine,
+    proposal_id: u64,
+) -> Option<ProposalInfo> {
+    let result = state_machine
+        .execute_ingress_as(
+            PrincipalId::new_anonymous(),
+            GOVERNANCE_CANISTER_ID,
+            "get_proposal_info",
+            Encode!(&proposal_id).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!("get_proposal_info was rejected by the NNS governance canister: {reject:#?}")
+        }
+    };
+
+    Decode!(&result, Option<ProposalInfo>).unwrap()
+}
+
 pub fn nns_send_icp_to_claim_or_refresh_neuron(
     state_machine: &StateMachine,
     sender: PrincipalId,
@@ -1466,6 +1492,12 @@ pub fn nns_leave_community_fund(
     manage_neuron_or_panic(state_machine, sender, neuron_id, command)
 }
 
+/// If you are in the common case where
+///
+/// 1. TEST_NEURON_1 has a majority of the voting power, and
+/// 2. You expect the proposal to pass right away and execute successfully
+///
+/// Then, use nns_execute_proposal instead.
 pub fn nns_governance_make_proposal(
     state_machine: &StateMachine,
     sender: PrincipalId,
@@ -1475,6 +1507,38 @@ pub fn nns_governance_make_proposal(
     let command = ManageNeuronCommandRequest::MakeProposal(Box::new(proposal.clone()));
 
     manage_neuron_or_panic(state_machine, sender, neuron_id, command)
+}
+
+/// Returns proposal ID.
+///
+/// TEST_NEURON_1 submits the proposal. Then, waits for it to execute
+/// successfully (see `nns_wait_for_proposal_execution`).
+///
+/// Panics if the proposal is Rejected, fails during execution (i.e. reaches
+/// Failed status), times out, etc.
+pub fn nns_execute_proposal(
+    state_machine: &StateMachine,
+    action: ProposalActionRequest,
+) -> ProposalId {
+    let response = nns_governance_make_proposal(
+        state_machine,
+        *TEST_NEURON_1_OWNER_PRINCIPAL,
+        NeuronId {
+            id: TEST_NEURON_1_ID,
+        },
+        &MakeProposalRequest {
+            title: Some(format!("{action:?}")),
+            summary: String::new(),
+            url: String::new(),
+            action: Some(action),
+        },
+    );
+    let proposal_id = match response.command.unwrap() {
+        manage_neuron_response::Command::MakeProposal(r) => r.proposal_id.unwrap(),
+        other => panic!("{other:#?}"),
+    };
+    nns_wait_for_proposal_execution(state_machine, proposal_id.id);
+    proposal_id
 }
 
 pub fn nns_add_hot_key(

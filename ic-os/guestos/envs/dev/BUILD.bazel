@@ -3,6 +3,8 @@ load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/guestos:defs.bzl", "image_deps")
 load("//publish:defs.bzl", "artifact_bundle")
 
+package(default_visibility = ["//ic-os/guestos/envs/sev-recovery-dev:__pkg__"])
+
 # The macro contains several targets.
 # Check
 #       //ic-os/guestos/BUILD.bazel for examples

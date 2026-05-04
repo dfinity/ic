@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+### Added
+
+- Support for canister snapshot visibility settings:
+  - Added `snapshot_visibility` field to `CanisterSettings` and `DefiniteCanisterSettings`.
+  - Added the type `SnapshotVisibility`.
+
 ## [0.7.1] - 2026-03-03
 
 This release supersedes 0.7.0, which has been yanked because it was missing the `log_memory_store_size` field in `MemoryMetrics`.

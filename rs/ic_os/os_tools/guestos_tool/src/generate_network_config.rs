@@ -4,7 +4,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, Result, bail};
-use tracing::warn;
+use tracing::{info, warn};
 
 use config_tool::guestos::network::get_best_interface_name;
 use config_types::Ipv6Config;
@@ -34,7 +34,7 @@ impl IpAddressInfo {
         gateway: &str,
     ) -> Result<IpAddressInfo> {
         if Self::verify_ipv4_address(address, prefix_length, gateway) {
-            warn!(
+            info!(
                 "Valid IPv4 address configuration provided:\nAddress: {address}\nPrefix length: {prefix_length}\nGateway: {gateway}"
             );
             let address_with_prefix = format!("{address}/{prefix_length}");
@@ -52,7 +52,7 @@ impl IpAddressInfo {
 
     pub fn new_ipv6_address(address_with_prefix: &str, gateway: &str) -> Result<IpAddressInfo> {
         if Self::verify_ipv6_address(address_with_prefix, gateway)? {
-            warn!(
+            info!(
                 "Valid IPv6 address configuration provided:\nAddress: {address_with_prefix}\nGateway: {gateway}"
             );
             Ok(IpAddressInfo {
@@ -96,9 +96,9 @@ pub fn generate_networkd_config(
     systemd_network_dir: &Path,
     ipv4_info: Option<IpAddressInfo>,
 ) -> Result<()> {
-    warn!("IPv6 config info: {ipv6_config:?}");
-    warn!("IPv4 address info: {ipv4_info:?}");
-    warn!(
+    info!("IPv6 config info: {ipv6_config:?}");
+    info!("IPv4 address info: {ipv4_info:?}");
+    info!(
         "Systemd network directory: {}",
         systemd_network_dir.display()
     );
@@ -106,7 +106,7 @@ pub fn generate_networkd_config(
     std::fs::create_dir_all(systemd_network_dir)?;
 
     let network_info: NetworkInfo = create_network_info(ipv6_config, ipv4_info)?;
-    warn!("{network_info:#?}");
+    info!("{network_info:#?}");
 
     let network_interface_name = get_best_interface_name()?;
 
@@ -114,12 +114,12 @@ pub fn generate_networkd_config(
 
     let networkd_config_file_contents =
         generate_networkd_config_contents(network_info, &network_interface_name, disable_dad);
-    warn!("Networkd config contents: {networkd_config_file_contents:#?}");
+    info!("Networkd config contents: {networkd_config_file_contents:#?}");
 
     let networkd_config_file_path =
         systemd_network_dir.join(format!("10-{network_interface_name}.network"));
 
-    warn!(
+    info!(
         "Writing systemd networkd config to {}",
         networkd_config_file_path.display()
     );

@@ -46,7 +46,7 @@ impl BinaryEncodedWasm {
 }
 
 /// Represents the current loading state of the canister module storage.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum ModuleLoadingStatus {
     /// The module is stored in memory.
     InMemory,
@@ -186,7 +186,7 @@ impl std::hash::Hash for CanisterModule {
 }
 
 /// The hash of an __uninstrumented__ canister wasm.
-#[derive(Clone, DeterministicHeapBytes, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, DeterministicHeapBytes)]
 pub struct WasmHash([u8; WASM_HASH_LENGTH]);
 
 impl WasmHash {

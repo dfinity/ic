@@ -64,6 +64,7 @@ pub fn execute_inspect_message(
         ingress.method_name().to_string(),
         ingress.arg().to_vec(),
         time,
+        ingress.as_sender_info(),
     );
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions(message_instruction_limit),

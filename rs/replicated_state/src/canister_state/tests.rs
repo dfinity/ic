@@ -32,7 +32,10 @@ use ic_types::messages::{
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{CountBytes, Time};
-use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, Instructions, NominalCycles,
+    NominalCyclesTesting,
+};
 use ic_wasm_types::CanisterModule;
 use prometheus::IntCounter;
 use strum::IntoEnumIterator;
@@ -121,6 +124,7 @@ impl CanisterStateFixture {
                 Cycles::zero(),
                 Time::from_nanos_since_unix_epoch(0),
                 Default::default(),
+                None,
             )
             .unwrap();
         self.canister_state
@@ -129,8 +133,9 @@ impl CanisterStateFixture {
                 call_context_id,
                 respondent,
                 Cycles::zero(),
-                Cycles::new(42),
-                Cycles::new(84),
+                CompoundCycles::new(Cycles::new(42), CanisterCyclesCostSchedule::Normal),
+                CompoundCycles::new(Cycles::new(84), CanisterCyclesCostSchedule::Normal),
+                CompoundCycles::new(Cycles::new(168), CanisterCyclesCostSchedule::Normal),
                 WasmClosure::new(0, 2),
                 WasmClosure::new(0, 2),
                 None,
@@ -831,6 +836,7 @@ fn canister_state_ingress_induction_cycles_debit() {
     let system_state = &mut CanisterStateFixture::new().canister_state.system_state;
     let initial_balance = system_state.balance();
     let ingress_induction_debit = Cycles::new(42);
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
     system_state.add_postponed_charge_to_ingress_induction_cycles_debit(ingress_induction_debit);
     assert_eq!(
         ingress_induction_debit,
@@ -844,6 +850,7 @@ fn canister_state_ingress_induction_cycles_debit() {
 
     system_state.apply_ingress_induction_cycles_debit(
         system_state.canister_id(),
+        cost_schedule,
         &no_op_logger(),
         &mock_metrics(),
     );
@@ -874,31 +881,35 @@ fn canister_state_ingress_induction_cycles_debit() {
         NominalCycles::new(ingress_induction_debit.get()),
     );
 }
+
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 
 #[test]
 fn update_balance_and_consumed_cycles_correctly() {
     let mut system_state = CanisterStateFixture::new().canister_state.system_state;
     let initial_consumed_cycles = Cycles::new(1000);
-    system_state.remove_cycles(initial_consumed_cycles, CyclesUseCase::Memory);
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    let prepaid_cycles =
+        CompoundCycles::<Instructions>::new(initial_consumed_cycles, cost_schedule);
+    system_state.consume_cycles(prepaid_cycles);
     assert_eq!(
         system_state.balance(),
         INITIAL_CYCLES - initial_consumed_cycles
     );
     assert_eq!(
         system_state.canister_metrics().consumed_cycles(),
-        NominalCycles::new(initial_consumed_cycles.get())
+        prepaid_cycles.nominal()
     );
 
-    let cycles = Cycles::new(100);
-    system_state.add_cycles(cycles, CyclesUseCase::Memory);
+    let refund = CompoundCycles::<Instructions>::new(Cycles::new(100), cost_schedule);
+    system_state.refund_cycles(prepaid_cycles, refund);
     assert_eq!(
         system_state.balance(),
-        INITIAL_CYCLES - initial_consumed_cycles + cycles
+        INITIAL_CYCLES - initial_consumed_cycles + refund.real()
     );
     assert_eq!(
         system_state.canister_metrics().consumed_cycles(),
-        NominalCycles::new((initial_consumed_cycles - cycles).get())
+        (prepaid_cycles - refund).nominal()
     );
 }
 
@@ -906,21 +917,23 @@ fn update_balance_and_consumed_cycles_correctly() {
 fn update_balance_and_consumed_cycles_by_use_case_correctly() {
     let mut system_state = CanisterStateFixture::new().canister_state.system_state;
     let cycles_to_consume = Cycles::from(1000_u128);
-    system_state.remove_cycles(cycles_to_consume, CyclesUseCase::Memory);
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    let prepaid_cycles = CompoundCycles::<Instructions>::new(cycles_to_consume, cost_schedule);
+    system_state.consume_cycles(prepaid_cycles);
 
-    let cycles_to_add = Cycles::from(100_u128);
-    system_state.add_cycles(cycles_to_add, CyclesUseCase::Memory);
+    let refund = CompoundCycles::<Instructions>::new(Cycles::from(100_u128), cost_schedule);
+    system_state.refund_cycles(prepaid_cycles, refund);
     assert_eq!(
         system_state.balance(),
-        INITIAL_CYCLES - cycles_to_consume + cycles_to_add
+        INITIAL_CYCLES - cycles_to_consume + refund.real()
     );
     assert_eq!(
         *system_state
             .canister_metrics()
             .consumed_cycles_by_use_cases()
-            .get(&CyclesUseCase::Memory)
+            .get(&CyclesUseCase::Instructions)
             .unwrap(),
-        NominalCycles::new((cycles_to_consume - cycles_to_add).get())
+        (prepaid_cycles - refund).nominal()
     );
 }
 
@@ -932,8 +945,9 @@ fn canister_state_callback_round_trip() {
         CallContextId::new(1),
         OTHER_CANISTER_ID,
         Cycles::zero(),
-        Cycles::zero(),
-        Cycles::zero(),
+        CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
         WasmClosure::new(0, 2),
         WasmClosure::new(0, 2),
         None,
@@ -943,8 +957,9 @@ fn canister_state_callback_round_trip() {
         CallContextId::new(1),
         OTHER_CANISTER_ID,
         Cycles::new(21),
-        Cycles::new(42),
-        Cycles::new(84),
+        CompoundCycles::new(Cycles::new(42), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::new(84), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::new(168), CanisterCyclesCostSchedule::Normal),
         WasmClosure::new(0, 2),
         WasmClosure::new(1, 2),
         Some(WasmClosure::new(2, 2)),
@@ -954,8 +969,18 @@ fn canister_state_callback_round_trip() {
         CallContextId::new(u64::MAX - 1),
         CanisterId::from_u64(u64::MAX - 3),
         Cycles::new(u128::MAX - 4),
-        Cycles::new(u128::MAX - 5),
-        Cycles::new(u128::MAX - 6),
+        CompoundCycles::new(
+            Cycles::new(u128::MAX - 5),
+            CanisterCyclesCostSchedule::Normal,
+        ),
+        CompoundCycles::new(
+            Cycles::new(u128::MAX - 6),
+            CanisterCyclesCostSchedule::Normal,
+        ),
+        CompoundCycles::new(
+            Cycles::new(u128::MAX - 7),
+            CanisterCyclesCostSchedule::Normal,
+        ),
         WasmClosure::new(u32::MAX - 7, u64::MAX - 8),
         WasmClosure::new(u32::MAX - 9, u64::MAX - 10),
         Some(WasmClosure::new(u32::MAX - 11, u64::MAX - 12)),
@@ -1226,7 +1251,10 @@ fn drops_aborted_canister_install_after_split() {
         .enqueue(ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Request(Arc::new(RequestBuilder::new().build())),
             call_id: InstallCodeCallId::new(0),
-            prepaid_execution_cycles: Cycles::from(0_u128),
+            prepaid_execution_cycles: CompoundCycles::new(
+                Cycles::zero(),
+                CanisterCyclesCostSchedule::Normal,
+            ),
         });
 
     // Expected canister state is identical, minus the `AbortedInstallCode` task.
@@ -1249,6 +1277,7 @@ fn reverts_stopping_status_after_split() {
         Cycles::from(0_u128),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
+        None,
     ));
     canister_state
         .system_state

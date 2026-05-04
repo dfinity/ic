@@ -35,6 +35,27 @@ pub const VETKD_FEE: Cycles = Cycles::new(10 * B as u128);
 const DEFAULT_CYCLES_PER_NODE: Cycles = Cycles::new(100 * B as u128);
 const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = 0;
 
+/// Returns the extra instruction overhead charged in-band by the deterministic
+/// memory tracker for `n_wasm_pages` Wasm pages first written in replicated
+/// mode (DirtyPageTracking::Track). Each such page triggers both
+/// `mark_wasm_page_accessed` and `mark_wasm_page_dirty`, charging two
+/// instructions per OS page per Wasm page.  The OS page size varies by
+/// platform (4 KiB on Linux, 16 KiB on arm64-darwin).
+fn deterministic_tracker_write_overhead(n_wasm_pages: u64) -> u64 {
+    use ic_config::flag_status::FlagStatus;
+    use ic_sys::PAGE_SIZE;
+    const WASM_PAGE_SIZE: u64 = 65536;
+    if EmbeddersConfig::default()
+        .feature_flags
+        .deterministic_memory_tracker
+        == FlagStatus::Enabled
+    {
+        n_wasm_pages * 2 * (WASM_PAGE_SIZE / PAGE_SIZE as u64)
+    } else {
+        0
+    }
+}
+
 // instruction cost of executing inc method on the test canister
 fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
     use ic_config::embedders::MeteringType;
@@ -357,6 +378,7 @@ fn simulate_execute_install_code_cost(subnet_type: SubnetType, subnet_size: usiz
             filtered_subnet_config(subnet_type, KeepFeesFilter::Execution),
             HypervisorConfig {
                 embedders_config: EmbeddersConfig {
+                    create_execution_state_base_cost: NumInstructions::from(0),
                     cost_to_compile_wasm_instruction: NumInstructions::from(0),
                     ..Default::default()
                 },
@@ -717,6 +739,19 @@ fn trillion_cycles(value: f64) -> Cycles {
     Cycles::new((value * 1e12) as u128)
 }
 
+/// Returns a hand-copy of the fees defined in
+/// `CyclesAccountManagerConfig::{application,system}_subnet()` in
+/// `rs/config/src/subnet_config.rs`.
+///
+/// The duplication is intentional. These tests compute expected costs from the
+/// fee values returned here and compare them against the actual charges made by
+/// the replica. If someone changes a fee in `subnet_config.rs` without updating
+/// this mirror, the tests fail — which forces a conscious update of the copy
+/// and a review of the cycle-economics impact, since fee changes affect every
+/// canister on the IC.
+///
+/// Do not replace this with a direct call to `CyclesAccountManagerConfig::…`
+/// from `subnet_config.rs` — doing so would silently bless any fee change.
 fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountManagerConfig {
     let ten_update_instructions_execution_fee_in_cycles = 10;
     const WASM64_INSTRUCTION_COST_MULTIPLIER: u128 = 2;
@@ -773,8 +808,8 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
                 xnet_byte_transmission_fee: Cycles::new(1_000),
                 ingress_message_reception_fee: Cycles::new(1_200_000),
                 ingress_byte_reception_fee: Cycles::new(2_000),
-                // 7.84 SDR per GiB per year => 7.84e12 Cycles per year
-                gib_storage_per_second_fee: Cycles::new(248_920),
+                // 10 SDR per GiB per year => 10e12 Cycles per year
+                gib_storage_per_second_fee: Cycles::new(317_500),
                 duration_between_allocation_charges: Duration::from_secs(10),
                 ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
                 schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
@@ -786,8 +821,8 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
                 max_storage_reservation_period: Duration::from_secs(0),
                 default_reserved_balance_limit: CyclesAccountManagerConfig::application_subnet()
                     .default_reserved_balance_limit,
-                fetch_canister_logs_base_fee: Cycles::new(1_000_000),
-                fetch_canister_logs_per_byte_fee: Cycles::new(800),
+                fetch_canister_logs_base_fee: Cycles::new(5_000_000),
+                fetch_canister_logs_per_byte_fee: Cycles::new(80),
             }
         }
     }
@@ -945,15 +980,15 @@ fn test_subnet_size_one_gib_storage_default_cost() {
 
     // Assert small subnet size cost per year.
     let cost = simulate_one_gib_per_second_cost(subnet_type, subnet_size_lo, compute_allocation);
-    assert_eq!(cost * per_year, trillion_cycles(7.849_941_120));
+    assert_eq!(cost * per_year, trillion_cycles(10.012_680_000));
 
     // Assert big subnet size cost per year.
     let cost = simulate_one_gib_per_second_cost(subnet_type, subnet_size_hi, compute_allocation);
-    assert_eq!(cost * per_year, trillion_cycles(20.530_598_256));
+    assert_eq!(cost * per_year, trillion_cycles(26.186_989_824));
 
     // Assert big subnet size cost per year scaled to a small size.
     let adjusted_cost = (cost * subnet_size_lo) / subnet_size_hi;
-    assert_eq!(adjusted_cost * per_year, trillion_cycles(7.849_909_584));
+    assert_eq!(adjusted_cost * per_year, trillion_cycles(10.012_648_464));
 }
 
 // Storage cost tests split into 2: zero and non-zero compute allocation.
@@ -1088,7 +1123,11 @@ fn test_subnet_size_execute_message_cost() {
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
     let reference_subnet_size = config.reference_subnet_size;
-    let reference_instructions_cost = inc_instruction_cost(HypervisorConfig::default());
+    // The `inc` method writes to the heap (first access), so the deterministic
+    // memory tracker charges an extra 32 instructions in-band (accessed + dirty
+    // for 1 Wasm page) when enabled.
+    let reference_instructions_cost =
+        inc_instruction_cost(HypervisorConfig::default()) + deterministic_tracker_write_overhead(1);
     let reference_cost = calculate_execution_cost(
         &config,
         NumInstructions::from(reference_instructions_cost),
@@ -1096,7 +1135,10 @@ fn test_subnet_size_execute_message_cost() {
     );
 
     // Check default cost.
-    assert_eq!(reference_instructions_cost, 2019);
+    assert_eq!(
+        reference_instructions_cost,
+        2019 + deterministic_tracker_write_overhead(1)
+    );
     let simulated_cost = simulate_execute_message_cost(subnet_type, reference_subnet_size);
     assert_eq!(
         simulated_cost, reference_cost,
