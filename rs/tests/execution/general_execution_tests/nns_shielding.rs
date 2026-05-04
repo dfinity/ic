@@ -95,10 +95,10 @@ pub fn no_cycle_balance_limit_on_nns_subnet(env: TestEnv) {
         let balance = get_balance(&canister_a.canister_id(), &agent).await;
         assert_eq!(
             Cycles::from(balance),
-            CYCLES_LIMIT_PER_CANISTER * 3u64,
+            CYCLES_LIMIT_PER_CANISTER * 3_u64,
             "expected {} == {}",
             balance,
-            CYCLES_LIMIT_PER_CANISTER * 3u64
+            CYCLES_LIMIT_PER_CANISTER * 3_u64
         );
 
         // Canister A creates canister B with `CYCLES_LIMIT_PER_CANISTER` cycles.
@@ -111,10 +111,10 @@ pub fn no_cycle_balance_limit_on_nns_subnet(env: TestEnv) {
         let balance = get_balance(&canister_a.canister_id(), &agent).await;
         assert_eq!(
             Cycles::from(balance),
-            CYCLES_LIMIT_PER_CANISTER * 2u64,
+            CYCLES_LIMIT_PER_CANISTER * 2_u64,
             "expected {} == {}",
             balance,
-            CYCLES_LIMIT_PER_CANISTER * 2u64
+            CYCLES_LIMIT_PER_CANISTER * 2_u64
         );
 
         // Deposit cycles from canister_a to canister_b to increase b's balance
@@ -132,10 +132,10 @@ pub fn no_cycle_balance_limit_on_nns_subnet(env: TestEnv) {
         let balance = get_balance_via_canister(&canister_b_id, &canister_a).await;
         assert_eq!(
             balance,
-            CYCLES_LIMIT_PER_CANISTER * 2u64,
+            CYCLES_LIMIT_PER_CANISTER * 2_u64,
             "expected {} == {}",
             balance,
-            CYCLES_LIMIT_PER_CANISTER * 2u64
+            CYCLES_LIMIT_PER_CANISTER * 2_u64
         );
     });
 }
@@ -145,22 +145,26 @@ pub fn no_cycle_balance_limit_on_nns_subnet(env: TestEnv) {
 pub fn app_canister_attempt_initiating_dkg_fails(env: TestEnv) {
     let logger = env.logger();
     let app_node = env.get_first_healthy_application_node_snapshot();
+    let app_subnet_id = app_node
+        .subnet_id()
+        .expect("application node has no subnet");
     let agent = app_node.build_default_agent();
     block_on(async move {
-        let node_ids: Vec<_> = (0..4).map(node_test_id).collect();
-        let request = SetupInitialDKGArgs::new(node_ids, RegistryVersion::from(2));
-
         let uni_can =
             UniversalCanister::new_with_retries(&agent, app_node.effective_canister_id(), &logger)
                 .await;
-        let res = uni_can
-            .forward_to(
-                &Principal::management_canister(),
-                "setup_initial_dkg",
-                Encode!(&request).unwrap(),
-            )
-            .await;
+        for subnet_id in [None, Some(app_subnet_id)] {
+            let node_ids: Vec<_> = (0..4).map(node_test_id).collect();
+            let request = SetupInitialDKGArgs::new(node_ids, RegistryVersion::from(2), subnet_id);
+            let res = uni_can
+                .forward_to(
+                    &Principal::management_canister(),
+                    "setup_initial_dkg",
+                    Encode!(&request).unwrap(),
+                )
+                .await;
 
-        assert_reject(res, RejectCode::CanisterReject);
+            assert_reject(res, RejectCode::CanisterReject);
+        }
     });
 }

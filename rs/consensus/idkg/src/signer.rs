@@ -2,10 +2,10 @@
 
 use crate::{
     complaints::IDkgTranscriptLoader,
-    metrics::{IDkgPayloadMetrics, ThresholdSignerMetrics, timed_call},
-    utils::{IDkgSchedule, build_signature_inputs, load_transcripts},
+    metrics::{ThresholdSignerMetrics, timed_call},
+    utils::{IDkgSchedule, load_transcripts},
 };
-use ic_consensus_utils::crypto::ConsensusCrypto;
+use ic_consensus_utils::{chain_key::build_signature_inputs, crypto::ConsensusCrypto};
 use ic_interfaces::{
     crypto::{
         ErrorReproducibility, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
@@ -14,23 +14,20 @@ use ic_interfaces::{
     idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool},
 };
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
-use ic_logger::{ReplicaLogger, debug, warn};
+use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
-use ic_replicated_state::{
-    ReplicatedState, metadata_state::subnet_call_context_manager::SignWithThresholdContext,
-};
+use ic_replicated_state::ReplicatedState;
 use ic_types::{
     Height, NodeId,
     artifact::IDkgMessageId,
     consensus::idkg::{
         EcdsaSigShare, IDkgMessage, IDkgStats, RequestId, SchnorrSigShare, SigShare, VetKdKeyShare,
-        common::{CombinedSignature, SignatureScheme, ThresholdSigInputs},
+        common::{SignatureScheme, ThresholdSigInputs},
         ecdsa_sig_share_prefix, schnorr_sig_share_prefix, vetkd_key_share_prefix,
     },
     crypto::{
         canister_threshold_sig::error::{
-            ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCreateSigShareError,
-            ThresholdEcdsaVerifySigShareError, ThresholdSchnorrCombineSigSharesError,
+            ThresholdEcdsaCreateSigShareError, ThresholdEcdsaVerifySigShareError,
             ThresholdSchnorrCreateSigShareError, ThresholdSchnorrVerifySigShareError,
         },
         vetkd::{VetKdKeyShareCreationError, VetKdKeyShareVerificationError},
@@ -44,7 +41,7 @@ use rayon::{
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::{self, Debug, Formatter},
-    sync::Arc,
+    sync::{Arc, RwLock},
 };
 
 #[derive(Clone, Debug)]
@@ -103,26 +100,6 @@ impl VerifySigShareError {
     }
 }
 
-#[derive(Clone, Debug)]
-enum CombineSigSharesError {
-    Ecdsa(ThresholdEcdsaCombineSigSharesError),
-    Schnorr(ThresholdSchnorrCombineSigSharesError),
-    VetKdUnexpected,
-}
-
-impl CombineSigSharesError {
-    fn is_unsatisfied_reconstruction_threshold(&self) -> bool {
-        matches!(
-            self,
-            CombineSigSharesError::Ecdsa(
-                ThresholdEcdsaCombineSigSharesError::UnsatisfiedReconstructionThreshold { .. }
-            ) | CombineSigSharesError::Schnorr(
-                ThresholdSchnorrCombineSigSharesError::UnsatisfiedReconstructionThreshold { .. }
-            )
-        )
-    }
-}
-
 pub(crate) trait ThresholdSigner: Send {
     /// The on_state_change() called from the main IDKG path.
     fn on_state_change(
@@ -138,6 +115,7 @@ pub(crate) struct ThresholdSignerImpl {
     crypto: Arc<dyn ConsensusCrypto>,
     thread_pool: Arc<ThreadPool>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    validated_sig_share_signers: RwLock<BTreeMap<RequestId, BTreeSet<NodeId>>>,
     metrics: ThresholdSignerMetrics,
     log: ReplicaLogger,
 }
@@ -156,6 +134,7 @@ impl ThresholdSignerImpl {
             crypto,
             thread_pool,
             state_reader,
+            validated_sig_share_signers: RwLock::new(BTreeMap::new()),
             metrics: ThresholdSignerMetrics::new(metrics_registry),
             log,
         }
@@ -169,7 +148,7 @@ impl ThresholdSignerImpl {
         transcript_loader: &dyn IDkgTranscriptLoader,
         state_snapshot: &dyn CertifiedStateSnapshot<State = ReplicatedState>,
     ) -> IDkgChangeSet {
-        self.thread_pool.install(|| {
+        let ret = self.thread_pool.install(|| {
             state_snapshot
                 .get_state()
                 .signature_request_contexts()
@@ -187,7 +166,7 @@ impl ThresholdSignerImpl {
                     .ok()
                 })
                 .filter(|(request_id, inputs)| {
-                    !self.signer_has_issued_share(
+                    !Self::signer_has_issued_share(
                         idkg_pool,
                         &self.node_id,
                         request_id,
@@ -203,7 +182,23 @@ impl ThresholdSignerImpl {
                     )
                 })
                 .collect()
-        })
+        });
+
+        let mut valid_sig_share_signers = self.validated_sig_share_signers.write().unwrap();
+        for action in &ret {
+            #[allow(clippy::needless_borrowed_reference)] // This borrowed reference *is* needed
+            if let &IDkgChangeAction::AddToValidated(ref share) = action
+                && let Some((request_id, signer)) = share.sig_share_request_id_and_signer()
+            {
+                // Record our share in the map of validated signature share signers
+                valid_sig_share_signers
+                    .entry(request_id)
+                    .or_default()
+                    .insert(signer);
+            }
+        }
+
+        ret
     }
 
     /// Processes the received signature shares
@@ -230,7 +225,7 @@ impl ThresholdSignerImpl {
 
         let shares: Vec<_> = idkg_pool.unvalidated().signature_shares().collect();
 
-        let results: Vec<_> = self.thread_pool.install(|| {
+        self.thread_pool.install(|| {
             // Iterate over all signature shares of all schemes
             shares
                 .into_par_iter()
@@ -248,25 +243,7 @@ impl ThresholdSignerImpl {
                     }
                 })
                 .collect()
-        });
-
-        let mut ret = Vec::new();
-        // Collection of validated shares
-        let mut validated_sig_shares = BTreeSet::new();
-        for action in results {
-            if let IDkgChangeAction::MoveToValidated(msg) = &action
-                && let Some(key) = msg.sig_share_dedup_key()
-                && !validated_sig_shares.insert(key)
-            {
-                self.metrics
-                    .sign_errors_inc("duplicate_sig_shares_in_batch");
-                ret.push(IDkgChangeAction::RemoveUnvalidated(msg.message_id()));
-                continue;
-            }
-            ret.push(action);
-        }
-
-        ret
+        })
     }
 
     fn validate_signature_share(
@@ -276,12 +253,25 @@ impl ThresholdSignerImpl {
         share: SigShare,
         inputs: &ThresholdSigInputs,
     ) -> Option<IDkgChangeAction> {
-        if self.signer_has_issued_share(
-            idkg_pool,
-            &share.signer(),
-            &share.request_id(),
-            share.scheme(),
-        ) {
+        {
+            let valid_sig_share_signers = self.validated_sig_share_signers.read().unwrap();
+            let maybe_signers = valid_sig_share_signers.get(&share.request_id());
+            if maybe_signers.is_some_and(|signers| signers.contains(&share.signer())) {
+                self.metrics
+                    .sign_errors_inc("duplicate_sig_share_cache_hit");
+                return Some(IDkgChangeAction::RemoveUnvalidated(id));
+            }
+
+            if Self::inputs_already_have_enough_shares(inputs, maybe_signers) {
+                // We already have enough valid shares for this request
+                return Some(IDkgChangeAction::RemoveUnvalidated(id));
+            }
+        }
+
+        let signer = share.signer();
+        let request_id = share.request_id();
+        let scheme = share.scheme();
+        if Self::signer_has_issued_share(idkg_pool, &signer, &request_id, scheme) {
             // The node already sent a valid share for this request
             self.metrics.sign_errors_inc("duplicate_sig_share");
             return Some(IDkgChangeAction::RemoveUnvalidated(id));
@@ -300,7 +290,8 @@ impl ThresholdSignerImpl {
             }
             Err(error) => {
                 // Defer in case of transient errors
-                debug!(
+                warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Signature share validation(transient error): {}, error = {:?}",
                     share_string,
@@ -316,7 +307,20 @@ impl ThresholdSignerImpl {
             }
             Ok(share) => {
                 self.metrics.sign_metrics_inc("sig_shares_received");
-                Some(IDkgChangeAction::MoveToValidated(share))
+
+                // Although we already checked the cache for duplicate shares above, it could happen that a
+                // different thread validated a share for the same request_id in the meantime, after we
+                // released the read lock. Therefore, we acquire the write lock here to check again with
+                // exclusive access.
+                let mut valid_sig_share_signers = self.validated_sig_share_signers.write().unwrap();
+                let signers = valid_sig_share_signers.entry(request_id).or_default();
+                if !signers.insert(signer) {
+                    self.metrics
+                        .sign_errors_inc("duplicate_sig_share_cache_miss");
+                    Some(IDkgChangeAction::RemoveUnvalidated(id))
+                } else {
+                    Some(IDkgChangeAction::MoveToValidated(share))
+                }
             }
         }
     }
@@ -334,28 +338,33 @@ impl ThresholdSignerImpl {
             .cloned()
             .collect::<BTreeSet<_>>();
 
-        let mut ret = Vec::new();
         let current_height = state_snapshot.get_height();
 
         // Unvalidated signature shares.
-        let mut action = idkg_pool
+        let ret = idkg_pool
             .unvalidated()
             .signature_shares()
-            .filter(|(_, share)| self.should_purge(share, current_height, &in_progress))
-            .map(|(id, _)| IDkgChangeAction::RemoveUnvalidated(id))
-            .collect();
-        ret.append(&mut action);
+            .filter(|(_, share)| {
+                Self::should_purge(share.request_id(), current_height, &in_progress)
+            })
+            .map(|(id, _)| IDkgChangeAction::RemoveUnvalidated(id));
 
         // Validated signature shares.
-        let mut action = idkg_pool
+        let mut valid_sig_share_signers = self.validated_sig_share_signers.write().unwrap();
+        let action = idkg_pool
             .validated()
             .signature_shares()
-            .filter(|(_, share)| self.should_purge(share, current_height, &in_progress))
-            .map(|(id, _)| IDkgChangeAction::RemoveValidated(id))
-            .collect();
-        ret.append(&mut action);
+            .filter(|(_, share)| {
+                Self::should_purge(share.request_id(), current_height, &in_progress)
+            })
+            // Side-effect: remove from the validated_sig_share_signers map
+            .map(|(id, share)| {
+                valid_sig_share_signers.remove(&share.request_id());
+                IDkgChangeAction::RemoveValidated(id)
+            });
+        let ret = ret.chain(action);
 
-        ret
+        ret.collect()
     }
 
     /// Load necessary transcripts for the signature inputs
@@ -523,7 +532,6 @@ impl ThresholdSignerImpl {
     /// Checks if the signer node has already issued a signature share for the
     /// request
     fn signer_has_issued_share(
-        &self,
         idkg_pool: &dyn IDkgPool,
         signer_id: &NodeId,
         request_id: &RequestId,
@@ -558,14 +566,29 @@ impl ThresholdSignerImpl {
         }
     }
 
+    fn inputs_already_have_enough_shares(
+        inputs: &ThresholdSigInputs,
+        maybe_signers: Option<&BTreeSet<NodeId>>,
+    ) -> bool {
+        let reconstruction_threshold = match inputs {
+            ThresholdSigInputs::Ecdsa(inputs) => inputs.reconstruction_threshold().get() as usize,
+            ThresholdSigInputs::Schnorr(inputs) => inputs.reconstruction_threshold().get() as usize,
+            // VetKd's API does not expose the number of shares needed for reconstruction directly.
+            // As this code path is an optimization, we conservatively assume that we do not have
+            // enough shares if the inputs are for VetKd.
+            // The worst thing that can happen is to validate a few extra shares.
+            ThresholdSigInputs::VetKd(_inputs) => return false,
+        };
+
+        maybe_signers.as_ref().map_or(0, |signers| signers.len()) >= reconstruction_threshold
+    }
+
     /// Checks if the signature share should be purged
     fn should_purge(
-        &self,
-        share: &SigShare,
+        request_id: RequestId,
         current_height: Height,
         in_progress: &BTreeSet<CallbackId>,
     ) -> bool {
-        let request_id = share.request_id();
         request_id.height <= current_height && !in_progress.contains(&request_id.callback_id)
     }
 }
@@ -589,6 +612,14 @@ impl ThresholdSigner for ThresholdSignerImpl {
             .signature_request_contexts()
             .iter()
             .flat_map(|(callback_id, context)| {
+                if let Some(id) = context.deprecated_pseudo_random_id {
+                    warn!(
+                        every_n_seconds => 15,
+                        self.log,
+                        "Deprecated pseudo random ID still in use by context {}: {:?}",
+                        callback_id, id
+                    );
+                }
                 context.height().map(|height| RequestId {
                     callback_id: *callback_id,
                     height,
@@ -628,122 +659,6 @@ impl ThresholdSigner for ThresholdSignerImpl {
             [&send_signature_shares, &validate_signature_shares];
         changes.append(&mut schedule.call_next(&calls));
         changes
-    }
-}
-
-pub(crate) trait ThresholdSignatureBuilder: Send + Sync {
-    /// Returns the signature for the given context, if it can be successfully
-    /// built from the current sig shares in the IDKG pool
-    fn get_completed_signature(
-        &self,
-        id: CallbackId,
-        context: &SignWithThresholdContext,
-    ) -> Option<CombinedSignature>;
-}
-
-pub(crate) struct ThresholdSignatureBuilderImpl<'a> {
-    crypto: &'a dyn ConsensusCrypto,
-    idkg_pool: &'a dyn IDkgPool,
-    metrics: &'a IDkgPayloadMetrics,
-    log: ReplicaLogger,
-}
-
-impl<'a> ThresholdSignatureBuilderImpl<'a> {
-    pub(crate) fn new(
-        crypto: &'a dyn ConsensusCrypto,
-        idkg_pool: &'a dyn IDkgPool,
-        metrics: &'a IDkgPayloadMetrics,
-        log: ReplicaLogger,
-    ) -> Self {
-        Self {
-            crypto,
-            idkg_pool,
-            metrics,
-            log,
-        }
-    }
-
-    fn crypto_combine_sig_shares(
-        &self,
-        request_id: &RequestId,
-        inputs: &ThresholdSigInputs,
-        stats: &dyn IDkgStats,
-    ) -> Result<CombinedSignature, CombineSigSharesError> {
-        let start = std::time::Instant::now();
-        let ret = match inputs {
-            ThresholdSigInputs::Ecdsa(inputs) => {
-                // Collect the signature shares for the request.
-                let mut sig_shares = BTreeMap::new();
-                for (_, share) in self.idkg_pool.validated().ecdsa_signature_shares() {
-                    if share.request_id == *request_id {
-                        sig_shares.insert(share.signer_id, share.share.clone());
-                    }
-                }
-                ThresholdEcdsaSigVerifier::combine_sig_shares(self.crypto, inputs, &sig_shares)
-                    .map_or_else(
-                        |err| Err(CombineSigSharesError::Ecdsa(err)),
-                        |share| Ok(CombinedSignature::Ecdsa(share)),
-                    )
-            }
-            ThresholdSigInputs::Schnorr(inputs) => {
-                // Collect the signature shares for the request.
-                let mut sig_shares = BTreeMap::new();
-                for (_, share) in self.idkg_pool.validated().schnorr_signature_shares() {
-                    if share.request_id == *request_id {
-                        sig_shares.insert(share.signer_id, share.share.clone());
-                    }
-                }
-                ThresholdSchnorrSigVerifier::combine_sig_shares(self.crypto, inputs, &sig_shares)
-                    .map_or_else(
-                        |err| Err(CombineSigSharesError::Schnorr(err)),
-                        |share| Ok(CombinedSignature::Schnorr(share)),
-                    )
-            }
-            // We don't expect to combine VetKD shares here
-            // (this is done by the VetKD payload builder instead).
-            ThresholdSigInputs::VetKd(_) => Err(CombineSigSharesError::VetKdUnexpected),
-        };
-        stats.record_sig_share_aggregation(request_id, start.elapsed());
-        ret
-    }
-}
-
-impl ThresholdSignatureBuilder for ThresholdSignatureBuilderImpl<'_> {
-    fn get_completed_signature(
-        &self,
-        callback_id: CallbackId,
-        context: &SignWithThresholdContext,
-    ) -> Option<CombinedSignature> {
-        // Find the sig inputs for the request and translate the refs.
-        let (request_id, sig_inputs) = build_signature_inputs(callback_id, context)
-            .map_err(|err| {
-                if err.is_fatal() {
-                    warn!(every_n_seconds => 15, self.log,
-                        "get_completed_signature(): failed to build signature inputs: {:?}",
-                        err
-                    );
-                    self.metrics
-                        .payload_errors_inc("signature_inputs_malformed");
-                }
-            })
-            .ok()?;
-
-        match self.crypto_combine_sig_shares(&request_id, &sig_inputs, self.idkg_pool.stats()) {
-            Ok(signature) => {
-                self.metrics
-                    .payload_metrics_inc("signatures_completed", None);
-                Some(signature)
-            }
-            Err(err) if err.is_unsatisfied_reconstruction_threshold() => None,
-            Err(err) => {
-                warn!(
-                    self.log,
-                    "Failed to combine signature shares: request_id = {:?}, {:?}", request_id, err
-                );
-                self.metrics.payload_errors_inc("combine_sig_share");
-                None
-            }
-        }
     }
 }
 
@@ -818,32 +733,33 @@ mod tests {
     use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_key_transcript,
-        generate_tecdsa_protocol_inputs, generate_tschnorr_protocol_inputs, run_tecdsa_protocol,
-        run_tschnorr_protocol,
+        generate_tecdsa_protocol_inputs, generate_tschnorr_protocol_inputs,
     };
-    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
     use ic_management_canister_types_private::{MasterPublicKeyId, SchnorrAlgorithm};
-    use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-        EcdsaArguments, EcdsaMatchedPreSignature, SchnorrArguments, SchnorrMatchedPreSignature,
-        ThresholdArguments, VetKdArguments,
-    };
     use ic_test_utilities_consensus::{IDkgStatsNoOp, idkg::*};
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_types::{
-        ids::{NODE_1, NODE_2, NODE_3, canister_test_id, subnet_test_id, user_test_id},
-        messages::RequestBuilder,
-    };
+    use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, subnet_test_id, user_test_id};
     use ic_types::{
         Height, Randomness,
-        consensus::idkg::*,
+        consensus::{get_faults_tolerated, idkg::*},
         crypto::{
             AlgorithmId, ExtendedDerivationPath, canister_threshold_sig::idkg::IDkgReceivers,
         },
         time::UNIX_EPOCH,
     };
-    use std::{ops::Deref, sync::RwLock};
+    use ic_types_test_utils::ids::node_test_id;
+    use std::sync::RwLock;
+
+    impl ThresholdSignerImpl {
+        fn validated_sig_share_signers(&self) -> BTreeMap<RequestId, BTreeSet<NodeId>> {
+            self.validated_sig_share_signers
+                .read()
+                .expect("ThresholdSignerImpl::validated_sig_share_signers(): RwLock poisoned")
+                .clone()
+        }
+    }
 
     #[test]
     fn test_ecdsa_signer_action() {
@@ -945,6 +861,12 @@ mod tests {
                     IDkgChangeAction::AddToValidated(share2),
                 ];
                 idkg_pool.apply(change_set);
+                {
+                    let mut valid_sig_share_signers =
+                        signer.validated_sig_share_signers.write().unwrap();
+                    valid_sig_share_signers.insert(id_1, BTreeSet::from([NODE_1]));
+                    valid_sig_share_signers.insert(id_2, BTreeSet::from([NODE_2]));
+                }
 
                 let schedule = IDkgSchedule::new(Height::from(0));
                 // Certified height doesn't increase, so share1 shouldn't be purged
@@ -958,6 +880,10 @@ mod tests {
                 assert_eq!(*schedule.last_purge.borrow(), new_height);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id1));
+                assert_eq!(
+                    signer.validated_sig_share_signers(),
+                    BTreeMap::from([(id_2, BTreeSet::from([NODE_2]))])
+                );
                 idkg_pool.apply(change_set);
 
                 // Certified height increases above share2, so it is purged
@@ -967,6 +893,7 @@ mod tests {
                 assert_eq!(height_30, new_height);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id2));
+                assert_eq!(signer.validated_sig_share_signers(), BTreeMap::new());
             })
         })
     }
@@ -1036,6 +963,13 @@ mod tests {
                     &ids[4],
                     height,
                 ));
+                assert_eq!(
+                    signer.validated_sig_share_signers(),
+                    BTreeMap::from([
+                        (ids[3], BTreeSet::from([NODE_1])),
+                        (ids[4], BTreeSet::from([NODE_1])),
+                    ])
+                );
             })
         });
 
@@ -1059,6 +993,7 @@ mod tests {
                 let change_set =
                     signer.send_signature_shares(&idkg_pool, &transcript_loader, &state);
                 assert!(change_set.is_empty());
+                assert_eq!(signer.validated_sig_share_signers(), BTreeMap::new());
             })
         });
     }
@@ -1116,6 +1051,10 @@ mod tests {
                     &ids[2],
                     height,
                 ));
+                assert_eq!(
+                    signer.validated_sig_share_signers(),
+                    BTreeMap::from([(ids[2], BTreeSet::from([NODE_1]))])
+                );
             })
         });
     }
@@ -1154,10 +1093,19 @@ mod tests {
                 if key_id.is_idkg_key() {
                     // No shares should be created for IDKG keys when transcripts fail to load
                     assert!(change_set.is_empty());
+                    assert_eq!(signer.validated_sig_share_signers(), BTreeMap::new());
                 } else {
                     // NiDKG transcripts are loaded ahead of time, so creation should succeed, even if
                     // IDKG transcripts fail to load.
                     assert_eq!(change_set.len(), 3);
+                    assert_eq!(
+                        signer.validated_sig_share_signers(),
+                        BTreeMap::from([
+                            (ids[0], BTreeSet::from([NODE_1])),
+                            (ids[1], BTreeSet::from([NODE_1])),
+                            (ids[2], BTreeSet::from([NODE_1])),
+                        ])
+                    );
                 }
                 idkg_pool.apply(change_set);
 
@@ -1167,12 +1115,20 @@ mod tests {
                     signer.send_signature_shares(&idkg_pool, &transcript_loader, &state);
 
                 if key_id.is_idkg_key() {
-                    // IDKG key siganture shares should be created when transcripts succeed to load
+                    // IDKG key signature shares should be created when transcripts succeed to load
                     assert_eq!(change_set.len(), 3);
                 } else {
                     // No new shares should be created with NiDKG, as they were already created above
                     assert!(change_set.is_empty());
                 }
+                assert_eq!(
+                    signer.validated_sig_share_signers(),
+                    BTreeMap::from([
+                        (ids[0], BTreeSet::from([NODE_1])),
+                        (ids[1], BTreeSet::from([NODE_1])),
+                        (ids[2], BTreeSet::from([NODE_1])),
+                    ])
+                );
             })
         })
     }
@@ -1232,6 +1188,7 @@ mod tests {
                         &NODE_1,
                     ));
                 }
+                assert_eq!(signer.validated_sig_share_signers(), BTreeMap::new());
             })
         })
     }
@@ -1422,6 +1379,129 @@ mod tests {
                 assert!(is_moved_to_validated(&change_set, &msg_id_2));
                 assert!(is_moved_to_validated(&change_set, &msg_id_3));
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
+                assert_eq!(
+                    signer.validated_sig_share_signers(),
+                    BTreeMap::from([
+                        (id_2, BTreeSet::from([NODE_2])),
+                        (id_3, BTreeSet::from([NODE_2])),
+                    ])
+                );
+            })
+        });
+    }
+
+    // Tests that signature shares are validated only until the reconstruction threshold is
+    // reached, and shares received after that are not validated.
+    #[test]
+    fn test_validate_signature_shares_validates_only_necessary_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_validate_signature_shares_until_reconstruction_threshold(key_id);
+        }
+    }
+
+    fn test_validate_signature_shares_until_reconstruction_threshold(key_id: MasterPublicKeyId) {
+        let height = Height::from(100);
+        let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
+        let id = request_id(1, height);
+        let pid = generator.next_pre_signature_id();
+
+        let state = fake_state_with_signature_requests(
+            height,
+            [fake_signature_request_context_from_id(
+                key_id.clone(),
+                pid,
+                id,
+            )],
+        );
+
+        let n = 4;
+        let node_ids = (0..n)
+            .map(|i| node_test_id(i.try_into().unwrap()))
+            .collect::<Vec<_>>();
+        let expected_nb_sig_shares = match key_id {
+            MasterPublicKeyId::Ecdsa(_) => get_faults_tolerated(n) + 1,
+            MasterPublicKeyId::Schnorr(_) => get_faults_tolerated(n) + 1,
+            MasterPublicKeyId::VetKd(_) => n, // The optimization is disabled for VetKD for now
+        };
+
+        // Add unvalidated shares for all nodes
+        let mut msg_ids = vec![];
+        let mut artifacts = vec![];
+        for node_id in &node_ids {
+            let message = create_signature_share(&key_id, *node_id, id);
+            msg_ids.push(message.message_id());
+            artifacts.push(UnvalidatedArtifact {
+                message,
+                peer_id: *node_id,
+                timestamp: UNIX_EPOCH,
+            });
+        }
+
+        // In the single threaded case only f + 1 shares should be accepted, the rest dropped
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut idkg_pool, signer) =
+                    create_signer_dependencies_with_threads(pool_config, logger, 1);
+                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+
+                let change_set = signer.validate_signature_shares(&idkg_pool, &state);
+                assert_eq!(change_set.len(), n);
+                let (accepted, dropped): (Vec<_>, Vec<_>) = msg_ids
+                    .clone()
+                    .into_iter()
+                    .partition(|msg_id| is_moved_to_validated(&change_set, msg_id));
+                assert!(
+                    dropped
+                        .iter()
+                        .all(|msg_id| is_removed_from_unvalidated(&change_set, msg_id))
+                );
+                assert_eq!(accepted.len(), expected_nb_sig_shares);
+                assert_eq!(dropped.len(), n - expected_nb_sig_shares);
+
+                assert_eq!(signer.validated_sig_share_signers().len(), 1);
+                assert!(
+                    signer
+                        .validated_sig_share_signers()
+                        .get(&id)
+                        .is_some_and(|signers| {
+                            signers.len() == expected_nb_sig_shares
+                                && signers.is_subset(&node_ids.iter().cloned().collect())
+                        })
+                );
+            })
+        });
+
+        // In the multi threaded case at least f + 1 shares should be accepted, the rest dropped
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
+                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+
+                let change_set = signer.validate_signature_shares(&idkg_pool, &state);
+                assert_eq!(change_set.len(), n);
+                let (accepted, dropped): (Vec<_>, Vec<_>) = msg_ids
+                    .clone()
+                    .into_iter()
+                    .partition(|msg_id| is_moved_to_validated(&change_set, msg_id));
+                assert!(
+                    dropped
+                        .iter()
+                        .all(|msg_id| is_removed_from_unvalidated(&change_set, msg_id))
+                );
+                assert!(accepted.len() >= expected_nb_sig_shares);
+                assert_eq!(dropped.len(), n - accepted.len());
+
+                assert_eq!(signer.validated_sig_share_signers().len(), 1);
+                assert!(
+                    signer
+                        .validated_sig_share_signers()
+                        .get(&id)
+                        .is_some_and(|signers| {
+                            signers.len() == accepted.len()
+                                && signers.is_subset(&node_ids.iter().cloned().collect())
+                        })
+                );
             })
         });
     }
@@ -1493,6 +1573,10 @@ mod tests {
                     &msg_id_2,
                     "Signature share validation(permanent error)"
                 ));
+                assert_eq!(
+                    signer.validated_sig_share_signers(),
+                    BTreeMap::from([(id_1, BTreeSet::from([NODE_2]))])
+                );
             })
         });
     }
@@ -1588,6 +1672,10 @@ mod tests {
                 assert_eq!(change_set.len(), 2);
                 assert!(is_moved_to_validated(&change_set, &msg_id_3));
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
+                assert_eq!(
+                    signer.validated_sig_share_signers(),
+                    BTreeMap::from([(ids[2], BTreeSet::from([NODE_2]))])
+                );
             })
         });
     }
@@ -1626,6 +1714,11 @@ mod tests {
                 let share = create_signature_share(&key_id, NODE_2, id_2);
                 let change_set = vec![IDkgChangeAction::AddToValidated(share)];
                 idkg_pool.apply(change_set);
+                {
+                    let mut valid_sig_share_signers =
+                        signer.validated_sig_share_signers.write().unwrap();
+                    valid_sig_share_signers.insert(id_2, BTreeSet::from([NODE_2]));
+                }
 
                 // Unvalidated pool has: {signature share 2, signer = NODE_2, height = 100}
                 let message = create_signature_share(&key_id, NODE_2, id_2);
@@ -1639,6 +1732,10 @@ mod tests {
                 let change_set = signer.validate_signature_shares(&idkg_pool, &state);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
+                assert_eq!(
+                    signer.validated_sig_share_signers(),
+                    BTreeMap::from([(id_2, BTreeSet::from([NODE_2]))])
+                );
             })
         })
     }
@@ -1709,6 +1806,10 @@ mod tests {
                 // One is considered duplicate
                 assert!(msg_1_valid || msg_2_valid);
                 assert!(is_moved_to_validated(&change_set, &msg_id_3));
+                assert_eq!(
+                    signer.validated_sig_share_signers(),
+                    BTreeMap::from([(id_1, BTreeSet::from([NODE_2, NODE_3]))])
+                );
             })
         })
     }
@@ -1831,318 +1932,25 @@ mod tests {
                 let change_set = vec![IDkgChangeAction::AddToValidated(share)];
                 idkg_pool.apply(change_set);
 
+                {
+                    let mut valid_sig_share_signers =
+                        signer.validated_sig_share_signers.write().unwrap();
+                    valid_sig_share_signers.insert(id_1, BTreeSet::from([NODE_2]));
+                    valid_sig_share_signers.insert(id_2, BTreeSet::from([NODE_2]));
+                    valid_sig_share_signers.insert(id_3, BTreeSet::from([NODE_2]));
+                }
+
                 let change_set = signer.purge_artifacts(&idkg_pool, &state);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id_2));
+                assert_eq!(
+                    signer.validated_sig_share_signers(),
+                    BTreeMap::from([
+                        (id_1, BTreeSet::from([NODE_2])),
+                        (id_3, BTreeSet::from([NODE_2])),
+                    ])
+                );
             })
-        })
-    }
-
-    // Tests aggregating ecdsa signature shares into a complete signature
-    #[test]
-    fn test_ecdsa_get_completed_signature() {
-        let mut rng = reproducible_rng();
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, _) = create_signer_dependencies(pool_config, logger.clone());
-                let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
-                let (dealers, receivers) = env.choose_dealers_and_receivers(
-                    &IDkgParticipants::AllNodesAsDealersAndReceivers,
-                    &mut rng,
-                );
-                let key_transcript = generate_key_transcript(
-                    &env,
-                    &dealers,
-                    &receivers,
-                    AlgorithmId::ThresholdEcdsaSecp256k1,
-                    &mut rng,
-                );
-                let derivation_path = ExtendedDerivationPath {
-                    caller: canister_test_id(1).get(),
-                    derivation_path: vec![],
-                };
-                let req_id = request_id(1, Height::from(10));
-                let pre_sig_id = PreSigId(1);
-                let message_hash = [0; 32];
-                let callback_id = CallbackId::from(1);
-                let nonce = [2; 32];
-                let sig_inputs = generate_tecdsa_protocol_inputs(
-                    &env,
-                    &dealers,
-                    &receivers,
-                    &key_transcript,
-                    &message_hash,
-                    Randomness::from(nonce),
-                    &derivation_path,
-                    AlgorithmId::ThresholdEcdsaSecp256k1,
-                    &mut rng,
-                );
-                let context = SignWithThresholdContext {
-                    request: RequestBuilder::new().sender(canister_test_id(1)).build(),
-                    args: ThresholdArguments::Ecdsa(EcdsaArguments {
-                        key_id: fake_ecdsa_key_id(),
-                        message_hash,
-                        pre_signature: Some(EcdsaMatchedPreSignature {
-                            id: pre_sig_id,
-                            height: req_id.height,
-                            pre_signature: Arc::new(sig_inputs.presig_quadruple().clone()),
-                            key_transcript: Arc::new(key_transcript.clone()),
-                        }),
-                    }),
-                    pseudo_random_id: [1; 32],
-                    derivation_path: Arc::new(vec![]),
-                    batch_time: UNIX_EPOCH,
-                    nonce: Some(nonce),
-                };
-
-                let metrics = IDkgPayloadMetrics::new(MetricsRegistry::new());
-                let crypto: Arc<dyn ConsensusCrypto> = env
-                    .nodes
-                    .filter_by_receivers(&sig_inputs)
-                    .next()
-                    .unwrap()
-                    .crypto();
-
-                {
-                    let sig_builder = ThresholdSignatureBuilderImpl::new(
-                        crypto.deref(),
-                        &idkg_pool,
-                        &metrics,
-                        logger.clone(),
-                    );
-
-                    // There are no signature shares yet, no signature can be completed
-                    let result = sig_builder.get_completed_signature(callback_id, &context);
-                    assert_matches!(result, None);
-                }
-
-                // Generate signature shares and add to validated
-                let change_set = env
-                    .nodes
-                    .filter_by_receivers(&sig_inputs)
-                    .map(|receiver| {
-                        receiver.load_tecdsa_sig_transcripts(&sig_inputs.as_ref());
-                        let share =
-                            ThresholdEcdsaSigner::create_sig_share(receiver, &sig_inputs.as_ref())
-                                .expect("failed to create sig share");
-                        EcdsaSigShare {
-                            signer_id: receiver.id(),
-                            request_id: req_id,
-                            share,
-                        }
-                    })
-                    .map(|share| {
-                        IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaSigShare(share))
-                    })
-                    .collect::<Vec<_>>();
-                idkg_pool.apply(change_set);
-
-                let sig_builder = ThresholdSignatureBuilderImpl::new(
-                    crypto.deref(),
-                    &idkg_pool,
-                    &metrics,
-                    logger.clone(),
-                );
-
-                // Signature completion should succeed now.
-                let r1 = sig_builder.get_completed_signature(callback_id, &context);
-                // Compare to combined signature returned by crypto environment
-                let r2 = CombinedSignature::Ecdsa(run_tecdsa_protocol(
-                    &env,
-                    &sig_inputs.as_ref(),
-                    &mut rng,
-                ));
-                assert_matches!(r1, Some(ref s) if s == &r2);
-
-                // If the context's nonce hasn't been set yet, no signature should be completed
-                let mut context_without_nonce = context.clone();
-                context_without_nonce.nonce = None;
-                let res = sig_builder.get_completed_signature(callback_id, &context_without_nonce);
-                assert_eq!(None, res);
-            });
-        })
-    }
-
-    // Tests aggregating schnorr signature shares into a complete signature
-    #[test]
-    fn test_schnorr_get_completed_signature_all_algorithms() {
-        for algorithm in AlgorithmId::all_threshold_schnorr_algorithms() {
-            println!("Running test for algorithm {algorithm}");
-            test_schnorr_get_completed_signature(algorithm);
-        }
-    }
-
-    fn test_schnorr_get_completed_signature(algorithm: AlgorithmId) {
-        let mut rng = reproducible_rng();
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, _) = create_signer_dependencies(pool_config, logger.clone());
-                let req_id = request_id(1, Height::from(10));
-                let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
-                let (dealers, receivers) = env.choose_dealers_and_receivers(
-                    &IDkgParticipants::AllNodesAsDealersAndReceivers,
-                    &mut rng,
-                );
-                let key_transcript =
-                    generate_key_transcript(&env, &dealers, &receivers, algorithm, &mut rng);
-                let derivation_path = ExtendedDerivationPath {
-                    caller: canister_test_id(1).get(),
-                    derivation_path: vec![],
-                };
-                let pre_sig_id = PreSigId(1);
-                let message = vec![0; 32];
-                let nonce = [2; 32];
-                let callback_id = CallbackId::from(1);
-                let sig_inputs = generate_tschnorr_protocol_inputs(
-                    &env,
-                    &dealers,
-                    &receivers,
-                    &key_transcript,
-                    &message,
-                    Randomness::from(nonce),
-                    None,
-                    &derivation_path,
-                    algorithm,
-                    &mut rng,
-                );
-                let context = SignWithThresholdContext {
-                    request: RequestBuilder::new().sender(canister_test_id(1)).build(),
-                    args: ThresholdArguments::Schnorr(SchnorrArguments {
-                        key_id: fake_schnorr_key_id(schnorr_algorithm(algorithm)),
-                        message: Arc::new(message.clone()),
-                        taproot_tree_root: None,
-                        pre_signature: Some(SchnorrMatchedPreSignature {
-                            id: pre_sig_id,
-                            height: req_id.height,
-                            pre_signature: Arc::new(sig_inputs.presig_transcript().clone()),
-                            key_transcript: Arc::new(key_transcript.clone()),
-                        }),
-                    }),
-                    pseudo_random_id: [1; 32],
-                    derivation_path: Arc::new(vec![]),
-                    batch_time: UNIX_EPOCH,
-                    nonce: Some(nonce),
-                };
-
-                let metrics = IDkgPayloadMetrics::new(MetricsRegistry::new());
-                let crypto: Arc<dyn ConsensusCrypto> = env
-                    .nodes
-                    .filter_by_receivers(&sig_inputs)
-                    .next()
-                    .unwrap()
-                    .crypto();
-
-                {
-                    let sig_builder = ThresholdSignatureBuilderImpl::new(
-                        crypto.deref(),
-                        &idkg_pool,
-                        &metrics,
-                        logger.clone(),
-                    );
-
-                    // There are no signature shares yet, no signature can be completed
-                    let result = sig_builder.get_completed_signature(callback_id, &context);
-                    assert_matches!(result, None);
-                }
-
-                // Generate signature shares and add to validated
-                let change_set = env
-                    .nodes
-                    .filter_by_receivers(&sig_inputs)
-                    .map(|receiver| {
-                        receiver.load_tschnorr_sig_transcripts(&sig_inputs.as_ref());
-                        let share = ThresholdSchnorrSigner::create_sig_share(
-                            receiver,
-                            &sig_inputs.as_ref(),
-                        )
-                        .expect("failed to create sig share");
-                        SchnorrSigShare {
-                            signer_id: receiver.id(),
-                            request_id: req_id,
-                            share,
-                        }
-                    })
-                    .map(|share| {
-                        IDkgChangeAction::AddToValidated(IDkgMessage::SchnorrSigShare(share))
-                    })
-                    .collect::<Vec<_>>();
-                idkg_pool.apply(change_set);
-
-                let sig_builder = ThresholdSignatureBuilderImpl::new(
-                    crypto.deref(),
-                    &idkg_pool,
-                    &metrics,
-                    logger.clone(),
-                );
-
-                // Signature completion should succeed now.
-                let r1 = sig_builder.get_completed_signature(callback_id, &context);
-                // Compare to combined signature returned by crypto environment
-                let r2 = CombinedSignature::Schnorr(run_tschnorr_protocol(
-                    &env,
-                    &sig_inputs.as_ref(),
-                    &mut rng,
-                ));
-                assert_matches!(r1, Some(ref s) if s == &r2);
-
-                // If the context's nonce hasn't been set yet, no signature should be completed
-                let mut context_without_nonce = context.clone();
-                context_without_nonce.nonce = None;
-                let res = sig_builder.get_completed_signature(callback_id, &context_without_nonce);
-                assert_eq!(None, res);
-            });
-        })
-    }
-
-    #[test]
-    fn test_vetkd_get_completed_signature_unexpected() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (idkg_pool, _) = create_signer_dependencies(pool_config, logger.clone());
-
-                let callback_id = CallbackId::from(1);
-                let key_id = fake_vetkd_key_id();
-                let height = Height::from(100);
-                let context = SignWithThresholdContext {
-                    request: RequestBuilder::new().sender(canister_test_id(1)).build(),
-                    args: ThresholdArguments::VetKd(VetKdArguments {
-                        key_id: key_id.clone(),
-                        input: Arc::new(vec![]),
-                        transport_public_key: vec![],
-                        ni_dkg_id: fake_dkg_id(key_id),
-                        height,
-                    }),
-                    pseudo_random_id: [1; 32],
-                    derivation_path: Arc::new(vec![vec![]]),
-                    batch_time: UNIX_EPOCH,
-                    nonce: None,
-                };
-
-                let metrics = IDkgPayloadMetrics::new(MetricsRegistry::new());
-                let crypto: Arc<dyn ConsensusCrypto> = Arc::new(CryptoReturningOk::default());
-
-                let sig_builder = ThresholdSignatureBuilderImpl::new(
-                    crypto.deref(),
-                    &idkg_pool,
-                    &metrics,
-                    logger,
-                );
-
-                // We don't expect to combine VetKD shares using the ThresholdSignatureBuilder
-                // (they are instead created by the VetKD payload builder).
-                let (request_id, sig_inputs) =
-                    build_signature_inputs(callback_id, &context).unwrap();
-
-                let result = sig_builder.crypto_combine_sig_shares(
-                    &request_id,
-                    &sig_inputs,
-                    idkg_pool.stats(),
-                );
-                assert_matches!(result, Err(CombineSigSharesError::VetKdUnexpected));
-
-                let result = sig_builder.get_completed_signature(callback_id, &context);
-                assert_matches!(result, None);
-            });
         })
     }
 }

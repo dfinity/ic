@@ -98,7 +98,7 @@ mod tests {
         time::CoarseTime,
         xnet::{RejectReason, StreamFlags, StreamIndex, StreamIndexedQueue},
     };
-    use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
+    use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting};
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
     use std::collections::{BTreeMap, BTreeSet};
@@ -334,21 +334,21 @@ mod tests {
 
             let mut subnet_metrics = SubnetMetrics::default();
 
-            subnet_metrics.observe_consumed_cycles_by_deleted_canisters(NominalCycles::from(0));
+            subnet_metrics.observe_consumed_cycles_by_deleted_canisters(NominalCycles::zero());
             subnet_metrics
-                .observe_consumed_cycles_http_outcalls(NominalCycles::from(50_000_000_000));
+                .observe_consumed_cycles_http_outcalls(NominalCycles::new(50_000_000_000));
             subnet_metrics
-                .observe_consumed_cycles_ecdsa_outcalls(NominalCycles::from(100_000_000_000));
+                .observe_consumed_cycles_ecdsa_outcalls(NominalCycles::new(100_000_000_000));
             subnet_metrics.num_canisters = 5;
             subnet_metrics.canister_state_bytes = NumBytes::from(5 * 1024 * 1024);
             subnet_metrics.update_transactions_total = 4200;
             subnet_metrics.observe_consumed_cycles_with_use_case(
                 CyclesUseCase::Instructions,
-                NominalCycles::from(80_000_000_000),
+                NominalCycles::new(80_000_000_000),
             );
             subnet_metrics.observe_consumed_cycles_with_use_case(
                 CyclesUseCase::RequestAndResponseTransmission,
-                NominalCycles::from(20_000_000_000),
+                NominalCycles::new(20_000_000_000),
             );
             let schnorr_key_id = MasterPublicKeyId::Schnorr(SchnorrKeyId {
                 algorithm: SchnorrAlgorithm::Bip340Secp256k1,

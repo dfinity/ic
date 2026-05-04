@@ -10,6 +10,7 @@ use ic_interfaces::execution_environment::{
 use ic_interfaces::time_source::system_time_now;
 use ic_logger::{ReplicaLogger, error, fatal};
 use ic_query_stats::deliver_query_stats;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_types::batch::{Batch, BatchContent};
@@ -33,6 +34,7 @@ pub(crate) trait StateMachine: Send {
         network_topology: NetworkTopology,
         batch: Batch,
         subnet_features: SubnetFeatures,
+        resource_limits: ResourceLimits,
         registry_settings: &RegistryExecutionSettings,
         node_public_keys: NodePublicKeys,
         api_boundary_nodes: ApiBoundaryNodes,
@@ -115,6 +117,7 @@ impl StateMachine for StateMachineImpl {
         network_topology: NetworkTopology,
         batch: Batch,
         subnet_features: SubnetFeatures,
+        resource_limits: ResourceLimits,
         registry_settings: &RegistryExecutionSettings,
         node_public_keys: NodePublicKeys,
         api_boundary_nodes: ApiBoundaryNodes,
@@ -135,6 +138,7 @@ impl StateMachine for StateMachineImpl {
 
         state.metadata.network_topology = network_topology;
         state.metadata.own_subnet_features = subnet_features;
+        state.metadata.own_resource_limits = resource_limits;
         state.metadata.node_public_keys = node_public_keys;
         state.metadata.api_boundary_nodes = api_boundary_nodes;
         if let Err(message) = state.metadata.init_allocation_ranges_if_empty() {
@@ -211,7 +215,10 @@ impl StateMachine for StateMachineImpl {
 
         // Preprocess messages and add messages to the induction pool through the Demux.
         let since = Instant::now();
-        let mut state_with_messages = self.demux.process_payload(state, batch_messages);
+        let current_round = ExecutionRound::from(batch.batch_number.get());
+        let mut state_with_messages =
+            self.demux
+                .process_payload(state, current_round, batch_messages);
         // Batch creation time is essentially wall time (on some replica), so the median
         // duration should be meaningful.
         self.metrics.induct_batch_latency.observe(
@@ -244,7 +251,7 @@ impl StateMachine for StateMachineImpl {
             batch.randomness,
             chain_key_data,
             &batch.replica_version,
-            ExecutionRound::from(batch.batch_number.get()),
+            current_round,
             round_summary,
             execution_round_type,
             registry_settings,

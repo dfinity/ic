@@ -170,6 +170,7 @@ fn test_subnet_admins_cannot_be_updated_for_system_subnet() {
                             ssh_backup_access: vec![],
                             chain_key_config: None,
                             recalled_replica_version_ids: vec![],
+                            resource_limits: Default::default(),
                         }
                         .encode_to_vec(),
                     )],
@@ -260,6 +261,7 @@ fn test_subnet_admins_cannot_be_updated_for_non_rented_subnet() {
                             ssh_backup_access: vec![],
                             chain_key_config: None,
                             recalled_replica_version_ids: vec![],
+                            resource_limits: Default::default(),
                         }
                         .encode_to_vec(),
                     )],
@@ -349,6 +351,7 @@ fn test_subnet_rental_canister_can_update_subnet_admins_of_rented_subnet() {
                             ssh_backup_access: vec![],
                             chain_key_config: None,
                             recalled_replica_version_ids: vec![],
+                            resource_limits: Default::default(),
                         }
                         .encode_to_vec(),
                     )],
@@ -418,6 +421,7 @@ fn test_rate_limit_subnet_admin_updates_per_subnet() {
                             subnet_type: SubnetType::Application.into(),
                             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Free.into(),
                             subnet_admins: vec![],
+                            resource_limits: Default::default(),
                             // Set the rest of the fields to some dummy values.
                             membership: vec![],
                             max_ingress_bytes_per_message: 60 * 1024 * 1024,

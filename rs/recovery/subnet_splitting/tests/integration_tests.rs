@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::{fs::read_to_string, io::Write, str::FromStr};
 
 use candid::Encode;
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, HttpMethod};
@@ -12,6 +12,9 @@ use ic_types_cycles::Cycles;
 use ic_universal_canister::{call_args, wasm};
 use proxy_canister::{RemoteHttpRequest, UnvalidatedCanisterHttpRequestArgs};
 use slog::{Logger, info};
+
+const EPSILON: f64 = 0.0001;
+const MAX_CUTS: usize = 10;
 
 /// Checks whether the first argument is equal to the second argument with a relative error
 /// tolerance up to the third argument.
@@ -31,7 +34,7 @@ macro_rules! assert_near {
 #[test]
 /// Tests that three tools needed for subnet splitting are compatible with each other:
 /// 1. `state-tool`, which extracts load metrics and manifest from the replicated state,
-/// 2. TODO(CON-1569): a tool which takes the output of the `state-tool` and proposes a good split,
+/// 2. `split-finder`, which takes the output of the `state-tool` and proposes a good split,
 /// 3. `subnet-splitting-tool`, which takes the outputs from the above two tools, and returns
 ///    estimated loads/sizes after splitting a subnet.
 fn load_metrics_e2e_test() {
@@ -89,16 +92,55 @@ fn load_metrics_e2e_test() {
         let load_samples_path = dir.path().join("load_samples.csv");
         ic_state_tool::commands::canister_metrics::get(checkpoint_dir.clone(), &load_samples_path)
             .expect("Should compute canister metrics for a valid checkpoint");
+        let communication_samples_path = dir.path().join("comm_samples.csv");
+        // TODO(CON-1569): use actual connectivity metrics
+        {
+            let communication_data = include_str!("../test_data/fake_communication_sample.csv");
+            let mut communication_samples_file =
+                std::fs::File::create(&communication_samples_path).unwrap();
+            write!(communication_samples_file, "{communication_data}").unwrap();
+        }
 
-        // TODO(CON-1569): use a tool for finding a good split, once it's in the `ic-public` repo.
-        // For now we use a static set of ranges.
-        let mut canister_ids = state_machine.get_canister_ids();
-        canister_ids.sort();
-        // middle half of the canisters
-        let canister_id_ranges = vec![CanisterIdRange {
-            start: canister_ids[5],
-            end: canister_ids[14],
-        }];
+        info!(
+            logger,
+            "Using `split-finder` to find candidate canister ranges to be migrated"
+        );
+        let split_output_path = dir.path().join("split_output.csv");
+        let split_finder_path =
+            std::env::var("SPLIT_FINDER_PATH").expect("SPLIT_FINDER_PATH not set");
+        let output = std::process::Command::new(split_finder_path)
+            .args(["--load-path", &load_samples_path.display().to_string()])
+            .args([
+                "--load-baseline-path",
+                &load_samples_baseline_path.display().to_string(),
+            ])
+            .args([
+                "--communication-data-path",
+                &communication_samples_path.display().to_string(),
+            ])
+            .args(["--output-path", &split_output_path.display().to_string()])
+            .args(["--load-type", "instructions_executed"])
+            .args(["--epsilon-load", &EPSILON.to_string()])
+            .args(["--max-cuts", &MAX_CUTS.to_string()])
+            .output()
+            .unwrap();
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "The script returned a non-zero value:\n\n === stdout ===\n{}\n\n === stderr ===\n{}",
+            str::from_utf8(&output.stdout).unwrap(),
+            str::from_utf8(&output.stderr).unwrap(),
+        );
+        let canister_id_ranges: Vec<CanisterIdRange> = read_to_string(&split_output_path)
+            .expect("The split-finder script should have produced a valid output")
+            .lines()
+            .map(|line| CanisterIdRange::from_str(line).expect("Not a valid CanisterIdRange"))
+            .collect();
+        assert!(
+            canister_id_ranges.len() <= MAX_CUTS.div_ceil(2),
+            "The split-finder script should have produced at most {MAX_CUTS} because we \
+            passed {MAX_CUTS} as the `--max-cuts` argument"
+        );
 
         // And finally use the `subnet-splitting-tool` to estimate the loads on each subnet after a
         // split.
@@ -133,15 +175,15 @@ fn load_metrics_e2e_test() {
         // Accept up to 10% error. The precise values are not important here and they're very sensitive
         // to the changes to the replicated state / execution. It's mostly a sanity check that the
         // returned values are not too ridiculous and they might have to be updated once in a while.
-        assert_near!(states_sizes_bytes.source, 4662083, 0.1);
-        assert_near!(states_sizes_bytes.destination, 4662072, 0.1);
-        assert_near!(instructions_executed.source, 7664259, 0.1);
-        assert_near!(instructions_executed.destination, 7680855, 0.1);
+        assert_near!(states_sizes_bytes.source, 4572692, 0.1);
+        assert_near!(states_sizes_bytes.destination, 4572736, 0.1);
+        assert_near!(instructions_executed.source, 7664789, 0.1);
+        assert_near!(instructions_executed.destination, 7663691, 0.1);
         assert_eq!(
             ingress_messages_executed,
             Estimates {
-                source: 19,
-                destination: 20,
+                source: 20,
+                destination: 19,
             }
         );
         assert_eq!(
@@ -154,8 +196,8 @@ fn load_metrics_e2e_test() {
         assert_eq!(
             local_subnet_messages_executed_upper_bound,
             Estimates {
-                source: 13,
-                destination: 15,
+                source: 14,
+                destination: 14,
             }
         );
         assert_eq!(
@@ -168,9 +210,20 @@ fn load_metrics_e2e_test() {
         assert_eq!(
             heartbeats_and_global_timers_executed,
             Estimates {
-                source: 379,
-                destination: 315,
+                source: 250,
+                destination: 444,
             }
+        );
+        // Check if the split finder found a split satisfying the load constraints
+        assert_near!(
+            instructions_executed.source,
+            instructions_executed.total() / 2,
+            EPSILON
+        );
+        assert_near!(
+            instructions_executed.destination,
+            instructions_executed.total() / 2,
+            EPSILON
         );
     })
 }

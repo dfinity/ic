@@ -244,7 +244,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
                 .as_mut()
                 .unwrap()
                 .metadata = WasmMetadata::new(btreemap! {
-                "large_section".to_string() => CustomSection::new(CustomSectionType::Public, vec![1u8; 1 << 20]),
+                "large_section".to_string() => CustomSection::new(CustomSectionType::Public, vec![1_u8; 1 << 20]),
             });
         }
         state

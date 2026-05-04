@@ -110,13 +110,7 @@ struct Args {
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .without_time()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .init();
+    ic_os_logging::init_logging();
 
     // TODO: We could replace this with Linux capabilities but this works well for now.
     if !getuid().is_root() {
@@ -582,9 +576,17 @@ impl GuestVmService {
             .context("Failed to create config media file")?;
 
         info!("Extracting direct boot dependencies");
-        let direct_boot = prepare_direct_boot(self.guest_vm_type, self.partition_provider.as_ref())
-            .await
-            .context("Failed to prepare direct boot")?;
+        let enable_tee = self
+            .hostos_config
+            .icos_settings
+            .enable_trusted_execution_environment;
+        let direct_boot = prepare_direct_boot(
+            self.guest_vm_type,
+            enable_tee,
+            self.partition_provider.as_ref(),
+        )
+        .await
+        .context("Failed to prepare direct boot")?;
 
         if direct_boot.is_none() {
             info!(
@@ -592,11 +594,6 @@ impl GuestVmService {
                  legacy boot."
             );
         }
-
-        let enable_tee = self
-            .hostos_config
-            .icos_settings
-            .enable_trusted_execution_environment;
         if enable_tee && direct_boot.is_none() {
             return Err(GuestVmServiceError::Other(anyhow!(
                 "enable_trusted_execution_environment is true but direct boot could not be \
@@ -777,9 +774,8 @@ impl GuestVmService {
     }
 
     // We have two different ways to log:
-    // 1. Log via tracing. These logs will end up in the systemd journal. Upon error,
-    //    display_systemd_logs() writes the journal logs to the console.
-    // 2. Log to the console. These logs will show up in the terminal but not in the journal.
+    // 1. Log to the console. These logs will show up in the terminal but not in the journal.
+    // 2. Log via tracing. These logs will end up in the systemd journal.
     fn write_to_console_and_stdout(&self, message: &str) {
         self.write_to_console(message);
         info!("{message}");

@@ -17,8 +17,8 @@ use ic_execution_environment::{
 };
 use ic_interfaces::execution_environment::ExecutionMode;
 use ic_types::PrincipalId;
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::methods::WasmMethod;
+use ic_types_cycles::CanisterCyclesCostSchedule;
 
 use crate::common::Wasm64;
 
@@ -53,7 +53,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Disabled,
             ),
-            520000006,
+            520000006 + common::deterministic_tracker_overhead(1),
         ),
         common::Benchmark(
             "wasm64/ic0_data_certificate_copy()/1B".into(),
@@ -63,7 +63,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ),
-            520000006,
+            520000006 + common::deterministic_tracker_overhead(1),
         ),
         common::Benchmark(
             "wasm32/ic0_data_certificate_copy()/64B".into(),
@@ -73,7 +73,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Disabled,
             ),
-            583000006,
+            583000006 + common::deterministic_tracker_overhead(1),
         ),
         common::Benchmark(
             "wasm64/ic0_data_certificate_copy()/64B".into(),
@@ -83,7 +83,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ),
-            583000006,
+            583000006 + common::deterministic_tracker_overhead(1),
         ),
     ];
     let sender = PrincipalId::new_node_test_id(common::REMOTE_CANISTER_ID);
@@ -116,7 +116,10 @@ pub fn execute_query_bench(c: &mut Criterion) {
             };
             let instructions_before = round_limits.instructions;
             let result = execute_non_replicated_query(
-                NonReplicatedQueryKind::Pure { caller: sender },
+                NonReplicatedQueryKind::Pure {
+                    caller: sender,
+                    sender_info: None,
+                },
                 WasmMethod::Query("test".to_string()),
                 &[],
                 canister_state,

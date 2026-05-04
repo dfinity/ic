@@ -46,7 +46,7 @@ impl Storable for Hash {
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        let mut arr = [0u8; 32];
+        let mut arr = [0_u8; 32];
         arr.copy_from_slice(&bytes);
         Hash(arr)
     }

@@ -385,7 +385,7 @@ pub async fn build_index() -> Option<()> {
     for archived in res.archived_blocks {
         let mut remaining = archived.length;
         let mut next_archived_txid = archived.start;
-        while remaining > 0u64 {
+        while remaining > 0_u64 {
             let archived = ArchivedEncodedBlocksRange {
                 start: next_archived_txid,
                 length: remaining,

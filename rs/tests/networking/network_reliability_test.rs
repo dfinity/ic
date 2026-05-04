@@ -25,7 +25,7 @@ use ic_system_test_driver::{
     driver::{
         constants::DEVICE_NAME,
         group::SystemTestGroup,
-        ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+        ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides},
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
@@ -91,22 +91,14 @@ const TASK_TIMEOUT: Duration = Duration::from_secs(320 * 60);
 const OVERALL_TIMEOUT: Duration = Duration::from_secs(350 * 60);
 
 pub fn setup(env: TestEnv, config: Config) {
-    let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(8)),
-        memory_kibibytes: Some(AmountOfMemoryKiB::new(50331648)), // 48GiB
-        boot_image_minimal_size_gibibytes: None,
-    };
     InternetComputer::new()
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .with_default_vm_resources(vm_resources)
-                .add_nodes(config.nodes_system_subnet),
-        )
-        .add_subnet(
-            Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(vm_resources)
-                .add_nodes(config.nodes_app_subnet),
-        )
+        .with_resource_overrides(VmResourceOverrides {
+            vcpus: Some(NrOfVCPUs::new(8)),
+            memory_kibibytes: Some(AmountOfMemoryKiB::new(50331648)), // 48GiB
+            ..VmResourceOverrides::default()
+        })
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(config.nodes_system_subnet))
+        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(config.nodes_app_subnet))
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
 }

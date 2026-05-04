@@ -1,5 +1,5 @@
 use crate::AlgorithmVersion;
-use crate::performance_based_algorithm::results::RewardsCalculatorResults;
+use crate::performance_based_algorithm::results::DailyResults;
 use crate::performance_based_algorithm::{
     PerformanceBasedAlgorithm, PerformanceBasedAlgorithmInputProvider,
 };
@@ -40,15 +40,13 @@ impl AlgorithmVersion for RewardsCalculationV1 {
 }
 
 impl RewardsCalculationV1 {
-    pub fn calculate_rewards(
-        from_date: NaiveDate,
-        to_date: NaiveDate,
-        input_provider: impl PerformanceBasedAlgorithmInputProvider,
-    ) -> Result<RewardsCalculatorResults, String> {
-        <RewardsCalculationV1 as PerformanceBasedAlgorithm>::calculate_rewards(
-            from_date,
-            to_date,
+    pub fn calculate_rewards_for_date(
+        date: &NaiveDate,
+        input_provider: &impl PerformanceBasedAlgorithmInputProvider,
+    ) -> Result<DailyResults, String> {
+        <RewardsCalculationV1 as PerformanceBasedAlgorithm>::calculate_rewards_for_date(
             input_provider,
+            date,
         )
     }
 }

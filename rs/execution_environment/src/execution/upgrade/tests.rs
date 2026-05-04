@@ -10,10 +10,9 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_types::ids::user_test_id;
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::ingress::IngressState;
 use ic_types::{ComputeAllocation, MemoryAllocation};
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 
 ////////////////////////////////////////////////////////////////////////
 // Constants and templates
@@ -77,6 +76,7 @@ fn execution_test_with_max_rounds(max_rounds: u64) -> ExecutionTest {
     ExecutionTestBuilder::new()
         .with_install_code_slice_instruction_limit(MAX_INSTRUCTIONS_PER_SLICE)
         .with_install_code_instruction_limit(MAX_INSTRUCTIONS_PER_SLICE * max_rounds)
+        .with_create_execution_state_base_cost(0)
         .with_cost_to_compile_wasm_instruction(0)
         .build()
 }
@@ -243,7 +243,7 @@ fn upgrade_fails_on_not_enough_cycles() {
     );
     let canister_id = test
         .canister_from_cycles_and_binary(
-            Cycles::new(balance_cycles.into()) + freezing_threshold_cycles,
+            balance_cycles.real() + freezing_threshold_cycles,
             old_empty_binary(),
         )
         .unwrap();

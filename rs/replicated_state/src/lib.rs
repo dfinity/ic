@@ -73,7 +73,7 @@ pub use canister_state::{
 };
 pub use metadata_state::subnet_schedule::{CanisterPriority, SubnetSchedule};
 pub use metadata_state::{
-    IngressHistoryState, NetworkTopology, Stream, SubnetTopology, SystemMetadata,
+    FullTopology, IngressHistoryState, NetworkTopology, Stream, SubnetTopology, SystemMetadata,
 };
 pub use page_map::{PageIndex, PageMap};
 pub use replicated_state::{InputQueueType, InputSource, ReplicatedState, StateError};
@@ -117,7 +117,7 @@ pub mod testing {
     use std::cell::RefCell;
     use std::collections::BTreeMap;
 
-    #[derive(Default, Debug)]
+    #[derive(Debug, Default)]
     pub struct FakeDropMessageMetrics {
         pub timed_out_messages:
             RefCell<BTreeMap<(&'static str, &'static str, &'static str), usize>>,

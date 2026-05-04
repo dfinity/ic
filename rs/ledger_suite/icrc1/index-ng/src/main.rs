@@ -738,7 +738,7 @@ async fn fetch_blocks_via_get_blocks() -> Result<u64, SyncError> {
     for archived in res.archived_blocks {
         let mut remaining = archived.length.clone();
         let mut next_archived_txid = archived.start.clone();
-        while remaining > 0u32 {
+        while remaining > 0_u32 {
             let archived = ArchivedRange::<QueryBlockArchiveFn> {
                 start: next_archived_txid.clone(),
                 length: remaining.clone(),
@@ -776,7 +776,7 @@ async fn fetch_blocks_via_icrc3() -> Result<u64, SyncError> {
         // The archive can return less than arg.length blocks.
         // The client canister must make sure to call icrc3_get_blocks
         // until all blocks in `arg` have been retrieved.
-        while arg.length != 0u64 {
+        while arg.length != 0_u64 {
             // sanity check that the next index to fetch is the correct
             // one, i.e. next_id + num_indexed
             let expected_id = with_blocks(|blocks| blocks.len());
@@ -1113,6 +1113,12 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
             } => {
                 // Does not affect the balance
             }
+            Operation::AuthorizedMint { to, amount, .. } => {
+                credit(block_index, to, amount);
+            }
+            Operation::AuthorizedBurn { from, amount, .. } => {
+                debit(block_index, from, amount);
+            }
         },
     );
 }
@@ -1156,6 +1162,8 @@ fn get_accounts(block: &Block<Tokens>) -> Vec<Account> {
         }
         Operation::Approve { from, .. } => vec![from],
         Operation::FeeCollector { .. } => vec![],
+        Operation::AuthorizedMint { to, .. } => vec![to],
+        Operation::AuthorizedBurn { from, .. } => vec![from],
     }
 }
 

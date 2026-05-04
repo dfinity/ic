@@ -69,8 +69,8 @@ use crate::{
     errors::ErrorCause,
     http::{
         PATH_CALL_V2, PATH_CALL_V3, PATH_CALL_V4, PATH_HEALTH, PATH_QUERY_V2, PATH_QUERY_V3,
-        PATH_READ_STATE_V2, PATH_READ_STATE_V3, PATH_STATUS, PATH_SUBNET_READ_STATE_V2,
-        PATH_SUBNET_READ_STATE_V3, RequestType,
+        PATH_READ_STATE_V2, PATH_READ_STATE_V3, PATH_STATUS, PATH_SUBNET_CALL_V4,
+        PATH_SUBNET_QUERY_V3, PATH_SUBNET_READ_STATE_V2, PATH_SUBNET_READ_STATE_V3, RequestType,
         handlers::{self, LogsState, logs_canister},
         middleware::{
             cache::{CacheState, cache_middleware},
@@ -78,6 +78,9 @@ use crate::{
             geoip::{self},
             process::{self},
             retry::{RetryParams, retry_request},
+            subnet_read_state_cache::{
+                SubnetReadStateCacheState, subnet_read_state_cache_middleware,
+            },
             validate::{self, UUID_REGEX},
         },
     },
@@ -277,6 +280,20 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
         None
     };
 
+    // Subnet read_state caching
+    let subnet_read_state_cache_state =
+        (!cli.subnet_read_state_cache.subnet_read_state_cache_disable).then(|| {
+            Arc::new(SubnetReadStateCacheState::new(
+                cli.subnet_read_state_cache.subnet_read_state_cache_ttl,
+                cli.subnet_read_state_cache.subnet_read_state_cache_size,
+                cli.subnet_read_state_cache
+                    .subnet_read_state_cache_max_item_size,
+                cli.subnet_read_state_cache
+                    .subnet_read_state_cache_body_timeout,
+                &metrics_registry,
+            ))
+        });
+
     // Bouncer
     let bouncer = if cli.bouncer.bouncer_enable {
         Some(bouncer::setup(&cli.bouncer, &metrics_registry).context("unable to setup bouncer")?)
@@ -335,6 +352,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
         &cli,
         &metrics_registry,
         cache_state.clone(),
+        subnet_read_state_cache_state,
         anonymization_salt.clone(),
         proxy_router.clone(),
     );
@@ -818,6 +836,7 @@ pub fn setup_router(
     cli: &Cli,
     metrics_registry: &Registry,
     cache_state: Option<Arc<CacheState>>,
+    subnet_read_state_cache_state: Option<Arc<SubnetReadStateCacheState>>,
     anonymization_salt: Arc<ArcSwapOption<Vec<u8>>>,
     proxy_router: Arc<ProxyRouter>,
 ) -> Router {
@@ -834,11 +853,11 @@ pub fn setup_router(
     let canister_handler = post(handlers::handle_canister).with_state(proxy.clone());
     let subnet_handler = post(handlers::handle_subnet).with_state(proxy.clone());
 
-    let query_route = Router::new()
+    let canister_query_routes = Router::new()
         .route(PATH_QUERY_V2, canister_handler.clone())
         .route(PATH_QUERY_V3, canister_handler.clone());
 
-    let call_route = {
+    let canister_call_routes = {
         let mut route = Router::new()
             .route(PATH_CALL_V2, canister_handler.clone())
             .route(PATH_CALL_V3, canister_handler.clone())
@@ -980,7 +999,9 @@ pub fn setup_router(
 
     // Layers under ServiceBuilder are executed top-down (opposite to that under Router)
     // 1st layer wraps 2nd layer and so on
-    let common_service_layers = ServiceBuilder::new()
+
+    // Layers that are used everywhere
+    let common_layers = ServiceBuilder::new()
         .layer(middleware_bouncer)
         .layer(middleware_geoip)
         .set_x_request_id(MakeRequestUuid)
@@ -991,10 +1012,11 @@ pub fn setup_router(
         .layer(middleware::from_fn(process::preprocess_request))
         .layer(load_shedder_latency_mw);
 
-    let service_canister_read_call_query = ServiceBuilder::new()
+    // Layers specific to the canister requests
+    let canister_layers = ServiceBuilder::new()
         .layer(middleware::from_fn(validate::validate_request))
         .layer(middleware::from_fn(validate::validate_canister_request))
-        .layer(common_service_layers.clone())
+        .layer(common_layers.clone())
         .layer(middleware_subnet_lookup.clone())
         .layer(middleware_generic_limiter.clone())
         .layer(option_layer(cache_state.map(|x| {
@@ -1002,30 +1024,39 @@ pub fn setup_router(
         })))
         .layer(middleware_retry.clone());
 
-    let service_subnet_read = ServiceBuilder::new()
+    // Layers specific to the subnet requests
+    let middleware_subnet_read_state_cache = option_layer(
+        subnet_read_state_cache_state
+            .map(|x| middleware::from_fn_with_state(x, subnet_read_state_cache_middleware)),
+    );
+
+    let subnet_layers = ServiceBuilder::new()
         .layer(middleware::from_fn(validate::validate_request))
         .layer(middleware::from_fn(validate::validate_subnet_request))
-        .layer(common_service_layers)
+        .layer(common_layers)
+        .layer(middleware_subnet_read_state_cache)
         .layer(middleware_subnet_lookup)
         .layer(middleware_generic_limiter)
         .layer(middleware_retry);
 
-    let canister_read_state_route = Router::new()
+    let canister_read_state_routes = Router::new()
         .route(PATH_READ_STATE_V2, canister_handler.clone())
         .route(PATH_READ_STATE_V3, canister_handler.clone());
 
-    let canister_read_call_query_routes = query_route
-        .merge(call_route)
-        .merge(canister_read_state_route)
-        .layer(service_canister_read_call_query);
+    let canister_routes = canister_query_routes
+        .merge(canister_call_routes)
+        .merge(canister_read_state_routes)
+        .layer(canister_layers);
 
-    let subnet_read_state_route = Router::new()
+    let subnet_routes = Router::new()
         .route(PATH_SUBNET_READ_STATE_V2, subnet_handler.clone())
         .route(PATH_SUBNET_READ_STATE_V3, subnet_handler.clone())
-        .layer(service_subnet_read);
+        .route(PATH_SUBNET_QUERY_V3, subnet_handler.clone())
+        .route(PATH_SUBNET_CALL_V4, subnet_handler.clone())
+        .layer(subnet_layers);
 
-    let mut router = canister_read_call_query_routes
-        .merge(subnet_read_state_route)
+    let mut router = canister_routes
+        .merge(subnet_routes)
         .merge(status_route)
         .merge(health_route);
 
