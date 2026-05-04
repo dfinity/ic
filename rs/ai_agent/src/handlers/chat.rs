@@ -55,7 +55,7 @@ pub async fn chat(
         .unwrap_or(state.config.default_preamble.as_str());
     let max_turns = req.max_turns.unwrap_or(state.config.default_max_turns);
 
-    let agent = match provider.build_agent(preamble, &[]) {
+    let agent = match provider.build_agent(&state, preamble, &[]).await {
         Ok(a) => a,
         Err(e) => {
             return (

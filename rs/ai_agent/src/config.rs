@@ -5,6 +5,7 @@
 //! the spec). Defaults below cover the rest.
 
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 /// Default Gemini model used if `/v1/config` doesn't override it.
 ///
@@ -14,12 +15,32 @@ use serde::{Deserialize, Serialize};
 pub const DEFAULT_GEMINI_MODEL: &str = "gemini-flash-latest";
 
 /// Default agent system prompt.
+///
+/// IC observability tools (`ic_state`, `ic_metrics`, `ic_logs`) are described
+/// here so the LLM knows to reach for them. Without an explicit mention, the
+/// model tends to fall back to "I don't have access to live data" answers
+/// instead of using the tools wired into the agent.
 pub const DEFAULT_PREAMBLE: &str = "You are a concise, helpful assistant. \
     When tools are provided, prefer using them for any factual, computational, \
-    or time-sensitive request.";
+    or time-sensitive request. \
+    \
+    You can also query Internet Computer node observability: `ic_state` for \
+    canister/subnet/node metadata read from the locally synced state, \
+    `ic_metrics` for replica/orchestrator/host Prometheus metrics, and \
+    `ic_logs` for recent systemd journal output. Prefer `ic_state` for \
+    \"what exists\", `ic_metrics` for \"how is it performing\", and \
+    `ic_logs` for \"what happened recently\". Always cite the metric name \
+    or log timestamp range you used.";
 
 /// Default cap on tool-call turns per agent invocation.
 pub const DEFAULT_MAX_TURNS: usize = 5;
+
+/// Default replica config file path on a deployed GuestOS / AiNode. The
+/// orchestrator places `ic.json5` here and we re-parse it (with a tmpdir for
+/// any path-resolution helpers it does internally) to discover the on-disk
+/// state root that the AiNode's state-sync replica writes to **and** the
+/// registry local store path used to look up peer node IPv6 addresses.
+pub const DEFAULT_IC_CONFIG_PATH: &str = "/run/ic-node/config/ic.json5";
 
 /// Static configuration baked in at startup. The actual provider client is
 /// created later, when `/v1/config` is invoked with the API key.
@@ -28,6 +49,11 @@ pub struct AppConfig {
     pub default_model: String,
     pub default_preamble: String,
     pub default_max_turns: usize,
+    /// Path to the replica `ic.json5` config. Used by `ic_state` to discover
+    /// the on-disk state root, and by `ic_metrics` / `ic_logs` to discover
+    /// the registry local store (so node ids can be resolved to IPv6
+    /// addresses of peer nodes in the syncing subnet).
+    pub ic_config_path: PathBuf,
 }
 
 impl Default for AppConfig {
@@ -36,6 +62,7 @@ impl Default for AppConfig {
             default_model: DEFAULT_GEMINI_MODEL.to_string(),
             default_preamble: DEFAULT_PREAMBLE.to_string(),
             default_max_turns: DEFAULT_MAX_TURNS,
+            ic_config_path: PathBuf::from(DEFAULT_IC_CONFIG_PATH),
         }
     }
 }

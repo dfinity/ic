@@ -4,9 +4,14 @@
 //! defaults. Wrapped in `Arc<RwLock<...>>` so `/v1/config` can update it
 //! at runtime without recreating the router.
 
-use crate::{config::AppConfig, providers::AiProvider};
+use crate::{
+    config::AppConfig,
+    providers::AiProvider,
+    tools::node_directory::{NodeDirectory, NodeDirectoryError},
+};
 use slog::Logger;
-use tokio::sync::RwLock;
+use std::sync::Arc;
+use tokio::sync::{OnceCell, RwLock};
 
 /// Mutable runtime state shared across handlers.
 pub struct AppState {
@@ -14,6 +19,11 @@ pub struct AppState {
     pub log: Logger,
     /// `None` until `POST /v1/config` populates it.
     pub provider: RwLock<Option<AiProvider>>,
+    /// Lazily constructed registry-backed node lookup. Built on first
+    /// use because (a) it touches the filesystem and we want
+    /// `AppState::new` to stay infallible, and (b) on a fresh AiNode
+    /// the registry local store may not exist yet on startup.
+    node_directory: OnceCell<Result<Arc<NodeDirectory>, NodeDirectoryError>>,
 }
 
 impl AppState {
@@ -22,6 +32,44 @@ impl AppState {
             config,
             log,
             provider: RwLock::new(None),
+            node_directory: OnceCell::new(),
         }
+    }
+
+    /// Returns the shared node directory, constructing it on first
+    /// call. Errors are cached: if the registry local store is
+    /// misconfigured we don't keep retrying on every tool call. Restart
+    /// the service to retry.
+    pub async fn node_directory(&self) -> Result<Arc<NodeDirectory>, NodeDirectoryError> {
+        let cfg_path = self.config.ic_config_path.clone();
+        let res = self
+            .node_directory
+            .get_or_init(|| async move {
+                tokio::task::spawn_blocking(move || NodeDirectory::from_ic_config(&cfg_path))
+                    .await
+                    .map_err(|e| NodeDirectoryError::Config {
+                        path: std::path::PathBuf::new(),
+                        message: format!("join error: {e}"),
+                    })?
+                    .map(Arc::new)
+            })
+            .await;
+        match res {
+            Ok(d) => Ok(Arc::clone(d)),
+            Err(e) => Err(clone_node_directory_error(e)),
+        }
+    }
+}
+
+/// `NodeDirectoryError` doesn't implement `Clone` (the underlying
+/// `RegistryClientError` carries a non-cloneable source). For caching
+/// purposes we render it through a string round-trip; the lossy
+/// display is acceptable here because the cached error is only ever
+/// surfaced to the LLM as a one-shot "couldn't reach the registry"
+/// message.
+fn clone_node_directory_error(e: &NodeDirectoryError) -> NodeDirectoryError {
+    NodeDirectoryError::Config {
+        path: std::path::PathBuf::new(),
+        message: e.to_string(),
     }
 }

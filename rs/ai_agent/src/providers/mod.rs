@@ -5,16 +5,20 @@
 //! [`AiProvider`] with a new variant, add an arm in [`AiProvider::from_request`]
 //! and in [`AiProvider::build_agent`], done.
 
+use std::sync::Arc;
+
 use anyhow::anyhow;
 use rig::{
     agent::Agent,
     client::CompletionClient,
     providers::gemini::{Client as GeminiClient, completion::CompletionModel as GeminiCompletion},
 };
+use slog::warn;
 
 use crate::{
     config::ConfigRequest,
-    tools::{Calculator, CurrentDateTime},
+    state::AppState,
+    tools::{Calculator, CurrentDateTime, IcLogs, IcMetrics, IcState},
 };
 
 /// Active AI provider client. Currently Gemini-only; new providers slot in
@@ -59,8 +63,17 @@ impl AiProvider {
     /// Build a configured agent. Tools and context can be filtered/added by
     /// the caller, but in v1 we always wire all built-in tools so requests
     /// can reference any of them by name.
-    pub fn build_agent(
+    ///
+    /// Takes `Arc<AppState>` so the IC observability tools (`ic_state`,
+    /// `ic_metrics`, `ic_logs`) can pick up the shared replica config
+    /// path and lazily-built node directory. Tools that fail to
+    /// construct (typically `ic_state` on a node where `ic.json5` is
+    /// missing or unreadable) are skipped with a warning rather than
+    /// failing the whole agent build — the other tools may still be
+    /// useful and we don't want one bad path to take the agent down.
+    pub async fn build_agent(
         &self,
+        state: &Arc<AppState>,
         preamble: &str,
         contexts: &[String],
     ) -> anyhow::Result<Agent<GeminiCompletion>> {
@@ -70,8 +83,24 @@ impl AiProvider {
                 for ctx in contexts {
                     builder = builder.context(ctx);
                 }
-                let agent = builder.tool(Calculator).tool(CurrentDateTime).build();
-                Ok(agent)
+                let mut builder = builder.tool(Calculator).tool(CurrentDateTime);
+
+                match IcState::new(state.clone()).await {
+                    Ok(t) => builder = builder.tool(t),
+                    Err(e) => {
+                        warn!(
+                            state.log,
+                            "skipping ic_state tool: {}", e;
+                            "ic_config_path" => %state.config.ic_config_path.display()
+                        );
+                    }
+                }
+
+                builder = builder
+                    .tool(IcMetrics::new(state.clone()))
+                    .tool(IcLogs::new(state.clone()));
+
+                Ok(builder.build())
             }
         }
     }

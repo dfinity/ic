@@ -5,9 +5,13 @@
 //! a stunnel sidecar terminates TLS for external traffic.
 
 use clap::Parser;
-use ic_ai_agent::{config::AppConfig, router::build_router, state::AppState};
+use ic_ai_agent::{
+    config::{AppConfig, DEFAULT_IC_CONFIG_PATH},
+    router::build_router,
+    state::AppState,
+};
 use slog::{Drain, Logger, info, o};
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
 #[derive(Debug, Parser)]
 #[command(name = "ic-ai-agent", about = "IC AI agent orchestration HTTP API")]
@@ -15,6 +19,12 @@ struct Cli {
     /// Address to bind the HTTP server to.
     #[arg(long, env = "IC_AI_AGENT_ADDR", default_value = "127.0.0.1:11501")]
     addr: SocketAddr,
+
+    /// Path to the replica `ic.json5` config. Used by `ic_state` to find
+    /// the on-disk state root, and by `ic_metrics` / `ic_logs` to find
+    /// the registry local store for resolving peer node IPv6 addresses.
+    #[arg(long, env = "IC_AI_AGENT_IC_CONFIG", default_value = DEFAULT_IC_CONFIG_PATH)]
+    ic_config: PathBuf,
 }
 
 fn make_logger() -> Logger {
@@ -43,7 +53,10 @@ async fn main() -> anyhow::Result<()> {
     // `CompletionError::HttpError`.
     let _ = rustls::crypto::ring::default_provider().install_default();
 
-    let config = AppConfig::default();
+    let config = AppConfig {
+        ic_config_path: cli.ic_config.clone(),
+        ..AppConfig::default()
+    };
     let state = Arc::new(AppState::new(config, log.clone()));
     let app = build_router(state);
 

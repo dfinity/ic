@@ -61,7 +61,7 @@ pub async fn run(
         .unwrap_or(state.config.default_preamble.as_str());
     let max_turns = req.max_turns.unwrap_or(state.config.default_max_turns);
 
-    let agent = match provider.build_agent(preamble, &req.context) {
+    let agent = match provider.build_agent(&state, preamble, &req.context).await {
         Ok(a) => a,
         Err(e) => {
             return (

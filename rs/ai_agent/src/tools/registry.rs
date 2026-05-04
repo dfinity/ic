@@ -5,11 +5,17 @@
 
 use rig::tool::Tool;
 
-use super::{Calculator, CurrentDateTime};
+use super::{Calculator, CurrentDateTime, IcLogs, IcMetrics, IcState};
 
 /// Returns the names of all built-in tools.
 pub fn registered_tool_names() -> &'static [&'static str] {
-    &[Calculator::NAME, CurrentDateTime::NAME]
+    &[
+        Calculator::NAME,
+        CurrentDateTime::NAME,
+        IcState::NAME,
+        IcMetrics::NAME,
+        IcLogs::NAME,
+    ]
 }
 
 /// Validates that every name in `requested` exists in the registry.

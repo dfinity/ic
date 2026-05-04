@@ -8,8 +8,15 @@
 
 pub mod calculator;
 pub mod current_datetime;
+pub mod ic_logs;
+pub mod ic_metrics;
+pub mod ic_state;
+pub mod node_directory;
 pub mod registry;
 
 pub use calculator::Calculator;
 pub use current_datetime::CurrentDateTime;
+pub use ic_logs::IcLogs;
+pub use ic_metrics::IcMetrics;
+pub use ic_state::IcState;
 pub use registry::{registered_tool_names, validate_tool_names};
