@@ -346,7 +346,6 @@ impl CanisterManager {
         subnet_memory_saturation: &ResourceSaturation,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
-        log_resize_needed: bool,
         metrics: Option<&ExecutionEnvironmentMetrics>,
     ) -> Result<(), CanisterManagerError> {
         // Resolve current canister state and effective new settings. The
@@ -365,6 +364,15 @@ impl CanisterManager {
         let canister_reserved_balance_limit = canister.system_state.reserved_balance_limit();
         let canister_log_bytes_used =
             NumBytes::new(canister.system_state.log_memory_store.bytes_used() as u64);
+        let log_resize_needed = settings
+            .log_memory_limit()
+            .map(|limit| {
+                canister
+                    .system_state
+                    .log_memory_store
+                    .would_resize(limit.get() as usize)
+            })
+            .unwrap_or(false);
         let new_memory_allocation = settings
             .memory_allocation
             .unwrap_or(canister_memory_allocation);
@@ -660,15 +668,6 @@ impl CanisterManager {
 
         validate_controller(canister, &sender)?;
 
-        let log_resize_needed = settings
-            .log_memory_limit()
-            .map(|limit| {
-                canister
-                    .system_state
-                    .log_memory_store
-                    .would_resize(limit.get() as usize)
-            })
-            .unwrap_or(false);
         self.validate_and_update_canister_settings(
             &settings,
             canister,
@@ -676,7 +675,6 @@ impl CanisterManager {
             &subnet_memory_saturation,
             subnet_size,
             cost_schedule,
-            log_resize_needed,
             Some(metrics),
         )?;
 
@@ -1472,7 +1470,6 @@ impl CanisterManager {
             &subnet_memory_saturation,
             subnet_size,
             state.get_own_cost_schedule(),
-            true, // New canister: resize always needed.
             None,
         ) {
             *round_limits = round_limits_snapshot;
