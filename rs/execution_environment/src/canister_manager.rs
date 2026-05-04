@@ -341,7 +341,7 @@ impl CanisterManager {
     #[allow(clippy::too_many_arguments)]
     fn validate_and_update_canister_settings(
         &self,
-        settings: CanisterSettings,
+        settings: &CanisterSettings,
         canister: &mut CanisterState,
         subnet_available_memory: &mut SubnetAvailableMemory,
         subnet_memory_saturation: &ResourceSaturation,
@@ -388,7 +388,7 @@ impl CanisterManager {
         );
 
         // Environment variables: validate and apply.
-        self.validate_environment_variables(&settings)?;
+        self.validate_environment_variables(settings)?;
         if let Some(environment_variables) = settings.environment_variables() {
             canister.system_state.environment_variables = environment_variables.clone();
         }
@@ -661,7 +661,7 @@ impl CanisterManager {
         let old_log_bytes_used = canister.system_state.log_memory_store.bytes_used() as u64;
 
         self.validate_and_update_canister_settings(
-            settings,
+            &settings,
             canister,
             &mut round_limits.subnet_available_memory,
             &subnet_memory_saturation,
@@ -1485,7 +1485,7 @@ impl CanisterManager {
         // distributions. Pass `None` to skip observation here.
         let round_limits_snapshot = round_limits.clone();
         if let Err(err) = self.validate_and_update_canister_settings(
-            settings,
+            &settings,
             &mut new_canister,
             &mut round_limits.subnet_available_memory,
             &subnet_memory_saturation,

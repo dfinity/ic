@@ -222,9 +222,7 @@ fn failed_create_canister_does_not_reuse_canister_id() {
 
     // On an application subnet, a freezing threshold of 2^60 seconds combined
     // with a 1 MiB memory allocation requires an astronomically large cycle
-    // balance, causing the create_canister call to fail with
-    // InsufficientCyclesInMemoryAllocation during settings validation — before
-    // a canister ID is ever generated.
+    // balance, causing the create_canister call to fail.
     let failing_args = CreateCanisterArgs {
         settings: Some(
             CanisterSettingsArgsBuilder::new()
