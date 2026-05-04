@@ -92,10 +92,4 @@ impl fmt::Display for UpgradeError {
     }
 }
 
-impl From<FileDownloadError> for UpgradeError {
-    fn from(e: FileDownloadError) -> Self {
-        UpgradeError::FileDownloadError(e)
-    }
-}
-
 impl Error for UpgradeError {}
