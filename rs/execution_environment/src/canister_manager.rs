@@ -362,7 +362,7 @@ impl CanisterManager {
             .unwrap_or(NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64));
         let new_log_memory_usage =
             LogMemoryStore::memory_usage_for_limit(LOG_MEMORY_STORE_FEATURE, new_log_memory_limit);
-        let canister_memory_usage = canister.memory_usage()
+        let new_canister_memory_usage = canister.memory_usage()
             - canister.log_memory_store_memory_usage()
             + new_log_memory_usage;
         let canister_message_memory_usage = canister.message_memory_usage();
@@ -395,7 +395,7 @@ impl CanisterManager {
         let threshold = self.cycles_account_manager.freeze_threshold_cycles(
             new_freezing_threshold,
             new_memory_allocation,
-            canister_memory_usage,
+            new_canister_memory_usage,
             canister_message_memory_usage,
             new_compute_allocation,
             subnet_size,
@@ -454,8 +454,8 @@ impl CanisterManager {
         }
 
         // Memory allocation: validate subnet capacity and cycle balance, and apply.
-        let old_memory_bytes = canister_memory_allocation.allocated_bytes(canister_memory_usage);
-        let new_memory_bytes = new_memory_allocation.allocated_bytes(canister_memory_usage);
+        let old_memory_bytes = canister_memory_allocation.allocated_bytes(canister.memory_usage());
+        let new_memory_bytes = new_memory_allocation.allocated_bytes(new_canister_memory_usage);
         if new_memory_bytes >= old_memory_bytes {
             let available = NumBytes::from(
                 (round_limits
@@ -664,7 +664,7 @@ impl CanisterManager {
                 }
             })?;
 
-        debug_assert_eq!(canister.memory_usage(), canister_memory_usage);
+        debug_assert_eq!(canister.memory_usage(), new_canister_memory_usage);
 
         Ok(())
     }

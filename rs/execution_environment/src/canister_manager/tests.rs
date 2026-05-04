@@ -4654,11 +4654,12 @@ fn resource_saturation_scaling_works_in_create_canister() {
 fn update_settings_can_set_reserved_cycles_limit() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
     const CAPACITY: u64 = 20_000_000_000;
+    const THRESHOLD: u64 = CAPACITY / 2;
 
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_execution_memory(CAPACITY)
         .with_subnet_memory_reservation(0)
-        .with_subnet_memory_threshold(0)
+        .with_subnet_memory_threshold(THRESHOLD)
         .build();
 
     let canister_id = test
@@ -7903,11 +7904,12 @@ fn create_canister_fails_with_reserved_cycles_limit_exceeded() {
 fn create_canister_can_set_reserved_cycles_limit() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
     const CAPACITY: u64 = 20_000_000_000;
+    const THRESHOLD: u64 = CAPACITY / 2;
 
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_execution_memory(CAPACITY)
         .with_subnet_memory_reservation(0)
-        .with_subnet_memory_threshold(0)
+        .with_subnet_memory_threshold(THRESHOLD)
         .build();
 
     let uc = test
