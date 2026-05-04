@@ -697,8 +697,6 @@ pub struct CanisterHttpArtifact {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgPayload {
-    #[prost(message, repeated, tag = "1")]
-    pub signature_agreements: ::prost::alloc::vec::Vec<CompletedSignature>,
     #[prost(message, optional, tag = "5")]
     pub next_unused_transcript_id:
         ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscriptId>,
@@ -717,6 +715,8 @@ pub struct IDkgPayload {
     pub available_pre_signatures: ::prost::alloc::vec::Vec<AvailablePreSignature>,
     #[prost(message, repeated, tag = "15")]
     pub pre_signatures_in_creation: ::prost::alloc::vec::Vec<PreSignatureInProgress>,
+    #[prost(bool, tag = "17")]
+    pub empty_signature_agreements_flag: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ConsensusResponse {
@@ -1004,13 +1004,6 @@ pub struct PreSignatureTranscriptRef {
     pub blinder_unmasked_ref: ::core::option::Option<UnmaskedTranscript>,
     #[prost(message, optional, tag = "3")]
     pub key_unmasked_ref: ::core::option::Option<UnmaskedTranscript>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CompletedSignature {
-    #[prost(message, optional, tag = "3")]
-    pub unreported: ::core::option::Option<ConsensusResponse>,
-    #[prost(bytes = "vec", tag = "4")]
-    pub pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgReshareRequest {

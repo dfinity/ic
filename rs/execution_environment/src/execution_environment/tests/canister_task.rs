@@ -1,5 +1,6 @@
 use assert_matches::assert_matches;
 use ic_base_types::{NumSeconds, PrincipalId};
+use ic_config::embedders::DEFAULT_CREATE_EXECUTION_STATE_BASE_COST;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{
@@ -122,7 +123,10 @@ fn heartbeat_fails_gracefully_if_not_exported() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     test.canister_task(canister_id, CanisterTask::Heartbeat);
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
-    assert_eq!(wat_compilation_cost(wat), test.executed_instructions());
+    assert_eq!(
+        DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + wat_compilation_cost(wat),
+        test.executed_instructions()
+    );
 }
 
 #[test]
@@ -132,7 +136,10 @@ fn global_timer_fails_gracefully_if_not_exported() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     test.canister_task(canister_id, CanisterTask::GlobalTimer);
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
-    assert_eq!(wat_compilation_cost(wat), test.executed_instructions());
+    assert_eq!(
+        DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + wat_compilation_cost(wat),
+        test.executed_instructions()
+    );
 }
 
 #[test]

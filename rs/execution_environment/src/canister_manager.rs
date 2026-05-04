@@ -1496,7 +1496,7 @@ impl CanisterManager {
     /// Returns `Err` iff the `specified_id` is not valid.
     fn validate_specified_id(
         &self,
-        state: &mut ReplicatedState,
+        state: &ReplicatedState,
         specified_id: PrincipalId,
     ) -> Result<CanisterId, CanisterManagerError> {
         let new_canister_id = CanisterId::unchecked_from_principal(specified_id);
@@ -1550,7 +1550,7 @@ impl CanisterManager {
         let new_canister_id = match specified_id {
             Some(spec_id) => self.validate_specified_id(state, spec_id)?,
 
-            None => self.generate_new_canister_id(state, canister_creation_error)?,
+            None => self.peek_new_canister_id(state, canister_creation_error)?,
         };
 
         // Canister id available. Create the new canister.
@@ -1609,6 +1609,10 @@ impl CanisterManager {
         round_limits
             .subnet_available_memory
             .update_execution_memory_unchecked(available_execution_memory_change);
+
+        if specified_id.is_none() {
+            state.metadata.commit_new_canister_id(new_canister_id);
+        }
 
         // Add new canister to the replicated state.
         state.put_canister_state(new_canister);
@@ -1698,21 +1702,25 @@ impl CanisterManager {
         Ok(())
     }
 
-    /// Generates a new canister ID.
+    /// Returns the next canister ID that is available for canister creation,
+    /// without mutating state.
     ///
-    /// Returns `Err` if the subnet can generate no more canister IDs; or a canister
-    /// with the newly generated ID already exists.
+    /// Returns `Err` if the subnet can generate no more canister IDs,
+    /// or if a canister with the next canister ID already exists.
+    ///
+    /// The caller must follow up with `state.metadata.commit_new_canister_id`
+    /// once canister creation succeeds.
     //
     // WARNING!!! If you change the logic here, please ensure that the sequence
     // of NNS canister ids as defined in nns/constants/src/lib.rs are also
     // updated.
-    fn generate_new_canister_id(
+    fn peek_new_canister_id(
         &self,
-        state: &mut ReplicatedState,
+        state: &ReplicatedState,
         canister_creation_error: &IntCounter,
     ) -> Result<CanisterId, CanisterManagerError> {
-        let canister_id = state.metadata.generate_new_canister_id().map_err(|err| {
-            error!(self.log, "Unable to generate new canister IDs: {}", err);
+        let canister_id = state.metadata.peek_new_canister_id().map_err(|err| {
+            error!(self.log, "Unable to peek new canister ID: {}", err);
             CanisterManagerError::SubnetOutOfCanisterIds
         })?;
 

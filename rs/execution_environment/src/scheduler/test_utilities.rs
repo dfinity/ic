@@ -808,13 +808,15 @@ impl Default for SchedulerTestBuilder {
         let subnet_type = SubnetType::Application;
         let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
         let config = ic_config::execution_environment::Config::default();
+        let mut hypervisor_config = config.embedders_config;
+        hypervisor_config.create_execution_state_base_cost = NumInstructions::from(0);
         Self {
             own_subnet_id: subnet_test_id(1),
             nns_subnet_id: subnet_test_id(2),
             subnet_type,
             batch_time: UNIX_EPOCH,
             scheduler_config,
-            hypervisor_config: config.embedders_config,
+            hypervisor_config,
             initial_canister_cycles: Cycles::new(1_000_000_000_000_000_000),
             subnet_memory_capacity: config.subnet_memory_capacity.get(),
             subnet_guaranteed_response_message_memory: config
@@ -1047,6 +1049,7 @@ impl SchedulerTestBuilder {
             canister_guaranteed_callback_quota: self.canister_guaranteed_callback_quota,
             rate_limiting_of_instructions,
             rate_limiting_of_heap_delta,
+            embedders_config: self.hypervisor_config.clone(),
             ..ic_config::execution_environment::Config::default()
         };
         let wasm_executor = Arc::new(TestWasmExecutor::new(

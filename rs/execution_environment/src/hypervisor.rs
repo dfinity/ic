@@ -119,6 +119,7 @@ pub struct Hypervisor {
     log: ReplicaLogger,
     cycles_account_manager: Arc<CyclesAccountManager>,
     compilation_cache: Arc<CompilationCache>,
+    create_execution_state_base_cost: NumInstructions,
     cost_to_compile_wasm_instruction: NumInstructions,
     dirty_page_overhead: NumInstructions,
     canister_guaranteed_callback_quota: usize,
@@ -148,10 +149,11 @@ impl Hypervisor {
         };
         let compilation_cost = self.cost_to_compile_wasm_instruction * wasm_size as u64;
         if let Err(err) = wasm_size_result {
-            round_limits.instructions -= as_round_instructions(compilation_cost);
+            let total_cost = self.create_execution_state_base_cost + compilation_cost;
+            round_limits.instructions -= as_round_instructions(total_cost);
             self.compilation_cache
                 .insert_err(&canister_module, err.clone().into());
-            return (compilation_cost, Err(err.into()));
+            return (total_cost, Err(err.into()));
         }
 
         let creation_result = self.wasm_executor.create_execution_state(
@@ -169,14 +171,15 @@ impl Hypervisor {
                         self.compilation_cache.disk_bytes(),
                     );
                 }
-                let adjusted_compilation_cost =
-                    compilation_cost_handling.adjusted_compilation_cost(compilation_cost);
-                round_limits.instructions -= as_round_instructions(adjusted_compilation_cost);
-                (adjusted_compilation_cost, Ok(execution_state))
+                let total_cost = self.create_execution_state_base_cost
+                    + compilation_cost_handling.adjusted_compilation_cost(compilation_cost);
+                round_limits.instructions -= as_round_instructions(total_cost);
+                (total_cost, Ok(execution_state))
             }
             Err(err) => {
-                round_limits.instructions -= as_round_instructions(compilation_cost);
-                (compilation_cost, Err(err))
+                let total_cost = self.create_execution_state_base_cost + compilation_cost;
+                round_limits.instructions -= as_round_instructions(total_cost);
+                (total_cost, Err(err))
             }
         }
     }
@@ -230,6 +233,9 @@ impl Hypervisor {
                     .with_dir(tempfile::tempdir_in(temp_dir).unwrap())
                     .build(),
             ),
+            create_execution_state_base_cost: config
+                .embedders_config
+                .create_execution_state_base_cost,
             cost_to_compile_wasm_instruction: config
                 .embedders_config
                 .cost_to_compile_wasm_instruction,
@@ -244,6 +250,7 @@ impl Hypervisor {
         log: ReplicaLogger,
         cycles_account_manager: Arc<CyclesAccountManager>,
         wasm_executor: Arc<dyn WasmExecutor>,
+        create_execution_state_base_cost: NumInstructions,
         cost_to_compile_wasm_instruction: NumInstructions,
         dirty_page_overhead: NumInstructions,
         canister_guaranteed_callback_quota: usize,
@@ -260,6 +267,7 @@ impl Hypervisor {
                     .with_dir(tempfile::tempdir().unwrap())
                     .build(),
             ),
+            create_execution_state_base_cost,
             cost_to_compile_wasm_instruction,
             dirty_page_overhead,
             canister_guaranteed_callback_quota,
