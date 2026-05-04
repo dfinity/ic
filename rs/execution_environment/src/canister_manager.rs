@@ -521,6 +521,17 @@ impl CanisterManager {
         if let Some(compute_allocation) = settings.compute_allocation() {
             canister.system_state.compute_allocation = compute_allocation;
         }
+        let old_ca = canister_compute_allocation.as_percent();
+        let new_ca = new_compute_allocation.as_percent();
+        if old_ca < new_ca {
+            round_limits.compute_allocation_used = round_limits
+                .compute_allocation_used
+                .saturating_add(new_ca - old_ca);
+        } else {
+            round_limits.compute_allocation_used = round_limits
+                .compute_allocation_used
+                .saturating_sub(old_ca - new_ca);
+        }
 
         // Freezing threshold: apply.
         if let Some(freezing_threshold) = settings.freezing_threshold() {
@@ -658,8 +669,6 @@ impl CanisterManager {
                     .would_resize(limit.get() as usize)
             })
             .unwrap_or(false);
-        let old_compute_allocation = canister.compute_allocation().as_percent();
-
         self.validate_and_update_canister_settings(
             &settings,
             canister,
@@ -670,17 +679,6 @@ impl CanisterManager {
             log_resize_needed,
             Some(metrics),
         )?;
-
-        let new_compute_allocation = canister.compute_allocation().as_percent();
-        if old_compute_allocation < new_compute_allocation {
-            round_limits.compute_allocation_used = round_limits
-                .compute_allocation_used
-                .saturating_add(new_compute_allocation - old_compute_allocation);
-        } else {
-            round_limits.compute_allocation_used = round_limits
-                .compute_allocation_used
-                .saturating_sub(old_compute_allocation - new_compute_allocation);
-        }
 
         canister.system_state.bump_canister_version();
         let new_controllers = match settings.controllers() {
@@ -1480,10 +1478,6 @@ impl CanisterManager {
             *round_limits = round_limits_snapshot;
             return Err(err);
         }
-
-        round_limits.compute_allocation_used = round_limits
-            .compute_allocation_used
-            .saturating_add(new_canister.compute_allocation().as_percent());
 
         let controllers = new_canister
             .system_state
