@@ -394,7 +394,7 @@ impl CanisterManager {
             canister_reserved_balance,
         );
 
-        // We also evaluate the condition if the sender is a controller
+        // We evaluate the condition if the sender is a controller
         // (used to determine if canister cycles balance should be revealed
         // to the sender in error messages) w.r.t. controllers before applying
         // new settings so that the sender could still get a useful error
