@@ -692,10 +692,9 @@ impl CanisterManager {
         }
 
         canister.system_state.bump_canister_version();
-        let new_controllers = if settings.controllers().is_some() {
-            Some(canister.system_state.controllers.iter().copied().collect())
-        } else {
-            None
+        let new_controllers = match settings.controllers() {
+            Some(_) => Some(canister.system_state.controllers.iter().copied().collect()),
+            None => None,
         };
 
         // For the sake of backward-compatibility, we do not record
