@@ -655,8 +655,6 @@ impl CanisterManager {
                     .would_resize(limit.get() as usize)
             })
             .unwrap_or(false);
-        let controllers_changed = settings.controllers().is_some();
-
         let old_compute_allocation = canister.compute_allocation().as_percent();
         let old_log_bytes_used = canister.system_state.log_memory_store.bytes_used() as u64;
 
@@ -694,7 +692,7 @@ impl CanisterManager {
         }
 
         canister.system_state.bump_canister_version();
-        let new_controllers = if controllers_changed {
+        let new_controllers = if settings.controllers().is_some() {
             Some(canister.system_state.controllers.iter().copied().collect())
         } else {
             None
@@ -1457,11 +1455,6 @@ impl CanisterManager {
             None => self.peek_new_canister_id(state, canister_creation_error)?,
         };
 
-        // Capture environment variables hash before settings is consumed.
-        let environment_variables_hash = settings
-            .environment_variables()
-            .map(|env_vars| env_vars.hash());
-
         // Canister id available. Create the new canister.
         let mut system_state = SystemState::new_running(
             new_canister_id,
@@ -1512,7 +1505,12 @@ impl CanisterManager {
         let available_execution_memory_change = new_canister.add_canister_change(
             state.time(),
             origin,
-            CanisterChangeDetails::canister_creation(controllers, environment_variables_hash),
+            CanisterChangeDetails::canister_creation(
+                controllers,
+                settings
+                    .environment_variables()
+                    .map(|env_vars| env_vars.hash()),
+            ),
         );
         round_limits
             .subnet_available_memory
