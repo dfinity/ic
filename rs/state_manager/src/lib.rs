@@ -71,6 +71,7 @@ use ic_types::{
 };
 use ic_utils_thread::{JoinOnDrop, deallocator_thread::DeallocatorThread};
 use ic_wasm_types::ModuleLoadingStatus;
+use parking_lot::RwLockWriteGuard;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use prost::Message;
 use std::cmp::min;
@@ -1997,6 +1998,47 @@ impl StateManagerImpl {
             })
     }
 
+    /// Helper to share `on_synced_checkpoint` code with testing code.
+    fn push_state_and_cert_metadata(
+        &self,
+        height: Height,
+        latest_state_height: &AtomicU64,
+        state: ReplicatedState,
+        states: &mut RwLockWriteGuard<'_, SharedState>,
+    ) {
+        let lazy_tree = replicated_state_as_lazy_tree(&state, height);
+        let hash_tree = hash_lazy_tree(&lazy_tree)
+            .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
+        update_hash_tree_metrics(&hash_tree, &self.metrics);
+        let height_witness = state_height_witness(&lazy_tree, &hash_tree, &self.metrics);
+        drop(lazy_tree);
+        let certification_metadata = CertificationMetadata {
+            certified_state_hash: crypto_hash_of_tree(&hash_tree),
+            height_witness,
+            hash_tree: Some((Arc::new(hash_tree), Instant::now())),
+            certification: None,
+        };
+
+        states.snapshots.push_back(Snapshot {
+            height,
+            state: Arc::new(state),
+        });
+        states
+            .snapshots
+            .make_contiguous()
+            .sort_by_key(|snapshot| snapshot.height);
+
+        self.metrics
+            .resident_state_count
+            .set(states.snapshots.len() as i64);
+
+        states
+            .certifications_metadata
+            .insert(height, certification_metadata);
+
+        update_latest_height(latest_state_height, height);
+    }
+
     fn on_synced_checkpoint(
         &self,
         state: ReplicatedState,
@@ -2023,19 +2065,6 @@ impl StateManagerImpl {
             }
         }
 
-        let lazy_tree = replicated_state_as_lazy_tree(&state, height);
-        let hash_tree = hash_lazy_tree(&lazy_tree)
-            .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
-        update_hash_tree_metrics(&hash_tree, &self.metrics);
-        let height_witness = state_height_witness(&lazy_tree, &hash_tree, &self.metrics);
-        drop(lazy_tree);
-        let certification_metadata = CertificationMetadata {
-            certified_state_hash: crypto_hash_of_tree(&hash_tree),
-            height_witness,
-            hash_tree: Some((Arc::new(hash_tree), Instant::now())),
-            certification: None,
-        };
-
         let mut states = self.states.write();
         #[cfg(debug_assertions)]
         check_certifications_metadata_snapshots_and_states_metadata_are_consistent(&states);
@@ -2059,22 +2088,12 @@ impl StateManagerImpl {
 
         if !is_snapshot_present {
             // Normal case: we don't have the in-memory state yet.
-            states.snapshots.push_back(Snapshot {
+            self.push_state_and_cert_metadata(
                 height,
-                state: Arc::new(state),
-            });
-            states
-                .snapshots
-                .make_contiguous()
-                .sort_by_key(|snapshot| snapshot.height);
-
-            self.metrics
-                .resident_state_count
-                .set(states.snapshots.len() as i64);
-
-            states
-                .certifications_metadata
-                .insert(height, certification_metadata);
+                &self.latest_state_height,
+                state,
+                &mut states,
+            );
         } else {
             // Rare case: we already have the in-memory state.
             info!(
@@ -4379,6 +4398,9 @@ pub mod testing {
 
         /// Testing only: Returns `fast_forward_height`.
         fn fast_forward_height(&self) -> u64;
+
+        /// Testing only: Push state
+        fn push_state_and_cert_metadata(&self, height: Height, state: ReplicatedState);
     }
 
     impl StateManagerTesting for StateManagerImpl {
@@ -4486,6 +4508,16 @@ pub mod testing {
 
         fn fast_forward_height(&self) -> u64 {
             self.fast_forward_height.load(Ordering::Relaxed)
+        }
+
+        fn push_state_and_cert_metadata(&self, height: Height, state: ReplicatedState) {
+            let mut states = self.states.write();
+            self.push_state_and_cert_metadata(
+                height,
+                &self.latest_state_height,
+                state,
+                &mut states,
+            );
         }
     }
 }
