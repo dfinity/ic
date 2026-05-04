@@ -393,11 +393,8 @@ impl RegistryHelper {
         version: RegistryVersion,
     ) -> RegistryResult<ReplicaVersion> {
         match self.registry_client.get_unassigned_nodes_config(version)? {
-            Some(record) => {
-                let replica_version = ReplicaVersion::try_from(record.replica_version.as_ref())
-                    .map_err(RegistryError::ReplicaVersionParseError)?;
-                Ok(replica_version)
-            }
+            Some(record) => ReplicaVersion::try_from(record.replica_version)
+                .map_err(RegistryError::ReplicaVersionParseError),
             None => Err(RegistryError::UnassignedNodesConfigMissing(version)),
         }
     }
@@ -409,7 +406,7 @@ impl RegistryHelper {
     ) -> RegistryResult<ReplicaVersion> {
         let api_boundary_node_record = self.get_api_boundary_node_record(node_id, version)?;
 
-        ReplicaVersion::try_from(api_boundary_node_record.version.as_ref())
+        ReplicaVersion::try_from(api_boundary_node_record.version)
             .map_err(RegistryError::ReplicaVersionParseError)
     }
 
