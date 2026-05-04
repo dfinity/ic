@@ -228,7 +228,7 @@ fn failed_create_canister_does_not_reuse_canister_id() {
     let failing_args = CreateCanisterArgs {
         settings: Some(
             CanisterSettingsArgsBuilder::new()
-                .with_freezing_threshold(1u64 << 60)
+                .with_freezing_threshold(1_u64 << 60)
                 .with_memory_allocation(1 << 20)
                 .build(),
         ),
