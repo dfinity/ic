@@ -342,6 +342,7 @@ impl CanisterManager {
         &self,
         settings: &CanisterSettings,
         canister: &mut CanisterState,
+        sender: PrincipalId,
         round_limits: &mut RoundLimits,
         subnet_memory_saturation: &ResourceSaturation,
         subnet_size: usize,
@@ -349,7 +350,7 @@ impl CanisterManager {
         metrics: Option<&ExecutionEnvironmentMetrics>,
     ) -> Result<(), CanisterManagerError> {
         // Resolve current canister state and effective new settings. The
-        // freeze-threshold cycles requirement (`threshold`) depends jointly on
+        // freezing threshold cycles (`threshold`) depends jointly on
         // memory allocation, compute allocation, and freezing threshold, so we
         // compute it once here and reuse it across all checks below. Storage
         // cycle reservation (which would change the reserved balance and
@@ -392,6 +393,14 @@ impl CanisterManager {
             cost_schedule,
             canister_reserved_balance,
         );
+
+        // We also evaluate the condition if the sender is a controller
+        // (used to determine if canister cycles balance should be revealed
+        // to the sender in error messages) w.r.t. controllers before applying
+        // new settings so that the sender could still get a useful error
+        // message when trying to set a different set of controllers
+        // not containing the sender.
+        let reveal_top_up = canister.system_state.controllers.contains(&sender);
 
         // Environment variables: validate and apply.
         self.validate_environment_variables(settings)?;
@@ -575,7 +584,7 @@ impl CanisterManager {
                         &mut canister.system_state,
                         log_resize_cycles,
                         threshold,
-                        true, // The caller is always a controller.
+                        reveal_top_up,
                     )
                     .map_err(|err| CanisterManagerError::LogResizeNotEnoughCycles {
                         available: err.available,
@@ -671,6 +680,7 @@ impl CanisterManager {
         self.validate_and_update_canister_settings(
             &settings,
             canister,
+            sender,
             round_limits,
             &subnet_memory_saturation,
             subnet_size,
@@ -1466,6 +1476,7 @@ impl CanisterManager {
         if let Err(err) = self.validate_and_update_canister_settings(
             &settings,
             &mut new_canister,
+            sender,
             round_limits,
             &subnet_memory_saturation,
             subnet_size,
