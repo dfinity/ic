@@ -278,6 +278,9 @@ impl RoundSchedule {
         let mut long_executions_compute_allocation = ZERO;
 
         // Collect all active canisters and their next executions.
+        //
+        // Unfortunately, not all active canisters are in the subnet schedule, so we
+        // must iterate over all canister states to find them.
         let mut schedule: Vec<CanisterRoundState> = canister_states
             .iter()
             .filter_map(|(canister_id, canister)| {
@@ -657,7 +660,9 @@ impl RoundSchedule {
 
         self.observe_round_metrics(state, current_round, metrics);
 
-        // TODO(DSM-103): `debug_assert` that all active canisters are in the subnet schedule.
+        // NOTE: Some active canisters may not be in the subnet schedule at this point,
+        // because we may have bailed out of inner_round() due to reaching some limit,
+        // either before we scheduled anything or after inducting subnet-local messages.
     }
 
     /// Deducts the heap delta and install code rate limits from the canisters'
