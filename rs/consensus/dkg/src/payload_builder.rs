@@ -1,10 +1,15 @@
 use crate::{
     MAX_EARLY_REMOTE_TRANSCRIPTS, MAX_REMOTE_DKGS_PER_INTERVAL,
-    remote::{ConfigResult, build_callback_id_config_map, merge_configs},
+    remote::{
+        ConfigResult, build_callback_id_config_map, get_updated_remote_dkg_attempts, merge_configs,
+    },
     utils::{self, tags_iter, vetkd_key_ids_for_subnet},
 };
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
-use ic_interfaces::{crypto::ErrorReproducibility, dkg::DkgPool};
+use ic_interfaces::{
+    crypto::{ErrorReproducibility, NiDkgAlgorithm},
+    dkg::DkgPool,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, error, info, warn};
@@ -24,10 +29,9 @@ use ic_types::{
         get_faults_tolerated,
     },
     crypto::threshold_sig::ni_dkg::{
-        NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
+        NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         NiDkgTranscript,
         config::{NiDkgConfig, NiDkgConfigData, errors::NiDkgConfigValidationError},
-        errors::create_transcript_error::DkgCreateTranscriptError,
     },
     messages::CallbackId,
 };
@@ -187,7 +191,7 @@ pub(crate) fn create_early_remote_transcripts(
     }
 
     // Get all dealings for DKGs that have not been completed yet
-    let (all_dealings, completed_dkgs) = utils::get_dkg_dealings(pool_reader, parent);
+    let (mut all_dealings, completed_dkgs) = utils::get_dkg_dealings(pool_reader, parent);
 
     // Try to create transcripts for all configs of each target_id. Note that we either include
     // all transcript results for a target_id or none of them.
@@ -235,9 +239,21 @@ pub(crate) fn create_early_remote_transcripts(
 
         // For each config, try to build the necessary (dkg_id, callback_id, transcript_result) triple
         for config in configs.iter() {
+            let dealings = all_dealings.remove(config.dkg_id()).unwrap_or_else(|| {
+                error!(
+                    logger,
+                    "We checked that all configs have enough dealings above. This is a bug."
+                );
+                // Just in case, return an empty map of dealings to make the next call to
+                // `create_transcript` fail with a reproducible error for not having enough
+                // dealings. This will send back a reject response to the canister.
+                BTreeMap::new()
+            });
             // Generate the transcript. We need to retry transient errors, as a payload containing
             // transient errors may not be verifiable by peers.
-            let transcript_result = match create_transcript(crypto, config, &all_dealings, logger) {
+            let transcript_result = match NiDkgAlgorithm::create_transcript(
+                crypto, config, dealings,
+            ) {
                 Ok(transcript) => Ok(transcript),
                 // Note that we handled the reproducible error case of not having enough dealings
                 // already beforehand.
@@ -403,7 +419,7 @@ pub(super) fn create_summary_payload(
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
 ) -> Result<DkgSummary, DkgPayloadCreationError> {
-    let (all_dealings, completed_dkgs) = utils::get_dkg_dealings(pool_reader, parent);
+    let (mut all_dealings, completed_dkgs) = utils::get_dkg_dealings(pool_reader, parent);
     let mut next_transcripts = BTreeMap::new();
     // Try to create transcripts from the last round.
     for (dkg_id, config) in last_summary.configs.iter() {
@@ -411,7 +427,8 @@ pub(super) fn create_summary_payload(
             // Skip remote DKGs
             continue;
         }
-        match create_transcript(crypto, config, &all_dealings, &logger) {
+        let dealings = all_dealings.remove(dkg_id).unwrap_or_default();
+        match NiDkgAlgorithm::create_transcript(crypto, config, dealings) {
             Ok(transcript) => {
                 let previous_value_found = next_transcripts
                     .insert(dkg_id.dkg_tag.clone(), transcript)
@@ -473,13 +490,11 @@ pub(super) fn create_summary_payload(
     let state = state_reader
         .get_state_at(validation_context.certified_height)
         .map_err(DkgPayloadCreationError::StateManagerError)?;
-    let target_ids_from_contexts = get_target_ids_from_contexts(state.get_ref());
 
-    let completed_target_ids = get_completed_target_ids(&completed_dkgs);
-    let initial_dkg_attempts = get_updated_initial_dkg_attempts(
-        &last_summary.initial_dkg_attempts,
-        target_ids_from_contexts,
-        completed_target_ids,
+    let remote_dkg_attempts = get_updated_remote_dkg_attempts(
+        last_summary,
+        state.get_ref(),
+        get_completed_target_ids(&completed_dkgs),
     );
 
     let interval_length = last_summary.next_interval_length;
@@ -508,25 +523,12 @@ pub(super) fn create_summary_payload(
         local_configs,
         current_transcripts,
         next_transcripts,
-        vec![],
         registry_version,
         interval_length,
         next_interval_length,
         height,
-        initial_dkg_attempts,
+        remote_dkg_attempts,
     ))
-}
-
-fn create_transcript(
-    crypto: &dyn ConsensusCrypto,
-    config: &NiDkgConfig,
-    all_dealings: &BTreeMap<NiDkgId, BTreeMap<NodeId, NiDkgDealing>>,
-    _logger: &ReplicaLogger,
-) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
-    let no_dealings = BTreeMap::new();
-    let dealings = all_dealings.get(config.dkg_id()).unwrap_or(&no_dealings);
-
-    ic_interfaces::crypto::NiDkgAlgorithm::create_transcript(crypto, config, dealings)
 }
 
 /// Return the set of next transcripts for all tags. If for some tag
@@ -646,7 +648,6 @@ pub fn get_dkg_summary_from_cup_contents(
         configs,
         transcripts,
         BTreeMap::new(), // next transcripts
-        Vec::new(),      // transcripts for other subnets
         // If we are in a NNS subnet recovery with failover nodes, we use the registry version of
         // the recovered NNS as a DKG summary version which is used as the CUP version.
         registry_version_of_original_registry.unwrap_or(registry_version),
@@ -755,49 +756,6 @@ fn get_completed_target_ids(completed: &BTreeSet<NiDkgId>) -> BTreeSet<NiDkgTarg
             }
         })
         .collect()
-}
-
-/// Build the set of NiDkgTargetIds from the setup initial DKG and reshare chain key contexts
-/// found in the given replicated state.
-fn get_target_ids_from_contexts(state: &ReplicatedState) -> BTreeSet<NiDkgTargetId> {
-    let call_contexts = &state.metadata.subnet_call_context_manager;
-    call_contexts
-        .setup_initial_dkg_contexts
-        .values()
-        .map(|context| context.target_id)
-        .chain(
-            call_contexts
-                .reshare_chain_key_contexts
-                .values()
-                .map(|context| context.target_id),
-        )
-        .collect()
-}
-
-/// Update the initial DKG attempts for the given target IDs based on the previous attempts and the
-/// completed target IDs.
-fn get_updated_initial_dkg_attempts(
-    previous_initial_dkg_attempts: &BTreeMap<NiDkgTargetId, u32>,
-    target_ids_from_contexts: BTreeSet<NiDkgTargetId>,
-    completed_target_ids: BTreeSet<NiDkgTargetId>,
-) -> BTreeMap<NiDkgTargetId, u32> {
-    let mut initial_dkg_attempts = BTreeMap::new();
-
-    for target_id in target_ids_from_contexts {
-        let attempts = previous_initial_dkg_attempts
-            .get(&target_id)
-            .copied()
-            .unwrap_or(0)
-            .saturating_add(1);
-        initial_dkg_attempts.insert(target_id, attempts);
-    }
-
-    // Completed target IDs remain tracked with attempt counter reset to 0.
-    for target_id in completed_target_ids {
-        initial_dkg_attempts.insert(target_id, 0);
-    }
-
-    initial_dkg_attempts
 }
 
 /// This function is called for each entry on the SubnetCallContext. It returns
@@ -1895,7 +1853,6 @@ mod tests {
                 vec![],
                 BTreeMap::new(),
                 BTreeMap::new(),
-                Vec::new(),
                 registry_version,
                 Height::from(99),
                 Height::from(99),
@@ -1958,35 +1915,6 @@ mod tests {
                 NiDkgTargetSubnet::Remote(reshare_target)
             );
         });
-    }
-
-    #[test]
-    fn test_update_initial_dkg_attempts_from_contexts_and_completed() {
-        let persisted_target = NiDkgTargetId::new([1_u8; 32]);
-        let removed_target = NiDkgTargetId::new([2_u8; 32]);
-        let new_target = NiDkgTargetId::new([3_u8; 32]);
-        let completed_target = NiDkgTargetId::new([4_u8; 32]);
-
-        let previous_attempts = BTreeMap::from([
-            (persisted_target, 2),
-            (removed_target, 7),
-            (completed_target, 3),
-        ]);
-
-        let target_ids_from_contexts =
-            BTreeSet::from([persisted_target, new_target, completed_target]);
-        let completed_target_ids = BTreeSet::from([completed_target]);
-
-        let attempts = get_updated_initial_dkg_attempts(
-            &previous_attempts,
-            target_ids_from_contexts,
-            completed_target_ids,
-        );
-
-        assert_eq!(attempts.get(&persisted_target), Some(&3));
-        assert_eq!(attempts.get(&new_target), Some(&1));
-        assert_eq!(attempts.get(&completed_target), Some(&0));
-        assert!(!attempts.contains_key(&removed_target));
     }
 
     struct TestDkgPool {
