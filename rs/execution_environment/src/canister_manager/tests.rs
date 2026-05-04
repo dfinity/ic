@@ -99,6 +99,7 @@ use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
+use num_traits::SaturatingSub;
 use prometheus::IntCounter;
 use serde::Deserialize;
 use std::{
@@ -4408,13 +4409,13 @@ fn update_settings_checks_freezing_threshold_for_log_memory_limit() {
         .build();
 
     // Create a canister with very few cycles so it's below the freezing threshold.
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000));
+    let canister_id = test.create_canister(Cycles::new(100_000_000));
 
     let err = test
         .update_settings(
             canister_id,
             CanisterSettingsArgsBuilder::new()
-                .with_log_memory_limit(10 * 1024 * 1024)
+                .with_log_memory_limit(1024 * 1024)
                 .build(),
         )
         .unwrap_err();
@@ -4425,6 +4426,65 @@ fn update_settings_checks_freezing_threshold_for_log_memory_limit() {
         err.description(),
     );
     assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
+}
+
+#[test]
+fn update_settings_log_memory_limit_increase_reserves_cycles() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const CAPACITY: u64 = 20_000_000_000;
+    const THRESHOLD: u64 = CAPACITY / 2;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_log_memory_store_feature_enabled()
+        .with_subnet_execution_memory(CAPACITY)
+        .with_subnet_memory_reservation(0)
+        .with_subnet_memory_threshold(THRESHOLD)
+        .with_resource_saturation_scaling(1)
+        .build();
+
+    // Push subnet memory usage past the threshold to trigger storage reservation.
+    test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD + 1))
+        .unwrap();
+
+    let canister_id = test.create_canister(CYCLES);
+
+    // Capture state before the settings update.
+    let old_memory_usage = test.canister_state(canister_id).memory_usage();
+    let subnet_memory_usage =
+        CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
+    let reserved_before = test
+        .canister_state(canister_id)
+        .system_state
+        .reserved_balance();
+
+    test.update_settings(
+        canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(1024 * 1024)
+            .build(),
+    )
+    .unwrap();
+
+    let new_memory_usage = test.canister_state(canister_id).memory_usage();
+    let reserved_after = test
+        .canister_state(canister_id)
+        .system_state
+        .reserved_balance();
+    let allocated_bytes = new_memory_usage.saturating_sub(&old_memory_usage);
+    let extra_reserved = reserved_after - reserved_before;
+
+    let expected = test
+        .cycles_account_manager()
+        .storage_reservation_cycles(
+            allocated_bytes,
+            &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
+            test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
+        )
+        .real();
+
+    assert_gt!(extra_reserved, Cycles::zero());
+    assert_eq!(extra_reserved, expected);
 }
 
 #[test]
