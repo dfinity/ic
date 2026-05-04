@@ -357,13 +357,11 @@ impl CanisterManager {
         // cycle reservation (which would change the reserved balance and
         // invalidate `threshold`) is deferred to the end of this function.
         let canister_memory_usage = canister.memory_usage();
-        let new_log_memory_limit = settings
-            .log_memory_limit()
-            .unwrap_or(NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64));
-        let new_log_memory_usage = LogMemoryStore::memory_usage_for_limit(
-            self.config.log_memory_store_feature,
-            new_log_memory_limit,
-        );
+        let new_log_memory_usage = if let Some(limit) = settings.log_memory_limit() {
+            LogMemoryStore::memory_usage_for_limit(self.config.log_memory_store_feature, limit)
+        } else {
+            canister.log_memory_store_memory_usage()
+        };
         let new_canister_memory_usage =
             canister_memory_usage - canister.log_memory_store_memory_usage() + new_log_memory_usage;
         let canister_message_memory_usage = canister.message_memory_usage();
@@ -603,11 +601,7 @@ impl CanisterManager {
             }
             Some(requested_limit)
         } else {
-            // User did not set log_memory_limit: default so that new canisters
-            // get a log memory store initialized.
-            // For existing canisters this is a no-op (resize early-returns
-            // when capacity is unchanged). No cycles are charged.
-            Some(NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64))
+            None
         };
 
         // Log visibility: apply.
@@ -847,6 +841,10 @@ impl CanisterManager {
         settings
             .wasm_memory_limit
             .get_or_insert(self.config.default_wasm_memory_limit);
+
+        settings
+            .log_memory_limit
+            .get_or_insert(NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64));
 
         // Test coverage relies on the fact that
         // the IC method `provisional_create_canister_with_cycles`
@@ -1387,6 +1385,10 @@ impl CanisterManager {
         settings
             .wasm_memory_limit
             .get_or_insert(self.config.default_wasm_memory_limit);
+
+        settings
+            .log_memory_limit
+            .get_or_insert(NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64));
 
         // Test coverage relies on the fact that
         // the IC method `provisional_create_canister_with_cycles`
