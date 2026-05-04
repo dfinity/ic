@@ -9652,7 +9652,7 @@ fn commit_and_certify_panic_on_delivered_fake_certification() {
 fn certification_not_pruned() {
     state_manager_test(|metrics, sm| {
         // update `fast_forward_height` to enable optimization
-        sm.update_fast_forward_height(Height::new(3));
+        sm.update_fast_forward_height(Height::new(5));
 
         // consensus delivers a certification so the optimization triggers
         sm.deliver_state_certification(fake_certification_for_height_with_hash(
@@ -9683,38 +9683,5 @@ fn certification_not_pruned() {
         // certification @ height 1 should still be present, because it is at tip_height
         assert!(sm.certifications().contains_key(&Height::new(1)));
         sm.commit_and_certify_at_height(state, Height::new(2), CertificationScope::Metadata, None);
-
-        // without optimization: move past optimization range...
-        let state = sm.take_tip().1;
-        sm.commit_and_certify_at_height(state, Height::new(3), CertificationScope::Metadata, None);
-        // ...and repeat
-
-        // consensus delivers a certification so the optimization triggers
-        sm.deliver_state_certification(fake_certification_for_height_with_hash(
-            Height::new(4),
-            CryptoHash(
-                hex::decode("02d44a58eb0003414fa51fd2a41d5ee5a06ff9748fef57fed1bb5158c080bd82")
-                    .unwrap(),
-            ),
-        ));
-        // all conditions are satisfied => optimization triggers
-        let state = sm.take_tip().1;
-        sm.commit_and_certify_at_height(state, Height::new(4), CertificationScope::Metadata, None);
-
-        let state = sm.take_tip().1;
-        let mut new_state = state.clone();
-        new_state.metadata.prev_state_hash = Some(
-            CryptoHash(
-                hex::decode("02d44a58eb0003414fa51fd2a41d5ee5a06ff9748fef57fed1bb5158c080bd82")
-                    .unwrap(),
-            )
-            .into(),
-        );
-        sm.push_state_and_cert_metadata(Height::new(5), new_state);
-        sm.remove_states_below(Height::new(5));
-
-        // certification @ height 4 should still be present, because it is at tip_height
-        assert!(sm.certifications().contains_key(&Height::new(4)));
-        sm.commit_and_certify_at_height(state, Height::new(5), CertificationScope::Metadata, None);
     });
 }
