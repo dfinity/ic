@@ -45,6 +45,11 @@ pub enum CyclesLedgerArgs {
 
 /* Internet Identity */
 
+#[derive(CandidType)]
+pub struct DiscoverableOidcConfig {
+    pub discovery_domain: String,
+}
+
 pub type AnchorNumber = u64;
 
 #[derive(CandidType)]
@@ -148,4 +153,5 @@ pub struct InternetIdentityInit {
     pub dummy_auth: Option<Option<DummyAuthConfig>>,
     pub backend_canister_id: Option<Principal>,
     pub backend_origin: Option<String>,
+    pub sso_discoverable_domains: Option<Vec<String>>,
 }

@@ -1771,20 +1771,18 @@ impl From<api::DerivedProposalInformation> for pb::DerivedProposalInformation {
     }
 }
 
-impl From<pb::SuccessfulProposalExecutionValue> for api::SuccessfulProposalExecutionValue {
+impl From<pb::SuccessfulProposalExecutionValue> for Option<api::SuccessfulProposalExecutionValue> {
     fn from(item: pb::SuccessfulProposalExecutionValue) -> Self {
-        match item.proposal_type {
-            Some(ProposalType::CreateCanisterAndInstallCode(ok)) => {
+        let result = match item.proposal_type? {
+            ProposalType::CreateCanisterAndInstallCode(ok) => {
                 api::SuccessfulProposalExecutionValue::CreateCanisterAndInstallCode(ok.into())
             }
-            None => {
-                // This shouldn't happen, but if it does, we need a fallback.
-                // Use a CreateCanisterAndInstallCode with None canister_id.
-                api::SuccessfulProposalExecutionValue::CreateCanisterAndInstallCode(
-                    api::CreateCanisterAndInstallCodeOk { canister_id: None },
-                )
+            ProposalType::TakeCanisterSnapshot(ok) => {
+                api::SuccessfulProposalExecutionValue::TakeCanisterSnapshot(ok.into())
             }
-        }
+        };
+
+        Some(result)
     }
 }
 
@@ -1826,6 +1824,35 @@ impl From<pb::CreateCanisterAndInstallCodeOk> for pb::SuccessfulProposalExecutio
     fn from(ok: pb::CreateCanisterAndInstallCodeOk) -> Self {
         Self {
             proposal_type: Some(ProposalType::CreateCanisterAndInstallCode(ok)),
+        }
+    }
+}
+
+impl From<root::TakeCanisterSnapshotOk> for pb::TakeCanisterSnapshotOk {
+    fn from(ok: root::TakeCanisterSnapshotOk) -> Self {
+        Self { snapshot_id: ok.id }
+    }
+}
+
+impl From<root::TakeCanisterSnapshotOk> for pb::SuccessfulProposalExecutionValue {
+    fn from(ok: root::TakeCanisterSnapshotOk) -> Self {
+        Self::from(pb::TakeCanisterSnapshotOk::from(ok))
+    }
+}
+
+// Upgrade Ok to result.
+impl From<pb::TakeCanisterSnapshotOk> for pb::SuccessfulProposalExecutionValue {
+    fn from(ok: pb::TakeCanisterSnapshotOk) -> Self {
+        Self {
+            proposal_type: Some(ProposalType::TakeCanisterSnapshot(ok)),
+        }
+    }
+}
+
+impl From<pb::TakeCanisterSnapshotOk> for api::TakeCanisterSnapshotOk {
+    fn from(item: pb::TakeCanisterSnapshotOk) -> Self {
+        Self {
+            snapshot_id: item.snapshot_id,
         }
     }
 }

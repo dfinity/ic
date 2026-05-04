@@ -1,14 +1,18 @@
 use super::*;
 use crate::{
-    governance::max_dissolve_delay_seconds,
+    governance::{
+        MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70,
+        RELAXED_EIGHT_YEAR_GANG_MAX_AGING_SINCE_TIMESTAMP_SECONDS, max_dissolve_delay_seconds,
+    },
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{
         BallotInfo, Followees, KnownNeuronData, MaturityDisbursement, NeuronDissolveStateSnapshot,
+        neuron_dissolve_state_snapshot,
         neuron_dissolve_state_snapshot::DissolveState as SnapshotDissolveState,
     },
     storage::{with_stable_neuron_indexes, with_voting_history_store},
 };
-use ic_nervous_system_common::ONE_MONTH_SECONDS;
+use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use maplit::{btreemap, btreeset, hashmap, hashset};
 use pretty_assertions::assert_eq;
@@ -1193,4 +1197,150 @@ fn test_clamp_dissolve_delay_for_all_neurons_multiple_neurons() {
             );
         })
         .unwrap();
+}
+
+#[test]
+fn test_set_relaxed_eight_year_gang_bonus_base_e8s() {
+    // Step 1: Prepare the world.
+
+    let not_dissolving_with_dissolve_delay_of_nearly_eight_years = NeuronDissolveStateSnapshot {
+        dissolve_state: Some(
+            neuron_dissolve_state_snapshot::DissolveState::DissolveDelaySeconds(
+                MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70 - 1,
+            ),
+        ),
+    };
+
+    let neuron_id_to_pre_clamp_dissolve_state = hashmap! {
+        // Meets the main criterion: not dissolving and has its dissolve delay is
+        // nearly 8 years. Later, is will be seen that it meets the secondary criteria,
+        // and therefore, fully qualifies in the second round of induction into the
+        // eight year gang.
+        101 => not_dissolving_with_dissolve_delay_of_nearly_eight_years,
+
+        // Neurons that certainly do NOT qualify, based on their dissolve_state.
+
+        // Insufficient dissolve delay.
+        201 => NeuronDissolveStateSnapshot {
+            dissolve_state: Some(
+                neuron_dissolve_state_snapshot::DissolveState::DissolveDelaySeconds(
+                    MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70 - 14 * ONE_DAY_SECONDS - 1,
+                ),
+            ),
+        },
+
+        // Dissolving.
+        202 => NeuronDissolveStateSnapshot {
+            dissolve_state: Some(
+                neuron_dissolve_state_snapshot::DissolveState::WhenDissolvedTimestampSeconds(
+                    // A timestamp. This isn't used, but the value is realistic anyway.
+                    1_776_785_900,
+                ),
+            ),
+        },
+
+        // Already qualified during the first induction round.
+        203 => NeuronDissolveStateSnapshot {
+            dissolve_state: Some(
+                neuron_dissolve_state_snapshot::DissolveState::DissolveDelaySeconds(
+                    MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70,
+                ),
+            ),
+        },
+
+        // Neurons that SEEM to qualify, since they have the same dissolve_state as neuron 101,
+        // but because (as will be seen later), these do not meet the secondary criteria,
+        // do not make it in the relaxed second round of induction into the eight year gang.
+
+        // Stake is too young.
+        301 => not_dissolving_with_dissolve_delay_of_nearly_eight_years,
+
+        // Already a member of the eight year gang. In theory, this will not occur.
+        // Nevertheless, the implementation should handle this gracefully by
+        // not modifying the neuron.
+        302 => not_dissolving_with_dissolve_delay_of_nearly_eight_years,
+    };
+
+    fn new_neuron(id: u64, age_delta_seconds: i64) -> Neuron {
+        NeuronBuilder::new(
+            NeuronId { id },
+            Subaccount::from(&PrincipalId::new_user_test_id(id)),
+            PrincipalId::new_user_test_id(1),
+            DissolveStateAndAge::NotDissolving {
+                dissolve_delay_seconds: 2 * ONE_YEAR_SECONDS,
+                aging_since_timestamp_seconds:
+                    (RELAXED_EIGHT_YEAR_GANG_MAX_AGING_SINCE_TIMESTAMP_SECONDS as i64
+                        + age_delta_seconds) as u64,
+            },
+            1745249919, // created_at_timestamp_seconds
+        )
+        // Net stake = 100 - 50 + 10 = 60.
+        .with_cached_neuron_stake_e8s(100 * E8)
+        .with_neuron_fees_e8s(50 * E8)
+        .with_staked_maturity_e8s_equivalent(10 * E8)
+        .build()
+    }
+
+    let neuron_101 = new_neuron(101, 0);
+
+    let neuron_201 = new_neuron(201, 0);
+    let neuron_202 = new_neuron(202, 0);
+    let neuron_203 = new_neuron(203, 0);
+
+    // Stake is too young: started aging one second after the cutoff.
+    let neuron_301 = new_neuron(301, 1);
+
+    // Already a member: bonus was set by a prior migration.=
+    let neuron_302 = NeuronBuilder::new(
+        NeuronId { id: 302 },
+        Subaccount::from(&PrincipalId::new_user_test_id(302)),
+        PrincipalId::new_user_test_id(302),
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 2 * ONE_YEAR_SECONDS,
+            aging_since_timestamp_seconds:
+                RELAXED_EIGHT_YEAR_GANG_MAX_AGING_SINCE_TIMESTAMP_SECONDS,
+        },
+        1_776_790_431, // created at
+    )
+    .with_cached_neuron_stake_e8s(100 * E8)
+    .with_staked_maturity_e8s_equivalent(50 * E8)
+    .with_neuron_fees_e8s(10 * E8)
+    .with_eight_year_gang_bonus_base_e8s(42 * E8)
+    .build();
+
+    let mut neuron_store = NeuronStore::new(btreemap! {
+        101 => neuron_101,
+        201 => neuron_201,
+
+        202 => neuron_202,
+        203 => neuron_203,
+
+        301 => neuron_301,
+        302 => neuron_302,
+    });
+
+    // Step 2: Call the code under test.
+    neuron_store.set_relaxed_eight_year_gang_bonus_base_e8s_or_panic(
+        &neuron_id_to_pre_clamp_dissolve_state,
+    );
+
+    // Step 3: Verify results.
+
+    let assert_eight_year_gang_bonus_base_e8s = |neuron_id, expected| {
+        let observed = neuron_store
+            .with_neuron(&NeuronId { id: neuron_id }, |n| {
+                n.eight_year_gang_bonus_base_e8s
+            })
+            .unwrap();
+        assert_eq!(observed, expected);
+    };
+
+    assert_eight_year_gang_bonus_base_e8s(101, 60 * E8);
+
+    assert_eight_year_gang_bonus_base_e8s(201, 0);
+    assert_eight_year_gang_bonus_base_e8s(202, 0);
+    assert_eight_year_gang_bonus_base_e8s(203, 0);
+
+    assert_eight_year_gang_bonus_base_e8s(301, 0);
+    assert_eight_year_gang_bonus_base_e8s(302, 42 * E8);
 }

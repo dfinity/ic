@@ -267,7 +267,7 @@ impl InstallCodeHelper {
                 .replay_step(state_change, original, round)
                 .map_err(|err| (err, paused_instructions_left, helper.take_canister_log()))?;
         }
-        assert_eq!(paused_instructions_left, helper.instructions_left());
+        debug_assert_eq!(paused_instructions_left, helper.instructions_left());
         Ok(helper)
     }
 
@@ -288,7 +288,7 @@ impl InstallCodeHelper {
         // The balance should not change because `install_code` cannot accept or
         // send cycles. The execution cycles have already been accounted for in
         // the clean canister state.
-        assert_eq!(
+        debug_assert_eq!(
             clean_canister.system_state.balance(),
             self.canister.system_state.balance()
         );

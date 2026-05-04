@@ -2608,21 +2608,28 @@ impl<'a> Payload<'a> for CreateCanisterArgs {
 /// record {
 ///   node_ids : vec principal;
 ///   registry_version : nat64;
+///   subnet_id : opt principal;
 /// }
 /// ```
 #[derive(Debug, CandidType, Deserialize)]
 pub struct SetupInitialDKGArgs {
     node_ids: Vec<PrincipalId>,
     registry_version: u64,
+    subnet_id: Option<SubnetId>,
 }
 
 impl Payload<'_> for SetupInitialDKGArgs {}
 
 impl SetupInitialDKGArgs {
-    pub fn new(node_ids: Vec<NodeId>, registry_version: RegistryVersion) -> Self {
+    pub fn new(
+        node_ids: Vec<NodeId>,
+        registry_version: RegistryVersion,
+        subnet_id: Option<SubnetId>,
+    ) -> Self {
         Self {
             node_ids: node_ids.iter().map(|node_id| node_id.get()).collect(),
             registry_version: registry_version.get(),
+            subnet_id,
         }
     }
 
@@ -2641,6 +2648,10 @@ impl SetupInitialDKGArgs {
 
     pub fn get_registry_version(&self) -> RegistryVersion {
         RegistryVersion::new(self.registry_version)
+    }
+
+    pub fn get_subnet_id(&self) -> Option<SubnetId> {
+        self.subnet_id
     }
 }
 
@@ -3569,7 +3580,7 @@ impl Payload<'_> for BitcoinSendTransactionInternalArgs {}
 ///   end   : principal;
 /// }
 /// ```
-#[derive(Clone, Debug, PartialEq, CandidType, Deserialize)]
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterIdRange {
     pub start: CanisterId,
     pub end: CanisterId,
@@ -3868,7 +3879,7 @@ impl UploadChunkArgs {
 ///   hash : blob;
 /// }
 /// ```
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Serialize)]
 pub struct ChunkHash {
     #[serde(with = "serde_bytes")]
     pub hash: Vec<u8>,
@@ -4288,7 +4299,7 @@ pub type ListCanisterSnapshotResponse = Vec<CanisterSnapshotResponse>;
 impl Payload<'_> for ListCanisterSnapshotResponse {}
 
 /// An enum representing the possible values of a global variable.
-#[derive(Copy, Clone, Debug, Deserialize, Serialize, EnumIter, CandidType)]
+#[derive(Copy, Clone, Debug, CandidType, Deserialize, EnumIter, Serialize)]
 pub enum Global {
     #[serde(rename = "i32")]
     I32(i32),
@@ -4413,7 +4424,7 @@ impl ReadCanisterSnapshotMetadataArgs {
 
 impl Payload<'_> for ReadCanisterSnapshotMetadataArgs {}
 
-#[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Serialize, Deserialize, EnumIter)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Deserialize, EnumIter, Serialize)]
 pub enum SnapshotSource {
     #[serde(rename = "taken_from_canister")]
     TakenFromCanister(Reserved),
@@ -4510,7 +4521,7 @@ impl TryFrom<pb_canister_state_bits::SnapshotSource> for SnapshotSource {
 /// }
 /// ```
 
-#[derive(Clone, PartialEq, Debug, CandidType, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct ReadCanisterSnapshotMetadataResponse {
     pub source: SnapshotSource,
     pub taken_at_timestamp: u64,
@@ -4541,7 +4552,7 @@ pub enum GlobalTimer {
 
 /// A wrapper around the different statuses of `OnLowWasmMemory` hook execution.
 #[derive(
-    Clone, Copy, Eq, PartialEq, Debug, Default, Deserialize, CandidType, Serialize, EnumIter,
+    Copy, Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, EnumIter, Serialize,
 )]
 pub enum OnLowWasmMemoryHookStatus {
     #[default]
@@ -4647,7 +4658,7 @@ impl TryFrom<pb_canister_state_bits::OnLowWasmMemoryHookStatus> for OnLowWasmMem
 /// }
 /// ```
 
-#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct ReadCanisterSnapshotDataArgs {
     pub canister_id: PrincipalId,
     pub snapshot_id: SnapshotId,
@@ -4678,7 +4689,7 @@ impl ReadCanisterSnapshotDataArgs {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub enum CanisterSnapshotDataKind {
     #[serde(rename = "wasm_module")]
     WasmModule { offset: u64, size: u64 },
@@ -4693,7 +4704,7 @@ pub enum CanisterSnapshotDataKind {
     },
 }
 
-#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 
 /// Struct to encode/decode
 /// ```text
@@ -4740,7 +4751,7 @@ impl ReadCanisterSnapshotDataResponse {
 /// }
 /// ```
 
-#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct UploadCanisterSnapshotMetadataArgs {
     pub canister_id: PrincipalId,
     pub replace_snapshot: Option<SnapshotId>,
@@ -4807,7 +4818,7 @@ impl UploadCanisterSnapshotMetadataArgs {
 ///   snapshot_id : blob;
 /// }
 /// ```
-#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct UploadCanisterSnapshotMetadataResponse {
     pub snapshot_id: SnapshotId,
 }
@@ -4841,7 +4852,7 @@ impl UploadCanisterSnapshotMetadataResponse {
 /// }
 /// ```
 
-#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct UploadCanisterSnapshotDataArgs {
     pub canister_id: PrincipalId,
     pub snapshot_id: SnapshotId,
@@ -4876,7 +4887,7 @@ impl UploadCanisterSnapshotDataArgs {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub enum CanisterSnapshotDataOffset {
     #[serde(rename = "wasm_module")]
     WasmModule { offset: u64 },
@@ -4902,7 +4913,7 @@ pub enum CanisterSnapshotDataOffset {
 /// }
 /// ```
 
-#[derive(Clone, Debug, Deserialize, CandidType, Serialize, PartialEq)]
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct RenameCanisterArgs {
     pub canister_id: PrincipalId,
     pub rename_to: RenameToArgs,
@@ -4926,7 +4937,7 @@ impl RenameCanisterArgs {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, CandidType, Serialize, PartialEq)]
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct RenameToArgs {
     pub canister_id: PrincipalId,
     pub version: u64,

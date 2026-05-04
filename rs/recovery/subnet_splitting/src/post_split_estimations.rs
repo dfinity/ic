@@ -191,9 +191,15 @@ pub struct Estimates {
     pub destination: u64,
 }
 
+impl Estimates {
+    pub fn total(&self) -> u64 {
+        self.source + self.destination
+    }
+}
+
 impl Display for Estimates {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let total = (self.source + self.destination) as f64;
+        let total = self.total() as f64;
         let source_proportion = self.source as f64 / total;
         let destination_proportion = self.destination as f64 / total;
 

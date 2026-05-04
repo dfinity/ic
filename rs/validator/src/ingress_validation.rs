@@ -527,7 +527,7 @@ where
     };
 
     // Construct the signable content (domain = "ic-sender-info")
-    let sender_info_content = SenderInfoContent(sender_info.info.clone());
+    let sender_info_content = SenderInfoContent(&sender_info.info);
     let canister_sig = CanisterSigOf::from(CanisterSig(sender_info.sig.clone()));
 
     verify_canister_sig_with_fallback!(

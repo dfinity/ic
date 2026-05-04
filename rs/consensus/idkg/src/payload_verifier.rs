@@ -35,7 +35,7 @@ use crate::{
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::validation::{ValidationError, ValidationResult};
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateManager;
+use ic_interfaces_state_manager::StateReader;
 use ic_management_canister_types_private::ReshareChainKeyResponse;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -227,7 +227,7 @@ pub fn validate_payload(
     crypto: &dyn ConsensusCrypto,
     thread_pool: &ThreadPool,
     pool_reader: &PoolReader<'_>,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
     context: &ValidationContext,
     parent_block: &Block,
     payload: &BlockPayload,
@@ -258,7 +258,7 @@ pub fn validate_payload(
                     crypto,
                     thread_pool,
                     pool_reader,
-                    state_manager,
+                    state_reader,
                     context,
                     parent_block,
                     payload.as_data().idkg.as_ref(),
@@ -329,7 +329,7 @@ fn validate_data_payload(
     crypto: &dyn ConsensusCrypto,
     thread_pool: &ThreadPool,
     pool_reader: &PoolReader<'_>,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
     context: &ValidationContext,
     parent_block: &Block,
     data_payload: Option<&idkg::IDkgPayload>,
@@ -357,7 +357,7 @@ fn validate_data_payload(
                 if data_payload.is_none() {
                     return Err(InvalidIDkgPayloadReason::MissingIDkgDataPayload.into());
                 }
-                (idkg_summary.clone(), data_payload.as_ref().unwrap())
+                (idkg_summary, data_payload.as_ref().unwrap())
             }
         }
     } else {
@@ -373,7 +373,7 @@ fn validate_data_payload(
                 if data_payload.is_none() {
                     return Err(InvalidIDkgPayloadReason::MissingIDkgDataPayload.into());
                 }
-                (payload.clone(), data_payload.as_ref().unwrap())
+                (payload, data_payload.as_ref().unwrap())
             }
         }
     };
@@ -410,7 +410,7 @@ fn validate_data_payload(
                 crypto,
                 thread_pool,
                 &block_reader,
-                &prev_payload,
+                prev_payload,
                 curr_payload,
                 curr_height,
             )
@@ -419,7 +419,7 @@ fn validate_data_payload(
     )?;
     let dealings = timed_call(
         "validate_reshare_dealings",
-        || validate_reshare_dealings(crypto, &block_reader, &prev_payload, curr_payload),
+        || validate_reshare_dealings(crypto, &block_reader, prev_payload, curr_payload),
         metrics,
     )?;
 
@@ -435,7 +435,7 @@ fn validate_data_payload(
         &summary_block,
         &block_reader,
         &builder,
-        state_manager,
+        state_reader,
         registry_client,
         None,
         &ic_logger::replica_logger::no_op_logger(),
