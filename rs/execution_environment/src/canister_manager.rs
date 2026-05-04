@@ -15,6 +15,7 @@ use crate::hypervisor::Hypervisor;
 use crate::types::{IngressResponse, Response};
 use crate::util::{GOVERNANCE_CANISTER_ID, MIGRATION_CANISTER_ID};
 use ic_config::embedders::Config as EmbeddersConfig;
+use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE;
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::wasm_utils::decoding::decode_wasm;
@@ -40,6 +41,7 @@ use ic_replicated_state::canister_state::execution_state::{
     CustomSectionType, Memory, SandboxMemory, WasmExecutionMode,
 };
 use ic_replicated_state::canister_state::system_state::ReservationError;
+use ic_replicated_state::canister_state::system_state::log_memory_store::LogMemoryStore;
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::{
     self, CHUNK_SIZE, ChunkValidationResult, WasmChunkHash, WasmChunkStore,
 };
@@ -355,7 +357,14 @@ impl CanisterManager {
         // compute it once here and reuse it across all checks below. Storage
         // cycle reservation (which would change the reserved balance and
         // invalidate `threshold`) is deferred to the end of this function.
-        let canister_memory_usage = canister.memory_usage();
+        let new_log_memory_limit = settings
+            .log_memory_limit()
+            .unwrap_or(NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64));
+        let new_log_memory_usage =
+            LogMemoryStore::memory_usage_for_limit(LOG_MEMORY_STORE_FEATURE, new_log_memory_limit);
+        let canister_memory_usage = canister.memory_usage()
+            - canister.log_memory_store_memory_usage()
+            + new_log_memory_usage;
         let canister_message_memory_usage = canister.message_memory_usage();
         let canister_memory_allocation = canister.memory_allocation();
         let canister_compute_allocation = canister.compute_allocation();
@@ -654,6 +663,8 @@ impl CanisterManager {
                     }
                 }
             })?;
+
+        debug_assert_eq!(canister.memory_usage(), canister_memory_usage);
 
         Ok(())
     }
