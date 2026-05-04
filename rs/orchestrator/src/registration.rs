@@ -856,13 +856,13 @@ fn generate_node_registration_attestation(
     use sev_guest::attestation_package::generate_attestation_package;
     use sev_guest::is_tee_enabled;
 
-    // Check if SEV is active
+    // Check if TEE is enabled
     let is_tee_enabled = match is_tee_enabled() {
         Ok(active) => active,
         Err(err) => {
             info!(
                 log,
-                "Failed to check if SEV is active, assuming it is not: {:?}", err
+                "Failed to check if TEE is enabled, assuming it is not: {:?}", err
             );
             return None;
         }
@@ -871,14 +871,14 @@ fn generate_node_registration_attestation(
     if !is_tee_enabled {
         info!(
             log,
-            "SEV is not active, skipping node registration attestation"
+            "TEE is not enabled, skipping node registration attestation"
         );
         return None;
     }
 
     info!(
         log,
-        "SEV is active, generating node registration attestation package"
+        "TEE is enabled, generating node registration attestation package"
     );
 
     // Read the GuestOS config to get the trusted execution environment config
