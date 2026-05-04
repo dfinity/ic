@@ -4,6 +4,7 @@ package(default_visibility = ["//rs/crypto:__subpackages__"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-ed25519",
     "//packages/ic-secp256r1",
     "//rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1",
     "//rs/types/types",
