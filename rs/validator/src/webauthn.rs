@@ -58,9 +58,17 @@ fn basic_sig_from_webauthn_sig(
                 .map_err(|e| format!("Failed to parse EcdsaP256 signature: {e}"))
         }
         AlgorithmId::Ed25519 => {
-            // EdDSA signatures are 64 raw bytes (not DER wrapped).
+            // EdDSA signatures are exactly 64 raw bytes (not DER wrapped).
             // See https://www.w3.org/TR/webauthn-2/#sctn-signature-attestation-types
-            Ok(BasicSig(webauthn_sig.signature().0.clone()))
+            const ED25519_SIGNATURE_LEN: usize = 64;
+            let sig = webauthn_sig.signature().0;
+            if sig.len() != ED25519_SIGNATURE_LEN {
+                return Err(format!(
+                    "Invalid Ed25519 signature length: expected {ED25519_SIGNATURE_LEN} bytes, got {}",
+                    sig.len()
+                ));
+            }
+            Ok(BasicSig(sig))
         }
         AlgorithmId::RsaSha256 => {
             // RSA signatures are not DER wrapped, see https://www.w3.org/TR/webauthn-2/#sctn-signature-attestation-types
@@ -372,7 +380,13 @@ mod tests {
             };
 
             let result = validate_webauthn_sig(&verifier, &bad_sig, &message, &pk);
-            assert!(result.is_err());
+            assert!(
+                result
+                    .as_ref()
+                    .err()
+                    .is_some_and(|e| e.contains("Invalid Ed25519 signature length")),
+                "expected length error, got: {result:?}"
+            );
         }
     }
 
