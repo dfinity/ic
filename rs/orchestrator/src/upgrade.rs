@@ -693,8 +693,7 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
     ) -> UpgradeResult<(Vec<String>, Option<String>)> {
         let record = self
             .registry
-            .get_replica_version_record(version.clone(), self.registry.get_latest_version())
-            .map_err(UpgradeError::from)?;
+            .get_replica_version_record(version.clone(), self.registry.get_latest_version())?;
 
         Ok((
             record.release_package_urls,
