@@ -50,7 +50,7 @@ fn setup(env: TestEnv) {
     install_nns_and_check_progress(env.topology_snapshot());
 }
 
-fn upgrade_assigned_nodes(
+fn upgrade_unassigned_nodes(
     log: &Logger,
     nns_node: &IcNodeSnapshot,
     unassigned_node: &IcNodeSnapshot,
@@ -85,13 +85,13 @@ fn upgrade_downgrade_unassigned_nodes(env: TestEnv) {
 
     let target_version = bless_target_version(&env, &nns_node);
     info!(log, "Upgrading unassigned nodes to {} ...", target_version);
-    upgrade_assigned_nodes(&log, &nns_node, &unassigned_node, &target_version);
+    upgrade_unassigned_nodes(&log, &nns_node, &unassigned_node, &target_version);
     let initial_version = get_guestos_img_version();
     info!(
         log,
         "Downgrading unassigned nodes to {} ...", initial_version
     );
-    upgrade_assigned_nodes(&log, &nns_node, &unassigned_node, &initial_version);
+    upgrade_unassigned_nodes(&log, &nns_node, &unassigned_node, &initial_version);
 }
 
 fn main() -> Result<()> {
