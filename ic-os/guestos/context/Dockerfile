@@ -257,6 +257,26 @@ RUN addgroup --system ollama && \
     chown ollama:ollama /var/lib/ollama && \
     chmod 0750 /var/lib/ollama
 
+# The "ic-ai-agent" account. Used to run the `ic-ai-agent` HTTP service
+# (started on AI nodes by manage-ai-agent.sh, driven by the
+# orchestrator's AiNodeManager).
+#
+# The agent's IC-observability tools need read access to two on-disk
+# trees written by the state-sync replica:
+#
+#   * /var/lib/ic/data/ic_state            (group nonconfidential)
+#   * /var/lib/ic/data/ic_registry_local_store
+#                                          (group ic-registry-local-store)
+#
+# Both are set up by setup-permissions.sh as group-readable. We add
+# `ic-ai-agent` to those groups here so the unix permission check passes;
+# without this the service runs under DynamicUser/an isolated UID and
+# gets EACCES walking the checkpoints directory.
+RUN addgroup --system ic-ai-agent && \
+    adduser --system --disabled-password --shell /usr/sbin/nologin --no-create-home --ingroup ic-ai-agent -c "IC AI Agent" ic-ai-agent && \
+    adduser ic-ai-agent nonconfidential && \
+    adduser ic-ai-agent ic-registry-local-store
+
 # ------ INSTALL SCRIPTS -----------------------------------------
 
 # Install IC binaries and other data late -- this means everything above
