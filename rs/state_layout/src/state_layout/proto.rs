@@ -15,14 +15,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                 .into_iter()
                 .map(|controller| controller.into())
                 .collect(),
-            last_full_execution_round: item.last_full_execution_round.get(),
             compute_allocation: item.compute_allocation.as_percent(),
-            accumulated_priority: item.accumulated_priority.get(),
-            priority_credit: item.priority_credit.get(),
-            long_execution_mode: pb_canister_state_bits::LongExecutionMode::from(
-                item.long_execution_mode,
-            )
-            .into(),
             execution_state_bits: item.execution_state_bits.as_ref().map(|v| v.into()),
             memory_allocation: item.memory_allocation.pre_allocated_bytes().get(),
             wasm_memory_threshold: Some(item.wasm_memory_threshold.get()),
@@ -137,20 +130,12 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
 
         Ok(Self {
             controllers,
-            last_full_execution_round: value.last_full_execution_round.into(),
             compute_allocation: ComputeAllocation::try_from(value.compute_allocation).map_err(
                 |e| ProxyDecodeError::ValueOutOfRange {
                     typ: "ComputeAllocation",
                     err: format!("{e:?}"),
                 },
             )?,
-            accumulated_priority: value.accumulated_priority.into(),
-            priority_credit: value.priority_credit.into(),
-            long_execution_mode: pb_canister_state_bits::LongExecutionMode::try_from(
-                value.long_execution_mode,
-            )
-            .unwrap_or_default()
-            .into(),
             execution_state_bits,
             memory_allocation: MemoryAllocation::from(NumBytes::from(value.memory_allocation)),
             wasm_memory_threshold: NumBytes::new(value.wasm_memory_threshold.unwrap_or(0)),

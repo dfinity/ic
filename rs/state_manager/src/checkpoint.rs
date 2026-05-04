@@ -34,7 +34,7 @@ use ic_replicated_state::{
     canister_state::execution_state::{WasmBinary, WasmExecutionMode},
     page_map::PageMap,
 };
-use ic_replicated_state::{CanisterPriority, CheckpointLoadingMetrics, Memory, SubnetSchedule};
+use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
 use ic_state_layout::{
     AccessPolicy, CanisterLayout, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout,
     PageMapLayout, ReadOnly, SnapshotLayout, error::LayoutError, try_mmap_wasm_file,
@@ -425,10 +425,7 @@ impl CheckpointLoader {
         }
     }
 
-    fn load_system_metadata(
-        &self,
-        subnet_schedule: SubnetSchedule,
-    ) -> Result<ic_replicated_state::SystemMetadata, CheckpointError> {
+    fn load_system_metadata(&self) -> Result<ic_replicated_state::SystemMetadata, CheckpointError> {
         let _timer = self
             .metrics
             .load_checkpoint_step_duration
@@ -442,7 +439,6 @@ impl CheckpointLoader {
         let metadata_proto = self.checkpoint_layout.system_metadata().deserialize()?;
         let mut metadata = ic_replicated_state::SystemMetadata::try_from((
             metadata_proto,
-            subnet_schedule,
             &self.metrics as &dyn CheckpointLoadingMetrics,
         ))
         .map_err(|err| self.map_to_checkpoint_error("SystemMetadata".into(), err))?;
@@ -505,7 +501,7 @@ impl CheckpointLoader {
     fn load_canister_states(
         &self,
         thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
-    ) -> Result<(BTreeMap<CanisterId, Arc<CanisterState>>, SubnetSchedule), CheckpointError> {
+    ) -> Result<BTreeMap<CanisterId, Arc<CanisterState>>, CheckpointError> {
         let _timer = self
             .metrics
             .load_checkpoint_step_duration
@@ -513,7 +509,6 @@ impl CheckpointLoader {
             .start_timer();
 
         let mut canister_states = BTreeMap::new();
-        let mut priorities = BTreeMap::new();
         let canister_ids = self.checkpoint_layout.canister_ids()?;
         let snapshot_ids = self.checkpoint_layout.snapshot_ids()?;
         let mut snapshot_ids_per_canister: BTreeMap<CanisterId, Vec<SnapshotId>> = BTreeMap::new();
@@ -536,24 +531,24 @@ impl CheckpointLoader {
             )
         });
 
-        for result in results.into_iter() {
-            let (canister_state, canister_priority, durations) = result?;
-            priorities.insert(canister_state.canister_id(), canister_priority);
-            canister_states.insert(canister_state.canister_id(), Arc::new(canister_state));
+        for canister_state in results.into_iter() {
+            let (canister_state, durations) = canister_state?;
+            canister_states.insert(
+                canister_state.system_state.canister_id(),
+                Arc::new(canister_state),
+            );
 
             durations.apply(&self.metrics);
         }
 
-        let subnet_schedule = SubnetSchedule::new(priorities);
-
-        Ok((canister_states, subnet_schedule))
+        Ok(canister_states)
     }
 
     fn validate_eq_canister_states(
         &self,
         thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
         ref_canister_states: &BTreeMap<CanisterId, Arc<CanisterState>>,
-    ) -> Result<BTreeMap<CanisterId, CanisterPriority>, String> {
+    ) -> Result<(), String> {
         let on_disk_canister_ids = self
             .checkpoint_layout
             .canister_ids()
@@ -574,8 +569,8 @@ impl CheckpointLoader {
                 .or_default()
                 .push(snapshot_id);
         }
-        maybe_parallel_map(thread_pool, ref_canister_ids.iter(), |&canister_id| {
-            let (canister_state, canister_priority, _) = load_canister_state_from_checkpoint(
+        maybe_parallel_map(thread_pool, ref_canister_ids.iter(), |canister_id| {
+            load_canister_state_from_checkpoint(
                 &self.checkpoint_layout,
                 canister_id,
                 snapshot_ids_per_canister
@@ -589,16 +584,16 @@ impl CheckpointLoader {
                 format!(
                     "Failed to load canister state for validation for key #{canister_id}: {err}"
                 )
-            })?;
-            canister_state.validate_eq(
+            })?
+            .0
+            .validate_eq(
                 ref_canister_states
                     .get(canister_id)
                     .expect("Failed to get canister from canister_states"),
-            )?;
-            Ok::<_, String>((*canister_id, canister_priority))
+            )
         })
         .into_iter()
-        .collect()
+        .try_for_each(identity)
     }
 
     fn validate_eq_canister_snapshots_ids(
@@ -636,11 +631,9 @@ pub fn load_checkpoint(
         metrics: metrics.clone(),
         fd_factory,
     };
-    let (canister_states, subnet_schedule) =
-        checkpoint_loader.load_canister_states(&mut thread_pool)?;
     let state = ReplicatedState::new_from_checkpoint(
-        canister_states,
-        checkpoint_loader.load_system_metadata(subnet_schedule)?,
+        checkpoint_loader.load_canister_states(&mut thread_pool)?,
+        checkpoint_loader.load_system_metadata()?,
         checkpoint_loader.load_subnet_queues()?,
         checkpoint_loader.load_refunds()?,
         checkpoint_loader.load_epoch_query_stats()?,
@@ -693,9 +686,9 @@ fn validate_eq_checkpoint_internal(
         fd_factory,
     };
 
-    let priorities = checkpoint_loader.validate_eq_canister_states(thread_pool, canister_states)?;
+    checkpoint_loader.validate_eq_canister_states(thread_pool, canister_states)?;
     checkpoint_loader
-        .load_system_metadata(SubnetSchedule::new(priorities))
+        .load_system_metadata()
         .map_err(|err| format!("Failed to load system metadata: {err}"))?
         .validate_eq(metadata)?;
     if !metadata.unflushed_checkpoint_ops.is_empty() {
@@ -746,7 +739,7 @@ pub fn load_canister_state(
     height: Height,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     metrics: &dyn CheckpointLoadingMetrics,
-) -> Result<(CanisterState, CanisterPriority, LoadCanisterMetrics), CheckpointError> {
+) -> Result<(CanisterState, LoadCanisterMetrics), CheckpointError> {
     let mut durations = BTreeMap::<&str, Duration>::default();
 
     let into_checkpoint_error =
@@ -908,22 +901,10 @@ pub fn load_canister_state(
         },
         canister_snapshots,
     };
-    let priority = CanisterPriority {
-        accumulated_priority: canister_state_bits.accumulated_priority,
-        // We can only be loading an aborted execution, so zero executed rounds.
-        executed_rounds: 0,
-        // Set a long execution start round where necessary.
-        long_execution_start_round: if canister_state.has_long_execution() {
-            Some(0.into())
-        } else {
-            None
-        },
-        last_full_execution_round: canister_state_bits.last_full_execution_round,
-    };
 
     let metrics = LoadCanisterMetrics { durations };
 
-    Ok((canister_state, priority, metrics))
+    Ok((canister_state, metrics))
 }
 
 fn load_canister_state_from_checkpoint(
@@ -932,7 +913,7 @@ fn load_canister_state_from_checkpoint(
     snapshot_ids: Vec<SnapshotId>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     metrics: &CheckpointMetrics,
-) -> Result<(CanisterState, CanisterPriority, LoadCanisterMetrics), CheckpointError> {
+) -> Result<(CanisterState, LoadCanisterMetrics), CheckpointError> {
     let canister_layout = checkpoint_layout.canister(canister_id)?;
     let mut canister_snapshots = CanisterSnapshots::default();
     for snapshot_id in snapshot_ids {

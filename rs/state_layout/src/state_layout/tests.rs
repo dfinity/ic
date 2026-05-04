@@ -28,11 +28,7 @@ use std::sync::Arc;
 fn default_canister_state_bits() -> CanisterStateBits {
     CanisterStateBits {
         controllers: BTreeSet::new(),
-        last_full_execution_round: ExecutionRound::from(0),
         compute_allocation: ComputeAllocation::try_from(0).unwrap(),
-        accumulated_priority: AccumulatedPriority::default(),
-        priority_credit: AccumulatedPriority::default(),
-        long_execution_mode: LongExecutionMode::default(),
         execution_state_bits: None,
         memory_allocation: MemoryAllocation::default(),
         wasm_memory_threshold: NumBytes::new(0),

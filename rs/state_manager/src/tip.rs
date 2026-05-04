@@ -1207,15 +1207,7 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
     canister_layout.canister().serialize(
         CanisterStateBits {
             controllers: canister_state.system_state.controllers.clone(),
-            // Ignored after the first checkpoint load during an upgrade.
-            last_full_execution_round: 0.into(),
             compute_allocation: canister_state.compute_allocation(),
-            // Value is ignored when loading.
-            priority_credit: 0.into(),
-            // Value is ignored when loading.
-            long_execution_mode: Default::default(),
-            // Ignored after the first checkpoint load during an upgrade.
-            accumulated_priority: Default::default(),
             memory_allocation: canister_state.system_state.memory_allocation,
             wasm_memory_threshold: canister_state.system_state.wasm_memory_threshold,
             freeze_threshold: canister_state.system_state.freeze_threshold,
