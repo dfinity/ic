@@ -202,12 +202,12 @@ fn init_allocation_ranges_if_empty() {
 }
 
 #[test]
-fn generate_new_canister_id_no_allocation_ranges() {
-    let mut system_metadata = SystemMetadata::new(SUBNET_0, SubnetType::Application);
+fn peek_new_canister_id_no_allocation_ranges() {
+    let system_metadata = SystemMetadata::new(SUBNET_0, SubnetType::Application);
 
     assert_eq!(
         Err("Canister ID allocation was consumed".into()),
-        system_metadata.generate_new_canister_id()
+        system_metadata.peek_new_canister_id()
     );
     assert_eq!(None, system_metadata.last_generated_canister_id);
 }
@@ -219,7 +219,7 @@ fn generate_new_canister_id_no_allocation_ranges() {
 ///          \ canister_migrations.ranges()
 /// ```
 #[test]
-fn generate_new_canister_id() {
+fn peek_and_commit_new_canister_id() {
     fn range(start: u64, end: u64) -> CanisterIdRange {
         CanisterIdRange {
             start: start.into(),
@@ -269,10 +269,9 @@ fn generate_new_canister_id() {
     /// Asserts that the next generated canister ID is the expected one.
     /// And that `last_generated_canister_id` is updated accordingly.
     fn assert_next_generated(expected: u64, system_metadata: &mut SystemMetadata) {
-        assert_eq!(
-            Ok(expected.into()),
-            system_metadata.generate_new_canister_id()
-        );
+        let canister_id = system_metadata.peek_new_canister_id().unwrap();
+        assert_eq!(CanisterId::from(expected), canister_id);
+        system_metadata.commit_new_canister_id(canister_id);
         assert_eq!(
             Some(expected.into()),
             system_metadata.last_generated_canister_id
@@ -300,7 +299,7 @@ fn generate_new_canister_id() {
     // No more canister IDs can be generated.
     assert_eq!(
         Err("Canister ID allocation was consumed".into()),
-        system_metadata.generate_new_canister_id()
+        system_metadata.peek_new_canister_id()
     );
     // But last generated is the same.
     assert_eq!(Some(30.into()), system_metadata.last_generated_canister_id);
@@ -391,7 +390,7 @@ fn system_metadata_roundtrip_encoding() {
         .subnet_schedule
         .get_mut(CanisterId::from_u64(1)) = CanisterPriority {
         accumulated_priority: 100.into(),
-        executed_slices: 2,
+        executed_rounds: 2,
         long_execution_start_round: Some(3.into()),
         last_full_execution_round: 4.into(),
     };
@@ -435,7 +434,7 @@ fn subnet_schedule_backward_compatibility() {
     let mut subnet_schedule = SubnetSchedule::default();
     *subnet_schedule.get_mut(CanisterId::from_u64(1)) = CanisterPriority {
         accumulated_priority: 100.into(),
-        executed_slices: 2,
+        executed_rounds: 2,
         long_execution_start_round: Some(3.into()),
         last_full_execution_round: 4.into(),
     };

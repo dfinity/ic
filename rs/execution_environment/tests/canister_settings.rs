@@ -1,12 +1,15 @@
+use assert_matches::assert_matches;
 use candid::Nat;
 use ic_error_types::ErrorCode;
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CreateCanisterArgs,
     DefiniteCanisterSettingsArgs, IC_00, Method, Payload, UpdateSettingsArgs,
 };
-use ic_state_machine_tests::StateMachine;
+use ic_registry_subnet_type::SubnetType;
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_test_utilities::universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, wasm};
 use ic_test_utilities_execution_environment::get_reply;
+use ic_types::CanisterId;
 use ic_types::NumBytes;
 use ic_types::ingress::WasmResult;
 use ic_types_cycles::Cycles;
@@ -200,4 +203,77 @@ fn canister_settings_ranges() {
         let err = via_create_canister(invalid_settings.clone()).unwrap_err();
         assert!(err.contains(&expected_err));
     }
+}
+
+#[test]
+fn failed_create_canister_does_not_reuse_canister_id() {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    // Proxy universal canister gets ID 0.
+    let proxy_canister_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            Cycles::new(100_000_000_000_000),
+        )
+        .unwrap();
+
+    // On an application subnet, a freezing threshold of 2^60 seconds combined
+    // with a 1 MiB memory allocation requires an astronomically large cycle
+    // balance, causing the create_canister call to fail.
+    let failing_args = CreateCanisterArgs {
+        settings: Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_freezing_threshold(1_u64 << 60)
+                .with_memory_allocation(1 << 20)
+                .build(),
+        ),
+        sender_canister_version: None,
+    };
+    // Send enough cycles to pass the creation fee check so the calls reach
+    // the freezing threshold validation (where they are actually rejected).
+    let cycles_with_call: u64 = 1_000_000_000_000;
+
+    // Each call is rejected during validation, so no canister ID is consumed.
+    for _ in 0..3 {
+        let call_args = CallArgs::default()
+            .other_side(failing_args.encode())
+            .on_reject(wasm().reject_message().reject().build());
+        let res = env
+            .execute_ingress(
+                proxy_canister_id,
+                "update",
+                wasm()
+                    .call_with_cycles(IC_00, Method::CreateCanister, call_args, cycles_with_call)
+                    .build(),
+            )
+            .unwrap();
+        assert_matches!(res, WasmResult::Reject(_));
+    }
+
+    // Because the failures above consumed no IDs, the next successful call
+    // still gets ID 1 (one after the proxy at ID 0).
+    let success_args = CreateCanisterArgs {
+        settings: None,
+        sender_canister_version: None,
+    };
+    let call_args = CallArgs::default()
+        .other_side(success_args.encode())
+        .on_reject(wasm().reject_message().reject().build());
+    let res = env
+        .execute_ingress(
+            proxy_canister_id,
+            "update",
+            wasm()
+                .call_with_cycles(IC_00, Method::CreateCanister, call_args, cycles_with_call)
+                .build(),
+        )
+        .unwrap();
+    let canister_id = match res {
+        WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes).unwrap().get_canister_id(),
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+    };
+    assert_eq!(canister_id, CanisterId::from_u64(1));
 }

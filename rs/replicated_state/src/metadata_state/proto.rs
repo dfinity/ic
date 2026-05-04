@@ -376,7 +376,7 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                 .map(|(canister_id, priority)| pb_metadata::CanisterPriority {
                     canister_id: Some(pb_types::CanisterId::from(*canister_id)),
                     accumulated_priority: priority.accumulated_priority.get(),
-                    executed_slices: priority.executed_slices,
+                    executed_rounds: priority.executed_rounds,
                     long_execution_start_round: priority
                         .long_execution_start_round
                         .map(|round| round.get()),
@@ -426,7 +426,7 @@ impl
                     canister_id,
                     CanisterPriority {
                         accumulated_priority: AccumulatedPriority::new(entry.accumulated_priority),
-                        executed_slices: entry.executed_slices,
+                        executed_rounds: entry.executed_rounds,
                         long_execution_start_round: entry
                             .long_execution_start_round
                             .map(ExecutionRound::new),

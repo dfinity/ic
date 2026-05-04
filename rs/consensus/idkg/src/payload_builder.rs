@@ -350,9 +350,6 @@ fn create_summary_payload_helper(
 
     idkg_summary.idkg_transcripts.clear();
 
-    // Purge deprecated signature agreements in the idkg payload.
-    idkg_summary.signature_agreements.clear();
-
     // We purge available pre-signatures of the parent payload,
     // because they were already delivered with the previous payload.
     idkg_summary.available_pre_signatures.clear();
@@ -652,9 +649,6 @@ pub(crate) fn create_data_payload_helper_2(
     // We purge available pre-signatures of the parent payload,
     // because they were already delivered with the previous payload.
     idkg_payload.available_pre_signatures.clear();
-
-    // Purge deprecated signature agreements in the idkg payload.
-    idkg_payload.signature_agreements.clear();
 
     let new_transcripts = [
         pre_signatures::update_pre_signatures_in_creation(
@@ -1301,13 +1295,6 @@ mod tests {
             .unwrap();
             assert_eq!(result.len(), 1);
 
-            idkg_payload
-                .signature_agreements
-                .insert([2; 32], idkg::CompletedSignature::ReportedToExecution);
-            idkg_payload.signature_agreements.insert(
-                [3; 32],
-                idkg::CompletedSignature::Unreported(empty_response()),
-            );
             idkg_payload.xnet_reshare_agreements.insert(
                 create_reshare_request(key_id, 6, 6),
                 idkg::CompletedReshareRequest::ReportedToExecution,
@@ -1350,24 +1337,6 @@ mod tests {
                 Ok(())
             );
 
-            let (reported, unreported) = {
-                let mut reported = 0;
-                let mut unreported = 0;
-                for agreement in summary.signature_agreements.values() {
-                    match agreement {
-                        idkg::CompletedSignature::ReportedToExecution => {
-                            reported += 1;
-                        }
-                        idkg::CompletedSignature::Unreported(_) => {
-                            unreported += 1;
-                        }
-                    }
-                }
-                (reported, unreported)
-            };
-            assert!(!summary.signature_agreements.is_empty());
-            assert!(reported > 0);
-            assert!(unreported > 0);
             assert!(!summary.available_pre_signatures.is_empty());
             assert!(!summary.pre_signatures_in_creation.is_empty());
             assert!(!summary.idkg_transcripts.is_empty());
@@ -1409,24 +1378,9 @@ mod tests {
             assert_proposal_conversion(b);
 
             // Convert to proto format and back
-            let mut summary_proto = pb::IDkgPayload::from(&summary);
+            let summary_proto = pb::IDkgPayload::from(&summary);
             let summary_from_proto = IDkgPayload::try_from(summary_proto.clone()).unwrap();
             assert_eq!(summary, summary_from_proto);
-
-            // Check signature_agreement upgrade compatibility
-            summary_proto
-                .signature_agreements
-                .push(pb::CompletedSignature {
-                    pseudo_random_id: vec![4; 32],
-                    unreported: None,
-                });
-            let summary_from_proto = IDkgPayload::try_from(summary_proto).unwrap();
-            // Make sure the previous RequestId record can be retrieved by its pseudo_random_id.
-            assert!(
-                summary_from_proto
-                    .signature_agreements
-                    .contains_key(&[4; 32])
-            );
         })
     }
 

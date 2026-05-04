@@ -46,8 +46,9 @@ pub(super) struct CanisterRoundState {
     accumulated_priority: AccumulatedPriority,
     /// Copy of the canister's `SchedulerState::compute_allocation`.
     compute_allocation: AccumulatedPriority,
-    /// Number of DTS slices executed so far in the current long execution.
-    executed_slices: i64,
+    /// Number of rounds during which the current long execution has executed at
+    /// least one slice.
+    executed_rounds: i64,
     /// The round when the current long execution started. `None` means the canister
     /// is not in a long execution.
     long_execution_start_round: Option<ExecutionRound>,
@@ -70,7 +71,7 @@ impl CanisterRoundState {
             canister_id: canister.canister_id(),
             accumulated_priority: canister_priority.accumulated_priority + compute_allocation,
             compute_allocation,
-            executed_slices: canister_priority.executed_slices,
+            executed_rounds: canister_priority.executed_rounds,
             long_execution_start_round: canister_priority.long_execution_start_round,
         }
     }
@@ -96,16 +97,16 @@ impl Ord for CanisterRoundState {
                 .cmp(&self.accumulated_priority)
                 .then_with(|| self.canister_id.cmp(&other.canister_id)),
 
-            // Among long executions, sort by executed slices; AP descending; start round
+            // Among long executions, sort by executed rounds; AP descending; start round
             // ascending; then break ties by canister ID.
             //
-            // An aborted execution (executed slices == 0) is considered to have the same
-            // priority as a newly started long execution (executed slices == 1). This is to
+            // An aborted execution (executed rounds == 0) is considered to have the same
+            // priority as a newly started long execution (executed rounds == 1). This is to
             // avoid starvation of aborted executions.
             (Some(self_start_round), Some(other_start_round)) => other
-                .executed_slices
+                .executed_rounds
                 .max(1)
-                .cmp(&self.executed_slices.max(1))
+                .cmp(&self.executed_rounds.max(1))
                 .then_with(|| other.accumulated_priority.cmp(&self.accumulated_priority))
                 .then_with(|| self_start_round.cmp(&other_start_round))
                 .then_with(|| self.canister_id.cmp(&other.canister_id)),
@@ -444,7 +445,7 @@ impl RoundSchedule {
     ///
     /// * Grants canisters their compute allocations; charges for full executions;
     ///   then calculates the subnet-wide free allocation and distributes it.
-    /// * Applies the priority credit where possible (no long execution).
+    /// * Charges for executed rounds where possible (no long execution).
     /// * Observes round-level metrics.
     pub fn finish_round(
         &self,
@@ -457,14 +458,14 @@ impl RoundSchedule {
         // Update fully executed canisters' priorities.
         for canister_id in self.fully_executed_canisters.iter() {
             let canister_priority = subnet_schedule.get_mut(*canister_id);
-            canister_priority.executed_slices += 1;
+            canister_priority.executed_rounds += 1;
             canister_priority.last_full_execution_round = current_round;
         }
 
-        // Grant all canisters their compute allocation; apply the priority credit
+        // Grant all canisters their compute allocation; charge for executed rounds
         // where possible (no long execution); and calculate the subnet-wide free
         // allocation (as the deviation from zero of all canisters' total accumulated
-        // priority, including priority credit).
+        // priority, including executed rounds).
         let mut free_allocation = ZERO;
         for canister in canister_states.values() {
             // Add the canister to the subnet schedule, if not already there.
@@ -472,26 +473,26 @@ impl RoundSchedule {
 
             canister_priority.accumulated_priority += from_ca(canister.compute_allocation());
 
-            // On message completion (or short execution), charge for the executed slices.
-            if canister_priority.executed_slices > 0
+            // On message completion (or short execution), charge for the executed rounds.
+            if canister_priority.executed_rounds > 0
                 && (!canister.has_long_execution()
                     || self
                         .canisters_with_completed_messages
                         .contains(&canister.canister_id()))
             {
                 canister_priority.accumulated_priority -=
-                    ONE_HUNDRED_PERCENT * canister_priority.executed_slices;
-                canister_priority.executed_slices = 0;
+                    ONE_HUNDRED_PERCENT * canister_priority.executed_rounds;
+                canister_priority.executed_rounds = 0;
             }
 
             free_allocation -= canister_priority.accumulated_priority
-                - ONE_HUNDRED_PERCENT * canister_priority.executed_slices;
+                - ONE_HUNDRED_PERCENT * canister_priority.executed_rounds;
         }
 
         self.grant_heap_delta_and_install_code_credits(state, metrics);
 
         // Only ever apply positive free allocation. If the sum of all canisters'
-        // accumulated priorities (including priority credit) is somehow positive
+        // accumulated priorities (including executed rounds) is somehow positive
         // (although this should never happen), then there is simply no free allocation
         // to distribute.
         if free_allocation.get() < 0 {
