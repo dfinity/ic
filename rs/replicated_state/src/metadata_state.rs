@@ -590,13 +590,10 @@ impl SystemMetadata {
         Ok(())
     }
 
-    /// Generates a new canister ID.
+    /// Computes a new canister ID for canister creation.
     ///
-    /// If a canister ID from a second canister allocation range is generated, the
-    /// first range is dropped. The last canister allocation range is never dropped.
-    ///
-    /// Returns `Err` iff no more canister IDs can be generated.
-    pub fn generate_new_canister_id(&mut self) -> Result<CanisterId, String> {
+    /// Returns `Err` iff no more canister IDs are available.
+    pub fn peek_new_canister_id(&self) -> Result<CanisterId, String> {
         // Start off with
         //     (canister_allocation_ranges
         //          ∩ routing_table.ranges(own_subnet_id))
@@ -626,26 +623,34 @@ impl SystemMetadata {
             )
         })?;
 
-        let res = canister_allocation_ranges.generate_canister_id(self.last_generated_canister_id);
+        canister_allocation_ranges
+            .next_canister_id(self.last_generated_canister_id)
+            .ok_or_else(|| "Canister ID allocation was consumed".into())
+    }
 
-        if let Some(res) = &res {
-            self.last_generated_canister_id = Some(*res);
+    /// Records `canister_id` as the last generated canister ID and drops any
+    /// exhausted allocation ranges. Must be called with the canister ID returned
+    /// by the immediately preceding `peek_new_canister_id` call, once canister
+    /// creation succeeded and the canister ID should be permanently consumed.
+    ///
+    /// Note. The last canister allocation range is never dropped.
+    pub fn commit_new_canister_id(&mut self, canister_id: CanisterId) {
+        debug_assert_eq!(canister_id, self.peek_new_canister_id().unwrap());
 
-            while self.canister_allocation_ranges.len() > 1
-                && !self
-                    .canister_allocation_ranges
-                    .iter()
-                    .next()
-                    .unwrap()
-                    .contains(res)
-            {
-                // Drop the first canister allocation range iff consumed and more allocation
-                // ranges are available.
-                self.canister_allocation_ranges.drop_first();
-            }
+        self.last_generated_canister_id = Some(canister_id);
+
+        while self.canister_allocation_ranges.len() > 1
+            && !self
+                .canister_allocation_ranges
+                .iter()
+                .next()
+                .unwrap()
+                .contains(&canister_id)
+        {
+            // Drop the first canister allocation range iff consumed and more allocation
+            // ranges are available.
+            self.canister_allocation_ranges.drop_first();
         }
-
-        res.ok_or_else(|| "Canister ID allocation was consumed".into())
     }
 
     /// Returns the number of canister IDs that can still be generated.

@@ -28,7 +28,7 @@ rust_library(
     ],
     deps = [
         # Keep sorted.
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/canister_client",
         "//rs/config",
         "//rs/crypto/sha2",

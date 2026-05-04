@@ -40,13 +40,13 @@ pub fn create_transcript<C: CspSigner>(
     vault: &dyn CspVault,
     registry: &dyn RegistryClient,
     params: &IDkgTranscriptParams,
-    dealings: &BatchSignedIDkgDealings,
+    dealings: BatchSignedIDkgDealings,
 ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
-    ensure_sufficient_dealings_collected(params, dealings)?;
-    ensure_dealers_allowed_by_params(params, dealings)?;
-    ensure_signers_allowed_by_params(params, dealings)?;
+    ensure_sufficient_dealings_collected(params, &dealings)?;
+    ensure_dealers_allowed_by_params(params, &dealings)?;
+    ensure_signers_allowed_by_params(params, &dealings)?;
 
-    for dealing in dealings {
+    for dealing in &dealings {
         verify_signature_batch(
             csp_client,
             vault,
@@ -74,7 +74,7 @@ pub fn create_transcript<C: CspSigner>(
     let internal_transcript = idkg_create_transcript(
         params.algorithm_id(),
         params.reconstruction_threshold(),
-        &internal_dealings,
+        internal_dealings,
         &internal_operation_type,
     )
     .map_err(|e| IDkgCreateTranscriptError::InternalError {
@@ -148,7 +148,7 @@ pub fn verify_transcript<C: CspSigner>(
         &internal_transcript,
         transcript.algorithm_id,
         params.reconstruction_threshold(),
-        &internal_dealings,
+        internal_dealings,
         &internal_transcript_operation,
     )?)
 }
@@ -411,11 +411,11 @@ fn internal_dealings_from_signed_dealings(
 ///
 /// Only the first collection_threshold dealings are returned
 fn dealings_by_index_from_dealings(
-    dealings: &BatchSignedIDkgDealings,
+    dealings: BatchSignedIDkgDealings,
     params: &IDkgTranscriptParams,
 ) -> Result<BTreeMap<NodeIndex, BatchSignedIDkgDealing>, IDkgCreateTranscriptError> {
     dealings
-        .iter()
+        .into_iter()
         .take(params.collection_threshold().get() as usize)
         .map(|dealing| {
             let index = params.dealer_index(dealing.dealer_id()).ok_or(
@@ -423,7 +423,7 @@ fn dealings_by_index_from_dealings(
                     node_id: dealing.dealer_id(),
                 },
             )?;
-            Ok((index, dealing.clone()))
+            Ok((index, dealing))
         })
         .collect()
 }

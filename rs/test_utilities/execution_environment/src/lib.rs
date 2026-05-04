@@ -2701,6 +2701,13 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_create_execution_state_base_cost(mut self, cost: u64) -> Self {
+        self.execution_config
+            .embedders_config
+            .create_execution_state_base_cost = cost.into();
+        self
+    }
+
     pub fn with_cost_to_compile_wasm_instruction(mut self, cost: u64) -> Self {
         self.execution_config
             .embedders_config

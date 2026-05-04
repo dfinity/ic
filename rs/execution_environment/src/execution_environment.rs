@@ -48,7 +48,10 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::{NextExecution, system_state::PausedExecutionId};
+use ic_replicated_state::canister_state::{
+    NextExecution,
+    system_state::{PausedExecutionId, wasm_chunk_store::CHUNK_SIZE},
+};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     EcdsaArguments, InstallCodeCall, InstallCodeCallId, PreSignatureStash, ReshareChainKeyContext,
     SchnorrArguments, SetupInitialDkgContext, SignWithThresholdContext, StopCanisterCall,
@@ -3877,6 +3880,7 @@ impl ExecutionEnvironment {
     fn decode_input_and_take_canister(
         msg: &CanisterCall,
         state: &mut ReplicatedState,
+        config: &ExecutionConfig,
     ) -> Result<(InstallCodeContext, Arc<CanisterState>), UserError> {
         let payload = msg.method_payload();
         let method = Ic00Method::from_str(msg.method_name()).map_err(|_| {
@@ -3895,6 +3899,17 @@ impl ExecutionEnvironment {
             }
             Ic00Method::InstallChunkedCode => {
                 let args = InstallChunkedCodeArgs::decode(payload)?;
+                let max_chunks = config.embedders_config.wasm_max_size.get() / CHUNK_SIZE;
+                if args.chunk_hashes_list.len() as u64 > max_chunks {
+                    return Err(UserError::new(
+                        ErrorCode::CanisterContractViolation,
+                        format!(
+                            "InstallChunkedCode Error: chunk_hashes_list length {} exceeds the maximum of {} chunks",
+                            args.chunk_hashes_list.len(),
+                            max_chunks,
+                        ),
+                    ));
+                }
                 let origin = msg.canister_change_origin(args.get_sender_canister_version());
 
                 let store_canister_id = args
@@ -3969,7 +3984,7 @@ impl ExecutionEnvironment {
         let since = Instant::now();
 
         let (install_context, old_canister) =
-            match Self::decode_input_and_take_canister(&msg, &mut state) {
+            match Self::decode_input_and_take_canister(&msg, &mut state, &self.config) {
                 Ok(result) => result,
                 Err(err) => {
                     let refund = msg.take_cycles();
