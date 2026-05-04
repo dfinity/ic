@@ -609,16 +609,6 @@ impl CanisterManager {
             // when capacity is unchanged). No cycles are charged.
             Some(NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64))
         };
-        if let Some(log_memory_limit) = log_memory_limit {
-            let limit = log_memory_limit.get() as usize;
-            let log_memory_store = &mut canister.system_state.log_memory_store;
-            {
-                let _maybe_timer = metrics
-                    .filter(|_| log_memory_store.would_resize(limit))
-                    .map(|m| m.canister_log_resize_duration.start_timer());
-                log_memory_store.resize(limit, self.fd_factory.clone());
-            }
-        }
 
         // Log visibility: apply.
         if let Some(log_visibility) = settings.log_visibility() {
@@ -672,6 +662,20 @@ impl CanisterManager {
                     }
                 }
             })?;
+
+        // Only do expensive work at the end after all checks have passed.
+        // Otherwise, we'd need to properly account the instructions spent
+        // in case of subsequent failure.
+        if let Some(log_memory_limit) = log_memory_limit {
+            let limit = log_memory_limit.get() as usize;
+            let log_memory_store = &mut canister.system_state.log_memory_store;
+            {
+                let _maybe_timer = metrics
+                    .filter(|_| log_memory_store.would_resize(limit))
+                    .map(|m| m.canister_log_resize_duration.start_timer());
+                log_memory_store.resize(limit, self.fd_factory.clone());
+            }
+        }
 
         debug_assert_eq!(canister.memory_usage(), new_canister_memory_usage);
 
