@@ -1502,15 +1502,14 @@ impl CanisterManager {
             .iter()
             .copied()
             .collect();
+
+        let environment_variables_hash = settings
+            .environment_variables()
+            .map(|env_vars| env_vars.hash());
         let available_execution_memory_change = new_canister.add_canister_change(
             state.time(),
             origin,
-            CanisterChangeDetails::canister_creation(
-                controllers,
-                settings
-                    .environment_variables()
-                    .map(|env_vars| env_vars.hash()),
-            ),
+            CanisterChangeDetails::canister_creation(controllers, environment_variables_hash),
         );
         round_limits
             .subnet_available_memory
