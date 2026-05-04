@@ -20,10 +20,10 @@ use ic_config::embedders::DEFAULT_CREATE_EXECUTION_STATE_BASE_COST;
 use ic_config::{
     execution_environment::{
         CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, DEFAULT_WASM_MEMORY_LIMIT,
-        LOG_MEMORY_STORE_FEATURE_ENABLED, MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
-        MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH, MAX_ENVIRONMENT_VARIABLES,
-        MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, SUBNET_CALLBACK_SOFT_LIMIT,
-        SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
+        LOG_MEMORY_STORE_FEATURE, LOG_MEMORY_STORE_FEATURE_ENABLED,
+        MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH, MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
+        MAX_ENVIRONMENT_VARIABLES, MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
+        SUBNET_CALLBACK_SOFT_LIMIT, SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
     },
     flag_status::FlagStatus,
     subnet_config::{CANISTER_CREATION_FEE, SchedulerConfig},
@@ -323,6 +323,7 @@ fn canister_manager_config(
         MAX_ENVIRONMENT_VARIABLES,
         MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
         MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
+        LOG_MEMORY_STORE_FEATURE,
     )
 }
 
@@ -4398,6 +4399,32 @@ fn delete_canister_with_non_empty_input_queue_fails() {
     assert!(err.description().contains(&format!(
         "Canister {canister_id} has messages in its queues and cannot be deleted now",
     )));
+}
+
+#[test]
+fn update_settings_checks_freezing_threshold_for_log_memory_limit() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_log_memory_store_feature_enabled()
+        .build();
+
+    // Create a canister with very few cycles so it's below the freezing threshold.
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000));
+
+    let err = test
+        .update_settings(
+            canister_id,
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(10 * 1024 * 1024)
+                .build(),
+        )
+        .unwrap_err();
+
+    assert!(
+        err.description().contains("cannot grow memory by"),
+        "{}",
+        err.description(),
+    );
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
 }
 
 #[test]

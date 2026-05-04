@@ -15,7 +15,6 @@ use crate::hypervisor::Hypervisor;
 use crate::types::{IngressResponse, Response};
 use crate::util::{GOVERNANCE_CANISTER_ID, MIGRATION_CANISTER_ID};
 use ic_config::embedders::Config as EmbeddersConfig;
-use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE;
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::wasm_utils::decoding::decode_wasm;
@@ -357,14 +356,16 @@ impl CanisterManager {
         // compute it once here and reuse it across all checks below. Storage
         // cycle reservation (which would change the reserved balance and
         // invalidate `threshold`) is deferred to the end of this function.
+        let canister_memory_usage = canister.memory_usage();
         let new_log_memory_limit = settings
             .log_memory_limit()
             .unwrap_or(NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64));
-        let new_log_memory_usage =
-            LogMemoryStore::memory_usage_for_limit(LOG_MEMORY_STORE_FEATURE, new_log_memory_limit);
-        let new_canister_memory_usage = canister.memory_usage()
-            - canister.log_memory_store_memory_usage()
-            + new_log_memory_usage;
+        let new_log_memory_usage = LogMemoryStore::memory_usage_for_limit(
+            self.config.log_memory_store_feature,
+            new_log_memory_limit,
+        );
+        let new_canister_memory_usage =
+            canister_memory_usage - canister.log_memory_store_memory_usage() + new_log_memory_usage;
         let canister_message_memory_usage = canister.message_memory_usage();
         let canister_memory_allocation = canister.memory_allocation();
         let canister_compute_allocation = canister.compute_allocation();
@@ -454,7 +455,7 @@ impl CanisterManager {
         }
 
         // Memory allocation: validate subnet capacity and cycle balance, and apply.
-        let old_memory_bytes = canister_memory_allocation.allocated_bytes(canister.memory_usage());
+        let old_memory_bytes = canister_memory_allocation.allocated_bytes(canister_memory_usage);
         let new_memory_bytes = new_memory_allocation.allocated_bytes(new_canister_memory_usage);
         if new_memory_bytes >= old_memory_bytes {
             let available = NumBytes::from(
@@ -493,6 +494,14 @@ impl CanisterManager {
                 memory_allocation: new_memory_allocation,
                 available: canister_cycles_balance,
                 threshold,
+            });
+        }
+        if canister_cycles_balance < threshold && new_canister_memory_usage > canister_memory_usage
+        {
+            return Err(CanisterManagerError::InsufficientCyclesInMemoryGrow {
+                bytes: new_canister_memory_usage - canister_memory_usage,
+                available: canister_cycles_balance,
+                required: threshold,
             });
         }
         let allocated_bytes = new_memory_bytes.saturating_sub(&old_memory_bytes);
@@ -1470,6 +1479,7 @@ impl CanisterManager {
             state.metadata.batch_time,
             self.config.default_freeze_threshold,
             Arc::clone(&self.fd_factory),
+            self.config.log_memory_store_feature,
         );
 
         system_state.consume_cycles(creation_fee);
